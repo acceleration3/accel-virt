@@ -1,6 +1,7 @@
 #include "harness/executor/vulkan_backend_probe.hpp"
 
 #include "executor/import_table.hpp"
+#include "proto/vulkan/descriptor_template_layout.hpp"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
 
 namespace av {
@@ -33,6 +34,25 @@ void VulkanBackendProbe::show_types(const VkPhysicalDeviceMemoryProperties &host
 bool VulkanBackendProbe::memory_import() const { return backend.memory_import_; }
 
 void VulkanBackendProbe::begin_frame(bool recording) { backend.guard_.begin_frame(recording); }
+
+Status VulkanBackendProbe::add_template(uint64_t made, uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
+                                        uint32_t count)
+{
+    DescriptorTemplateLayout layout;
+    const Status measured = layout.take(entries, count);
+    if (measured != Status::ok) return measured;
+    const Status taken = backend.templates_.take(made, device, entries, count);
+    if (taken != Status::ok) return taken;
+    backend.made_through(device);
+    backend.keep(made, VulkanObjectKind::descriptor_template, layout.bytes());
+    return Status::ok;
+}
+
+bool VulkanBackendProbe::template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set,
+                                        uint64_t device)
+{
+    return backend.template_named(made, data, set, device);
+}
 
 VulkanGuard &VulkanBackendProbe::guard() { return backend.guard_; }
 

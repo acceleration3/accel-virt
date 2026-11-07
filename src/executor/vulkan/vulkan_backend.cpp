@@ -44,7 +44,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
-      progress_(), guard_(blocks, *this, progress_), parent_(0u), ran_(0u)
+      templates_(blocks), progress_(), guard_(blocks, *this, progress_), parent_(0u), ran_(0u)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -147,6 +147,7 @@ void VulkanBackend::made_through(uint64_t parent)
 void VulkanBackend::ended(uint64_t raw)
 {
     AV_SCOPE("VulkanBackend::ended");
+    templates_.forget(raw);
     handles_.forget(raw);
 }
 
@@ -235,10 +236,26 @@ VkResult VulkanBackend::on_vkCreateDescriptorUpdateTemplate(VkDevice device,
     const VkResult result = RealVulkanDispatch::on_vkCreateDescriptorUpdateTemplate(device, pCreateInfo, pAllocator,
                                                                                     pDescriptorUpdateTemplate);
     const uint64_t made = reinterpret_cast<uint64_t>(*pDescriptorUpdateTemplate);
+    if (result == VK_SUCCESS &&
+        templates_.take(made, reinterpret_cast<uint64_t>(device), pCreateInfo->pDescriptorUpdateEntries,
+                        pCreateInfo->descriptorUpdateEntryCount) != Status::ok) {
+        RealVulkanDispatch::on_vkDestroyDescriptorUpdateTemplate(device, *pDescriptorUpdateTemplate, nullptr);
+        *pDescriptorUpdateTemplate = VK_NULL_HANDLE;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     handles_.forget(made);
     made_through(reinterpret_cast<uint64_t>(device));
     keep(made, VulkanObjectKind::descriptor_template, layout.bytes());
     return result;
+}
+
+VkResult VulkanBackend::on_vkCreateDescriptorUpdateTemplateKHR(VkDevice device,
+                                                               const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+                                                               const VkAllocationCallbacks *pAllocator,
+                                                               VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateDescriptorUpdateTemplateKHR");
+    return on_vkCreateDescriptorUpdateTemplate(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
 }
 
 uint64_t VulkanBackend::template_bytes(VkDescriptorUpdateTemplate made) const
@@ -573,6 +590,7 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     guard_.release_all(reinterpret_cast<uint64_t>(device));
+    templates_.forget_device(reinterpret_cast<uint64_t>(device));
     progress_.forget(device);
     timing_.forget(device);
     GuestDevice *const ending = device_of(reinterpret_cast<uint64_t>(device));
@@ -865,6 +883,7 @@ void VulkanBackend::shut_down()
     AV_SCOPE("VulkanBackend::shut_down");
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
+    templates_.clear();
     imports_ = nullptr;
     types_learnt_ = false;
     gpu_ = nullptr;

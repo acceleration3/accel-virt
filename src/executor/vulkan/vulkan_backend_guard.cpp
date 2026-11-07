@@ -358,6 +358,66 @@ void VulkanBackend::on_vkUpdateDescriptorSets(VkDevice device, uint32_t descript
                                                   descriptorCopyCount, pDescriptorCopies);
 }
 
+bool VulkanBackend::resolved(const VulkanTemplates::Reference &reference, uint64_t &handle) const
+{
+    AV_SCOPE("VulkanBackend::resolved");
+    handle = 0u;
+    return !reference.named_ || handle_for(reference.kind_, reference.handle_, handle);
+}
+
+bool VulkanBackend::template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device)
+{
+    AV_SCOPE("VulkanBackend::template_named");
+    const uint64_t number_of = number(made);
+    if (handles_.find(number_of, VulkanObjectKind::descriptor_template) == nullptr) return false;
+    bool held = true;
+    const bool named = templates_.each(number_of, data, template_bytes(made), [&](const VulkanTemplates::Descriptor &at) {
+        uint64_t first = 0u;
+        uint64_t second = 0u;
+        if (!resolved(at.first_, first) || !resolved(at.second_, second)) return false;
+        if (set != 0u && !guard_.bound(set, at.binding_, at.element_, first, second, device)) held = false;
+        return true;
+    });
+    return named && (held || guard_.quiesce(device));
+}
+
+void VulkanBackend::on_vkUpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet descriptorSet,
+                                                         VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                         const void *pData)
+{
+    AV_SCOPE("VulkanBackend::on_vkUpdateDescriptorSetWithTemplate");
+    if (!template_named(descriptorUpdateTemplate, pData, number(descriptorSet), number(device))) return;
+    RealVulkanDispatch::on_vkUpdateDescriptorSetWithTemplate(device, descriptorSet, descriptorUpdateTemplate, pData);
+}
+
+void VulkanBackend::on_vkUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet,
+                                                            VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                            const void *pData)
+{
+    AV_SCOPE("VulkanBackend::on_vkUpdateDescriptorSetWithTemplateKHR");
+    if (!template_named(descriptorUpdateTemplate, pData, number(descriptorSet), number(device))) return;
+    RealVulkanDispatch::on_vkUpdateDescriptorSetWithTemplateKHR(device, descriptorSet, descriptorUpdateTemplate, pData);
+}
+
+void VulkanBackend::on_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
+                                                             VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                             VkPipelineLayout layout, uint32_t set, const void *pData)
+{
+    AV_SCOPE("VulkanBackend::on_vkCmdPushDescriptorSetWithTemplateKHR");
+    if (!template_named(descriptorUpdateTemplate, pData, 0u, 0u)) return;
+    RealVulkanDispatch::on_vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
+}
+
+void VulkanBackend::on_vkCmdPushDescriptorSetWithTemplate2KHR(
+    VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo *pPushDescriptorSetWithTemplateInfo)
+{
+    AV_SCOPE("VulkanBackend::on_vkCmdPushDescriptorSetWithTemplate2KHR");
+    if (!template_named(pPushDescriptorSetWithTemplateInfo->descriptorUpdateTemplate,
+                        pPushDescriptorSetWithTemplateInfo->pData, 0u, 0u))
+        return;
+    RealVulkanDispatch::on_vkCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, pPushDescriptorSetWithTemplateInfo);
+}
+
 VkResult VulkanBackend::on_vkQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
                                           VkFence fence)
 {

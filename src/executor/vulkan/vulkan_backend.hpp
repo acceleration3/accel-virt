@@ -13,6 +13,7 @@
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
+#include "executor/vulkan/vulkan_templates.hpp"
 #include "executor/shim/physical_device_list.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
@@ -54,7 +55,22 @@ public:
                                                  const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
                                                  VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate) override;
+    VkResult on_vkCreateDescriptorUpdateTemplateKHR(VkDevice device,
+                                                    const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+                                                    const VkAllocationCallbacks *pAllocator,
+                                                    VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate) override;
     uint64_t template_bytes(VkDescriptorUpdateTemplate made) const override;
+    void on_vkUpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet descriptorSet,
+                                              VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                              const void *pData) override;
+    void on_vkUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet,
+                                                 VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                 const void *pData) override;
+    void on_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
+                                                  VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                  VkPipelineLayout layout, uint32_t set, const void *pData) override;
+    void on_vkCmdPushDescriptorSetWithTemplate2KHR(
+        VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo *pPushDescriptorSetWithTemplateInfo) override;
 
     VkResult on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                const VkDeviceCreateInfo *pCreateInfo,
@@ -200,7 +216,8 @@ private:
     void     release_children(uint64_t parent, uint64_t device);
     uint64_t owning_device(uint64_t handle) const;
     bool     reusable(VkCommandBuffer commandBuffer);
-
+    bool     template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device);
+    bool     resolved(const VulkanTemplates::Reference &reference, uint64_t &handle) const;
     void let_go(uint64_t raw, VulkanObjectKind kind);
     [[nodiscard]] bool kept_on(const GuestDevice &device, uint64_t made);
     GuestDevice       *forgot(uint64_t made);
@@ -242,6 +259,7 @@ private:
     GuestMemoryTypes types_;
     bool             types_learnt_;
     VulkanSubmitTiming timing_;
+    VulkanTemplates      templates_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;
     uint64_t parent_;
