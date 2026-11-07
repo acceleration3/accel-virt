@@ -9,6 +9,7 @@ class BlobRole;
 class OwnedFd;
 class SharedImageShape;
 class SourceMemory;
+class TeardownBudget;
 class WireArena;
 class WireReader;
 class WireWriter;
@@ -24,7 +25,7 @@ public:
     virtual bool lost() const = 0;
     [[nodiscard]] virtual bool lose_device() = 0;
     virtual void end_batch() = 0;
-    virtual void drain() = 0;
+    [[nodiscard]] virtual bool drain(TeardownBudget &budget) = 0;
     virtual bool poll() = 0;
     virtual void gpu_progress(uint64_t &marked, uint64_t &reached) const = 0;
     virtual void bind_signal(void (*signal)(void *context), void *context) = 0;

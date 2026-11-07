@@ -1,6 +1,7 @@
 #include "executor/vulkan/vulkan_submit_progress.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/teardown_budget.hpp"
 
 namespace av {
 
@@ -72,10 +73,10 @@ uint32_t VulkanSubmitProgress::oldest() const
     return found;
 }
 
-bool VulkanSubmitProgress::waited(Slot &slot)
+bool VulkanSubmitProgress::waited(Slot &slot, uint64_t nanoseconds)
 {
     AV_SCOPE("VulkanSubmitProgress::waited");
-    const VkResult status = ::vkWaitForFences(slot.device_, 1u, &slot.fence_, VK_TRUE, wait_ns);
+    const VkResult status = ::vkWaitForFences(slot.device_, 1u, &slot.fence_, VK_TRUE, nanoseconds);
     if (status == VK_SUCCESS) static_cast<void>(::vkResetFences(slot.device_, 1u, &slot.fence_));
     if (status != VK_SUCCESS && status != VK_ERROR_DEVICE_LOST) return false;
     slot.state_ = State::vacant;
@@ -169,15 +170,21 @@ void VulkanSubmitProgress::cancel(uint64_t mark)
 bool VulkanSubmitProgress::wait_idle(uint64_t device)
 {
     AV_SCOPE("VulkanSubmitProgress::wait_idle");
-    return wait_through(device, ~uint64_t{0});
+    for (Slot &slot : slots_) {
+        if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
+        if (!settled(slot)) return false;
+    }
+    return true;
 }
 
-bool VulkanSubmitProgress::wait_through(uint64_t device, uint64_t mark)
+bool VulkanSubmitProgress::wait_marks(uint64_t device, const uint64_t *marks, uint32_t count)
 {
-    AV_SCOPE("VulkanSubmitProgress::wait_through");
+    AV_SCOPE("VulkanSubmitProgress::wait_marks");
     for (Slot &slot : slots_) {
-        if (slot.state_ == State::vacant || number(slot.device_) != device || slot.mark_ > mark) continue;
-        if (!settled(slot)) return false;
+        if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
+        bool stamped = false;
+        for (uint32_t index = 0u; index < count && !stamped; index++) stamped = marks[index] == slot.mark_;
+        if (stamped && !settled(slot)) return false;
     }
     return true;
 }
@@ -189,6 +196,25 @@ uint32_t VulkanSubmitProgress::stuck(uint64_t device) const
     for (const Slot &slot : slots_)
         if (slot.state_ == State::stuck && number(slot.device_) == device) found++;
     return found;
+}
+
+bool VulkanSubmitProgress::settled_within(Slot &slot, TeardownBudget &budget)
+{
+    AV_SCOPE("VulkanSubmitProgress::settled_within");
+    if (slot.state_ == State::stuck && !queued(slot)) return false;
+    if (slot.state_ == State::vacant) return true;
+    return slot.state_ == State::pending && waited(slot, budget.remaining());
+}
+
+bool VulkanSubmitProgress::drain(uint64_t device, TeardownBudget &budget)
+{
+    AV_SCOPE("VulkanSubmitProgress::drain");
+    bool drained = true;
+    for (Slot &slot : slots_) {
+        if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
+        if (!settled_within(slot, budget)) drained = false;
+    }
+    return drained;
 }
 
 void VulkanSubmitProgress::forget(VkDevice device)

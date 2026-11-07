@@ -45,6 +45,7 @@ public:
     bool     holding(uint64_t owner, uint64_t handle) const;
     bool     tracked(uint64_t handle) const;
     bool     linked(uint64_t handle, uint64_t pool) const;
+    bool     reset_pending(uint64_t pool) const;
     bool     described(uint64_t set, const Descriptor &at, uint64_t handle) const;
     uint64_t mark_of(uint64_t owner) const;
     uint32_t nodes() const;

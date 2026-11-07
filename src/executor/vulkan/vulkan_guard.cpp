@@ -72,10 +72,12 @@ void VulkanGuard::begin_frame(bool recording)
     owner_device_ = 0u;
 }
 
-void VulkanGuard::drain()
+bool VulkanGuard::drain(TeardownBudget &budget)
 {
     AV_SCOPE("VulkanGuard::drain");
-    devices_.for_each([this](uint64_t device, VulkanLifetimes *&) { static_cast<void>(progress_.wait_idle(device)); });
+    bool drained = true;
+    devices_.for_each([&](uint64_t device, VulkanLifetimes *&) { drained = progress_.drain(device, budget) && drained; });
+    return drained;
 }
 
 void VulkanGuard::end_batch()
@@ -276,14 +278,35 @@ bool VulkanGuard::await_reset(uint64_t owner, uint64_t device)
     if (lifetimes == nullptr) return true;
     const uint64_t mark = lifetimes->mark_of(owner);
     if (mark <= progress_.reached(device)) return true;
-    return progress_.wait_through(device, mark);
+    return progress_.wait_marks(device, &mark, 1u);
 }
 
-bool VulkanGuard::quiesce_through(uint64_t mark, uint64_t device)
+bool VulkanGuard::quiesce_marks(const uint64_t *marks, uint32_t count, uint64_t device)
 {
-    AV_SCOPE("VulkanGuard::quiesce_through");
-    if (mark <= progress_.reached(device)) return true;
-    return progress_.wait_through(device, mark);
+    AV_SCOPE("VulkanGuard::quiesce_marks");
+    const uint64_t reached = progress_.reached(device);
+    for (uint32_t index = 0u; index < count; index++)
+        if (marks[index] > reached) return progress_.wait_marks(device, marks, count);
+    return true;
+}
+
+bool VulkanGuard::reset_pending(uint64_t pool, uint64_t device) const
+{
+    AV_SCOPE("VulkanGuard::reset_pending");
+    const VulkanLifetimes *const lifetimes = lifetimes_of(device);
+    return lifetimes != nullptr && lifetimes->reset_pending(pool);
+}
+
+uint64_t VulkanGuard::marked() const
+{
+    AV_SCOPE("VulkanGuard::marked");
+    return progress_.marked();
+}
+
+uint64_t VulkanGuard::reached(uint64_t device)
+{
+    AV_SCOPE("VulkanGuard::reached");
+    return progress_.reached(device);
 }
 
 void VulkanGuard::defer_pool_reset(uint64_t pool, uint64_t device, uint64_t mark)

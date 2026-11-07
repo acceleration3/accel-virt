@@ -20,6 +20,7 @@ class GpuClockHold;
 class HostMemorySource;
 class SessionBackend;
 class StateWriter;
+class TeardownBudget;
 
 class ContextSession {
 public:
@@ -31,7 +32,8 @@ public:
     ContextSession &operator=(const ContextSession &) = delete;
 
     [[nodiscard]] Status initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes);
-    void                 release();
+    [[nodiscard]] bool   drain(TeardownBudget &budget);
+    [[nodiscard]] bool   release(TeardownBudget &budget);
     bool                 live() const;
     bool                 faulted() const;
     void                 hold_clocks(GpuClockHold &clocks);

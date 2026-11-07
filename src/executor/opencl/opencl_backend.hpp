@@ -2,6 +2,7 @@
 #define AV_OPENCL_BACKEND_HPP
 
 #include "executor/opencl/cl_event_signals.hpp"
+#include "executor/opencl/cl_user_events.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
 #include "executor/opencl/cl_argument_retention.hpp"
 #include "executor/opencl/cl_binary_envelope.hpp"
@@ -42,6 +43,7 @@ class GlDisplay;
 class ImportTable;
 class OpenClDevice;
 class SourceMemory;
+class TeardownBudget;
 struct OpenClBackendProbe;
 
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
@@ -58,7 +60,7 @@ public:
     bool lost() const override;
     [[nodiscard]] bool lose_device() override;
     void end_batch() override;
-    void drain() override;
+    bool drain(TeardownBudget &budget) override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle) override;
@@ -176,6 +178,8 @@ public:
     cl_int on_clEnqueueReleaseGLObjects(cl_command_queue command_queue, cl_uint num_objects,
                                         const cl_mem *mem_objects, cl_uint num_events_in_wait_list,
                                         const cl_event *event_wait_list, cl_event *event) override;
+    cl_event on_clCreateUserEvent(cl_context context, cl_int *errcode_ret) override;
+    cl_int   on_clSetUserEventStatus(cl_event event, cl_int execution_status) override;
     cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) override;
     cl_int on_clGetEventInfo(cl_event event, cl_event_info param_name, size_t param_value_size, void *param_value,
                              size_t *param_value_size_ret) override;
@@ -205,6 +209,7 @@ private:
     void  pace(cl_command_queue queue);
     void  look_at_marker();
     void  stop_pacing();
+    [[nodiscard]] bool settled(cl_command_queue queue, TeardownBudget &budget);
 
     static constexpr cl_uint max_program_devices = 16u;
 
@@ -235,6 +240,7 @@ private:
     GuestRegion      arena_;
     const ImportTable *imported_;
     ClEventSignals   events_;
+    ClUserEvents     user_events_;
     ClReadAhead      read_ahead_;
     ClBouncedRect    bounced_;
     MonotonicClock   clock_;

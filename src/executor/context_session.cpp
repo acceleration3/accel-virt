@@ -35,10 +35,19 @@ Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_
     return Status::ok;
 }
 
-void ContextSession::release()
+bool ContextSession::drain(TeardownBudget &budget)
+{
+    AV_SCOPE("ContextSession::drain");
+    return backend_ == nullptr || backend_->drain(budget);
+}
+
+bool ContextSession::release(TeardownBudget &budget)
 {
     AV_SCOPE("ContextSession::release");
-    if (backend_ != nullptr) backend_->drain();
+    if (!drain(budget)) {
+        lines_.write("a session's GPU work did not finish in time; its memory is kept");
+        return false;
+    }
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) retire_blob(blob->id());
     parked_count_ = 0u;
     if (backend_ != nullptr) backend_->shut_down();
@@ -50,6 +59,7 @@ void ContextSession::release()
     answer_.release();
     answer_length_ = 0u;
     faulted_ = false;
+    return true;
 }
 
 bool ContextSession::live() const

@@ -72,13 +72,18 @@ void MockSessionBackend::lose_elsewhere() { lost_ = true; }
 
 void MockSessionBackend::end_batch() {}
 
-void MockSessionBackend::drain()
+bool MockSessionBackend::drain(TeardownBudget &)
 {
     drains_++;
     abandoned_before_drain_ = abandoned_ + unbound_;
+    return drains_in_time_;
 }
 
+void MockSessionBackend::set_drains_in_time(bool in_time) { drains_in_time_ = in_time; }
+
 std::uint32_t MockSessionBackend::drains() const { return drains_; }
+
+std::uint32_t MockSessionBackend::drains_before_first_release() const { return drains_before_first_release_; }
 
 std::uint32_t MockSessionBackend::abandoned_before_drain() const { return abandoned_before_drain_; }
 
@@ -196,6 +201,7 @@ bool MockSessionBackend::import_object(std::uint32_t kind, std::uint32_t handle_
 void MockSessionBackend::release_object(std::uint32_t, std::uint64_t wire_handle, std::uint64_t detail)
 {
     if (wire_handle == 0u) return;
+    if (released_objects_ == 0u) drains_before_first_release_ = drains_;
     released_objects_++;
     last_released_detail_ = detail;
 }

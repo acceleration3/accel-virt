@@ -841,13 +841,11 @@ void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t
 {
     AV_SCOPE("VulkanBackend::release_object");
     if (detail == guest_semaphore) return;
+    const uint64_t device = handles_.holds(wire_handle) ? handles_.parent_of(wire_handle) : 0u;
     GuestDevice *const owner = forgot(wire_handle);
     if (owner == nullptr) return;
-    if (kind == AV_SHARED_MEMORY) {
-        owner->memory().release(wire_handle);
-        return;
-    }
-    owner->memory().destroy_semaphore(wire_handle);
+    guard_.destroy(kind == AV_SHARED_MEMORY ? VulkanDestroyKind::imported_memory : VulkanDestroyKind::imported_semaphore,
+                   device, 0u, wire_handle);
 }
 
 void VulkanBackend::abandon(const SourceMemory &, uint64_t handle)
@@ -886,10 +884,10 @@ void VulkanBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
     reached = 0u;
 }
 
-void VulkanBackend::drain()
+bool VulkanBackend::drain(TeardownBudget &budget)
 {
     AV_SCOPE("VulkanBackend::drain");
-    guard_.drain();
+    return guard_.drain(budget);
 }
 
 void VulkanBackend::end_batch()

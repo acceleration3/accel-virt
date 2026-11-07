@@ -1,4 +1,5 @@
 #include "core/log/driver_log.hpp"
+#include "device/abi/av_executor.h"
 #include "executor/exported_memory.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
@@ -33,6 +34,7 @@ struct FakeDriver {
     std::uint32_t command_pool_destroys = 0u;
     std::uint32_t status_polls = 0u;
     std::uint32_t pool_resets = 0u;
+    std::uint32_t allocations = 0u;
     std::uint32_t command_pool_resets = 0u;
     std::uint32_t command_buffer_resets = 0u;
     std::uint32_t begins = 0u;
@@ -191,6 +193,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetDescriptorPool(VkDevice, VkDescriptorPool,
 { driver.pool_resets++;
   return VK_SUCCESS; }
 
+VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(VkDevice, const VkDescriptorSetAllocateInfo *info, VkDescriptorSet *sets)
+{ driver.allocations++;
+  for (std::uint32_t at = 0u; at < info->descriptorSetCount; at++) sets[at] = as_handle<VkDescriptorSet>(0x900u + at);
+  return VK_SUCCESS; }
+
 VKAPI_ATTR VkResult VKAPI_CALL vkResetCommandPool(VkDevice, VkCommandPool, VkCommandPoolResetFlags)
 { driver.command_pool_resets++;
   return VK_SUCCESS; }
@@ -344,3 +351,120 @@ TEST(vulkan_backend_pools, imported_memory_abandoned_while_the_gpu_is_idle_is_fr
   const av::SourceMemory memory(1u, 2u, 0u, 0u, av::ExportedMemory(1u, -1, nullptr, 0u));
   rig.backend().abandon(memory, imported);
   CHECK_EQ(driver.memory_frees, 1u); }
+
+TEST(vulkan_backend_pools, shared_memory_released_while_a_submission_may_use_it_is_freed_after_the_gpu_is_past_it)
+{ Rig rig;
+  rig.backend().made_through(device);
+  rig.backend().made(HandleKind::device_memory, imported);
+  rig.backend().made_through(0u);
+  rig.record(cb, set);
+  rig.submit(cb);
+  rig.backend().release_object(AV_SHARED_MEMORY, imported, 0u);
+  CHECK_EQ(driver.memory_frees, 0u);
+  CHECK(!rig.backend().knows_handle(imported));
+  rig.gpu_finishes();
+  CHECK_EQ(driver.memory_frees, 1u);
+  CHECK_EQ(driver.freed_memory, imported); }
+
+TEST(vulkan_backend_pools, shared_memory_released_while_the_gpu_is_idle_is_freed_at_once)
+{ Rig rig;
+  rig.backend().made_through(device);
+  rig.backend().made(HandleKind::device_memory, imported);
+  rig.backend().made_through(0u);
+  rig.backend().release_object(AV_SHARED_MEMORY, imported, 0u);
+  CHECK_EQ(driver.memory_frees, 1u); }
+
+TEST(vulkan_backend_pools, a_pool_reset_waits_only_for_the_submissions_its_sets_were_stamped_by_and_not_for_older_work_elsewhere)
+{ Rig rig;
+  rig.record(cb, set);
+  rig.submit(cb);
+  rig.record(other_cb, other_set);
+  rig.submit(other_cb);
+  driver.fences[1].signalled = true;
+  const VkResult reset = rig.backend().on_vkResetDescriptorPool(rig.host_device(),
+                                                                as_handle<VkDescriptorPool>(other_descriptor_pool), 0u);
+  CHECK_EQ(static_cast<int>(reset), static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.pool_resets, 1u); }
+
+TEST(vulkan_backend_pools, a_command_pool_reset_waits_only_for_the_submissions_its_buffers_were_stamped_by)
+{ Rig rig;
+  rig.record(cb, set);
+  rig.submit(cb);
+  rig.record(other_cb, other_set);
+  rig.submit(other_cb);
+  driver.fences[1].signalled = true;
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetCommandPool(rig.host_device(),
+                                                                as_handle<VkCommandPool>(other_command_pool), 0u)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.command_pool_resets, 1u); }
+
+TEST(vulkan_backend_pools, allocations_from_a_pool_with_a_reset_still_pending_are_refused_until_the_reset_is_done)
+{ Rig rig;
+  rig.record(cb, set);
+  rig.submit(cb);
+  VkDescriptorSetLayout layouts[1] = {};
+  VkDescriptorSetAllocateInfo info = {};
+  info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  info.descriptorPool = as_handle<VkDescriptorPool>(descriptor_pool);
+  info.descriptorSetCount = 1u;
+  info.pSetLayouts = layouts;
+  VkDescriptorSet made[1] = {};
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetDescriptorPool(rig.host_device(), info.descriptorPool, 0u)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.pool_resets, 0u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkAllocateDescriptorSets(rig.host_device(), &info, made)),
+           static_cast<int>(VK_ERROR_OUT_OF_POOL_MEMORY));
+  CHECK_EQ(driver.allocations, 0u);
+  info.descriptorPool = as_handle<VkDescriptorPool>(other_descriptor_pool);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkAllocateDescriptorSets(rig.host_device(), &info, made)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.allocations, 1u);
+  rig.gpu_finishes();
+  CHECK_EQ(driver.pool_resets, 1u);
+  info.descriptorPool = as_handle<VkDescriptorPool>(descriptor_pool);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkAllocateDescriptorSets(rig.host_device(), &info, made)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.allocations, 2u); }
+
+TEST(vulkan_backend_pools, a_second_reset_of_a_pool_whose_first_is_pending_waits_for_it_and_resets_the_pool_once)
+{ Rig rig;
+  rig.record(cb, set);
+  rig.submit(cb);
+  const VkDescriptorPool pool = as_handle<VkDescriptorPool>(descriptor_pool);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetDescriptorPool(rig.host_device(), pool, 0u)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetDescriptorPool(rig.host_device(), pool, 0u)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.pool_resets, 0u);
+  rig.gpu_finishes();
+  CHECK_EQ(driver.pool_resets, 1u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetDescriptorPool(rig.host_device(), pool, 0u)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.pool_resets, 2u);
+  rig.gpu_finishes();
+  CHECK_EQ(driver.pool_resets, 2u); }
+
+TEST(vulkan_backend_pools, a_reset_after_the_gpu_passed_the_pending_one_runs_it_first_and_the_pool_takes_allocations_again)
+{ Rig rig;
+  rig.record(cb, set);
+  rig.submit(cb);
+  const VkDescriptorPool pool = as_handle<VkDescriptorPool>(descriptor_pool);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetDescriptorPool(rig.host_device(), pool, 0u)),
+           static_cast<int>(VK_SUCCESS));
+  for (std::uint32_t index = 0u; index < driver.made; index++) driver.fences[index].signalled = true;
+  rig.backend().end_batch();
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetDescriptorPool(rig.host_device(), pool, 0u)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK(driver.pool_resets >= 1u);
+  VkDescriptorSetLayout layouts[1] = {};
+  VkDescriptorSetAllocateInfo info = {};
+  info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  info.descriptorPool = pool;
+  info.descriptorSetCount = 1u;
+  info.pSetLayouts = layouts;
+  VkDescriptorSet made[1] = {};
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkAllocateDescriptorSets(rig.host_device(), &info, made)),
+           static_cast<int>(VK_SUCCESS));
+  const std::uint32_t resets = driver.pool_resets;
+  rig.gpu_finishes();
+  CHECK_EQ(driver.pool_resets, resets); }

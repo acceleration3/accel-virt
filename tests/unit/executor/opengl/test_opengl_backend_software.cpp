@@ -1,3 +1,6 @@
+#include "executor/monotonic_clock.hpp"
+#include "executor/teardown_budget.hpp"
+#include "harness/executor/generous_budget.hpp"
 #include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/executor_log.hpp"
@@ -328,7 +331,7 @@ TEST(opengl_backend_software, the_display_under_test_is_llvmpipe_and_nothing_els
 
 TEST(opengl_backend_software, drain_on_a_backend_that_never_opened_returns_and_has_nothing_in_flight)
 { OpenGlBackend backend(executor_log.opengl());
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   std::uint64_t marked = 7u, reached = 7u;
   backend.gpu_progress(marked, reached);
   CHECK_EQ(marked, 0u);
@@ -346,7 +349,7 @@ TEST(opengl_backend_software, drain_finishes_the_work_and_brings_the_reached_mar
   std::uint64_t marked = 0u, reached = 0u;
   backend.gpu_progress(marked, reached);
   CHECK_EQ(marked, 1u);
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   backend.gpu_progress(marked, reached);
   CHECK_EQ(marked, 1u);
   CHECK_EQ(reached, 1u);
@@ -354,27 +357,50 @@ TEST(opengl_backend_software, drain_finishes_the_work_and_brings_the_reached_mar
 
 namespace {
 
-void (*real_finish)() = nullptr;
-unsigned finishes = 0u;
+GLenum (*real_wait)(GLsync, GLbitfield, GLuint64) = nullptr;
+unsigned waits = 0u;
+GLuint64 waited_nanoseconds = 0u;
+GLenum   wait_answer = 0u;
 
-void counted_finish()
+GLenum counted_wait(GLsync sync, GLbitfield flags, GLuint64 nanoseconds)
 {
-    finishes++;
-    real_finish();
+    waits++;
+    waited_nanoseconds = nanoseconds;
+    const GLenum real = real_wait(sync, flags, nanoseconds);
+    return wait_answer != 0u ? wait_answer : real;
 }
 
 }
 
-TEST(opengl_backend_software, drain_calls_the_hosts_finish_before_it_settles)
+TEST(opengl_backend_software, drain_waits_on_a_fence_for_no_longer_than_its_budget_before_it_settles)
 { if (skipped()) return;
   OpenGlBackend backend(executor_log.opengl());
   CHECK(backend.initialize(software().display(), nullptr, nullptr));
-  real_finish = OpenGlBackendProbe::writable(backend).glFinish;
-  finishes = 0u;
-  OpenGlBackendProbe::writable(backend).glFinish = counted_finish;
-  backend.drain();
-  CHECK_EQ(finishes, 1u);
-  OpenGlBackendProbe::writable(backend).glFinish = real_finish;
+  real_wait = OpenGlBackendProbe::writable(backend).glClientWaitSync;
+  waits = 0u;
+  wait_answer = 0u;
+  OpenGlBackendProbe::writable(backend).glClientWaitSync = counted_wait;
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 700u * 1000u * 1000u);
+  CHECK(backend.drain(budget));
+  CHECK_EQ(waits, 1u);
+  CHECK(waited_nanoseconds <= 700u * 1000u * 1000u);
+  CHECK(waited_nanoseconds > 0u);
+  OpenGlBackendProbe::writable(backend).glClientWaitSync = real_wait;
+  backend.shut_down(); }
+
+TEST(opengl_backend_software, a_drain_whose_fence_does_not_signal_in_the_budget_is_reported_unfinished)
+{ if (skipped()) return;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr));
+  real_wait = OpenGlBackendProbe::writable(backend).glClientWaitSync;
+  waits = 0u;
+  wait_answer = 0x911Bu;
+  OpenGlBackendProbe::writable(backend).glClientWaitSync = counted_wait;
+  CHECK(!backend.drain(av::GenerousBudget().budget()));
+  wait_answer = 0u;
+  CHECK(backend.drain(av::GenerousBudget().budget()));
+  OpenGlBackendProbe::writable(backend).glClientWaitSync = real_wait;
   backend.shut_down(); }
 
 TEST(opengl_backend_software, drain_reclaims_a_retired_memory_object_once_the_work_that_named_it_is_done)
@@ -389,7 +415,7 @@ TEST(opengl_backend_software, drain_reclaims_a_retired_memory_object_once_the_wo
   backend.release_object(AV_SHARED_MEMORY, name, detail);
   CHECK(Command(av::glproto::kCmd_glFlush).run(backend));
   backend.end_batch();
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   CHECK(!memory_object_exists(static_cast<unsigned>(name)));
   CHECK_EQ(OpenGlBackendProbe::memories(backend).count(), 0u);
   backend.shut_down(); }
@@ -410,16 +436,16 @@ TEST(opengl_backend_software, a_texture_placed_on_imported_memory_keeps_the_memo
   CHECK_EQ(OpenGlBackendProbe::memories(backend).textured(), 2u);
   backend.release_object(AV_SHARED_MEMORY, name, detail);
   backend.end_batch();
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   CHECK(memory_object_exists(static_cast<unsigned>(name)));
   CHECK(delete_texture(backend, first));
   backend.end_batch();
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   CHECK(memory_object_exists(static_cast<unsigned>(name)));
   CHECK(delete_texture(backend, second));
   CHECK(Command(av::glproto::kCmd_glFlush).run(backend));
   backend.end_batch();
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   CHECK(!memory_object_exists(static_cast<unsigned>(name)));
   CHECK_EQ(OpenGlBackendProbe::memories(backend).textured(), 0u);
   backend.shut_down(); }
@@ -555,7 +581,7 @@ TEST(opengl_backend_software, a_linear_dma_buf_is_placed_under_a_texture_as_an_e
   backend.release_object(AV_SHARED_MEMORY, name, detail);
   CHECK_EQ(OpenGlBackendProbe::images(backend).count(), 1u);
   backend.end_batch();
-  backend.drain();
+  CHECK(backend.drain(av::GenerousBudget().budget()));
   CHECK_EQ(OpenGlBackendProbe::images(backend).count(), 0u);
   backend.shut_down(); }
 
@@ -660,16 +686,16 @@ void cycle(const av::GlDisplay *display, std::uint32_t number)
     expect(store_in_memory(second, right, side, name, memory_bytes / 2u), "the second texture is placed", number);
     second.release_object(AV_SHARED_MEMORY, name, detail);
     second.end_batch();
-    second.drain();
+    CHECK(second.drain(av::GenerousBudget().budget()));
     expect(memory_object_exists(static_cast<unsigned>(name)), "memory kept for two textures", number);
     expect(delete_texture(second, left), "the first texture goes", number);
     second.end_batch();
-    second.drain();
+    CHECK(second.drain(av::GenerousBudget().budget()));
     expect(memory_object_exists(static_cast<unsigned>(name)), "memory kept for the last texture", number);
     expect(delete_texture(second, right), "the second texture goes", number);
     expect(Command(av::glproto::kCmd_glFlush).run(second), "flush", number);
     second.end_batch();
-    second.drain();
+    CHECK(second.drain(av::GenerousBudget().budget()));
     expect(!memory_object_exists(static_cast<unsigned>(name)), "memory freed after the last texture", number);
     second.shut_down();
     first.shut_down();

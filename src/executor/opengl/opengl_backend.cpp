@@ -1,5 +1,7 @@
 #include "executor/opengl/opengl_backend.hpp"
 
+#include "executor/teardown_budget.hpp"
+
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/log/log_line.hpp"
@@ -24,6 +26,7 @@ namespace {
 constexpr uint32_t gl_context_profile_mask = 0x9126u, gl_context_core_profile_bit = 0x1u;
 constexpr uint32_t error_flags = 8u;
 constexpr uint32_t gl_sync_flush_commands_bit = 0x1u;
+constexpr uint32_t gl_sync_gpu_commands_complete = 0x9117u;
 constexpr uint32_t gl_already_signaled = 0x911Au, gl_condition_satisfied = 0x911Cu;
 constexpr uint32_t gl_out_of_memory = 0x0505u;
 
@@ -178,13 +181,23 @@ bool OpenGlBackend::granted_fixed_function()
     return (static_cast<uint32_t>(mask) & gl_context_core_profile_bit) == 0u;
 }
 
-void OpenGlBackend::drain()
+bool OpenGlBackend::drain(TeardownBudget &budget)
 {
     AV_SCOPE("OpenGlBackend::drain");
-    if (gl_.glFinish == nullptr || !context_.make_current()) return;
-    gl_.glFinish();
+    if (gl_.glFinish == nullptr || !context_.make_current()) return true;
+    GLsync fence = nullptr;
+    if (gl_.glFenceSync != nullptr && gl_.glClientWaitSync != nullptr && gl_.glDeleteSync != nullptr)
+        fence = gl_.glFenceSync(gl_sync_gpu_commands_complete, 0u);
+    if (fence == nullptr) {
+        gl_.glFinish();
+    } else {
+        const uint32_t reached = gl_.glClientWaitSync(fence, gl_sync_flush_commands_bit, budget.remaining());
+        gl_.glDeleteSync(fence);
+        if (reached != gl_already_signaled && reached != gl_condition_satisfied) return false;
+    }
     static_cast<void>(progress_.settle());
     memories_.reclaim(import_);
+    return true;
 }
 
 void OpenGlBackend::shut_down()

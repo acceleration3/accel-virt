@@ -1,4 +1,6 @@
 #include "executor/d3d/d3d_backend.hpp"
+
+#include "executor/teardown_budget.hpp"
 #include "proto/resources/mip_extent.hpp"
 #include "proto/resources/subresource_layout.hpp"
 
@@ -198,13 +200,17 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
                           blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR)));
 }
 
-void D3dBackend::drain()
+bool D3dBackend::drain(TeardownBudget &budget)
 {
     AV_SCOPE("D3dBackend::drain");
-    if (device11_ == nullptr) return;
+    if (device11_ == nullptr) return true;
+    bool drained = d3d12_.drain_within(budget);
+    if (!has_device()) return drained;
+    uint64_t ticket = 0u;
     device11_->lock(nullptr);
-    device11_->vulkan().idle();
+    const bool marked = device11_->vulkan().mark_idle(ticket);
     device11_->unlock();
+    return marked && device11_->vulkan().reached(ticket, budget.remaining()) && drained;
 }
 
 void D3dBackend::end_batch()

@@ -2,6 +2,7 @@
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/executor_log.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
+#include "harness/executor/generous_budget.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 
@@ -27,12 +28,14 @@ av::ExecutorLog  executor_log(sink);
 struct Drainer {
     D3dBackend        *backend;
     std::atomic<bool>  done;
+    std::atomic<bool>  drained;
 };
 
 void *drain_it(void *context)
 {
     Drainer &drainer = *static_cast<Drainer *>(context);
-    drainer.backend->drain();
+    av::GenerousBudget budget;
+    drainer.drained.store(drainer.backend->drain(budget.budget()));
     drainer.done.store(true);
     return nullptr;
 }
@@ -47,23 +50,22 @@ void wait_a_while()
 
 TEST(d3d_backend_drain, returns_at_once_for_a_backend_with_no_device)
 { D3dBackend backend(executor_log);
-  backend.drain();
+  av::GenerousBudget budget;
+  CHECK(backend.drain(budget.budget()));
   CHECK(backend.invariants_hold()); }
 
-TEST(d3d_backend_drain, takes_the_device_lock_for_the_idle_wait_and_gives_it_back)
+TEST(d3d_backend_drain, a_session_that_never_made_a_direct3d11_device_neither_takes_the_device_lock_nor_waits)
 { D3dBackend backend(executor_log);
   D3d11HostDevice device(executor_log.d3d11());
   D3dBackendProbe::use(backend, &device);
-  backend.drain();
-  device.lock(nullptr);
-  device.unlock();
-  Drainer drainer = {&backend, false};
+  Drainer drainer = {&backend, false, false};
   device.lock(nullptr);
   pthread_t thread;
   CHECK_EQ(pthread_create(&thread, nullptr, drain_it, &drainer), 0);
   wait_a_while();
-  CHECK(!drainer.done.load());
+  const bool finished = drainer.done.load();
   device.unlock();
   CHECK_EQ(pthread_join(thread, nullptr), 0);
-  CHECK(drainer.done.load());
+  CHECK(finished);
+  CHECK(drainer.drained.load());
   D3dBackendProbe::use(backend, nullptr); }

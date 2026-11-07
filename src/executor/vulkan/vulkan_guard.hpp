@@ -16,6 +16,7 @@ namespace av {
 
 class BlockSource;
 class VulkanDestroyer;
+class TeardownBudget;
 class VulkanProgress;
 
 class VulkanGuard {
@@ -45,11 +46,14 @@ public:
                                      uint32_t count);
     [[nodiscard]] bool await_reset(uint64_t owner, uint64_t device);
     [[nodiscard]] bool quiesce(uint64_t device);
-    [[nodiscard]] bool quiesce_through(uint64_t mark, uint64_t device);
+    [[nodiscard]] bool quiesce_marks(const uint64_t *marks, uint32_t count, uint64_t device);
+    bool               reset_pending(uint64_t pool, uint64_t device) const;
+    uint64_t           reached(uint64_t device);
+    uint64_t           marked() const;
     void               defer_pool_reset(uint64_t pool, uint64_t device, uint64_t mark);
     uint64_t           mark_of(uint64_t owner, uint64_t device) const;
     void               end_batch();
-    void               drain();
+    [[nodiscard]] bool drain(TeardownBudget &budget);
 
     bool holding(uint64_t owner, uint64_t handle) const;
     bool tracked(uint64_t handle) const;

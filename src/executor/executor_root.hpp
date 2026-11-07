@@ -10,6 +10,7 @@
 #include "executor/executor_domains.hpp"
 #include "executor/gpu_clock_hold.hpp"
 #include "executor/host_gpu_set.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/sharing/session_shares.hpp"
@@ -22,6 +23,7 @@ namespace av {
 
 class ExecutorLog;
 class SurfacePoint;
+class TeardownBudget;
 
 class HostApis;
 class HostMemorySource;
@@ -31,6 +33,7 @@ class SessionBackend;
 class ExecutorRoot final : public StateReporter {
 public:
     static constexpr uint32_t sessions = 64u;
+    static constexpr uint64_t teardown_nanoseconds = 1000000000u;
 
     explicit ExecutorRoot(ExecutorLog &log);
     ~ExecutorRoot();
@@ -83,6 +86,8 @@ private:
     const HostGpu *gpu_of(uint32_t domain) const;
     HostMemorySource *source_of(uint32_t domain) const;
     uint32_t       slot_of(const ContextSession *session) const;
+    bool           finish(uint32_t slot, TeardownBudget &budget);
+    void           reap_wedged();
     uint32_t       shared_answer(Status answered) const;
     void           retire(uint32_t gpu);
     const OpenGlBackend *sharing(const ContextSession *share, const HostGpu &gpu) const;
@@ -100,6 +105,8 @@ private:
     SessionShares  shares_[max_sessions];
     uint32_t       apis_of_[max_sessions];
     uint32_t       gpus_of_[max_sessions];
+    bool           wedged_[max_sessions];
+    MonotonicClock clock_;
     HostApis      *apis_;
 };
 

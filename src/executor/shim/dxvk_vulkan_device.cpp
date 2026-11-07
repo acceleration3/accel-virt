@@ -96,6 +96,19 @@ void DxvkVulkanDevice::idle()
     work_.idle();
 }
 
+bool DxvkVulkanDevice::mark_idle(uint64_t &ticket)
+{
+    AV_SCOPE("DxvkVulkanDevice::mark_idle");
+    ticket = 0u;
+    return !connected() || work_.mark_idle(ticket);
+}
+
+bool DxvkVulkanDevice::reached(uint64_t ticket, uint64_t nanoseconds) const
+{
+    AV_SCOPE("DxvkVulkanDevice::reached");
+    return work_.reached(ticket, nanoseconds);
+}
+
 bool DxvkVulkanDevice::signal(const VulkanTimeline &timeline, uint64_t value)
 {
     AV_SCOPE("DxvkVulkanDevice::signal");

@@ -1,5 +1,7 @@
 #include "executor/opencl/opencl_backend.hpp"
 
+#include "executor/teardown_budget.hpp"
+
 #include "core/support/extension_words.hpp"
 #include "core/support/growable_array.hpp"
 
@@ -79,7 +81,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -364,17 +366,40 @@ void OpenClBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
     reached = 0u;
 }
 
-void OpenClBackend::drain()
+bool OpenClBackend::drain(TeardownBudget &budget)
 {
     AV_SCOPE("OpenClBackend::drain");
-    if (queue_ != nullptr) static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
+    static_cast<void>(user_events_.fail_pending());
+    bool drained = queue_ == nullptr || settled(static_cast<cl_command_queue>(queue_), budget);
     for (uint32_t slot = handles_.next_held(0u); slot != handles_.no_slot; slot = handles_.next_held(slot + 1u)) {
         uint64_t                key = 0u;
         clproto::HandleKind     kind = clproto::HandleKind::platform;
         void *const *const object = handles_.at(slot, key, kind);
-        if (kind == clproto::HandleKind::command_queue && object != nullptr && *object != nullptr)
-            static_cast<void>(::clFinish(static_cast<cl_command_queue>(*object)));
+        if (kind == clproto::HandleKind::command_queue && object != nullptr && *object != nullptr &&
+            !settled(static_cast<cl_command_queue>(*object), budget))
+            drained = false;
     }
+    return drained || lost_;
+}
+
+bool OpenClBackend::settled(cl_command_queue queue, TeardownBudget &budget)
+{
+    AV_SCOPE("OpenClBackend::settled");
+    constexpr uint64_t poll_nanoseconds = 100000u;
+    cl_event           marker = nullptr;
+    if (::clEnqueueMarkerWithWaitList(queue, 0u, nullptr, &marker) != CL_SUCCESS || marker == nullptr) return false;
+    static_cast<void>(::clFlush(queue));
+    bool done = false;
+    for (;;) {
+        cl_int status = CL_QUEUED;
+        done = ::clGetEventInfo(marker, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr) !=
+                   CL_SUCCESS ||
+               status <= CL_COMPLETE;
+        if (done || budget.expired()) break;
+        clock_.pause(poll_nanoseconds);
+    }
+    static_cast<void>(::clReleaseEvent(marker));
+    return done;
 }
 
 void OpenClBackend::end_batch()
@@ -937,6 +962,22 @@ cl_int OpenClBackend::on_clGetEventInfo(cl_event event, cl_event_info param_name
         queue != nullptr)
         static_cast<void>(on_clFlush(queue));
     return asked;
+}
+
+cl_event OpenClBackend::on_clCreateUserEvent(cl_context context, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateUserEvent");
+    const cl_event made = RealDispatch::on_clCreateUserEvent(context, errcode_ret);
+    user_events_.track(made);
+    return made;
+}
+
+cl_int OpenClBackend::on_clSetUserEventStatus(cl_event event, cl_int execution_status)
+{
+    AV_SCOPE("OpenClBackend::on_clSetUserEventStatus");
+    const cl_int set = RealDispatch::on_clSetUserEventStatus(event, execution_status);
+    if (set == CL_SUCCESS) user_events_.settled(event);
+    return set;
 }
 
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)

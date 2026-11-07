@@ -75,6 +75,11 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
         if (owner != nullptr) owner->memory().release(handle);
         return;
     }
+    case VulkanDestroyKind::imported_semaphore: {
+        GuestDevice *const owner = device_of(device);
+        if (owner != nullptr) owner->memory().destroy_semaphore(handle);
+        return;
+    }
     case VulkanDestroyKind::descriptor_set: {
         const VkDescriptorSet set = reinterpret_cast<VkDescriptorSet>(handle);
         static_cast<void>(RealVulkanDispatch::on_vkFreeDescriptorSets(
@@ -95,15 +100,21 @@ void VulkanBackend::release_children(uint64_t parent, uint64_t device)
     handles_.for_each_child(parent, [this, device](uint64_t child) { static_cast<void>(guard_.release(child, device)); });
 }
 
-uint64_t VulkanBackend::children_mark(uint64_t parent, uint64_t device) const
+bool VulkanBackend::children_marks(uint64_t parent, uint64_t device, uint64_t *marks, uint32_t &count)
 {
-    AV_SCOPE("VulkanBackend::children_mark");
-    uint64_t newest = 0u;
+    AV_SCOPE("VulkanBackend::children_marks");
+    count = 0u;
+    bool   fits = true;
+    const uint64_t reached = guard_.reached(device);
     handles_.for_each_child(parent, [&](uint64_t child) {
         const uint64_t mark = guard_.mark_of(child, device);
-        if (mark > newest) newest = mark;
+        if (mark <= reached) return;
+        for (uint32_t index = 0u; index < count; index++)
+            if (marks[index] == mark) return;
+        if (count == max_child_marks) fits = false;
+        else marks[count++] = mark;
     });
-    return newest;
+    return fits;
 }
 
 uint64_t VulkanBackend::owning_device(uint64_t handle) const
@@ -228,20 +239,38 @@ VkResult VulkanBackend::on_vkFreeDescriptorSets(VkDevice device, VkDescriptorPoo
     return VK_SUCCESS;
 }
 
+VkResult VulkanBackend::on_vkAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo,
+                                                    VkDescriptorSet *pDescriptorSets)
+{
+    AV_SCOPE("VulkanBackend::on_vkAllocateDescriptorSets");
+    if (pAllocateInfo != nullptr && guard_.reset_pending(number(pAllocateInfo->descriptorPool), number(device)))
+        return VK_ERROR_OUT_OF_POOL_MEMORY;
+    return RealVulkanDispatch::on_vkAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets);
+}
+
 VkResult VulkanBackend::on_vkResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool,
                                                  VkDescriptorPoolResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetDescriptorPool");
-    const uint64_t newest = children_mark(number(descriptorPool), number(device));
-    if (!guard_.quiesce_through(newest, number(device))) {
-        guard_.defer_pool_reset(number(descriptorPool), number(device), newest);
-        release_children(number(descriptorPool), number(device));
-        guard_.orphan_children(number(descriptorPool), number(device));
+    const uint64_t pool = number(descriptorPool);
+    const uint64_t owner = number(device);
+    guard_.reap();
+    if (guard_.reset_pending(pool, owner)) return VK_SUCCESS;
+    uint64_t marks[max_child_marks];
+    uint32_t count = 0u;
+    const bool counted = children_marks(pool, owner, marks, count);
+    if (!(counted ? guard_.quiesce_marks(marks, count, owner) : guard_.quiesce(owner))) {
+        uint64_t newest = counted ? 0u : guard_.marked();
+        for (uint32_t index = 0u; index < count && counted; index++)
+            if (marks[index] > newest) newest = marks[index];
+        guard_.defer_pool_reset(pool, owner, newest);
+        release_children(pool, owner);
+        guard_.orphan_children(pool, owner);
         return VK_SUCCESS;
     }
-    release_children(number(descriptorPool), number(device));
+    release_children(pool, owner);
     const VkResult reset = RealVulkanDispatch::on_vkResetDescriptorPool(device, descriptorPool, flags);
-    if (reset == VK_SUCCESS) guard_.orphan_children(number(descriptorPool), number(device));
+    if (reset == VK_SUCCESS) guard_.orphan_children(pool, owner);
     return reset;
 }
 
@@ -249,9 +278,13 @@ VkResult VulkanBackend::on_vkResetCommandPool(VkDevice device, VkCommandPool com
                                               VkCommandPoolResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetCommandPool");
-    if (!guard_.quiesce_through(children_mark(number(commandPool), number(device)), number(device)))
+    const uint64_t owner = number(device);
+    uint64_t       marks[max_child_marks];
+    uint32_t       count = 0u;
+    const bool     counted = children_marks(number(commandPool), owner, marks, count);
+    if (!(counted ? guard_.quiesce_marks(marks, count, owner) : guard_.quiesce(owner)))
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    release_children(number(commandPool), number(device));
+    release_children(number(commandPool), owner);
     return RealVulkanDispatch::on_vkResetCommandPool(device, commandPool, flags);
 }
 

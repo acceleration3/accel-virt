@@ -1,3 +1,4 @@
+#include "harness/executor/generous_budget.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
@@ -118,7 +119,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         run_one(session, id, payload, length, capacity, reply, answer, result);
         if (result == AV_EXECUTED && answer <= capacity) answered.note(backend, reply, answer);
     }
-    session.release();
+    static_cast<void>(session.release(av::GenerousBudget().budget()));
     backend.shut_down();
     return 0;
 }

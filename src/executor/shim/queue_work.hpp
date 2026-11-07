@@ -1,6 +1,8 @@
 #ifndef AV_QUEUE_WORK_HPP
 #define AV_QUEUE_WORK_HPP
 
+#include "executor/shim/vulkan_timeline.hpp"
+
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
@@ -8,7 +10,6 @@ namespace av {
 
 class BorrowedQueue;
 class VulkanDeviceTable;
-class VulkanTimeline;
 
 class QueueWork {
 public:
@@ -28,6 +29,8 @@ public:
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
     [[nodiscard]] bool signal(const VulkanTimeline &timeline, uint64_t value);
     void               idle();
+    [[nodiscard]] bool mark_idle(uint64_t &ticket);
+    [[nodiscard]] bool reached(uint64_t ticket, uint64_t nanoseconds) const;
 
 private:
     VkCommandBuffer next_buffer();
@@ -42,6 +45,8 @@ private:
     const VulkanTimeline    *signals_[in_flight];
     uint64_t                 values_[in_flight];
     uint32_t                 next_;
+    VulkanTimeline           marker_;
+    uint64_t                 ticket_;
 };
 
 }

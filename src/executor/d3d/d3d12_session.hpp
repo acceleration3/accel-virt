@@ -38,6 +38,7 @@ class DriverLog;
 class D3d11HostDevice;
 class SessionShares;
 class SourceMemory;
+class TeardownBudget;
 class SharedSurfaces;
 class WatchedBlocks;
 class D3d12HostDevice;
@@ -57,6 +58,7 @@ public:
                                   D3d11HostDevice *shown_by = nullptr,
                                   SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr);
     void               shut_down();
+    [[nodiscard]] bool drain_within(TeardownBudget &budget);
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);

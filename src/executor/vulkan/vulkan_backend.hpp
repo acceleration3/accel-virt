@@ -44,7 +44,7 @@ public:
     bool lost() const override;
     [[nodiscard]] bool lose_device() override;
     void end_batch() override;
-    void drain() override;
+    bool drain(TeardownBudget &budget) override;
     bool poll() override;
     void bind_signal(void (*signal)(void *context), void *context) override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
@@ -151,6 +151,8 @@ public:
     void     on_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks *pAllocator) override;
     void     on_vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers) override;
     VkResult on_vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets) override;
+    VkResult on_vkAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo,
+                                         VkDescriptorSet *pDescriptorSets) override;
     VkResult on_vkResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags) override;
     VkResult on_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) override;
     VkResult on_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo) override;
@@ -221,8 +223,10 @@ private:
     [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
 
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
+    static constexpr uint32_t max_child_marks = 128u;
+
     void     release_children(uint64_t parent, uint64_t device);
-    uint64_t children_mark(uint64_t parent, uint64_t device) const;
+    bool     children_marks(uint64_t parent, uint64_t device, uint64_t *marks, uint32_t &count);
     uint64_t owning_device(uint64_t handle) const;
     bool     reusable(VkCommandBuffer commandBuffer);
     bool     template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device);

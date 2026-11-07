@@ -1,5 +1,7 @@
 #include "executor/d3d/d3d12_session.hpp"
 
+#include "executor/teardown_budget.hpp"
+
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/source_memory.hpp"
@@ -410,6 +412,21 @@ bool D3d12Session::drain()
     }
     if (wait_for(progress_.marked())) return true;
     progress_.log_stuck(lines_);
+    return false;
+}
+
+bool D3d12Session::drain_within(TeardownBudget &budget)
+{
+    AV_SCOPE("D3d12Session::drain_within");
+    if (device_ == nullptr || lost()) return true;
+    if (!progress_.mark_all()) return false;
+    const uint64_t mark = progress_.marked();
+    if (progress_.reached() >= mark) return true;
+    constexpr uint64_t spin_ns = 2000000u;
+    constexpr uint64_t nap_ns = 50000u;
+    PollBudget         polls(clock_, spin_ns, nap_ns, budget.remaining());
+    while (polls.next())
+        if (progress_.reached() >= mark) return true;
     return false;
 }
 

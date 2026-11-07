@@ -262,6 +262,13 @@ bool VulkanLifetimes::linked(uint64_t handle, uint64_t pool) const
     return found != nullptr && (*found)->pool() != nullptr && (*found)->pool()->handle() == pool;
 }
 
+bool VulkanLifetimes::reset_pending(uint64_t pool) const
+{
+    AV_SCOPE("VulkanLifetimes::reset_pending");
+    VulkanNode *const *const found = nodes_.find(pool);
+    return found != nullptr && (*found)->kind() == VulkanDestroyKind::descriptor_pool_reset;
+}
+
 uint32_t VulkanLifetimes::nodes() const
 {
     AV_SCOPE("VulkanLifetimes::nodes");

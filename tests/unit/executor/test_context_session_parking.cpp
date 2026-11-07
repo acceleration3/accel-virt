@@ -1,3 +1,4 @@
+#include "harness/executor/generous_budget.hpp"
 #include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
@@ -58,7 +59,7 @@ public:
     }
     ~Parking()
     {
-        session_.release();
+        static_cast<void>(session_.release(av::GenerousBudget().budget()));
         for (const AvHostMemory &made : memory_)
             if (made.fd >= 0) close(made.fd);
     }
@@ -181,7 +182,7 @@ TEST(context_session_parking, releasing_the_session_retires_what_still_waits)
   parking.backend().set_progress(7u, 3u);
   parking.session().release_blob(5u);
   CHECK_EQ(parking.session().parked(), 1u);
-  parking.session().release();
+  static_cast<void>(parking.session().release(av::GenerousBudget().budget()));
   CHECK_EQ(parking.session().parked(), 0u);
   CHECK_EQ(parking.backend().abandoned(), 1u);
   CHECK(parking.session().invariants_hold()); }

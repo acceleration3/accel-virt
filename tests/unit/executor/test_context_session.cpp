@@ -1,3 +1,4 @@
+#include "harness/executor/generous_budget.hpp"
 #include "core/log/driver_log.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
@@ -176,7 +177,7 @@ TEST(context_session, binding_twice_is_refused_and_releasing_gives_it_back)
   (void)backend;
   CHECK_STATUS(bound.status(), Status::ok);
   CHECK_STATUS(session.initialize(backend, bound.block(), block_bytes), Status::invalid_state);
-  session.release();
+  static_cast<void>(session.release(av::GenerousBudget().budget()));
   CHECK(!session.live());
   CHECK_STATUS(session.initialize(backend, bound.block(), block_bytes), Status::ok);
   CHECK(session.invariants_hold()); }
@@ -191,7 +192,7 @@ TEST(context_session, a_released_session_is_not_still_faulted)
   CHECK_EQ(session.execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr, 0u,
                            answer),
            std::uint32_t{AV_DEVICE_LOST});
-  session.release();
+  static_cast<void>(session.release(av::GenerousBudget().budget()));
   CHECK(session.invariants_hold());
   CHECK(!session.live()); }
 
@@ -211,7 +212,7 @@ public:
     }
     ~Drawing()
     {
-        bound_.session().release();
+        static_cast<void>(bound_.session().release(av::GenerousBudget().budget()));
         if (memory_.fd >= 0) close(memory_.fd);
     }
     static av::HostMemoryRequest upload() { return av::HostMemoryRequest(av::HostMemoryRequest::Kind::upload, 0u); }
@@ -320,7 +321,7 @@ TEST(context_session_import, imports_past_any_old_bound_are_all_held_and_given_b
   for (std::uint64_t id = 1u; id <= many; id++)
       CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(drawing.session().imports().count(), many);
-  drawing.session().release();
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 0u); }
 
@@ -331,7 +332,7 @@ TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did
   CHECK_EQ(drawing.session().imports().count(), 3u);
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 1u);
-  drawing.session().release();
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
   CHECK_EQ(drawing.backend().abandoned(), 3u);
   CHECK_EQ(drawing.session().imports().count(), 0u);
   CHECK_EQ(drawing.exporter().live(), 0u);
@@ -342,11 +343,11 @@ TEST(context_session_release, shuts_its_backend_down_after_its_imports)
   for (std::uint64_t id = 1u; id <= 2u; id++)
       CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(drawing.backend().shut_downs(), 0u);
-  drawing.session().release();
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
   CHECK_EQ(drawing.backend().shut_downs(), 1u);
   CHECK_EQ(drawing.backend().abandoned_before_shut_down(), 2u);
   CHECK(drawing.session().invariants_hold());
-  drawing.session().release();
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
   CHECK_EQ(drawing.backend().shut_downs(), 1u); }
 
 
@@ -425,7 +426,7 @@ TEST(context_session, says_when_a_lost_device_faulted_it)
   CHECK_EQ(bound.session().execute(MockSessionBackend::lose_id, nullptr, 0u, nullptr, 0u, answer),
            std::uint32_t{AV_DEVICE_LOST});
   CHECK(bound.session().faulted());
-  bound.session().release();
+  static_cast<void>(bound.session().release(av::GenerousBudget().budget()));
   CHECK(!bound.session().faulted()); }
 
 TEST(context_session_hold_clocks, a_session_holding_clocks_runs_its_commands_as_before)
@@ -441,7 +442,7 @@ TEST(context_session_hold_clocks, a_session_holding_clocks_runs_its_commands_as_
   CHECK_EQ(answer, sizeof payload);
   CHECK_EQ(reply[7], payload[7]);
   CHECK_EQ(bound.backend().ran(), 1u);
-  bound.session().release();
+  static_cast<void>(bound.session().release(av::GenerousBudget().budget()));
   CHECK(!bound.session().live());
   CHECK(bound.session().invariants_hold()); }
 
@@ -523,7 +524,7 @@ TEST(context_session, an_answer_longer_than_the_capacity_is_kept_for_answer_part
   CHECK_EQ(answer, sizeof big);
   CHECK_EQ(session.answer_part(0u, part, sizeof part, length), 0u);
   CHECK_EQ(length, 0u);
-  session.release();
+  static_cast<void>(session.release(av::GenerousBudget().budget()));
   CHECK_EQ(session.answer_part(0u, part, sizeof part, length), 0u); }
 
 TEST(context_session, a_command_needing_more_than_the_block_decodes_past_it)
@@ -573,10 +574,27 @@ TEST(context_session_release, waits_for_the_gpu_before_any_blob_or_source_memory
       CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.backend().drains(), 0u);
-  drawing.session().release();
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
   CHECK_EQ(drawing.backend().drains(), 1u);
   CHECK_EQ(drawing.backend().abandoned_before_drain(), 0u);
   CHECK_EQ(drawing.backend().abandoned(), 2u);
   CHECK_EQ(drawing.exporter().live(), 0u);
-  drawing.session().release();
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
   CHECK_EQ(drawing.backend().drains(), 1u); }
+
+TEST(context_session_release, a_drain_that_does_not_finish_keeps_every_blob_and_the_backend_and_may_be_retried)
+{ Drawing drawing;
+  for (std::uint64_t id = 1u; id <= 2u; id++)
+      CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
+  drawing.source().free(domain, key);
+  drawing.backend().set_drains_in_time(false);
+  CHECK(!drawing.session().release(av::GenerousBudget().budget()));
+  CHECK(drawing.session().live());
+  CHECK_EQ(drawing.backend().abandoned(), 0u);
+  CHECK_EQ(drawing.backend().shut_downs(), 0u);
+  CHECK(drawing.exporter().live() != 0u);
+  drawing.backend().set_drains_in_time(true);
+  CHECK(drawing.session().release(av::GenerousBudget().budget()));
+  CHECK(!drawing.session().live());
+  CHECK_EQ(drawing.backend().abandoned(), 2u);
+  CHECK_EQ(drawing.exporter().live(), 0u); }

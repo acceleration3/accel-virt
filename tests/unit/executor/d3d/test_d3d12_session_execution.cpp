@@ -1,4 +1,6 @@
 #include "executor/d3d/d3d12_object_holds.hpp"
+#include "executor/monotonic_clock.hpp"
+#include "executor/teardown_budget.hpp"
 #include "harness/executor/d3d12_session_loopback.hpp"
 #include "harness/executor/fake_allocator.hpp"
 #include "harness/executor/fake_command_list.hpp"
@@ -210,6 +212,28 @@ TEST(d3d12_session_execution, a_session_whose_gpu_never_finishes_leaks_what_it_h
   CHECK(scene.execute(queue_a, list));
   scene.session().shut_down();
   CHECK_EQ(scene.dst.references(), 1u); }
+
+TEST(d3d12_session_execution, a_drain_the_gpu_does_not_finish_gives_up_at_its_budget_and_not_at_the_hang_limit)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_a, list));
+  av::MonotonicClock  clock;
+  av::TeardownBudget  budget(clock, 20u * 1000u * 1000u);
+  const std::uint64_t started = clock.now_nanoseconds();
+  CHECK(!scene.session().drain_within(budget));
+  CHECK(clock.now_nanoseconds() - started < 1000u * 1000u * 1000u);
+  CHECK_EQ(scene.session().removed_reason(), 0u);
+  scene.rig.hurry(quick);
+  scene.session().shut_down(); }
+
+TEST(d3d12_session_execution, a_drain_the_gpu_finishes_in_time_reports_it)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_a, list));
+  for (av::FakeFence &fence : scene.device.fences) fence.completed = ~std::uint64_t{0};
+  av::MonotonicClock  clock;
+  av::TeardownBudget  budget(clock, 500u * 1000u * 1000u);
+  CHECK(scene.session().drain_within(budget)); }
 
 TEST(d3d12_session_execution, a_resource_a_view_names_outlives_the_guest_s_destroy_of_it)
 { Scene scene;

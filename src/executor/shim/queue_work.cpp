@@ -14,7 +14,7 @@ constexpr uint64_t most_wait_nanoseconds = 1000000000u;
 }
 
 QueueWork::QueueWork()
-    : table_(nullptr), queue_(nullptr), pool_(VK_NULL_HANDLE), buffers_{}, signals_{}, values_{}, next_(0u)
+    : table_(nullptr), queue_(nullptr), pool_(VK_NULL_HANDLE), buffers_{}, signals_{}, values_{}, next_(0u), marker_(), ticket_(0u)
 {
     AV_SCOPE("QueueWork::QueueWork");
 }
@@ -51,6 +51,8 @@ void QueueWork::close()
         table_->destroy_command_pool(pool_);
     }
     pool_ = VK_NULL_HANDLE;
+    marker_.release();
+    ticket_ = 0u;
     table_ = nullptr;
     queue_ = nullptr;
     for (uint32_t slot = 0u; slot < in_flight; slot++) {
@@ -69,6 +71,23 @@ void QueueWork::idle()
     queue_->lock();
     table_->queue_idle(queue_->queue());
     queue_->unlock();
+}
+
+bool QueueWork::mark_idle(uint64_t &ticket)
+{
+    AV_SCOPE("QueueWork::mark_idle");
+    ticket = 0u;
+    if (queue_ == nullptr) return true;
+    if (!marker_.made() && !marker_.make_exportable(*table_)) return false;
+    if (!signal(marker_, ticket_ + 1u)) return false;
+    ticket = ++ticket_;
+    return true;
+}
+
+bool QueueWork::reached(uint64_t ticket, uint64_t nanoseconds) const
+{
+    AV_SCOPE("QueueWork::reached");
+    return marker_.wait(ticket, nanoseconds);
 }
 
 VkCommandBuffer QueueWork::next_buffer()

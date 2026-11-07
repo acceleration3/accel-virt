@@ -33,6 +33,8 @@ public:
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
     [[nodiscard]] bool signal(const VulkanTimeline &timeline, uint64_t value);
     void               idle();
+    [[nodiscard]] bool mark_idle(uint64_t &ticket);
+    [[nodiscard]] bool reached(uint64_t ticket, uint64_t nanoseconds) const;
     [[nodiscard]] bool sync_file(int &fd);
 private:
     IDXGIVkInteropDevice1 *interop_;

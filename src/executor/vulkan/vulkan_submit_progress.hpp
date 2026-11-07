@@ -21,7 +21,8 @@ public:
     void     commit(uint64_t mark, uint64_t queue) override;
     void     cancel(uint64_t mark) override;
     bool     wait_idle(uint64_t device) override;
-    bool     wait_through(uint64_t device, uint64_t mark) override;
+    bool     wait_marks(uint64_t device, const uint64_t *marks, uint32_t count) override;
+    bool     drain(uint64_t device, TeardownBudget &budget) override;
     void     begin_poll() override;
     void     forget(VkDevice device);
 
@@ -50,7 +51,8 @@ private:
 
     void     settle();
     void     poll_all();
-    bool     waited(Slot &slot);
+    bool     waited(Slot &slot, uint64_t nanoseconds = wait_ns);
+    bool     settled_within(Slot &slot, TeardownBudget &budget);
     bool     queued(Slot &slot);
     bool     settled(Slot &slot);
     uint32_t oldest() const;

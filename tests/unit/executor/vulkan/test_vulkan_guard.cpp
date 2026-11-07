@@ -1,3 +1,4 @@
+#include "harness/executor/generous_budget.hpp"
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_progress.hpp"
@@ -61,13 +62,25 @@ public:
         pending = 0u;
         return true;
     }
-    bool wait_through(std::uint64_t of, std::uint64_t mark) override
+    bool wait_marks(std::uint64_t of, const std::uint64_t *marks, std::uint32_t count) override
     {
         waits++;
-        waited_through = mark;
+        waited_marks = count;
+        std::uint64_t newest = 0u;
+        for (std::uint32_t index = 0u; index < count; index++) {
+            waited_through = marks[index];
+            if (marks[index] > newest) newest = marks[index];
+        }
         if (timeout) return false;
-        const std::uint64_t to = mark < marked_ ? mark : marked_;
+        const std::uint64_t to = newest < marked_ ? newest : marked_;
         if (of < slots && reached_[of] < to) reached_[of] = to;
+        return true;
+    }
+    bool drain(std::uint64_t of, av::TeardownBudget &) override
+    {
+        waits++;
+        if (timeout) return false;
+        if (of < slots) reached_[of] = marked_;
         return true;
     }
     void begin_poll() override { polls++; }
@@ -90,6 +103,7 @@ public:
     std::uint32_t polls = 0u;
     std::uint32_t pending = 0u;
     std::uint32_t capacity = 128u;
+    std::uint32_t waited_marks = 0u;
     bool          refuse = false;
     bool          timeout = false;
 };
@@ -186,7 +200,8 @@ struct Rig {
     bool reset_descriptor_pool(std::uint64_t reset, std::uint64_t first_child, std::uint64_t second_child,
                                std::uint64_t on = device)
     {
-        if (!guard.quiesce_through(guard.mark_of(first_child, on), on)) return false;
+        const std::uint64_t mark = guard.mark_of(first_child, on);
+        if (!guard.quiesce_marks(&mark, 1u, on)) return false;
         if (first_child != 0u) static_cast<void>(guard.release(first_child, on));
         if (second_child != 0u) static_cast<void>(guard.release(second_child, on));
         guard.orphan_children(reset, on);
@@ -754,6 +769,17 @@ TEST(vulkan_guard, imported_memory_freed_while_a_buffer_bound_to_it_is_still_in_
   CHECK(rig.destroyer.kinds[rig.destroyer.order_of(memory)] == VulkanDestroyKind::imported_memory);
   CHECK(rig.guard.invariants_hold()); }
 
+TEST(vulkan_guard, an_imported_semaphore_a_submission_may_wait_on_is_destroyed_only_after_the_gpu_is_past_it)
+{ Rig rig;
+  CHECK(rig.record(cb, Named{HandleKind::buffer, buffer}, Named{HandleKind::device, 0u}, device));
+  CHECK_EQ(rig.submit(cb), 1u);
+  rig.guard.destroy(VulkanDestroyKind::imported_semaphore, device, 0u, memory);
+  CHECK_EQ(rig.destroyer.count, 0u);
+  rig.progress.reach(device, 1u);
+  rig.guard.reap();
+  CHECK_EQ(rig.destroyer.count, 1u);
+  CHECK(rig.destroyer.kinds[0] == VulkanDestroyKind::imported_semaphore); }
+
 TEST(vulkan_guard, imported_memory_nothing_uses_is_released_at_once_and_one_that_cannot_wait_is_leaked)
 { Rig rig;
   rig.guard.destroy(VulkanDestroyKind::imported_memory, device, 0u, memory);
@@ -875,13 +901,16 @@ TEST(vulkan_guard, waiting_for_a_mark_the_gpu_is_already_past_waits_for_nothing)
 { Rig rig;
   CHECK_EQ(rig.submit(cb), 1u);
   rig.progress.reach(device, 1u);
-  CHECK(rig.guard.quiesce_through(1u, device));
-  CHECK(rig.guard.quiesce_through(0u, device));
+  const std::uint64_t past[2] = {1u, 0u};
+  CHECK(rig.guard.quiesce_marks(past, 2u, device));
+  CHECK(rig.guard.quiesce_marks(nullptr, 0u, device));
   CHECK_EQ(rig.progress.waits, 0u);
-  CHECK(rig.guard.quiesce_through(2u, device));
+  const std::uint64_t ahead[1] = {2u};
+  CHECK(rig.guard.quiesce_marks(ahead, 1u, device));
   CHECK_EQ(rig.progress.waited_through, 2u);
   rig.progress.timeout = true;
-  CHECK(!rig.guard.quiesce_through(3u, device)); }
+  const std::uint64_t later[1] = {3u};
+  CHECK(!rig.guard.quiesce_marks(later, 1u, device)); }
 
 TEST(vulkan_guard, a_pool_reset_the_gpu_does_not_finish_is_done_after_the_mark_and_a_destroy_before_then_wins)
 { Rig rig;
@@ -918,9 +947,32 @@ TEST(vulkan_guard, draining_waits_for_every_device_s_work_and_leaves_the_objects
   CHECK(rig.record(other_cb, Named{HandleKind::image, image}, Named{HandleKind::device, 0u}, other_device));
   CHECK_EQ(rig.submit(cb, device), 1u);
   CHECK_EQ(rig.submit(other_cb, other_device), 2u);
-  rig.guard.drain();
+  av::GenerousBudget budget;
+  CHECK(rig.guard.drain(budget.budget()));
   CHECK_EQ(rig.progress.waits, 2u);
   CHECK_EQ(rig.progress.reached(device), 2u);
   CHECK_EQ(rig.progress.reached(other_device), 2u);
   CHECK(rig.guard.holding(cb, buffer));
   CHECK_EQ(rig.destroyer.count, 0u); }
+
+TEST(vulkan_guard, a_drain_the_gpu_does_not_finish_in_time_reports_it_and_still_asks_every_device)
+{ Rig rig;
+  CHECK(rig.record(cb, Named{HandleKind::buffer, buffer}, Named{HandleKind::device, 0u}, device));
+  CHECK(rig.record(other_cb, Named{HandleKind::image, image}, Named{HandleKind::device, 0u}, other_device));
+  CHECK_EQ(rig.submit(cb, device), 1u);
+  CHECK_EQ(rig.submit(other_cb, other_device), 2u);
+  rig.progress.timeout = true;
+  av::GenerousBudget budget;
+  CHECK(!rig.guard.drain(budget.budget()));
+  CHECK_EQ(rig.progress.waits, 2u);
+  CHECK_EQ(rig.destroyer.count, 0u); }
+
+TEST(vulkan_guard, a_wait_for_several_marks_asks_for_exactly_those_marks_and_ones_the_gpu_is_past_ask_for_nothing)
+{ Rig rig;
+  CHECK_EQ(rig.submit(cb), 1u);
+  CHECK_EQ(rig.submit(other_cb), 2u);
+  CHECK_EQ(rig.submit(cb), 3u);
+  const std::uint64_t some[2] = {1u, 3u};
+  CHECK(rig.guard.quiesce_marks(some, 2u, device));
+  CHECK_EQ(rig.progress.waited_marks, 2u);
+  CHECK_EQ(rig.progress.waits, 1u); }

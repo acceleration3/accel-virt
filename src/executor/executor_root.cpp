@@ -13,6 +13,7 @@
 #include "proto/resources/host_memory_request.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/sharing/host_shares.hpp"
+#include "executor/teardown_budget.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
@@ -25,7 +26,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][ContextSession::arena_
 
 ExecutorRoot::ExecutorRoot(ExecutorLog &log)
     : gpus_(), domains_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
-      apis_(nullptr)
+      wedged_{}, clock_(), apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
@@ -197,6 +198,7 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
 
     SessionBackend *const kind = backend_in(0u, sub_api);
     if (kind == nullptr) return nullptr;
+    reap_wedged();
 
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         SessionBackend &backend = *backend_in(slot, sub_api);
@@ -205,7 +207,8 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
         shares_[slot].bind(*apis_->shares(gpu->index()), options.domain, backend);
         if (!bind(slot, sub_api, *gpu, options, shared)) {
             shares_[slot].end();
-            sessions_[slot].object().release();
+            TeardownBudget budget(clock_, teardown_nanoseconds);
+            wedged_[slot] = !sessions_[slot].object().release(budget);
             return nullptr;
         }
         apis_of_[slot] = sub_api;
@@ -272,12 +275,35 @@ void ExecutorRoot::close(ContextSession *session)
     AV_SCOPE("ExecutorRoot::close");
     if (!owns(session)) return;
     const uint32_t slot = slot_of(session);
+    TeardownBudget budget(clock_, teardown_nanoseconds);
+    if (finish(slot, budget)) return;
+    wedged_[slot] = true;
+    apis_of_[slot] = 0u;
+}
+
+bool ExecutorRoot::finish(uint32_t slot, TeardownBudget &budget)
+{
+    AV_SCOPE("ExecutorRoot::finish");
+    ContextSession &session = sessions_[slot].object();
+    if (!session.drain(budget)) return false;
     shares_[slot].end();
-    session->release();
+    if (!session.release(budget)) return false;
     const uint32_t gpu = gpus_of_[slot];
+    wedged_[slot] = false;
     apis_of_[slot] = 0u;
     gpus_of_[slot] = 0u;
     retire(gpu);
+    return true;
+}
+
+void ExecutorRoot::reap_wedged()
+{
+    AV_SCOPE("ExecutorRoot::reap_wedged");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        if (!wedged_[slot]) continue;
+        TeardownBudget budget(clock_, 0u);
+        static_cast<void>(finish(slot, budget));
+    }
 }
 
 uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id)
@@ -352,6 +378,7 @@ void ExecutorRoot::report(StateWriter &writer)
         writer.text("api", api_name(apis_of_[slot]));
         writer.number("gpu", gpus_of_[slot]);
         writer.number("domain", shares_[slot].domain());
+        writer.flag("wedged", wedged_[slot]);
         sessions_[slot].object().report_channel(writer);
         writer.close();
     }

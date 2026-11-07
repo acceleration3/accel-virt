@@ -1,3 +1,5 @@
+#include "executor/monotonic_clock.hpp"
+#include "executor/teardown_budget.hpp"
 #include "executor/vulkan/vulkan_submit_progress.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -29,6 +31,7 @@ struct FakeDriver {
     bool          idle_fails = false;
     bool          submit_lost = false;
     std::uint32_t idles = 0u;
+    std::uint64_t last_wait_ns = 0u;
     VkFence       last_submitted = VK_NULL_HANDLE;
 };
 
@@ -112,9 +115,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceStatus(VkDevice, VkFence fence)
     return state.signalled ? VK_SUCCESS : VK_NOT_READY;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice, uint32_t, const VkFence *fences, VkBool32, uint64_t)
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice, uint32_t, const VkFence *fences, VkBool32, uint64_t timeout)
 {
     driver.waits++;
+    driver.last_wait_ns = timeout;
     const FakeFence &state = driver.fences[index_of(fences[0])];
     if (state.lost) return VK_ERROR_DEVICE_LOST;
     return state.signalled ? VK_SUCCESS : VK_TIMEOUT;
@@ -249,19 +253,29 @@ TEST(vulkan_submit_progress, a_wait_for_a_submission_whose_fence_cannot_be_queue
   CHECK_EQ(rig.progress.reached(device), 1u);
   CHECK(rig.progress.invariants_hold()); }
 
-TEST(vulkan_submit_progress, a_wait_through_a_mark_leaves_the_later_submissions_alone)
+TEST(vulkan_submit_progress, a_wait_for_marks_waits_for_those_submissions_only_and_not_for_earlier_or_later_ones)
 { Rig rig;
   CHECK_EQ(rig.submit(), 1u);
   CHECK_EQ(rig.submit(), 2u);
   CHECK_EQ(rig.submit(), 3u);
-  driver.fences[0].signalled = true;
   driver.fences[1].signalled = true;
   const std::uint32_t waited = driver.waits;
-  CHECK(rig.progress.wait_through(device, 2u));
-  CHECK_EQ(driver.waits - waited, 2u);
-  CHECK_EQ(rig.progress.reached(device), 2u);
-  CHECK(!rig.progress.wait_through(device, 3u));
-  CHECK(rig.progress.wait_through(device, 0u)); }
+  const std::uint64_t marks[1] = {2u};
+  CHECK(rig.progress.wait_marks(device, marks, 1u));
+  CHECK_EQ(driver.waits - waited, 1u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  const std::uint64_t unfinished[2] = {2u, 3u};
+  CHECK(!rig.progress.wait_marks(device, unfinished, 2u));
+  CHECK(rig.progress.wait_marks(device, marks, 0u)); }
+
+TEST(vulkan_submit_progress, a_wait_for_marks_leaves_other_devices_alone)
+{ Rig rig;
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(rig.submit(other_device), 2u);
+  driver.fences[0].signalled = true;
+  const std::uint64_t marks[2] = {1u, 2u};
+  CHECK(rig.progress.wait_marks(device, marks, 2u));
+  CHECK_EQ(driver.waits, 1u); }
 
 TEST(vulkan_submit_progress, a_queue_that_reports_the_device_lost_when_the_fence_is_retried_counts_the_work_as_done)
 { Rig rig;
@@ -335,3 +349,34 @@ TEST(vulkan_submit_progress, a_slot_taken_over_by_another_device_gets_a_fence_of
   CHECK_EQ(driver.destroyed, 1u);
   CHECK_EQ(driver.made, 2u);
   CHECK(driver.fences[1].device == device_of(other_device)); }
+
+TEST(vulkan_submit_progress, a_drain_waits_for_the_device_s_slots_no_longer_than_its_budget_and_says_when_they_did_not_finish)
+{ Rig rig;
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(rig.submit(other_device), 2u);
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 300u * 1000u * 1000u);
+  CHECK(!rig.progress.drain(device, budget));
+  CHECK_EQ(driver.waits, 1u);
+  CHECK(driver.last_wait_ns <= 300u * 1000u * 1000u);
+  CHECK(rig.progress.invariants_hold()); }
+
+TEST(vulkan_submit_progress, a_drain_of_finished_work_is_done_and_leaves_other_devices_alone)
+{ Rig rig;
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(rig.submit(other_device), 2u);
+  driver.fences[0].signalled = true;
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 300u * 1000u * 1000u);
+  CHECK(rig.progress.drain(device, budget));
+  CHECK_EQ(driver.waits, 1u);
+  CHECK(rig.progress.reached(other_device) == 1u); }
+
+TEST(vulkan_submit_progress, a_drain_never_blocks_on_a_submission_that_could_not_be_queued)
+{ Rig rig;
+  driver.submit_fails = true;
+  CHECK_EQ(rig.submit(), 1u);
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 300u * 1000u * 1000u);
+  CHECK(!rig.progress.drain(device, budget));
+  CHECK_EQ(driver.idles, 0u); }
