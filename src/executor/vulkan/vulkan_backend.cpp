@@ -1,4 +1,5 @@
 #include "executor/vulkan/vulkan_backend.hpp"
+#include "executor/vulkan/low_priority_queues.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
@@ -216,10 +217,11 @@ void VulkanBackend::adopt_host_version(VkInstanceCreateInfo &create)
     create.pApplicationInfo = &application_;
 }
 
-Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing)
+Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing,
+                                           const char *priority_extension)
 {
     AV_SCOPE("VulkanBackend::enable_memory_import");
-    constexpr uint32_t added = 4u;
+    constexpr uint32_t added = 5u;
     importing = create.enabledExtensionCount;
     const Status taken = extensions_.take(create.ppEnabledExtensionNames, create.enabledExtensionCount, added);
     if (taken == Status::invalid_parameter) return Status::ok;
@@ -227,6 +229,7 @@ Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t 
     static_cast<void>(extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME));
     static_cast<void>(extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME));
     static_cast<void>(extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME));
+    if (priority_extension != nullptr) static_cast<void>(extensions_.add(priority_extension));
     importing = extensions_.count();
     static_cast<void>(extensions_.add(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME));
     create.ppEnabledExtensionNames = extensions_.names();
@@ -392,22 +395,35 @@ VkResult VulkanBackend::on_vkCreateCommandPool(VkDevice device, const VkCommandP
     return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
-VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
-                                          const VkDeviceCreateInfo *pCreateInfo,
-                                          const VkAllocationCallbacks *, VkDevice *pDevice)
+VkResult VulkanBackend::create_host_device(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                                           const char *priority_extension, VkDevice *pDevice)
 {
-    AV_SCOPE("VulkanBackend::on_vkCreateDevice");
+    AV_SCOPE("VulkanBackend::create_host_device");
     VkDeviceCreateInfo create = *pCreateInfo;
     uint32_t           importing = 0u;
-    if (enable_memory_import(create, importing) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (enable_memory_import(create, importing, priority_extension) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
     if (result == VK_ERROR_EXTENSION_NOT_PRESENT && importing != create.enabledExtensionCount) {
         create.enabledExtensionCount = importing;
         result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
     }
-    if (result == VK_ERROR_EXTENSION_NOT_PRESENT &&
+    if (result == VK_ERROR_EXTENSION_NOT_PRESENT && priority_extension == nullptr &&
         create.enabledExtensionCount != pCreateInfo->enabledExtensionCount)
         result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, pCreateInfo, nullptr, pDevice);
+    return result;
+}
+
+VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
+                                          const VkDeviceCreateInfo *pCreateInfo,
+                                          const VkAllocationCallbacks *, VkDevice *pDevice)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateDevice");
+    LowPriorityQueues lowered;
+    VkDeviceCreateInfo prioritised = *pCreateInfo;
+    VkResult           result = VK_ERROR_INITIALIZATION_FAILED;
+    const bool         lowers = lowered.offered_by(physicalDevice) && lowered.apply(prioritised);
+    if (lowers) result = create_host_device(physicalDevice, &prioritised, lowered.extension(), pDevice);
+    if (!lowers || result != VK_SUCCESS) result = create_host_device(physicalDevice, pCreateInfo, nullptr, pDevice);
     if (result != VK_SUCCESS) return result;
     GuestDevice *made = nullptr;
     if (devices_.create(made) != Status::ok) {

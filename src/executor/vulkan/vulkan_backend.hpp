@@ -284,7 +284,10 @@ private:
 
     [[nodiscard]] Status enable_identity(VkInstanceCreateInfo &create);
     void adopt_host_version(VkInstanceCreateInfo &create);
-    [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
+    [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing,
+                                              const char *priority_extension);
+    VkResult create_host_device(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                                const char *priority_extension, VkDevice *pDevice);
 
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
     static constexpr uint32_t max_child_marks = 128u;
