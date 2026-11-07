@@ -1,0 +1,681 @@
+From: accel-virt
+Subject: [PATCH] memory: every allocation pool access is locked, and running out of memory no longer dereferences null
+
+importImageResource and the sparse createAllocation popped the allocation pool
+without the allocator's lock while DXVK's cs and submit threads allocated and
+freed under it, and the embedder imports host images on its own threads, so
+the pool's free list was corrupted and the next allocation crashed.
+When no memory is left, allocateStorage returns null: the DxvkBuffer and
+DxvkImage constructors throw DxvkOutOfMemoryError, which the Direct3D 11
+Create calls return as E_OUTOFMEMORY and Map(WRITE_DISCARD) returns as such
+before touching the slice. On the cs thread nothing throws: invalidateBuffer,
+storage relocation and the temporary, zero, spec data and scratch buffers
+skip the operation and mark the device lost.
+---
+diff --git a/src/d3d11/d3d11_buffer.h b/src/d3d11/d3d11_buffer.h
+index 52309c35..3d69a225 100644
+--- a/src/d3d11/d3d11_buffer.h
++++ b/src/d3d11/d3d11_buffer.h
+@@ -125,7 +125,10 @@ namespace dxvk {
+     
+     Rc<DxvkResourceAllocation> DiscardSlice(DxvkLocalAllocationCache* cache) {
+       auto allocation = m_buffer->allocateStorage(cache);
+-      m_mapPtr = allocation->mapPtr();
++
++      if (likely(allocation))
++        m_mapPtr = allocation->mapPtr();
++
+       return allocation;
+     }
+ 
+diff --git a/src/d3d11/d3d11_context.cpp b/src/d3d11/d3d11_context.cpp
+index b701ac98..0ad63dbc 100644
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -6052,10 +6052,20 @@ namespace dxvk {
+     uint32_t slotId = D3D11ShaderResourceMapping::computeCbvBinding(ShaderStage,
+       D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT + 1u);
+ 
++    Rc<DxvkBuffer> buffer;
++    Rc<DxvkResourceAllocation> slice;
++
+     if (NumClassInstances) {
+-      auto buffer = AllocInstanceDataBuffer(ShaderStage);
+-      auto slice = buffer->allocateStorage();
++      buffer = AllocInstanceDataBuffer(ShaderStage);
++
++      if (likely(buffer))
++        slice = buffer->allocateStorage();
+ 
++      if (unlikely(!slice))
++        Logger::err("D3D11: Out of memory allocating class instance data");
++    }
++
++    if (slice) {
+       auto data = reinterpret_cast<D3D11InstanceData*>(slice->mapPtr());
+ 
+       for (uint32_t i = 0u; i < D3D11ClassInstanceState::MaxInstances; i++)
+@@ -6113,10 +6123,15 @@ namespace dxvk {
+       bufferInfo.access = VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
+       bufferInfo.debugName = "Instance data";
+ 
+-      m_instanceData[ShaderStage] = m_device->createBuffer(bufferInfo,
+-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
++      try {
++        m_instanceData[ShaderStage] = m_device->createBuffer(bufferInfo,
++          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
++          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
++          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
++      } catch (const DxvkOutOfMemoryError& e) {
++        Logger::err(e.message());
++        return nullptr;
++      }
+     }
+ 
+     return m_instanceData[ShaderStage];
+diff --git a/src/d3d11/d3d11_context_def.cpp b/src/d3d11/d3d11_context_def.cpp
+index d58774c3..c6360346 100644
+--- a/src/d3d11/d3d11_context_def.cpp
++++ b/src/d3d11/d3d11_context_def.cpp
+@@ -282,6 +282,12 @@ namespace dxvk {
+     }
+ 
+     auto bufferSlice = pBuffer->AllocSlice(&m_allocationCache);
++
++    if (unlikely(!bufferSlice)) {
++      pMappedResource->pData = nullptr;
++      return E_OUTOFMEMORY;
++    }
++
+     pMappedResource->pData        = bufferSlice->mapPtr();
+     pMappedResource->RowPitch     = pBuffer->Desc()->ByteWidth;
+     pMappedResource->DepthPitch   = pBuffer->Desc()->ByteWidth;
+diff --git a/src/d3d11/d3d11_context_imm.cpp b/src/d3d11/d3d11_context_imm.cpp
+index 2120f718..fcd553d8 100644
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -347,6 +347,12 @@ namespace dxvk {
+       // it as the 'new' mapped slice. This assumes that the
+       // only way to invalidate a buffer is by mapping it.
+       auto bufferSlice = pResource->DiscardSlice(&m_allocationCache);
++
++      if (unlikely(!bufferSlice)) {
++        pMappedResource->pData = nullptr;
++        return E_OUTOFMEMORY;
++      }
++
+       pMappedResource->pData      = bufferSlice->mapPtr();
+       pMappedResource->RowPitch   = bufferSize;
+       pMappedResource->DepthPitch = bufferSize;
+diff --git a/src/d3d11/d3d11_device.cpp b/src/d3d11/d3d11_device.cpp
+index 22b70df6..cee045d1 100644
+--- a/src/d3d11/d3d11_device.cpp
++++ b/src/d3d11/d3d11_device.cpp
+@@ -112,6 +112,9 @@ namespace dxvk {
+ 
+       *ppBuffer = buffer.ref();
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -158,6 +161,9 @@ namespace dxvk {
+       m_initializer->InitTexture(texture->GetCommonTexture(), pInitialData);
+       *ppTexture1D = texture.ref();
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -246,6 +252,9 @@ namespace dxvk {
+       m_initializer->InitTexture(texture->GetCommonTexture(), pInitialData);
+       *ppTexture2D = texture.ref();
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -333,6 +342,9 @@ namespace dxvk {
+       m_initializer->InitTexture(texture->GetCommonTexture(), pInitialData);
+       *ppTexture3D = texture.ref();
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -421,6 +433,9 @@ namespace dxvk {
+     try {
+       *ppSRView = ref(new D3D11ShaderResourceView(this, pResource, &desc));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -511,6 +526,9 @@ namespace dxvk {
+       m_initializer->InitUavCounter(uav);
+       *ppUAView = ref(uav);
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -605,6 +623,9 @@ namespace dxvk {
+ 
+       *ppRTView = rtv;
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -653,6 +674,9 @@ namespace dxvk {
+     try {
+       *ppDepthStencilView = ref(new D3D11DepthStencilView(this, pResource, &desc));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -778,6 +802,9 @@ namespace dxvk {
+           attrCount, attrList.data(),
+           bindCount, bindList.data()));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -1176,6 +1203,9 @@ namespace dxvk {
+     try {
+       *ppSamplerState = m_samplerObjects.Create(this, desc);
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -1233,6 +1263,9 @@ namespace dxvk {
+     try {
+       *ppQuery = ref(new D3D11Query(this, *pQueryDesc));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -1265,6 +1298,9 @@ namespace dxvk {
+       *ppPredicate = D3D11Query::AsPredicate(
+         ref(new D3D11Query(this, desc)));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -1371,6 +1407,9 @@ namespace dxvk {
+     try {
+       Com<D3D11Fence> fence = new D3D11Fence(this, InitialValue, Flags, INVALID_HANDLE_VALUE);
+       return fence->QueryInterface(riid, ppFence);
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+@@ -1511,6 +1550,10 @@ namespace dxvk {
+           texture->QueryInterface(ReturnedInterface, ppResource);
+           return S_OK;
+         }
++        catch (const DxvkOutOfMemoryError& e) {
++          Logger::err(e.message());
++          return E_OUTOFMEMORY;
++        }
+         catch (const DxvkError& e) {
+           Logger::err(e.message());
+           return E_INVALIDARG;
+@@ -1609,6 +1652,10 @@ namespace dxvk {
+           texture->QueryInterface(ReturnedInterface, ppResource);
+           return S_OK;
+         }
++        catch (const DxvkOutOfMemoryError& e) {
++          Logger::err(e.message());
++          return E_OUTOFMEMORY;
++        }
+         catch (const DxvkError& e) {
+           Logger::err(e.message());
+           return E_INVALIDARG;
+@@ -1646,6 +1693,9 @@ namespace dxvk {
+     try {
+       Com<D3D11Fence> fence = new D3D11Fence(this, 0, D3D11_FENCE_FLAG_SHARED, hFence);
+       return fence->QueryInterface(ReturnedInterface, ppFence);
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+@@ -2615,6 +2665,10 @@ namespace dxvk {
+       texture->QueryInterface(ReturnedInterface, ppResource);
+       return S_OK;
+     }
++    catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
++    }
+     catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_INVALIDARG;
+@@ -3301,6 +3355,9 @@ namespace dxvk {
+       auto enumerator = static_cast<D3D11VideoProcessorEnumerator*>(pEnum);
+       *ppVideoProcessor = ref(new D3D11VideoProcessor(m_device, enumerator, RateConversionIndex));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+@@ -3347,6 +3404,9 @@ namespace dxvk {
+     try {
+       *ppVPIView = ref(new D3D11VideoProcessorInputView(m_device, pResource, *pDesc));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+@@ -3362,6 +3422,9 @@ namespace dxvk {
+     try {
+       *ppVPOView = ref(new D3D11VideoProcessorOutputView(m_device, pResource, *pDesc));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+@@ -3375,6 +3438,9 @@ namespace dxvk {
+     try {
+       *ppEnum = ref(new D3D11VideoProcessorEnumerator(m_device, *pDesc));
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+@@ -3720,6 +3786,9 @@ namespace dxvk {
+       
+       *ppSwapChain = presenter.ref();
+       return S_OK;
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return E_OUTOFMEMORY;
+     } catch (const DxvkError& e) {
+       Logger::err(e.message());
+       return E_FAIL;
+diff --git a/src/d3d11/d3d11_video.cpp b/src/d3d11/d3d11_video.cpp
+index 708c1fe5..c9a35a2e 100644
+--- a/src/d3d11/d3d11_video.cpp
++++ b/src/d3d11/d3d11_video.cpp
+@@ -1527,6 +1527,12 @@ namespace dxvk {
+       }
+ 
+       Rc<DxvkResourceAllocation> uboSlice = m_ubo->allocateStorage();
++
++      if (unlikely(!uboSlice)) {
++        m_device->markDeviceLost();
++        return;
++      }
++
+       memcpy(uboSlice->mapPtr(), &uboData, sizeof(uboData));
+ 
+       DxvkViewport vp = { viewport, scissor };
+diff --git a/src/dxvk/dxvk_buffer.cpp b/src/dxvk/dxvk_buffer.cpp
+index 9894b1ea..4586dd37 100644
+--- a/src/dxvk/dxvk_buffer.cpp
++++ b/src/dxvk/dxvk_buffer.cpp
+@@ -31,7 +31,14 @@ namespace dxvk {
+     m_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+ 
+     // Create and assign actual buffer resource
+-    assignStorage(allocateStorage());
++    Rc<DxvkResourceAllocation> storage = allocateStorage();
++
++    if (unlikely(!storage)) {
++      m_allocator->unregisterResource(this);
++      throw DxvkOutOfMemoryError("DxvkBuffer: out of memory");
++    }
++
++    assignStorage(std::move(storage));
+   }
+ 
+ 
+diff --git a/src/dxvk/dxvk_context.cpp b/src/dxvk/dxvk_context.cpp
+index 7c6a4c8a..709068b6 100644
+--- a/src/dxvk/dxvk_context.cpp
++++ b/src/dxvk/dxvk_context.cpp
+@@ -507,9 +507,11 @@ namespace dxvk {
+                       | VK_ACCESS_TRANSFER_READ_BIT;
+       bufInfo.debugName = "Temp buffer";
+ 
+-      auto tmpBuffer = m_device->createBuffer(
+-        bufInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+-      
++      auto tmpBuffer = tryCreateBuffer(bufInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++      if (unlikely(!tmpBuffer))
++        return;
++
+       VkDeviceSize tmpOffset = 0;
+       
+       this->copyBuffer(tmpBuffer, tmpOffset, dstBuffer, srcOffset, numBytes);
+@@ -740,7 +742,10 @@ namespace dxvk {
+                         | VK_ACCESS_SHADER_READ_BIT;
+       bufferInfo.debugName = "Temp buffer";
+ 
+-      Rc<DxvkBuffer> tmpBuffer = m_device->createBuffer(bufferInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++      Rc<DxvkBuffer> tmpBuffer = tryCreateBuffer(bufferInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++      if (unlikely(!tmpBuffer))
++        return;
+ 
+       auto tmpBufferSlice = tmpBuffer->getSliceInfo();
+       auto srcBufferSlice = srcView->getSliceInfo();
+@@ -1000,7 +1005,12 @@ namespace dxvk {
+     }
+ 
+     if (copySize) {
+-      auto srcSlice = createZeroBuffer(copySize)->getSliceInfo();
++      auto zeroBuffer = createZeroBuffer(copySize);
++
++      if (unlikely(!zeroBuffer))
++        return;
++
++      auto srcSlice = zeroBuffer->getSliceInfo();
+ 
+       VkBufferCopy2 copyRegion = { VK_STRUCTURE_TYPE_BUFFER_COPY_2 };
+       copyRegion.srcOffset = srcSlice.offset;
+@@ -1097,7 +1107,12 @@ namespace dxvk {
+           VkExtent3D blockCount = util::computeBlockCount(extent, formatInfo->blockSize);
+           VkDeviceSize dataSize = util::flattenImageExtent(blockCount) * elementSize;
+ 
+-          auto zeroSlice = createZeroBuffer(dataSize)->getSliceInfo();
++          auto zeroBuffer = createZeroBuffer(dataSize);
++
++          if (unlikely(!zeroBuffer))
++            return;
++
++          auto zeroSlice = zeroBuffer->getSliceInfo();
+ 
+           for (uint32_t level = 0; level < subresources.levelCount; level++) {
+             VkOffset3D offset = VkOffset3D { 0, 0, 0 };
+@@ -1344,6 +1359,11 @@ namespace dxvk {
+   void DxvkContext::invalidateBuffer(
+     const Rc<DxvkBuffer>&           buffer,
+           Rc<DxvkResourceAllocation>&& slice) {
++    if (unlikely(!slice)) {
++      m_device->markDeviceLost();
++      return;
++    }
++
+     Rc<DxvkResourceAllocation> prevAllocation = buffer->assignStorage(std::move(slice));
+     m_cmd->track(std::move(prevAllocation));
+ 
+@@ -1596,6 +1616,11 @@ namespace dxvk {
+ 
+     auto storage = image->allocateStorageWithUsage(usage, 0u);
+ 
++    if (unlikely(!storage)) {
++      m_device->markDeviceLost();
++      return false;
++    }
++
+     DxvkRelocateImageInfo relocateInfo;
+     relocateInfo.image = image;
+     relocateInfo.storage = storage;
+@@ -2493,13 +2518,18 @@ namespace dxvk {
+         usageInfo.viewFormats = &format;
+ 
+         auto newStorage = dstImage->allocateStorageWithUsage(usageInfo, 0u);
+-        auto oldStorage = dstImage->assignStorageWithUsage(std::move(newStorage), usageInfo);
+ 
+-        m_descriptorState.dirtyViews(dstImage->getShaderStages());
++        if (likely(newStorage)) {
++          auto oldStorage = dstImage->assignStorageWithUsage(std::move(newStorage), usageInfo);
++
++          m_descriptorState.dirtyViews(dstImage->getShaderStages());
+ 
+-        dstImage->resetTracking();
++          dstImage->resetTracking();
+ 
+-        m_cmd->track(std::move(oldStorage));
++          m_cmd->track(std::move(oldStorage));
++        } else {
++          m_device->markDeviceLost();
++        }
+       }
+ 
+       // Record layout transition from default layout to attachment layout
+@@ -5397,6 +5427,9 @@ namespace dxvk {
+     DxvkResourceBufferInfo counterMemory = allocateScratchMemory(
+       sizeof(uint32_t), sizeof(uint32_t) * counterDwordCount);
+ 
++    if (unlikely(!counterMemory.buffer))
++      return;
++
+     m_cmd->cmdFillBuffer(DxvkCmdBuffer::InitBuffer,
+       counterMemory.buffer, counterMemory.offset, counterMemory.size, 0u);
+ 
+@@ -7300,6 +7333,9 @@ namespace dxvk {
+     if (BindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS
+      && unlikely(m_flags.all(DxvkContextFlag::GpIndependentSets, DxvkContextFlag::GpDirtySpecDataBlock))) {
+       DxvkResourceBufferInfo specData = allocateSpecDataBuffer(pipelineLayout);
++
++      if (unlikely(!specData.buffer))
++        return;
+       pipelineLayout->writeSpecData(specData.mapPtr, m_state.gp.state.sc.specConstants);
+ 
+       VkDescriptorSet set = m_descriptorPool->alloc(m_trackingId, m_device->getSpecDataSetLayout());
+@@ -9208,6 +9244,19 @@ namespace dxvk {
+   }
+ 
+ 
++  Rc<DxvkBuffer> DxvkContext::tryCreateBuffer(
++    const DxvkBufferCreateInfo&         createInfo,
++          VkMemoryPropertyFlags         memoryType) {
++    try {
++      return m_device->createBuffer(createInfo, memoryType);
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      m_device->markDeviceLost();
++      return nullptr;
++    }
++  }
++
++
+   Rc<DxvkBuffer> DxvkContext::createZeroBuffer(
+           VkDeviceSize              size) {
+     if (m_zeroBuffer && m_zeroBuffer->info().size >= size) {
+@@ -9224,8 +9273,10 @@ namespace dxvk {
+                     | VK_ACCESS_TRANSFER_READ_BIT;
+     bufInfo.debugName = "Zero buffer";
+ 
+-    m_zeroBuffer = m_device->createBuffer(bufInfo,
+-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    m_zeroBuffer = tryCreateBuffer(bufInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++    if (unlikely(!m_zeroBuffer))
++      return nullptr;
+ 
+     auto slice = m_zeroBuffer->getSliceInfo();
+ 
+@@ -9258,12 +9309,22 @@ namespace dxvk {
+       bufInfo.access  = VK_ACCESS_2_UNIFORM_READ_BIT;
+       bufInfo.debugName = "Spec data buffer";
+ 
+-      m_specBuffer = m_device->createBuffer(bufInfo,
++      m_specBuffer = tryCreateBuffer(bufInfo,
+         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++      if (unlikely(!m_specBuffer))
++        return DxvkResourceBufferInfo();
+     } else {
+-      m_cmd->track(m_specBuffer->assignStorage(m_specBuffer->allocateStorage()));
++      auto storage = m_specBuffer->allocateStorage();
++
++      if (unlikely(!storage)) {
++        m_device->markDeviceLost();
++        return DxvkResourceBufferInfo();
++      }
++
++      m_cmd->track(m_specBuffer->assignStorage(std::move(storage)));
+     }
+ 
+     m_cmd->track(m_specBuffer, DxvkAccess::Write);
+@@ -10965,8 +11026,10 @@ namespace dxvk {
+                   | VK_ACCESS_2_SHADER_WRITE_BIT;
+       info.debugName = "Scratch buffer";
+ 
+-      m_scratchBuffer = m_device->createBuffer(info,
+-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++      m_scratchBuffer = tryCreateBuffer(info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++      if (unlikely(!m_scratchBuffer))
++        return DxvkResourceBufferInfo();
+     }
+ 
+     // Suballocate slice from buffer
+diff --git a/src/dxvk/dxvk_context.h b/src/dxvk/dxvk_context.h
+index 2d73c55d..de9ba43b 100644
+--- a/src/dxvk/dxvk_context.h
++++ b/src/dxvk/dxvk_context.h
+@@ -1896,6 +1896,10 @@ namespace dxvk {
+     DxvkComputePipeline* lookupComputePipeline(
+       const DxvkComputePipelineShaders&   shaders);
+     
++    Rc<DxvkBuffer> tryCreateBuffer(
++      const DxvkBufferCreateInfo&         createInfo,
++            VkMemoryPropertyFlags         memoryType);
++
+     Rc<DxvkBuffer> createZeroBuffer(
+             VkDeviceSize              size);
+ 
+diff --git a/src/dxvk/dxvk_device.h b/src/dxvk/dxvk_device.h
+index 7fb070d5..62aa334b 100644
+--- a/src/dxvk/dxvk_device.h
++++ b/src/dxvk/dxvk_device.h
+@@ -264,6 +264,10 @@ namespace dxvk {
+       return m_submissionQueue.getLastError();
+     }
+ 
++    void markDeviceLost() {
++      m_submissionQueue.markDeviceLost();
++    }
++
+     /**
+      * \brief Queries mapped image subresource layout
+      *
+diff --git a/src/dxvk/dxvk_image.cpp b/src/dxvk/dxvk_image.cpp
+index 3b5b7390..36306cbe 100644
+--- a/src/dxvk/dxvk_image.cpp
++++ b/src/dxvk/dxvk_image.cpp
+@@ -157,7 +157,14 @@ namespace dxvk {
+     m_globalLayout = (m_info.sharing.mode != DxvkSharedHandleMode::Import)
+       ? m_info.initialLayout : m_info.layout;
+ 
+-    assignStorage(allocateStorage());
++    Rc<DxvkResourceAllocation> storage = allocateStorage();
++
++    if (unlikely(!storage)) {
++      m_allocator->unregisterResource(this);
++      throw DxvkOutOfMemoryError("DxvkImage: out of memory");
++    }
++
++    assignStorage(std::move(storage));
+   }
+ 
+ 
+diff --git a/src/dxvk/dxvk_memory.cpp b/src/dxvk/dxvk_memory.cpp
+index c5723fca..53313c8f 100644
+--- a/src/dxvk/dxvk_memory.cpp
++++ b/src/dxvk/dxvk_memory.cpp
+@@ -1330,6 +1330,8 @@ namespace dxvk {
+     const VkImageCreateInfo&          createInfo,
+     const DxvkAllocationInfo&         allocationInfo,
+           VkImage                     imageHandle) {
++    std::unique_lock lock(m_mutex);
++
+     Rc<DxvkResourceAllocation> allocation = m_allocationPool.create(this, nullptr);
+     allocation->m_flags.set(DxvkAllocationFlag::Imported);
+     allocation->m_resourceCookie = allocationInfo.resourceCookie;
+@@ -1591,6 +1593,8 @@ namespace dxvk {
+   DxvkResourceAllocation* DxvkMemoryAllocator::createAllocation(
+           DxvkSparsePageTable*  sparsePageTable,
+     const DxvkAllocationInfo&   allocationInfo) {
++    std::unique_lock lock(m_mutex);
++
+     auto allocation = m_allocationPool.create(this, nullptr);
+     allocation->m_resourceCookie = allocationInfo.resourceCookie;
+     allocation->m_sparsePageTable = sparsePageTable;
+diff --git a/src/dxvk/dxvk_queue.h b/src/dxvk/dxvk_queue.h
+index 5e056902..4bc3629f 100644
+--- a/src/dxvk/dxvk_queue.h
++++ b/src/dxvk/dxvk_queue.h
+@@ -110,6 +110,10 @@ namespace dxvk {
+     VkResult getLastError() const {
+       return m_lastError.load();
+     }
++
++    void markDeviceLost() {
++      m_lastError = VK_ERROR_DEVICE_LOST;
++    }
+     
+     /**
+      * \brief Submits a command list asynchronously
+diff --git a/src/util/util_error.h b/src/util/util_error.h
+index 2cfd45ff..1d2cf56a 100644
+--- a/src/util/util_error.h
++++ b/src/util/util_error.h
+@@ -27,5 +27,15 @@ namespace dxvk {
+     std::string m_message;
+     
+   };
+-  
++
++
++  class DxvkOutOfMemoryError : public DxvkError {
++
++  public:
++
++    DxvkOutOfMemoryError(std::string&& message)
++    : DxvkError(std::move(message)) { }
++
++  };
++
+ }
+\ No newline at end of file
