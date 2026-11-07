@@ -722,3 +722,48 @@ TEST(vulkan_guard, a_slot_overwrite_that_cannot_be_deferred_is_refused_without_f
   rig.platform.fail_allocation_at(1u);
   CHECK(!rig.guard.written(&second, 1u, device));
   CHECK(rig.guard.invariants_hold()); }
+
+TEST(vulkan_guard, imported_memory_freed_while_a_buffer_bound_to_it_is_still_in_use_is_released_only_after_the_buffer)
+{ Rig rig;
+  CHECK(rig.guard.depends(buffer, memory, device));
+  CHECK(rig.record(cb, Named{HandleKind::buffer, buffer}));
+  CHECK_EQ(rig.submit(cb), 1u);
+  rig.guard.destroy(VulkanDestroyKind::imported_memory, device, 0u, memory);
+  rig.guard.destroy(VulkanDestroyKind::buffer, device, 0u, buffer);
+  CHECK(!rig.destroyer.destroyed(memory));
+  CHECK(rig.guard.release(cb, device));
+  CHECK(!rig.destroyer.destroyed(memory));
+  rig.progress.reach(device, 1u);
+  rig.guard.reap();
+  CHECK(rig.destroyer.destroyed(buffer));
+  CHECK(rig.destroyer.destroyed(memory));
+  CHECK(rig.destroyer.order_of(buffer) < rig.destroyer.order_of(memory));
+  CHECK(rig.destroyer.kinds[rig.destroyer.order_of(memory)] == VulkanDestroyKind::imported_memory);
+  CHECK(rig.guard.invariants_hold()); }
+
+TEST(vulkan_guard, imported_memory_nothing_uses_is_released_at_once_and_one_that_cannot_wait_is_leaked)
+{ Rig rig;
+  rig.guard.destroy(VulkanDestroyKind::imported_memory, device, 0u, memory);
+  CHECK(rig.destroyer.destroyed(memory));
+  rig.progress.marked_ = 5u;
+  rig.progress.reach(device, 1u);
+  rig.progress.timeout = true;
+  rig.platform.fail_allocation_at(1u);
+  rig.guard.destroy(VulkanDestroyKind::imported_memory, device, 0u, other_view);
+  CHECK(!rig.destroyer.destroyed(other_view)); }
+
+TEST(vulkan_guard, a_device_whose_work_is_behind_keeps_its_destroys_waiting_while_another_device_s_reaps_go_through)
+{ Rig rig;
+  rig.progress.marked_ = 6u;
+  rig.progress.reach(device, 2u);
+  rig.progress.reach(other_device, 2u);
+  rig.guard.destroy(VulkanDestroyKind::buffer, device, 0u, buffer);
+  rig.guard.destroy(VulkanDestroyKind::image, other_device, 0u, image);
+  CHECK_EQ(rig.destroyer.count, 0u);
+  rig.progress.reach(device, 6u);
+  rig.guard.reap();
+  CHECK(rig.destroyer.destroyed(buffer));
+  CHECK(!rig.destroyer.destroyed(image));
+  rig.progress.reach(other_device, 6u);
+  rig.guard.reap();
+  CHECK(rig.destroyer.destroyed(image)); }
