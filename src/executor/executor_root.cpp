@@ -4,6 +4,7 @@
 
 #include "executor/shim/d3d11_host_device.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
@@ -22,13 +23,21 @@ namespace {
 
 alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][ContextSession::arena_bytes];
 
+void *run_wedged_watch(void *root)
+{
+    AV_SCOPE("run_wedged_watch");
+    static_cast<ExecutorRoot *>(root)->watch_wedged();
+    return nullptr;
+}
+
 }
 
 ExecutorRoot::ExecutorRoot(ExecutorLog &log)
-    : gpus_(), domains_(), memory_groups_{}, group_of_{}, sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
-      wedged_{}, clock_(), apis_(nullptr)
+    : gpus_(), domains_(), memory_groups_{}, group_of_{}, group_refs_{}, sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
+      wedged_{}, reaping_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), stopping_(false), clock_(), apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) group_of_[slot] = max_sessions;
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         static_cast<void>(sessions_[slot].construct(log.sessions()));
         static_cast<void>(vulkan_[slot].construct(log.vulkan()));
@@ -41,6 +50,12 @@ ExecutorRoot::ExecutorRoot(ExecutorLog &log)
 ExecutorRoot::~ExecutorRoot()
 {
     AV_SCOPE("ExecutorRoot::~ExecutorRoot");
+    lock_.acquire();
+    const bool joined = watching_;
+    stopping_ = true;
+    wake_.signal();
+    lock_.release();
+    if (joined) pthread_join(watcher_, nullptr);
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         d3d_[slot].destroy();
         opengl_[slot].destroy();
@@ -192,34 +207,45 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
     if (options_asked && sub_api != AV_EXECUTOR_SUB_API_OPENGL) return nullptr;
     if (share != nullptr && sub_api != AV_EXECUTOR_SUB_API_OPENGL && sub_api != AV_EXECUTOR_SUB_API_OPENCL)
         return nullptr;
-    const OpenGlBackend *const shared = share != nullptr ? sharing(share, *gpu) : nullptr;
-    if (share != nullptr && shared == nullptr) return nullptr;
     if ((gpu->sub_apis() & sub_api) == 0u) return nullptr;
-
-    SessionBackend *const kind = backend_in(0u, sub_api);
-    if (kind == nullptr) return nullptr;
+    if (backend_in(0u, sub_api) == nullptr) return nullptr;
     reap_wedged();
 
+    lock_.acquire();
+    const OpenGlBackend *const shared = share != nullptr ? sharing(share, *gpu) : nullptr;
+    if (share != nullptr && shared == nullptr) {
+        lock_.release();
+        return nullptr;
+    }
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         SessionBackend &backend = *backend_in(slot, sub_api);
         if (sessions_[slot].object().initialize(backend, decode_blocks[slot], ContextSession::arena_bytes) != Status::ok)
             continue;
+        GlMemoryGroup *const group = sub_api == AV_EXECUTOR_SUB_API_OPENGL ? reserve_group(share, slot) : nullptr;
+        lock_.release();
         shares_[slot].bind(*apis_->shares(gpu->index()), options.domain, backend);
-        GlMemoryGroup *const group = sub_api == AV_EXECUTOR_SUB_API_OPENGL ? group_for(share) : nullptr;
         if (!bind(slot, sub_api, *gpu, options, shared, group)) {
             shares_[slot].end();
             TeardownBudget budget(clock_, teardown_nanoseconds);
-            wedged_[slot] = !sessions_[slot].object().release(budget);
+            const bool released = sessions_[slot].object().release(budget);
+            lock_.acquire();
+            wedged_[slot] = !released;
+            if (released) release_group(slot);
+            lock_.release();
+            if (!released) note_wedged();
             return nullptr;
         }
+        lock_.acquire();
         apis_of_[slot] = sub_api;
         gpus_of_[slot] = gpu->index();
+        lock_.release();
         HostMemorySource *const source = apis_->memory_source(gpu->index());
         if (source != nullptr) sessions_[slot].object().draw_from(*source, options.domain);
         if (sub_api != AV_EXECUTOR_SUB_API_OPENCL && clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
             sessions_[slot].object().hold_clocks(clocks_[gpu->index()]);
         return &sessions_[slot].object();
     }
+    lock_.release();
     return nullptr;
 }
 
@@ -247,14 +273,25 @@ const OpenGlBackend *ExecutorRoot::sharing(const ContextSession *share, const Ho
     return nullptr;
 }
 
-GlMemoryGroup *ExecutorRoot::group_for(const ContextSession *share)
+GlMemoryGroup *ExecutorRoot::reserve_group(const ContextSession *share, uint32_t slot)
 {
-    AV_SCOPE("ExecutorRoot::group_for");
+    AV_SCOPE("ExecutorRoot::reserve_group");
     const uint32_t sharer = share != nullptr ? slot_of(share) : max_sessions;
-    if (sharer != max_sessions) return &memory_groups_[group_of_[sharer]];
-    for (uint32_t group = 0u; group < max_sessions; group++)
-        if (memory_groups_[group].members() == 0u) return &memory_groups_[group];
-    return nullptr;
+    uint32_t       chosen = sharer != max_sessions ? group_of_[sharer] : max_sessions;
+    for (uint32_t group = 0u; group < max_sessions && chosen == max_sessions && sharer == max_sessions; group++)
+        if (group_refs_[group] == 0u && memory_groups_[group].members() == 0u) chosen = group;
+    if (chosen == max_sessions) return nullptr;
+    group_refs_[chosen]++;
+    group_of_[slot] = chosen;
+    return &memory_groups_[chosen];
+}
+
+void ExecutorRoot::release_group(uint32_t slot)
+{
+    AV_SCOPE("ExecutorRoot::release_group");
+    if (group_of_[slot] == max_sessions) return;
+    group_refs_[group_of_[slot]]--;
+    group_of_[slot] = max_sessions;
 }
 
 bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions &options,
@@ -267,9 +304,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
                                                  share, sessions_[slot].object().imports());
     case AV_EXECUTOR_SUB_API_OPENGL:
         if (group == nullptr) return false;
-        if (!opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group)) return false;
-        group_of_[slot] = static_cast<uint32_t>(group - memory_groups_);
-        return true;
+        return opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group);
     case AV_EXECUTOR_SUB_API_D3D: {
         constexpr uint32_t renew_wait_ms = 2000u;
         D3d11HostDevice *const device11 = apis_->d3d11_device(gpu.index());
@@ -291,8 +326,11 @@ void ExecutorRoot::close(ContextSession *session)
     const uint32_t slot = slot_of(session);
     TeardownBudget budget(clock_, teardown_nanoseconds);
     if (finish(slot, budget)) return;
+    lock_.acquire();
     wedged_[slot] = true;
     apis_of_[slot] = 0u;
+    lock_.release();
+    note_wedged();
 }
 
 bool ExecutorRoot::finish(uint32_t slot, TeardownBudget &budget)
@@ -302,10 +340,13 @@ bool ExecutorRoot::finish(uint32_t slot, TeardownBudget &budget)
     if (!session.drain(budget)) return false;
     shares_[slot].end();
     if (!session.release(budget)) return false;
+    lock_.acquire();
     const uint32_t gpu = gpus_of_[slot];
     wedged_[slot] = false;
     apis_of_[slot] = 0u;
     gpus_of_[slot] = 0u;
+    release_group(slot);
+    lock_.release();
     retire(gpu);
     return true;
 }
@@ -314,10 +355,66 @@ void ExecutorRoot::reap_wedged()
 {
     AV_SCOPE("ExecutorRoot::reap_wedged");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (!wedged_[slot]) continue;
+        lock_.acquire();
+        const bool claimed = wedged_[slot] && !reaping_[slot];
+        if (claimed) reaping_[slot] = true;
+        lock_.release();
+        if (!claimed) continue;
         TeardownBudget budget(clock_, 0u);
         static_cast<void>(finish(slot, budget));
+        const ThreadLockHold held(lock_);
+        reaping_[slot] = false;
     }
+}
+
+void ExecutorRoot::retry_wedged()
+{
+    AV_SCOPE("ExecutorRoot::retry_wedged");
+    reap_wedged();
+}
+
+uint32_t ExecutorRoot::wedged() const
+{
+    AV_SCOPE("ExecutorRoot::wedged");
+    const ThreadLockHold held(lock_);
+    return wedged_here();
+}
+
+uint32_t ExecutorRoot::wedged_here() const
+{
+    AV_SCOPE("ExecutorRoot::wedged_here");
+    uint32_t stuck = 0u;
+    for (uint32_t slot = 0u; slot < max_sessions; slot++)
+        if (wedged_[slot]) stuck++;
+    return stuck;
+}
+
+void ExecutorRoot::note_wedged()
+{
+    AV_SCOPE("ExecutorRoot::note_wedged");
+    const ThreadLockHold held(lock_);
+    if (stopping_) return;
+    if (!watching_ && pthread_create(&watcher_, nullptr, &run_wedged_watch, this) == 0) watching_ = true;
+    wake_.signal();
+}
+
+void ExecutorRoot::watch_wedged()
+{
+    AV_SCOPE("ExecutorRoot::watch_wedged");
+    lock_.acquire();
+    while (!stopping_) {
+        if (wedged_here() == 0u) {
+            wake_.wait();
+            continue;
+        }
+        const timespec until = clock_.ahead(retry_wedged_nanoseconds);
+        static_cast<void>(wake_.wait_until(until));
+        if (stopping_) break;
+        lock_.release();
+        reap_wedged();
+        lock_.acquire();
+    }
+    lock_.release();
 }
 
 uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id)

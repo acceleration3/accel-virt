@@ -26,6 +26,7 @@ public:
 
     uint32_t questions() const;
     void             give_d3d11(uint32_t index);
+    void             give_gl(const GlDisplay *display);
     D3d11HostDevice &d3d11();
     MockMemoryExporter &exporter();
     HostMemorySource   &source();
@@ -57,6 +58,7 @@ private:
     DriverLog       lines_;
     D3d11HostDevice d3d11_;
     uint32_t        d3d11_index_;
+    const GlDisplay *gl_;
     HostHeap        heap_;
     SharedSurfaces  surfaces_;
     HostShares      shares_;

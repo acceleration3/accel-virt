@@ -84,6 +84,7 @@ private:
     size_t          starved_;
     ChannelStatsLatest channel_;
     bool            faulted_;
+    bool            drained_;
     Parked          parked_[parked_most];
     uint32_t        parked_count_;
     DriverLog      &lines_;

@@ -1,4 +1,5 @@
 #include "executor/monotonic_clock.hpp"
+#include "harness/executor/software_gl.hpp"
 #include "executor/opengl/gl_memory_group.hpp"
 #include "executor/teardown_budget.hpp"
 #include "harness/executor/generous_budget.hpp"
@@ -71,6 +72,12 @@ using av::OpenGlBackendProbe;
 
 namespace {
 
+av::SoftwareGl &software()
+{
+    static av::SoftwareGl display;
+    return display;
+}
+
 struct SoftwareOnly {
     SoftwareOnly()
     {
@@ -87,7 +94,6 @@ struct SoftwareOnly {
 const SoftwareOnly software_only;
 
 constexpr unsigned gl_renderer = 0x1F01u;
-constexpr unsigned gl_device_uuid = 0x9597u;
 constexpr unsigned gl_texture_2d = 0x0DE1u;
 constexpr unsigned gl_rgba8 = 0x8058u;
 constexpr unsigned gl_srgb8_alpha8 = 0x8C43u;
@@ -100,7 +106,6 @@ constexpr unsigned gl_color_buffer_bit = 0x4000u;
 constexpr unsigned gl_texture_internal_format = 0x1003u;
 constexpr unsigned gl_texture_width = 0x1000u;
 constexpr unsigned dxgi_r8g8b8a8_unorm = 28u;
-constexpr std::uint32_t uuid_bytes = 16u;
 constexpr std::uint64_t memory_bytes = 1u << 20u;
 constexpr std::uint32_t side = 64u;
 constexpr std::uint32_t row_bytes = side * 4u;
@@ -108,69 +113,10 @@ constexpr std::uint32_t iterations = 256u;
 constexpr std::uint32_t threads = 8u;
 
 using GetString = const unsigned char *(*)(unsigned);
-using GetUnsignedBytev = void (*)(unsigned, unsigned char *);
 using IsMemoryObject = unsigned char (*)(unsigned);
 using StorageTwoD = void (*)(unsigned, int, unsigned, int, int);
 using GetTextureImage = void (*)(unsigned, int, unsigned, unsigned, int, void *);
 using GetTextureLevel = void (*)(unsigned, int, unsigned, int *);
-
-class SoftwareDisplay {
-public:
-    SoftwareDisplay() : display_(), uuid_{}, usable_(false) { probe(); }
-
-    bool                 usable() const { return usable_; }
-    const av::GlDisplay *display() const { return &display_; }
-
-private:
-    void probe()
-    {
-        if (eglGetProcAddress("eglQueryDevicesEXT") == nullptr) return;
-        auto *const query = reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(eglGetProcAddress("eglQueryDevicesEXT"));
-        auto *const platform =
-            reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
-        auto *const device_string =
-            reinterpret_cast<PFNEGLQUERYDEVICESTRINGEXTPROC>(eglGetProcAddress("eglQueryDeviceStringEXT"));
-        EGLDeviceEXT devices[8];
-        EGLint       found = 0;
-        if (query == nullptr || platform == nullptr || device_string == nullptr ||
-            query(8, devices, &found) != EGL_TRUE)
-            return;
-        for (EGLint index = 0; index < found && !usable_; index++) {
-            const char *const extensions = device_string(devices[index], EGL_EXTENSIONS);
-            if (extensions == nullptr || std::strstr(extensions, "EGL_MESA_device_software") == nullptr) continue;
-            EGLDisplay display = platform(EGL_PLATFORM_DEVICE_EXT, devices[index], nullptr);
-            if (display == EGL_NO_DISPLAY || eglInitialize(display, nullptr, nullptr) != EGL_TRUE) continue;
-            eglBindAPI(EGL_OPENGL_API);
-            EGLContext context = eglCreateContext(display, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, nullptr);
-            if (context != EGL_NO_CONTEXT && eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context)) {
-                auto *const get_string = reinterpret_cast<GetString>(eglGetProcAddress("glGetString"));
-                auto *const unsigned_bytev =
-                    reinterpret_cast<GetUnsignedBytev>(eglGetProcAddress("glGetUnsignedBytevEXT"));
-                const char *const renderer = get_string != nullptr
-                                                 ? reinterpret_cast<const char *>(get_string(gl_renderer))
-                                                 : nullptr;
-                if (renderer != nullptr && std::strstr(renderer, "llvmpipe") != nullptr && unsigned_bytev != nullptr) {
-                    unsigned_bytev(gl_device_uuid, uuid_);
-                    usable_ = true;
-                }
-            }
-            eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-            if (context != EGL_NO_CONTEXT) eglDestroyContext(display, context);
-            eglTerminate(display);
-        }
-        usable_ = usable_ && display_.open(uuid_);
-    }
-
-    av::GlDisplay display_;
-    std::uint8_t  uuid_[uuid_bytes];
-    bool          usable_;
-};
-
-SoftwareDisplay &software()
-{
-    static SoftwareDisplay display;
-    return display;
-}
 
 av::RecordingLog sink;
 av::ExecutorLog  executor_log(sink);

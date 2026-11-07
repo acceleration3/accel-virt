@@ -16,7 +16,7 @@ namespace av {
 
 ContextSession::ContextSession(DriverLog &lines)
     : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), heap_(), arena_(nullptr, 0u), answer_(heap_),
-      answer_length_(0u), imports_(heap_), starved_(0u), channel_(), faulted_(false), parked_{}, parked_count_(0u),
+      answer_length_(0u), imports_(heap_), starved_(0u), channel_(), faulted_(false), drained_(false), parked_{}, parked_count_(0u),
       lines_(lines)
 {
     AV_SCOPE("ContextSession::ContextSession");
@@ -32,19 +32,23 @@ Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_
     starved_ = 0u;
     channel_.reset();
     faulted_ = false;
+    drained_ = false;
     return Status::ok;
 }
 
 bool ContextSession::drain(TeardownBudget &budget)
 {
     AV_SCOPE("ContextSession::drain");
-    return backend_ == nullptr || backend_->drain(budget);
+    if (backend_ == nullptr) return true;
+    if (!backend_->drain(budget)) return false;
+    drained_ = true;
+    return true;
 }
 
 bool ContextSession::release(TeardownBudget &budget)
 {
     AV_SCOPE("ContextSession::release");
-    if (!drain(budget)) {
+    if (!drained_ && !drain(budget)) {
         lines_.write("a session's GPU work did not finish in time; its memory is kept");
         return false;
     }
@@ -59,6 +63,7 @@ bool ContextSession::release(TeardownBudget &budget)
     answer_.release();
     answer_length_ = 0u;
     faulted_ = false;
+    drained_ = false;
     return true;
 }
 
@@ -138,6 +143,7 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
                                  uint8_t *reply, size_t reply_capacity, size_t &answer)
 {
     AV_SCOPE("ContextSession::execute");
+    drained_ = false;
     answer = 0u;
     answer_.release();
     answer_length_ = 0u;

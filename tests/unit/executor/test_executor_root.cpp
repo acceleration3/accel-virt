@@ -17,11 +17,15 @@
 #include "harness/executor/host_gpu_probe.hpp"
 #include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
+#include "harness/executor/software_gl.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
 #include <cstdint>
+#include <pthread.h>
+#include <cstdio>
+#include <time.h>
 #include <unistd.h>
 
 using av::ContextSession;
@@ -777,3 +781,195 @@ TEST(executor_root, a_session_whose_gpu_work_does_not_drain_in_time_keeps_its_sh
   root.close(later);
   root.close(other);
   root.close(maker); }
+
+namespace {
+
+class Spread {
+public:
+    using Job = void (*)(void *context, std::uint32_t index);
+
+    Spread(std::uint32_t threads, Job job, void *context) : threads_(threads), job_(job), context_(context)
+    {
+        pthread_barrier_init(&gate_, nullptr, threads_);
+    }
+    ~Spread() { pthread_barrier_destroy(&gate_); }
+    Spread(const Spread &) = delete;
+    Spread &operator=(const Spread &) = delete;
+
+    void run()
+    {
+        Worker workers[most];
+        pthread_t ids[most];
+        for (std::uint32_t index = 0u; index < threads_; index++) {
+            workers[index] = {this, index};
+            pthread_create(&ids[index], nullptr, &Spread::enter, &workers[index]);
+        }
+        for (std::uint32_t index = 0u; index < threads_; index++) pthread_join(ids[index], nullptr);
+    }
+
+private:
+    static constexpr std::uint32_t most = 32u;
+
+    struct Worker {
+        Spread       *spread;
+        std::uint32_t index;
+    };
+
+    static void *enter(void *argument)
+    {
+        Worker &worker = *static_cast<Worker *>(argument);
+        pthread_barrier_wait(&worker.spread->gate_);
+        worker.spread->job_(worker.spread->context_, worker.index);
+        return nullptr;
+    }
+
+    std::uint32_t     threads_;
+    Job               job_;
+    void             *context_;
+    pthread_barrier_t gate_;
+};
+
+struct OpenAll {
+    ExecutorRoot    *root;
+    std::uint32_t    domain;
+    std::uint32_t    sub_api;
+    ContextSession  *opened[32];
+    ContextSession  *shared[32];
+};
+
+void open_one(void *context, std::uint32_t index)
+{
+    OpenAll &all = *static_cast<OpenAll *>(context);
+    AvContextOptions options = {};
+    options.domain = all.domain;
+    all.opened[index] = all.root->open(all.sub_api, options, nullptr);
+    if (all.opened[index] != nullptr && all.sub_api == AV_EXECUTOR_SUB_API_OPENGL)
+        all.shared[index] = all.root->open(all.sub_api, options, all.opened[index]);
+}
+
+}
+
+TEST(executor_root_concurrency, contexts_opened_at_once_get_distinct_slots)
+{ Opened opened;
+  OpenAll all = {&opened.root(), opened.held().domain_of(intel), AV_EXECUTOR_SUB_API_VULKAN, {}, {}};
+  constexpr std::uint32_t threads = 24u;
+  for (std::uint32_t round = 0u; round < 20u; round++) {
+      all.opened[0] = nullptr;
+      for (std::uint32_t index = 0u; index < threads; index++) all.opened[index] = nullptr;
+      Spread(threads, open_one, &all).run();
+      for (std::uint32_t index = 0u; index < threads; index++) {
+          CHECK(all.opened[index] != nullptr);
+          for (std::uint32_t other = 0u; other < index; other++) CHECK(all.opened[index] != all.opened[other]);
+      }
+      CHECK_EQ(opened.root().live(), threads);
+      for (std::uint32_t index = 0u; index < threads; index++) opened.root().close(all.opened[index]);
+      CHECK_EQ(opened.root().live(), 0u);
+  } }
+
+TEST(executor_root_concurrency, opengl_contexts_opened_at_once_never_share_a_memory_group_unless_they_share_a_context)
+{ av::SoftwareGl software;
+  if (!software.usable()) {
+      std::fprintf(stderr, "no llvmpipe EGL device: software GL test skipped\n");
+      return;
+  }
+  MockHostApis apis;
+  apis.add_gpu(software.uuid(), AV_EXECUTOR_SUB_API_OPENGL);
+  apis.give_gl(software.display());
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  ExecutorRootProbe probe(root);
+  OpenAll all = {&root, held.domain_of(software.uuid()), AV_EXECUTOR_SUB_API_OPENGL, {}, {}};
+  constexpr std::uint32_t threads = 8u;
+  for (std::uint32_t round = 0u; round < 4u; round++) {
+      for (std::uint32_t index = 0u; index < threads; index++) all.opened[index] = all.shared[index] = nullptr;
+      Spread(threads, open_one, &all).run();
+      for (std::uint32_t index = 0u; index < threads; index++) {
+          CHECK(all.opened[index] != nullptr);
+          CHECK(all.shared[index] != nullptr);
+          if (all.opened[index] == nullptr || all.shared[index] == nullptr) continue;
+          CHECK_EQ(probe.group_of(*all.opened[index]), probe.group_of(*all.shared[index]));
+          for (std::uint32_t other = 0u; other < index; other++)
+              if (all.opened[other] != nullptr)
+                  CHECK(probe.group_of(*all.opened[index]) != probe.group_of(*all.opened[other]));
+      }
+      for (std::uint32_t index = 0u; index < threads; index++) {
+          if (all.shared[index] != nullptr) root.close(all.shared[index]);
+          if (all.opened[index] != nullptr) root.close(all.opened[index]);
+      }
+      CHECK_EQ(root.live(), 0u);
+      for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
+  } }
+
+namespace {
+
+constexpr std::uint32_t wedged_slots = 8u;
+
+class Wedged {
+public:
+    explicit Wedged(Opened &opened) : probe_(opened.root())
+    {
+        domain_ = opened.held().domain_of(intel);
+        for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) {
+            ContextSession &session = probe_.session_at(slot);
+            CHECK_STATUS(session.initialize(backends_[slot], blocks_[slot], sizeof blocks_[slot]), Status::ok);
+            probe_.shares_at(slot).bind(*opened.apis().shares(0u), domain_, backends_[slot]);
+            probe_.remember(slot, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+            backends_[slot].set_drains_in_time(false);
+            opened.root().close(&session);
+        }
+        for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) drained_before_[slot] = backends_[slot].drains();
+    }
+
+    MockSessionBackend &backend(std::uint32_t slot) { return backends_[slot]; }
+    std::uint32_t       drained_before(std::uint32_t slot) const { return drained_before_[slot]; }
+    void                finish_in_time()
+    {
+        for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) backends_[slot].set_drains_in_time(true);
+    }
+
+private:
+    ExecutorRootProbe  probe_;
+    std::uint32_t      domain_;
+    MockSessionBackend backends_[wedged_slots];
+    std::uint8_t       blocks_[wedged_slots][4096];
+    std::uint32_t      drained_before_[wedged_slots] = {};
+};
+
+void open_vulkan(void *context, std::uint32_t)
+{
+    OpenAll &all = *static_cast<OpenAll *>(context);
+    AvContextOptions options = {};
+    options.domain = all.domain;
+    ContextSession *const made = all.root->open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr);
+    if (made != nullptr) all.root->close(made);
+}
+
+}
+
+TEST(executor_root_concurrency, a_wedged_slot_reaped_by_contexts_opening_at_once_is_finished_once)
+{ for (std::uint32_t round = 0u; round < 20u; round++) {
+      Opened opened;
+      Wedged wedged(opened);
+      CHECK_EQ(opened.root().wedged(), wedged_slots);
+      wedged.finish_in_time();
+      OpenAll all = {&opened.root(), opened.held().domain_of(intel), AV_EXECUTOR_SUB_API_VULKAN, {}, {}};
+      Spread(16u, open_vulkan, &all).run();
+      for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) {
+          CHECK_EQ(wedged.backend(slot).shut_downs(), 1u);
+          CHECK_EQ(wedged.backend(slot).drains(), wedged.drained_before(slot) + 1u);
+      }
+      CHECK_EQ(opened.root().wedged(), 0u);
+      CHECK_EQ(opened.root().live(), 0u);
+  } }
+
+TEST(executor_root_concurrency, a_wedged_slot_whose_work_finishes_is_released_without_another_context_opening)
+{ Opened opened;
+  Wedged wedged(opened);
+  CHECK_EQ(opened.root().wedged(), wedged_slots);
+  wedged.finish_in_time();
+  timespec nap = {0, 50 * 1000 * 1000};
+  for (std::uint32_t looks = 0u; looks < 30u && opened.root().wedged() != 0u; looks++) nanosleep(&nap, nullptr);
+  CHECK_EQ(opened.root().wedged(), 0u);
+  CHECK_EQ(opened.root().live(), 0u);
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) CHECK_EQ(wedged.backend(slot).shut_downs(), 1u); }

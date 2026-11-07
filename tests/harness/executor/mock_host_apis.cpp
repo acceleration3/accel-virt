@@ -2,7 +2,7 @@
 
 namespace av {
 
-MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), log_(), lines_(log_, "shares: "), d3d11_(lines_), d3d11_index_(max_gpus), heap_(), surfaces_(heap_),
+MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), log_(), lines_(log_, "shares: "), d3d11_(lines_), d3d11_index_(max_gpus), gl_(nullptr), heap_(), surfaces_(heap_),
       shares_(heap_, lines_), exporter_(), source_(exporter_, heap_),
       memory_withheld_(false) {}
 
@@ -18,6 +18,8 @@ void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis)
 uint32_t MockHostApis::questions() const { return questions_; }
 
 void MockHostApis::give_d3d11(uint32_t index) { d3d11_index_ = index; }
+
+void MockHostApis::give_gl(const GlDisplay *display) { gl_ = display; }
 
 D3d11HostDevice &MockHostApis::d3d11() { return d3d11_; }
 
@@ -55,7 +57,7 @@ uint32_t MockHostApis::sub_apis(uint32_t index)
 const GlDisplay *MockHostApis::gl_display(uint32_t)
 {
     questions_++;
-    return nullptr;
+    return gl_;
 }
 
 const OpenClDevice *MockHostApis::opencl_device(uint32_t)
