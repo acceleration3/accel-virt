@@ -425,7 +425,7 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
         described.kind() != AllocationKind::cross_adapter || !described.cpu_visible() || described.layout().height() != 1u ||
         described.layout().format() != 0u) {
         unsupported("pfnOpenHeapAndResource of a shared heap");
-        return E_NOTIMPL;
+        return E_INVALIDARG;
     }
     heap = HeapRecord{};
     stamp(heap.header, HeapRecord::tag, next_id());
