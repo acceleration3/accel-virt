@@ -157,5 +157,9 @@ namespace av::d3d12proto {
 // Each write stores `value` at `address` in order; mode is D3D12_WRITEBUFFERIMMEDIATE_MODE.
 [[nodiscard]] bool av_d3d12_WriteBufferImmediate12(::av::ClientTransport& t, uint32_t list, uint32_t count, const ImmediateWrite* writes);
 [[nodiscard]] bool av_d3d12_SetViewInstanceMask12(::av::ClientTransport& t, uint32_t list, uint32_t mask);
+// The host GPU's timestamp counter now and its rate in ticks a second, both 0 when the queue's host cannot
+// answer. The caller times the exchange against its own clock and hands the pair to the kernel driver as the origin
+// the timestamp calibration counts from.
+[[nodiscard]] bool av_d3d12_GetClockOrigin12(::av::ClientTransport& t, uint32_t queue, uint64_t* ticks, uint64_t* frequency);
 
 }  // namespace av::d3d12proto

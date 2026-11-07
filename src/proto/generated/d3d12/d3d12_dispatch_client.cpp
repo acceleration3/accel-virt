@@ -898,4 +898,20 @@ bool av_d3d12_SetViewInstanceMask12(::av::ClientTransport& t, uint32_t list, uin
     return t.send_async(kCmd_SetViewInstanceMask12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_GetClockOrigin12(::av::ClientTransport& t, uint32_t queue, uint64_t* ticks, uint64_t* frequency) {
+    AV_SCOPE("av_d3d12_GetClockOrigin12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(queue);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_GetClockOrigin12, b, r) != ::av::TransportResult::ok) return false;
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (ticks != nullptr) *ticks = value; }
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (frequency != nullptr) *frequency = value; }
+    return r.remaining() == 0u;
+}
+
 }  // namespace av::d3d12proto

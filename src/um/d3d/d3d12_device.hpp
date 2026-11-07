@@ -13,6 +13,7 @@
 #include "um/d3d/allocation_lender.hpp"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d_call_trace.hpp"
+#include "um/d3d/d3d12_clock_origin.hpp"
 #include "um/d3d/d3d12_ddi.hpp"
 #include "um/d3d/d3d12_recorder.hpp"
 #include "um/d3d/d3d12_records.hpp"
@@ -119,6 +120,7 @@ private:
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
     const D3DDDI_DEVICECALLBACKS                  *kernel_;
     d3d::AllocationLender                          lender_;
+    D3d12ClockOrigin                      clock_origin_;
     HeapMemories                          memories_;
     ObjectStorage<d3d::BatchFollower>     follower_;
     ObjectStorage<D3d12Residency>         residency_;

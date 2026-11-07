@@ -582,3 +582,12 @@ params = ["u32 list", "u32 count", "ImmediateWrite writes[count] max 64"]
 name = "SetViewInstanceMask12"
 id = 0x1524
 params = ["u32 list", "u32 mask"]
+
+[[command]]
+name = "GetClockOrigin12"
+id = 0x1525
+doc = """The host GPU's timestamp counter now and its rate in ticks a second, both 0 when the queue's host cannot
+answer. The caller times the exchange against its own clock and hands the pair to the kernel driver as the origin
+the timestamp calibration counts from."""
+params = ["u32 queue"]
+reply = ["u64 ticks", "u64 frequency"]

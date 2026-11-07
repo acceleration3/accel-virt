@@ -1525,6 +1525,22 @@ static bool decode_SetViewInstanceMask12(ServerDispatch& s, ::av::WireReader& r,
     return true;
 }
 
+static bool decode_GetClockOrigin12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:GetClockOrigin12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t queue{};
+    if (!r.read_pod(queue)) return false;
+    uint64_t ticks{};
+    uint64_t frequency{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_GetClockOrigin12(queue, ticks, frequency)) return false;
+    reply.write_pod(ticks);
+    reply.write_pod(frequency);
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1600,6 +1616,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_SetSamplePositions12:
         case kCmd_WriteBufferImmediate12:
         case kCmd_SetViewInstanceMask12:
+        case kCmd_GetClockOrigin12:
             return true;
         default: return false;
     }
@@ -1681,6 +1698,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_SetSamplePositions12: return decode_SetSamplePositions12(s, r, reply, arena);
         case kCmd_WriteBufferImmediate12: return decode_WriteBufferImmediate12(s, r, reply, arena);
         case kCmd_SetViewInstanceMask12: return decode_SetViewInstanceMask12(s, r, reply, arena);
+        case kCmd_GetClockOrigin12: return decode_GetClockOrigin12(s, r, reply, arena);
         default: return false;
     }
 }

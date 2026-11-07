@@ -491,3 +491,31 @@ TEST(d3d12_session_execution, a_session_killed_after_any_command_releases_everyt
       CHECK_EQ(scene.first_queue.references(), 0u);
       CHECK_EQ(scene.second_queue.references(), 0u);
   } }
+
+TEST(d3d12_session_execution, a_queue_answers_the_host_gpu_clock_it_counts_from_and_its_rate)
+{ Scene scene;
+  scene.first_queue.clock_frequency = 1000000000u;
+  scene.first_queue.clock_ticks = 424242u;
+  std::uint64_t ticks = 1u, frequency = 1u;
+  CHECK(scene.session().on_GetClockOrigin12(queue_a, ticks, frequency));
+  CHECK_EQ(ticks, 424242u);
+  CHECK_EQ(frequency, 1000000000u);
+  CHECK(av_d3d12_GetClockOrigin12(scene.rig, queue_a, &ticks, &frequency));
+  CHECK_EQ(ticks, 424242u);
+  CHECK_EQ(frequency, 1000000000u); }
+
+TEST(d3d12_session_execution, a_queue_whose_host_cannot_calibrate_answers_no_clock_and_a_stranger_is_refused)
+{ Scene scene;
+  std::uint64_t ticks = 1u, frequency = 1u;
+  CHECK(scene.session().on_GetClockOrigin12(queue_a, ticks, frequency));
+  CHECK_EQ(ticks, 0u);
+  CHECK_EQ(frequency, 0u);
+  scene.first_queue.clock_frequency = 10000000u;
+  scene.first_queue.refuse_calibration = true;
+  ticks = frequency = 1u;
+  CHECK(scene.session().on_GetClockOrigin12(queue_a, ticks, frequency));
+  CHECK_EQ(ticks, 0u);
+  CHECK_EQ(frequency, 0u);
+  CHECK(!scene.session().on_GetClockOrigin12(target, ticks, frequency));
+  CHECK(!scene.session().on_GetClockOrigin12(queue_a + 100u, ticks, frequency));
+  CHECK_EQ(frequency, 0u); }

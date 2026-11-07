@@ -35,7 +35,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(BlockSource &memory, d3d::D3dSession &session, KeyedLog &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table, d3d::D3dCallTrace &trace)
-    : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), lender_(session), memories_(memory, session, log), follower_(), residency_(), channel_(), addresses_(), commitment_(),
+    : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), lender_(session), clock_origin_(session, log), memories_(memory, session, log), follower_(), residency_(), channel_(), addresses_(), commitment_(),
       recorder_(*this), null_resource_{}, loss_(lines_), library_blob_(), trace_(trace),
       context_number_(trace.number_context())
 {
@@ -263,6 +263,7 @@ HRESULT D3d12Device::create_command_queue(const D3D12DDIARG_CREATECOMMANDQUEUE_0
     if (!sent(d3d12proto::av_d3d12_CreateCommandQueue12(wire(), queue.header.stamp.id(), queue.type, 0u, 0u),
               "CreateCommandQueue12"))
         return E_OUTOFMEMORY;
+    clock_origin_.take(wire(), queue.header.stamp.id());
     return S_OK;
 }
 

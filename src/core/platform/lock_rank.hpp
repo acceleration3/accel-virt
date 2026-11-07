@@ -29,6 +29,7 @@ enum class LockRank : uint16_t {
     cursor_queue = 230u,
     av_context = 240u,
     log_budget = 250u,
+    gpu_clock_origin = 260u,
 };
 
 }

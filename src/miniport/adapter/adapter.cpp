@@ -31,6 +31,7 @@
 #include "proto/escape/present_point_record.hpp"
 #include "miniport/present/present_ticket_record.hpp"
 #include "proto/escape/context_views_record.hpp"
+#include "proto/escape/clock_origin_record.hpp"
 #include "proto/escape/wake_event_record.hpp"
 #include "proto/escape/tail_publish_record.hpp"
 #include "miniport/ddi/dxgkarg_native_fence_records.hpp"
@@ -143,7 +144,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       render_km_(platform, devices_),
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
-      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
+      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), clock_origin_(platform), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
       display_changed_(0u), display_announced_(0u), scanout_period_(DisplayMode().period()), started_(false), luid_(0u), present_(true)
       {
@@ -700,6 +701,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     if (magic == HostWindowRecord::magic) return window_chunk(*escape);
     if (magic == ContextViewsRecord::magic) return context_views(*escape);
     if (magic == WakeEventRecord::magic) return wake_event(*escape);
+    if (magic == ClockOriginRecord::magic) return clock_origin(*escape);
     if (magic == PagesReadRecord::magic) return pages_read(*escape);
     if (magic == NextPointRecord::magic || magic == NextPointRecord::withdraw_magic ||
         magic == NextPointRecord::pages_magic)
@@ -798,6 +800,17 @@ int32_t Adapter::wake_event(const DxgkargEscapeRecord &escape)
             Status::ok ||
         av_contexts_.wake_on_raise(escape.hContext, record.event()) != Status::ok)
         return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::clock_origin(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::clock_origin");
+    ClockOriginRecord record;
+    if (record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize) !=
+        Status::ok)
+        return NtStatus(Status::invalid_parameter).value();
+    clock_origin_.adopt(record);
     return NtStatus(Status::ok).value();
 }
 
@@ -2009,8 +2022,14 @@ int32_t Adapter::calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuCloc
     if (clock == nullptr || node != 0u || engine != 0u) return NtStatus(Status::invalid_parameter).value();
     uint64_t frequency = 0u;
     const uint64_t counter = platform_.performance_counter(frequency);
-    clock->GpuFrequency = frequency;
-    clock->GpuClockCounter = counter;
+    uint64_t       gpu_ticks = counter;
+    uint64_t       gpu_frequency = frequency;
+    if (!clock_origin_.project(counter, frequency, gpu_ticks, gpu_frequency)) {
+        gpu_ticks = counter;
+        gpu_frequency = frequency;
+    }
+    clock->GpuFrequency = gpu_frequency;
+    clock->GpuClockCounter = gpu_ticks;
     clock->CpuClockCounter = counter;
     clock->Flags = 0u;
     return NtStatus(Status::ok).value();

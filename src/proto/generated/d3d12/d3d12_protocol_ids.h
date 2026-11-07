@@ -82,5 +82,6 @@ inline constexpr uint32_t kCmd_ResolveSubresourceRegion12 = 0x00041521;
 inline constexpr uint32_t kCmd_SetSamplePositions12 = 0x00041522;
 inline constexpr uint32_t kCmd_WriteBufferImmediate12 = 0x00041523;
 inline constexpr uint32_t kCmd_SetViewInstanceMask12 = 0x00041524;
+inline constexpr uint32_t kCmd_GetClockOrigin12 = 0x00041525;
 
 }  // namespace av::d3d12proto

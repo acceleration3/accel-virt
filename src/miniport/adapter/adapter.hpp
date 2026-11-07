@@ -4,6 +4,7 @@
 #include "proto/dma/present_operation.hpp"
 #include "miniport/adapter/adapter_description.hpp"
 #include "miniport/adapter/driver_capabilities.hpp"
+#include "miniport/adapter/gpu_clock_origin.hpp"
 #include "miniport/ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "miniport/display/display_info_response.hpp"
 #include "miniport/display/display_mode_list.hpp"
@@ -307,6 +308,7 @@ private:
     int32_t          window_chunk(const DxgkargEscapeRecord &escape);
     int32_t          context_views(const DxgkargEscapeRecord &escape);
     int32_t          wake_event(const DxgkargEscapeRecord &escape);
+    int32_t          clock_origin(const DxgkargEscapeRecord &escape);
     int32_t          next_point(const DxgkargEscapeRecord &escape);
     int32_t          pages_read(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
@@ -393,6 +395,7 @@ private:
     AdapterDescription             description_;
     InterruptNotification          notification_;
     SpinLock                       dpc_lock_;
+    GpuClockOrigin                 clock_origin_;
     DeviceVblank                   vsync_;
     HardwareCursor                 cursor_;
     DisplayScanout                 scanout_;

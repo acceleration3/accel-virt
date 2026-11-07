@@ -130,6 +130,7 @@
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/escape/context_views_record.hpp"
+#include "proto/escape/clock_origin_record.hpp"
 #include "proto/escape/wake_event_record.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"
@@ -2585,6 +2586,34 @@ TEST(adapter_calibrate_gpu_clock, the_gpu_clock_is_the_performance_counter)
   CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(1u, 0u, &clock)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 1u, &clock)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 0u, nullptr)), invalid_parameter); }
+
+TEST(adapter_calibrate_gpu_clock, an_origin_from_the_user_mode_driver_puts_the_gpu_clock_in_the_hosts_ticks)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.platform().advance_time(1000u);
+  const std::uint64_t taken_at = fixture.platform().interrupt_time();
+  std::uint8_t data[av::ClockOriginRecord::encoded_size] = {};
+  CHECK_STATUS(av::ClockOriginRecord(taken_at, 5000000u, 1000000000u).encode(data, sizeof data), av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  fixture.platform().advance_time(250u);
+  av::DxgkGpuClockDataRecord clock;
+  std::memset(&clock, 0xEE, sizeof clock);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 0u, &clock)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(clock.GpuFrequency, 1000000000u);
+  CHECK_EQ(clock.GpuClockCounter, 5000000u + 250u * 100u);
+  CHECK_EQ(clock.CpuClockCounter, fixture.platform().interrupt_time());
+  CHECK_STATUS(av::ClockOriginRecord(taken_at, 5000000u, 1000000000u).encode(data, sizeof data), av::Status::ok);
+  std::memset(data + 24, 0, 8u);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 0u, &clock)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(clock.GpuFrequency, 1000000000u); }
 
 TEST(adapter, the_wddm_1_3_ddis_declare_their_ceilings)
 { Fixture fixture;

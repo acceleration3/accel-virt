@@ -102,6 +102,7 @@ public:
     virtual bool on_SetSamplePositions12(uint32_t list, uint32_t samples, uint32_t pixels, uint32_t count, const SamplePosition* positions) = 0;
     virtual bool on_WriteBufferImmediate12(uint32_t list, uint32_t count, const ImmediateWrite* writes) = 0;
     virtual bool on_SetViewInstanceMask12(uint32_t list, uint32_t mask) = 0;
+    virtual bool on_GetClockOrigin12(uint32_t queue, uint64_t& ticks, uint64_t& frequency) = 0;
 
 protected:
     // `guest` is the context's blob arena, which the implementation owns and

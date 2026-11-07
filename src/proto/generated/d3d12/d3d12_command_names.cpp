@@ -82,6 +82,7 @@ const char* command_name(uint32_t id) {
         case kCmd_SetSamplePositions12: return "SetSamplePositions12";
         case kCmd_WriteBufferImmediate12: return "WriteBufferImmediate12";
         case kCmd_SetViewInstanceMask12: return "SetViewInstanceMask12";
+        case kCmd_GetClockOrigin12: return "GetClockOrigin12";
         default: return nullptr;
     }
 }
