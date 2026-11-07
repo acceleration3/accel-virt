@@ -20,7 +20,9 @@
 #include "harness/platform/mock_platform.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/common/shared_handles.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "icd/vulkan/connection.hpp"
+#include "icd/vulkan/fence_wakes.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -182,6 +184,42 @@ TEST(connection, opens_a_vulkan_context_on_the_avgpu_adapter_with_its_luid)
   CHECK(record.sub_api() == av::SubApi::vulkan);
   CHECK_EQ(record.ring_order(), 20u);
   CHECK(!rig.lock().held()); }
+
+TEST(connection, a_wake_is_registered_with_the_driver_only_once_open_and_only_if_the_driver_takes_it)
+{ Rig rig;
+  CHECK(!rig.connection().wake_on(0x55u));
+  CHECK(!rig.connection().wakes());
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
+  CHECK(!rig.connection().wake_on(0x55u));
+  CHECK(!rig.connection().wakes());
+  rig.kmt().accept_wake_events();
+  CHECK(rig.connection().wake_on(0x55u));
+  CHECK(rig.connection().wakes());
+  CHECK_EQ(rig.kmt().wake_event(), 0x55u);
+  rig.connection().close();
+  CHECK(!rig.connection().wakes()); }
+
+TEST(connection, fence_wakes_start_their_thread_and_register_its_handle_with_the_connection)
+{ Rig rig;
+  av::ScriptedThread thread;
+  av::icd::FenceWakes wakes(thread);
+  rig.kmt().accept_wake_events();
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
+  CHECK(!wakes.register_with(rig.connection()));
+  thread.offer_wake(0x77u);
+  CHECK(wakes.register_with(rig.connection()));
+  CHECK_EQ(thread.starts(), 1u);
+  CHECK_EQ(rig.kmt().wake_event(), 0x77u);
+  CHECK(rig.connection().wakes());
+  thread.refuse_start();
+  CHECK(!wakes.register_with(rig.connection()));
+  thread.driver_woke();
+  CHECK_EQ(wakes.woken(), 1u);
+  wakes.await(1u, 99u);
+  CHECK_EQ(thread.last_seen(), 1u);
+  CHECK_EQ(thread.last_timeout(), 99u);
+  CHECK(wakes.turn());
+  CHECK_EQ(thread.driven_pauses(), 1u); }
 
 TEST(connection, a_command_crosses_under_the_lock_and_its_answer_comes_back)
 { Rig rig;

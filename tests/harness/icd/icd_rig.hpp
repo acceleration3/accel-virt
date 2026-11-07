@@ -38,6 +38,7 @@ public:
     RecordingLog         &log();
     KeyedLog             &lines();
     ScriptedThread       &present_thread();
+    ScriptedThread       &wake_thread();
     RecordingThreadLock  &present_lock();
     CountedWakeSignal    &handed();
     CountedWakeSignal    &shown();
@@ -70,6 +71,7 @@ private:
     ScriptedWindowChains  chains_;
     RecordingThreadLock  present_lock_;
     ScriptedThread       present_thread_;
+    ScriptedThread       wake_thread_;
     CountedWakeSignal    handed_;
     CountedWakeSignal    shown_;
     icd::IcdRoot         root_;

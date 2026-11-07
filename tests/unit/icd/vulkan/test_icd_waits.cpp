@@ -8,6 +8,7 @@
 #include "icd/vulkan/loader_handle.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/vulkan/fence_wake.hpp"
 #include "proto/client/icd_handle_registry.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -40,11 +41,16 @@ constexpr std::uint64_t slice_ticks = MockKmt::ticks_per_second / 2u;
 constexpr std::uint64_t fence_host = 0x8800u;
 constexpr std::uint64_t semaphore_host = 0x8900u;
 constexpr std::uint64_t queue_host = 0x6600u;
+constexpr std::uint64_t wake_handle = 0x9900u;
 
 class WaitRig {
 public:
-    WaitRig()
+    explicit WaitRig(bool wakes = false)
     {
+        if (wakes) {
+            rig_.kmt().accept_wake_events();
+            rig_.wake_thread().offer_wake(wake_handle);
+        }
         instance_ = rig_.create_instance();
         physical_ = rig_.physical_device(instance_);
         VkDeviceCreateInfo info = {};
@@ -125,6 +131,36 @@ TEST(icd_waits, a_1200_ms_fence_wait_is_three_non_blocking_host_asks_one_slice_a
       CHECK_EQ(body.read_u32(), static_cast<std::uint32_t>(VK_TRUE));
   }
 }
+
+TEST(icd_waits, a_connection_the_driver_wakes_arms_a_long_fence_wait_once_and_then_waits_for_the_wake_instead_of_resting)
+{ WaitRig rig(true);
+  CHECK_EQ(rig.kmt().wake_event(), wake_handle);
+  rig.answer(VK_TIMEOUT, 2u);
+  rig.answer(VK_SUCCESS, 1u);
+  const std::uint32_t sleeps = rig.kmt().sleeps();
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.wait_for_fence(1200u * ms), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 3u);
+  CHECK_EQ(rig.timeout_back(2u), av::vkproto::FenceWake::arm_timeout);
+  CHECK_EQ(rig.timeout_back(1u), 0u);
+  CHECK_EQ(rig.timeout_back(0u), 0u);
+  CHECK(rig.rig().wake_thread().awaits() >= 1u);
+  CHECK_EQ(rig.kmt().sleeps(), sleeps); }
+
+TEST(icd_waits, a_wait_too_short_to_be_worth_a_wake_is_asked_without_one)
+{ WaitRig rig(true);
+  rig.answer(VK_TIMEOUT, 1u);
+  CHECK_EQ(rig.wait_for_fence(1u * ms), VK_TIMEOUT);
+  CHECK_EQ(rig.timeout_back(0u), 0u);
+  CHECK_EQ(rig.rig().wake_thread().awaits(), 0u); }
+
+TEST(icd_waits, a_connection_the_driver_does_not_wake_never_sends_the_wake_request)
+{ WaitRig rig;
+  rig.answer(VK_TIMEOUT, 1u);
+  rig.answer(VK_SUCCESS, 1u);
+  CHECK_EQ(rig.wait_for_fence(SlicedWait::forever), VK_SUCCESS);
+  CHECK_EQ(rig.timeout_back(1u), 0u);
+  CHECK_EQ(rig.rig().wake_thread().awaits(), 0u); }
 
 TEST(icd_waits, a_fence_signalled_in_the_second_slice_answers_success)
 { WaitRig rig;

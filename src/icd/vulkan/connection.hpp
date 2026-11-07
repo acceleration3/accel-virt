@@ -48,6 +48,8 @@ public:
     uint32_t             device() const;
     uint64_t             luid() const;
     const char          *adapter_name() const;
+    [[nodiscard]] bool   wake_on(uint64_t handle);
+    bool                 wakes() const;
     void                 note_host_dma_buf();
     bool                 host_has_dma_buf() const;
     ClientTransport     &transport();
@@ -71,6 +73,7 @@ private:
     bool                           opened_;
     AdapterFacts                   adapter_;
     bool                           host_dma_buf_;
+    bool                           wakes_;
     OpenedObjects                  opened_objects_;
 
     friend struct ConnectionProbe;

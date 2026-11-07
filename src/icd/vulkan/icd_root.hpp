@@ -9,6 +9,7 @@
 #include "icd/vulkan/device_memory.hpp"
 #include "icd/vulkan/entry_points.hpp"
 #include "icd/vulkan/extension_policy.hpp"
+#include "icd/vulkan/fence_wakes.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 #include "icd/vulkan/icd_entry_lookup.hpp"
@@ -54,7 +55,8 @@ public:
 
     IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
             KeyedLog &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
-            ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock);
+            ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock,
+            ServiceThread &wake_thread);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
     IcdRoot &operator=(const IcdRoot &) = delete;
@@ -191,6 +193,7 @@ private:
     ObjectPool<InstanceSpan> spans_;
     IcdEntryLookup         entries_;
     Presentation           presentation_;
+    FenceWakes             wakes_;
     DescriptorTemplateTable templates_;
     GuestHandleTranslation  translation_;
     ExternalObjects         externals_;

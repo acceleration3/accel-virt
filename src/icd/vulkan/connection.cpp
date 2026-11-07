@@ -15,7 +15,7 @@ Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, KeyedLog
     : kmt_(kmt), search_(kmt), connection_(kmt),
       channel_(memory, lines, ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
                lock),
-      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false), opened_objects_(handles, memory, lines)
+      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false), wakes_(false), opened_objects_(handles, memory, lines)
 {
     AV_SCOPE("Connection::Connection");
 }
@@ -42,10 +42,24 @@ Status Connection::open(uint64_t luid)
     return Status::ok;
 }
 
+bool Connection::wake_on(uint64_t handle)
+{
+    AV_SCOPE("Connection::wake_on");
+    wakes_ = opened() && channel_.transport().wake_on_raise(handle) == Status::ok;
+    return wakes_;
+}
+
+bool Connection::wakes() const
+{
+    AV_SCOPE("Connection::wakes");
+    return wakes_;
+}
+
 void Connection::close()
 {
     AV_SCOPE("Connection::close");
     opened_ = false;
+    wakes_ = false;
     channel_.close(false);
     connection_.close();
     static_cast<void>(search_.close());

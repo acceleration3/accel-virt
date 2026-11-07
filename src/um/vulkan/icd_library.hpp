@@ -43,6 +43,7 @@ private:
         WindowsServiceThread present_thread;
         WindowsThreadWake    present_handed;
         WindowsThreadWake    present_shown;
+        WindowsServiceThread wake_thread;
         icd::IcdRoot root;
     };
 

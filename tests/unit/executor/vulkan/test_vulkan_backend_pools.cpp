@@ -6,11 +6,13 @@
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
+#include "proto/vulkan/fence_wake.hpp"
 
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
 #include <cstring>
+#include <time.h>
 
 using av::VulkanBackend;
 using av::VulkanBackendProbe;
@@ -19,6 +21,21 @@ using HandleKind = av::vkproto::HandleKind;
 namespace {
 
 constexpr std::uint32_t most_fences = 64u;
+
+std::uint32_t raised_wakes = 0u;
+
+void count_wake(void *)
+{ __atomic_fetch_add(&raised_wakes, 1u, __ATOMIC_RELEASE); }
+
+bool wake_arrives()
+{ timespec began = {};
+  clock_gettime(CLOCK_MONOTONIC, &began);
+  for (;;) {
+      if (__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE) != 0u) return true;
+      timespec now = {};
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      if (now.tv_sec - began.tv_sec > 5) return false;
+  } }
 
 struct FakeFence {
     bool alive = false;
@@ -468,3 +485,69 @@ TEST(vulkan_backend_pools, a_reset_after_the_gpu_passed_the_pending_one_runs_it_
   const std::uint32_t resets = driver.pool_resets;
   rig.gpu_finishes();
   CHECK_EQ(driver.pool_resets, resets); }
+
+TEST(vulkan_backend_pools, a_fence_wait_that_asks_for_a_wake_answers_at_once_and_wakes_the_guest_when_the_fence_signals)
+{ Rig rig;
+  raised_wakes = 0u;
+  rig.backend().bind_signal(&count_wake, nullptr);
+  driver.fences[driver.made] = FakeFence{true, false};
+  const VkFence fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(driver.made++) + 1u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_TIMEOUT));
+  CHECK_EQ(__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE), 0u);
+  driver.fences[index_of(fence)].signalled = true;
+  CHECK(wake_arrives());
+  rig.backend().bind_signal(nullptr, nullptr); }
+
+TEST(vulkan_backend_pools, a_fence_wait_that_asks_for_a_wake_on_a_signalled_fence_answers_success_and_wakes_nobody)
+{ Rig rig;
+  raised_wakes = 0u;
+  rig.backend().bind_signal(&count_wake, nullptr);
+  driver.fences[driver.made] = FakeFence{true, true};
+  const VkFence fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(driver.made++) + 1u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_SUCCESS));
+  rig.backend().bind_signal(nullptr, nullptr);
+  CHECK_EQ(__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE), 0u); }
+
+TEST(vulkan_backend_pools, a_fence_wait_that_asks_for_a_wake_with_nothing_to_wake_the_guest_says_not_ready)
+{ Rig rig;
+  driver.fences[driver.made] = FakeFence{true, false};
+  const VkFence fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(driver.made++) + 1u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_NOT_READY)); }
+
+TEST(vulkan_backend_pools, any_other_fence_wait_is_passed_to_the_driver_untouched)
+{ Rig rig;
+  driver.fences[driver.made] = FakeFence{true, false};
+  const VkFence fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(driver.made++) + 1u);
+  const std::uint32_t before = driver.waits;
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE, 1000u)),
+           static_cast<int>(VK_TIMEOUT));
+  CHECK_EQ(driver.waits, before + 1u); }
+
+TEST(vulkan_backend_pools, destroying_or_resetting_a_fence_a_wake_waits_on_ends_the_wake_first)
+{ Rig rig;
+  raised_wakes = 0u;
+  rig.backend().bind_signal(&count_wake, nullptr);
+  driver.fences[driver.made] = FakeFence{true, false};
+  const VkFence fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(driver.made++) + 1u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_TIMEOUT));
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkResetFences(rig.host_device(), 1u, &fence)), static_cast<int>(VK_SUCCESS));
+  driver.fences[index_of(fence)].signalled = true;
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_SUCCESS));
+  driver.fences[index_of(fence)].signalled = false;
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_TIMEOUT));
+  rig.backend().on_vkDestroyFence(rig.host_device(), fence, nullptr);
+  CHECK(!driver.fences[index_of(fence)].alive);
+  CHECK_EQ(__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE), 0u);
+  rig.backend().bind_signal(nullptr, nullptr); }

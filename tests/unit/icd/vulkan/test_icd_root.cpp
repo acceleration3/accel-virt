@@ -465,10 +465,11 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::ScriptedWindowChains chains;
       av::RecordingThreadLock present_lock(trace, 'P');
       av::ScriptedThread present_thread;
+      av::ScriptedThread wake_thread;
       av::CountedWakeSignal handed;
       av::CountedWakeSignal shown;
       { IcdRoot root(platform, kmt, lock, send_lock, memory_lock, lines, av::icd::icd_binding, windows, chains,
-                     present_thread, handed, shown, present_lock);
+                     present_thread, handed, shown, present_lock, wake_thread);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
                                           av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem),

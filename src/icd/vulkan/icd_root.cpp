@@ -243,18 +243,20 @@ constexpr uint32_t reported_instance_extension_count =
 constexpr uint32_t max_chain = 32u;
 constexpr uint32_t max_host_extensions = 1024u;
 constexpr uint32_t max_allocated_at_once = 1024u;
+constexpr uint64_t wake_floor_ns = 2000000u;
 
 }
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
                  KeyedLog &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
-                 ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock)
+                 ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock,
+                 ServiceThread &wake_thread)
     : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), lines_(log),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), shared_handles_(kmt, lock, memory), connections_(memory), pending_(nullptr), spans_(memory),
-      entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_, present_thread, handed, shown, present_lock), templates_(memory, lock),
+      entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_, present_thread, handed, shown, present_lock), wakes_(wake_thread), templates_(memory, lock),
       translation_(lock, handles_, templates_),
       externals_(lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
@@ -343,7 +345,10 @@ Status IcdRoot::open_connection(Connection *&opened, uint64_t luid)
     const Status made = connections_.create(opened, kmt_, memory_, send_lock_, lines_, shared_handles_);
     if (made != Status::ok) return made;
     const Status status = opened->open(luid);
-    if (status == Status::ok) return Status::ok;
+    if (status == Status::ok) {
+        if (!wakes_.register_with(*opened)) lines_.write("fence waits on this connection ask on a timer; the driver does not wake them");
+        return Status::ok;
+    }
     static_cast<void>(connections_.destroy(opened));
     opened = nullptr;
     return status;
@@ -1425,7 +1430,8 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
-    FenceWaitProbe     probe(made->connection()->transport(), translation_, kmt_, device, count, fences, wait_all);
+    const bool         driven = made->connection()->wakes() && timeout >= wake_floor_ns;
+    FenceWaitProbe     probe(made->connection()->transport(), translation_, kmt_, wakes_, driven, device, count, fences, wait_all);
     HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
     return probe.result();

@@ -46,7 +46,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
-      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), progress_(),
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), progress_(),
       guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
@@ -669,6 +669,7 @@ void VulkanBackend::on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyInd
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
+    fence_watch_.settle();
     parked_.drop_device(reinterpret_cast<uint64_t>(device));
     const bool idle = guard_.release_all(reinterpret_cast<uint64_t>(device));
     templates_.forget_device(reinterpret_cast<uint64_t>(device));
@@ -923,9 +924,11 @@ bool VulkanBackend::poll()
     return parked_.pending() || lost_;
 }
 
-void VulkanBackend::bind_signal(void (*)(void *context), void *)
+void VulkanBackend::bind_signal(void (*signal)(void *context), void *context)
 {
     AV_SCOPE("VulkanBackend::bind_signal");
+    if (signal != nullptr) fence_watch_.bind(signal, context);
+    else fence_watch_.unbind();
 }
 
 void VulkanBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
@@ -979,6 +982,7 @@ void VulkanBackend::let_go_of_thread()
 void VulkanBackend::shut_down()
 {
     AV_SCOPE("VulkanBackend::shut_down");
+    fence_watch_.unbind();
     parked_.drop_all();
     host_waits_.clear();
     buffer_device_ = BufferDevice{};

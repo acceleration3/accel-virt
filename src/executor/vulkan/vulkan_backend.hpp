@@ -6,6 +6,7 @@
 #include "executor/vulkan/guest_device.hpp"
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/monotonic_clock.hpp"
+#include "executor/vulkan/vulkan_fence_watch.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_host_waits.hpp"
 #include "executor/vulkan/vulkan_park_host.hpp"
@@ -91,6 +92,10 @@ public:
                                const VkDeviceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
     void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
+    VkResult on_vkWaitForFences(VkDevice device, uint32_t fenceCount, const VkFence *pFences, VkBool32 waitAll,
+                                uint64_t timeout) override;
+    void     on_vkDestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks *pAllocator) override;
+    VkResult on_vkResetFences(VkDevice device, uint32_t fenceCount, const VkFence *pFences) override;
     void     on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
                                  VkQueue *pQueue) override;
     VkResult on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
@@ -339,6 +344,7 @@ private:
     bool                 replaying_;
     VkResult             last_submit_;
     DriverLog           &lines_;
+    VulkanFenceWatch     fence_watch_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;
     uint64_t parent_;
