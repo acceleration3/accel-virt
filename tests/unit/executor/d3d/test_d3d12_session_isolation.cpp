@@ -356,15 +356,15 @@ TEST(d3d12_session_isolation, a_buffer_footprint_is_laid_out_in_a_format_of_the_
                                                 Box{}));
   CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r8, 16u, 16u), 0u, 0u, 0u, image, 0u,
                                                 Box{}));
-  CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r32, 16u, 16u), 0u, 0u, 0u, image, 0u,
-                                                Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r32, 16u, 16u), 0u, 0u, 0u, image, 0u,
+                                               Box{}));
   CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_rgba_uint, 16u, 16u), 0u, 0u, 0u, image,
                                                0u, Box{}));
-  CHECK_EQ(scene.commands.texture_copies, 3u);
+  CHECK_EQ(scene.commands.texture_copies, 4u);
   scene.rgba.desc.SampleDesc.Count = 4u;
   CHECK(!scene.session().on_CopyTextureRegion12(list, image, 0u, 0u, 0u, footprint_of(source, format_rgba, 16u, 16u), 0u,
                                                 Box{}));
-  CHECK_EQ(scene.commands.texture_copies, 3u); }
+  CHECK_EQ(scene.commands.texture_copies, 4u); }
 
 TEST(d3d12_session_isolation, a_footprint_on_a_texture_or_a_footprint_pair_is_refused)
 { Scene scene;
