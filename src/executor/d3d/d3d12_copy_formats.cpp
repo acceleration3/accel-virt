@@ -9,6 +9,9 @@ namespace {
 constexpr uint32_t eight_bytes = 8u;
 constexpr uint32_t sixteen_bytes = 16u;
 constexpr uint32_t block_side = 4u;
+constexpr uint32_t family_r32g32b32a32 = 1u;
+constexpr uint32_t family_r16g16b16a16 = 9u;
+constexpr uint32_t family_r32g32 = 15u;
 
 struct PlaneRow {
     uint32_t texture_;
@@ -53,7 +56,10 @@ bool D3d12CopyFormats::block_pair() const
     const bool source_block = source_.element_width() == block_side && source_.element_height() == block_side;
     const bool destination_plain = destination_.element_width() == 1u && destination_.element_height() == 1u;
     const bool source_plain = source_.element_width() == 1u && source_.element_height() == 1u;
-    return (destination_block && source_plain) || (destination_plain && source_block);
+    if (!(destination_block && source_plain) && !(destination_plain && source_block)) return false;
+    const DxgiFormat &plain = destination_plain ? destination_ : source_;
+    if (bytes == sixteen_bytes) return plain.family() == family_r32g32b32a32;
+    return plain.family() == family_r16g16b16a16 || plain.family() == family_r32g32;
 }
 
 bool D3d12CopyFormats::same_texels() const
@@ -61,11 +67,8 @@ bool D3d12CopyFormats::same_texels() const
     AV_SCOPE("D3d12CopyFormats::same_texels");
     if (!destination_.known() || !source_.known()) return false;
     if (destination_format_ == source_format_) return true;
-    if (destination_.element_bytes() == 0u) return false;
-    if (destination_.element_bytes() == source_.element_bytes() &&
-        destination_.element_width() == source_.element_width() &&
-        destination_.element_height() == source_.element_height())
-        return true;
+    if (destination_.element_bytes() == 0u || source_.element_bytes() == 0u) return false;
+    if (destination_.family() != 0u && destination_.family() == source_.family()) return true;
     return block_pair();
 }
 

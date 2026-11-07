@@ -34,6 +34,7 @@ bool D3d12Footprint::holds(const d3d12proto::Box &region, uint64_t buffer_bytes)
         region.bottom > height_ || region.front > region.back || region.back > depth_)
         return false;
     if (region.left == region.right || region.top == region.bottom || region.front == region.back) return true;
+    if (!layout_.known() || layout_.element_bytes() == 0u) return false;
     const uint64_t slice = static_cast<uint64_t>(row_pitch_) * layout_.rows(height_);
     return PitchedExtent(layout_.copied_row_bytes(region.right), layout_.rows(region.bottom), region.back, row_pitch_, slice)
         .within(buffer_bytes - offset_);

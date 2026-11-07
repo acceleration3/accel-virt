@@ -54,7 +54,8 @@ TEST(d3d12_copy_pair, a_buffer_and_a_texture_do_not_copy_whole)
 TEST(d3d12_copy_pair, two_textures_copy_whole_only_when_every_dimension_and_the_texel_agree)
 { const D3D12_RESOURCE_DESC base = texture_of(DXGI_FORMAT_R8G8B8A8_UNORM, 64u, 32u);
   CHECK(whole(base, base));
-  CHECK(whole(base, texture_of(DXGI_FORMAT_B8G8R8A8_UNORM, 64u, 32u)));
+  CHECK(whole(base, texture_of(DXGI_FORMAT_R8G8B8A8_UINT, 64u, 32u)));
+  CHECK(!whole(base, texture_of(DXGI_FORMAT_B8G8R8A8_UNORM, 64u, 32u)));
   CHECK(!whole(base, texture_of(DXGI_FORMAT_R8G8B8A8_UNORM, 65u, 32u)));
   CHECK(!whole(base, texture_of(DXGI_FORMAT_R8G8B8A8_UNORM, 64u, 33u)));
   CHECK(!whole(base, texture_of(DXGI_FORMAT_R32G32B32A32_FLOAT, 64u, 32u)));
@@ -73,7 +74,8 @@ TEST(d3d12_copy_pair, two_textures_copy_whole_only_when_every_dimension_and_the_
 
 TEST(d3d12_copy_pair, a_region_copy_needs_textures_of_one_sample_count_and_texel)
 { const D3D12_RESOURCE_DESC base = texture_of(DXGI_FORMAT_R8G8B8A8_UNORM, 64u, 32u);
-  CHECK(D3d12CopyPair(base, texture_of(DXGI_FORMAT_B8G8R8A8_UNORM, 8u, 8u)).texels());
+  CHECK(D3d12CopyPair(base, texture_of(DXGI_FORMAT_R8G8B8A8_TYPELESS, 8u, 8u)).texels());
+  CHECK(!D3d12CopyPair(base, texture_of(DXGI_FORMAT_B8G8R8A8_UNORM, 8u, 8u)).texels());
   CHECK(!D3d12CopyPair(base, texture_of(DXGI_FORMAT_R16_UNORM, 64u, 32u)).texels());
   D3D12_RESOURCE_DESC multisampled = base;
   multisampled.SampleDesc.Count = 4u;

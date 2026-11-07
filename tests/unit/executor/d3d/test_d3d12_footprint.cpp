@@ -66,7 +66,20 @@ TEST(d3d12_footprint, a_region_outside_the_footprint_or_its_limits_holds_nothing
   const D3d12Footprint deeper(bgra, 4u, 4u, 2049u, 256u, 0u);
   CHECK(!deeper.holds(Box{0u, 0u, 0u, 1u, 1u, 1u}, huge)); }
 
-TEST(d3d12_footprint, a_format_with_no_fixed_layout_counts_a_row_a_texel)
-{ const D3d12Footprint planar(nv12, 64u, 4u, 1u, 256u, 0u);
-  CHECK(planar.holds(planar.whole(), 256u * 3u + 64u));
-  CHECK(!planar.holds(planar.whole(), 256u * 3u + 63u)); }
+TEST(d3d12_footprint, a_format_with_no_bytes_per_element_holds_no_region_whatever_the_buffer)
+{ const std::uint64_t huge = ~std::uint64_t{0};
+  const std::uint32_t no_bytes[] = {nv12, 104u, 105u, 106u, 110u, 0u, 0xFFFFu};
+  for (const std::uint32_t format : no_bytes) {
+      const D3d12Footprint footprint(format, 64u, 4u, 1u, 256u, 0u);
+      CHECK(!footprint.holds(footprint.whole(), huge));
+      CHECK(!footprint.holds(Box{0u, 0u, 0u, 1u, 1u, 1u}, huge));
+      CHECK(footprint.holds(Box{0u, 0u, 0u, 0u, 1u, 1u}, 0u));
+  } }
+
+TEST(d3d12_footprint, a_plane_of_a_planar_texture_is_laid_out_in_the_plane_s_own_format)
+{ const D3d12Footprint luma(61u, 64u, 4u, 1u, 256u, 0u);
+  CHECK(luma.holds(luma.whole(), 256u * 3u + 64u));
+  CHECK(!luma.holds(luma.whole(), 256u * 3u + 63u));
+  const D3d12Footprint chroma(49u, 32u, 2u, 1u, 256u, 0u);
+  CHECK(chroma.holds(chroma.whole(), 256u + 64u));
+  CHECK(!chroma.holds(chroma.whole(), 256u + 63u)); }
