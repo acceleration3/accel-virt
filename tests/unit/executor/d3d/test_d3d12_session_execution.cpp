@@ -263,6 +263,40 @@ TEST(d3d12_session_execution, a_drain_the_gpu_finishes_in_time_reports_it)
   av::TeardownBudget  budget(clock, 500u * 1000u * 1000u);
   CHECK(scene.session().drain_within(budget)); }
 
+TEST(d3d12_session_execution, a_shutdown_after_a_drain_that_reached_the_newest_work_marks_nothing_more)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_a, list));
+  for (av::FakeFence &fence : scene.device.fences) fence.completed = ~std::uint64_t{0};
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 500u * 1000u * 1000u);
+  CHECK(scene.session().drain_within(budget));
+  std::uint64_t marked = 0u, reached = 0u;
+  scene.session().gpu_progress(marked, reached);
+  const std::uint64_t drained = marked;
+  scene.session().shut_down();
+  scene.session().gpu_progress(marked, reached);
+  CHECK_EQ(marked, drained);
+  CHECK_EQ(scene.dst.references(), 0u); }
+
+TEST(d3d12_session_execution, a_shutdown_after_new_work_since_the_drain_marks_again)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_a, list));
+  for (av::FakeFence &fence : scene.device.fences) fence.completed = ~std::uint64_t{0};
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 500u * 1000u * 1000u);
+  CHECK(scene.session().drain_within(budget));
+  CHECK(scene.session().on_CopyBufferRegion12(other_list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_b, other_list));
+  std::uint64_t marked = 0u, reached = 0u;
+  scene.session().gpu_progress(marked, reached);
+  const std::uint64_t before = marked;
+  for (av::FakeFence &fence : scene.device.fences) fence.completed = ~std::uint64_t{0};
+  scene.session().shut_down();
+  scene.session().gpu_progress(marked, reached);
+  CHECK(marked > before); }
+
 TEST(d3d12_session_execution, a_resource_a_view_names_outlives_the_guest_s_destroy_of_it)
 { Scene scene;
   ViewDesc view = {};

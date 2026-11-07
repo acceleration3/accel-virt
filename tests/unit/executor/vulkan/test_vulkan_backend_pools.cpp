@@ -27,6 +27,15 @@ std::uint32_t raised_wakes = 0u;
 void count_wake(void *)
 { __atomic_fetch_add(&raised_wakes, 1u, __ATOMIC_RELEASE); }
 
+void time_passes()
+{ timespec began = {};
+  clock_gettime(CLOCK_MONOTONIC, &began);
+  for (;;) {
+      timespec now = {};
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      if ((now.tv_sec - began.tv_sec) * 1000000000L + (now.tv_nsec - began.tv_nsec) > 20000000L) break;
+  } }
+
 bool wake_arrives()
 { timespec began = {};
   clock_gettime(CLOCK_MONOTONIC, &began);
@@ -540,6 +549,10 @@ TEST(vulkan_backend_pools, destroying_or_resetting_a_fence_a_wake_waits_on_ends_
                                                               av::vkproto::FenceWake::arm_timeout)),
            static_cast<int>(VK_TIMEOUT));
   CHECK_EQ(static_cast<int>(rig.backend().on_vkResetFences(rig.host_device(), 1u, &fence)), static_cast<int>(VK_SUCCESS));
+  time_passes();
+  const std::uint32_t after_reset = driver.waits;
+  time_passes();
+  CHECK_EQ(driver.waits, after_reset);
   driver.fences[index_of(fence)].signalled = true;
   CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
                                                               av::vkproto::FenceWake::arm_timeout)),
@@ -551,13 +564,7 @@ TEST(vulkan_backend_pools, destroying_or_resetting_a_fence_a_wake_waits_on_ends_
   rig.backend().on_vkDestroyFence(rig.host_device(), fence, nullptr);
   CHECK(!driver.fences[index_of(fence)].alive);
   const std::uint32_t settled = driver.waits;
-  timespec began = {};
-  clock_gettime(CLOCK_MONOTONIC, &began);
-  for (;;) {
-      timespec now = {};
-      clock_gettime(CLOCK_MONOTONIC, &now);
-      if ((now.tv_sec - began.tv_sec) * 1000000000L + (now.tv_nsec - began.tv_nsec) > 20000000L) break;
-  }
+  time_passes();
   CHECK_EQ(driver.waits, settled);
   CHECK_EQ(__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE), 0u);
   rig.backend().bind_signal(nullptr, nullptr); }
@@ -576,3 +583,19 @@ TEST(vulkan_backend_pools, a_command_buffer_forgotten_and_made_again_under_anoth
   rig.backend().made_through(0u);
   rig.record(cb, set);
   CHECK_EQ(rig.probe().guard().devices(), 2u); }
+
+TEST(vulkan_backend_pools, destroying_the_device_a_wake_waits_on_ends_the_wake_first)
+{ Rig rig;
+  raised_wakes = 0u;
+  rig.backend().bind_signal(&count_wake, nullptr);
+  driver.fences[driver.made] = FakeFence{true, false};
+  const VkFence fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(driver.made++) + 1u);
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkWaitForFences(rig.host_device(), 1u, &fence, VK_TRUE,
+                                                              av::vkproto::FenceWake::arm_timeout)),
+           static_cast<int>(VK_TIMEOUT));
+  rig.backend().on_vkDestroyDevice(rig.host_device(), nullptr);
+  const std::uint32_t settled = driver.waits;
+  time_passes();
+  CHECK_EQ(driver.waits, settled);
+  CHECK_EQ(__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE), 0u);
+  rig.backend().bind_signal(nullptr, nullptr); }
