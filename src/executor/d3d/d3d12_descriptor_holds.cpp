@@ -38,6 +38,12 @@ bool D3d12DescriptorHolds::holds(uint32_t heap, uint32_t index, const IUnknown *
     return found != nullptr && (found->first_ == resource || found->second_ == resource);
 }
 
+const D3d12DescriptorHolds::View *D3d12DescriptorHolds::view_at(uint32_t heap, uint32_t index) const
+{
+    AV_SCOPE("D3d12DescriptorHolds::view_at");
+    return tables_.find(heap, key_of(index));
+}
+
 IUnknown *D3d12DescriptorHolds::resource_at(uint32_t heap, uint32_t index) const
 {
     AV_SCOPE("D3d12DescriptorHolds::resource_at");

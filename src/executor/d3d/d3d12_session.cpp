@@ -360,8 +360,10 @@ bool D3d12Session::retain_resource(uint32_t list, uint32_t resource)
 bool D3d12Session::retain_slot(uint32_t list, const d3d12proto::DescriptorRef &ref)
 {
     AV_SCOPE("D3d12Session::retain_slot");
-    IUnknown *const resource = descriptors_.resource_at(ref.heap, ref.index);
-    return resource == nullptr || retain(list, resource, holds_.repinned(descriptors_.pin_at(ref.heap, ref.index)));
+    const D3d12DescriptorHolds::View *const view = descriptors_.view_at(ref.heap, ref.index);
+    if (view == nullptr || view->first_ == nullptr) return true;
+    if (retained_.covers(list, view->first_, view->first_pin_)) return true;
+    return retain(list, view->first_, holds_.repinned(view->first_pin_));
 }
 
 bool D3d12Session::retain_address(uint32_t list, uint64_t address)

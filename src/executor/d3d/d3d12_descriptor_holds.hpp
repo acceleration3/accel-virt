@@ -35,6 +35,7 @@ public:
     void                 forget_all();
 
     bool            holds(uint32_t heap, uint32_t index, const IUnknown *resource) const;
+    const View     *view_at(uint32_t heap, uint32_t index) const;
     IUnknown       *resource_at(uint32_t heap, uint32_t index) const;
     D3d12BlockHeap *pin_at(uint32_t heap, uint32_t index) const;
     uint32_t        count() const;
