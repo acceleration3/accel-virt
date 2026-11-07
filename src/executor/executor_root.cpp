@@ -64,7 +64,7 @@ ExecutorRoot::~ExecutorRoot()
 void ExecutorRoot::stop_watching()
 {
     AV_SCOPE("ExecutorRoot::stop_watching");
-    WatcherExit::disarm(*this);
+    WatcherExit::process().disarm(*this);
     halt_watcher();
 }
 
@@ -423,7 +423,7 @@ void ExecutorRoot::note_wedged()
     if (stopping_) return;
     if (!watching_ && pthread_create(&watcher_, nullptr, &run_wedged_watch, this) == 0) {
         watching_ = true;
-        WatcherExit::arm(*this);
+        WatcherExit::process().arm(*this);
     }
     wake_.signal();
 }

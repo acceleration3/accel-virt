@@ -964,6 +964,11 @@ void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
     ::vkDestroyInstance(reinterpret_cast<VkInstance>(raw), nullptr);
 }
 
+void VulkanBackend::let_go_of_thread()
+{
+    AV_SCOPE("VulkanBackend::let_go_of_thread");
+}
+
 void VulkanBackend::shut_down()
 {
     AV_SCOPE("VulkanBackend::shut_down");

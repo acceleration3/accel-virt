@@ -581,6 +581,11 @@ cl_int OpenClBackend::answers_type(cl_device_type device_type) const
     return (device_type & (CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_DEFAULT)) != 0u ? CL_SUCCESS : CL_DEVICE_NOT_FOUND;
 }
 
+void OpenClBackend::let_go_of_thread()
+{
+    AV_SCOPE("OpenClBackend::let_go_of_thread");
+}
+
 void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");

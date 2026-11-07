@@ -208,6 +208,7 @@ public:
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
     void     shut_down() override;
+    void     let_go_of_thread() override;
 
     uint64_t ran() const;
     bool     room_for(uint64_t handles) override;

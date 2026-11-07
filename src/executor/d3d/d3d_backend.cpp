@@ -139,6 +139,11 @@ bool D3dBackend::initialize(SessionShares &shares, ImportTable &imports, D3d11Ho
     return true;
 }
 
+void D3dBackend::let_go_of_thread()
+{
+    AV_SCOPE("D3dBackend::let_go_of_thread");
+}
+
 void D3dBackend::shut_down()
 {
     AV_SCOPE("D3dBackend::shut_down");

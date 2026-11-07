@@ -188,6 +188,7 @@ public:
     void bind_signal(void (*signal)(void *context), void *context) override;
 
     void     shut_down() override;
+    void     let_go_of_thread() override;
     uint64_t ran() const;
 
 private:

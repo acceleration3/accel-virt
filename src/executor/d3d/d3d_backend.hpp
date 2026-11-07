@@ -57,6 +57,7 @@ public:
                                   D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
                                   D3d9HostDevice *device9 = nullptr);
     void               shut_down() override;
+    void               let_go_of_thread() override;
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,

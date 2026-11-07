@@ -1259,7 +1259,7 @@ TEST(executor_root_concurrency, the_watcher_stops_at_exit_and_never_reaps_after_
       for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) looked += wedged.backend(slot).drains();
   }
   CHECK(looked >= baseline + wedged_slots);
-  av::WatcherExit::stop_all();
+  av::WatcherExit::process().stop_all();
   std::uint32_t stopped = 0u;
   for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) stopped += wedged.backend(slot).drains();
   nap_for(700);
@@ -1285,3 +1285,16 @@ TEST(executor_root_open, an_opengl_context_that_fails_after_its_group_was_reserv
   for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
   CHECK_EQ(root.live(), 0u);
   CHECK(root.invariants_hold()); }
+
+TEST(executor_root_concurrency, stopping_the_watcher_ends_its_retries_and_is_safe_to_repeat)
+{ Opened opened;
+  Wedged wedged(opened);
+  opened.root().stop_watching();
+  opened.root().stop_watching();
+  std::uint32_t stopped = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) stopped += wedged.backend(slot).drains();
+  nap_for(700);
+  std::uint32_t later = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) later += wedged.backend(slot).drains();
+  CHECK_EQ(later, stopped);
+  CHECK_EQ(opened.root().wedged(), wedged_slots); }
