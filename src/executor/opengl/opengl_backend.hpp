@@ -12,6 +12,9 @@
 #include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/gl_buffer_slices.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
+#include "executor/opengl/gl_memory_objects.hpp"
+#include "executor/opengl/gl_texture_slices.hpp"
+#include "executor/shim/gl_dma_buf_images.hpp"
 #include "executor/opengl/sync_tokens.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
@@ -66,6 +69,7 @@ public:
     [[nodiscard]] bool bind_fence(uint64_t token, void *fence);
     void              *fence_for(uint64_t token) const;
     void              *forget_fence(uint64_t token);
+    void               record_error(uint32_t error);
     [[nodiscard]] bool pack(uint64_t offset, uint64_t bytes, void *&packed);
     void               unpack();
 
@@ -91,7 +95,10 @@ private:
     SyncTokens  fences_;
     GlBatchProgress progress_;
     GlErrorQueue    pending_;
+    GlMemoryObjects memories_;
+    GlDmaBufImages  images_;
     GlBufferSlices  slices_;
+    GlTextureSlices textures_;
     GuestBytes  guest_;
     GuestRegion region_;
     PublishedSlots published_;

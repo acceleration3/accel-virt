@@ -1,6 +1,8 @@
 #ifndef AV_OWNED_FD_HPP
 #define AV_OWNED_FD_HPP
 
+#include <stdint.h>
+
 namespace av {
 
 class OwnedFd {
@@ -17,6 +19,7 @@ public:
     [[nodiscard]] bool hold_copy(int fd);
     [[nodiscard]] bool copy_to(OwnedFd &copy) const;
     int                fd() const;
+    uint64_t           extent() const;
     bool               held() const;
     int                take();
     void               close();

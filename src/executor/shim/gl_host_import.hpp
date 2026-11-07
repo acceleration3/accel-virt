@@ -2,6 +2,7 @@
 #define AV_GL_HOST_IMPORT_HPP
 
 #include "executor/shim/gl_error_flags.hpp"
+#include "executor/shim/gl_extensions.hpp"
 #include "proto/generated/opengl/gl_types.h"
 
 #include <stdint.h>
@@ -9,6 +10,7 @@
 namespace av {
 
 class GlContext;
+class GlDmaBufImages;
 
 class GlHostImport {
 public:
@@ -16,6 +18,7 @@ public:
     GlHostImport(const GlHostImport &) = delete;
     GlHostImport &operator=(const GlHostImport &) = delete;
 
+    void attach(GlDmaBufImages &images);
     void configure(GlContext &context);
     void give_back();
     bool imports_memory() const;
@@ -41,9 +44,10 @@ private:
     void (APIENTRY *import_semaphore_fd_)(GLuint, GLenum, GLint);
     void (APIENTRY *delete_semaphores_)(GLsizei, const GLuint *);
     void (APIENTRY *get_integerv_)(GLenum, GLint *);
-    const GLubyte *(APIENTRY *get_stringi_)(GLenum, GLuint);
+    GlExtensions extensions_;
     GlErrorFlags errors_;
     GlContext *context_;
+    GlDmaBufImages *images_;
     bool memory_;
     bool buffers_;
     bool fences_;

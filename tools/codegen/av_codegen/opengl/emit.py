@@ -608,9 +608,24 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
 
 SYNC_TAKEN = {"glDeleteSync"}
 
-HOST_HOOKED = (
+BUFFER_HOOKED = (
     "glBufferStorageMemEXT", "glNamedBufferStorageMemEXT", "glDeleteMemoryObjectsEXT", "glDeleteBuffers",
 )
+
+TEXTURE_HOOKED = (
+    "glTexStorageMem1DEXT", "glTexStorageMem2DEXT", "glTexStorageMem2DMultisampleEXT", "glTexStorageMem3DEXT",
+    "glTexStorageMem3DMultisampleEXT", "glTextureStorageMem1DEXT", "glTextureStorageMem2DEXT",
+    "glTextureStorageMem2DMultisampleEXT", "glTextureStorageMem3DEXT", "glTextureStorageMem3DMultisampleEXT",
+    "glDeleteTextures", "glTextureView",
+)
+
+HOST_HOOKED = BUFFER_HOOKED + TEXTURE_HOOKED
+
+TEXTURE_FOLLOWED = ("glCreateTextures", "glBindTexture")
+
+
+def _hook_user(name: str) -> str:
+    return "av_texture_user" if name in TEXTURE_HOOKED else "av_hook_user"
 
 
 def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
@@ -867,6 +882,7 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
 GL_PIXEL_PACK_BUFFER_BINDING = "0x88ED"
 GL_QUERY_BUFFER_BINDING = "0x9193"
 GL_TEXTURE_WIDTH, GL_TEXTURE_HEIGHT, GL_TEXTURE_DEPTH = "0x1000", "0x1001", "0x8071"
+GL_TEXTURE_COMPRESSED_IMAGE_SIZE = "0x86A0"
 
 PACK_HELPERS = [
     "// The bytes one pixel of this format and type packs to, or 0 for a",
@@ -1129,7 +1145,8 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
     names = {q.name for q in cmd.params}
     n = p.name
     binding = GL_PIXEL_PACK_BUFFER_BINDING if p.type.base == "void" else GL_QUERY_BUFFER_BINDING
-    out = [f"    if ({n}_is_offset || {n} == nullptr) {{",
+    out = _not_negative(cmd, [d for d in ("width", "height") if d in names]) if "format" in names else []
+    out += [f"    if ({n}_is_offset || {n} == nullptr) {{",
            "        GLint av_bound = 0;",
            "        if (av_gl.glGetIntegerv == nullptr) return false;",
            f"        av_gl.glGetIntegerv({binding}, &av_bound);",
@@ -1137,7 +1154,8 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
            "    } else {"]
     room = f"static_cast<uint64_t>({n}_bytes)"
     if "bufSize" in names:
-        out.append(f"        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > {room}) return false;")
+        out.append(f"        if (bufSize < 0) return av_refuse({GL_INVALID_VALUE});")
+        out.append(f"        if (static_cast<uint64_t>(bufSize) > {room}) return false;")
     elif {"width", "height", "format", "type"} <= names:
         out.append("        uint64_t av_needed = 0;")
         out.append("        if (!pack_bytes(av_gl, width, height, 1, format, type, av_needed) ||")
@@ -1153,12 +1171,25 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
         out.append(f"        av_gl.glGetTexLevelParameteriv(target, level, {GL_TEXTURE_DEPTH}, &av_depth);")
         out.append("        if (!pack_bytes(av_gl, av_width, av_height, av_depth, format, type, av_needed) ||")
         out.append(f"            av_needed > {room}) return false;")
+    elif "Compressed" in cmd.name and "target" in names and names & {"level", "lod"}:
+        level = "level" if "level" in names else "lod"
+        out.append("        GLint av_size = 0;")
+        if "texunit" in names:
+            query = f"glGetMultiTexLevelParameterivEXT(texunit, target, {level}"
+        elif "texture" in names:
+            query = f"glGetTextureLevelParameterivEXT(texture, target, {level}"
+        else:
+            query = f"glGetTexLevelParameteriv(target, {level}"
+        out.append(f"        if (av_gl.{query.split('(')[0]} == nullptr) return false;")
+        out.append(f"        av_gl.{query}, {GL_TEXTURE_COMPRESSED_IMAGE_SIZE}, &av_size);")
+        out.append(f"        if (av_size < 0 || static_cast<uint64_t>(av_size) > {room}) return false;")
     else:
         out.append("        return false;")
     out.append("    }")
     return out
 
 
+GL_INVALID_VALUE = "0x0501"
 GL_ARRAY_BUFFER_BINDING = "0x8894"
 GL_ELEMENT_ARRAY_BUFFER_BINDING = "0x8895"
 GL_PIXEL_UNPACK_BUFFER_BINDING = "0x88EF"
@@ -1276,8 +1307,41 @@ def _scalar(cmd: Command, name: str) -> Param:
 
 
 def _not_negative(cmd: Command, names: list[str]) -> list[str]:
-    return [f"    if ({n} < 0) return false;" for n in names
+    return [f"    if ({n} < 0) return av_refuse({GL_INVALID_VALUE});" for n in names
             if _scalar(cmd, n).type.base in SIGNED_SCALARS]
+
+
+def _refuse_lambda(cmd: Command) -> list[str]:
+    out = ["    auto av_refuse = [&](uint32_t av_code) -> bool {",
+           "        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);"]
+    kind = _ret_kind(cmd)
+    if not cmd.mints_handle:
+        if kind == "scalar":
+            out.append("        av_reply.write_varint(0);")
+        elif kind in ("sync", "pointer"):
+            out.append("        av_reply.write_pod<uint64_t>(0);")
+        elif kind == "string":
+            out.append("        av_reply.write_varint(0);")
+            out.append("        av_reply.write_varint(0);")
+    for p in cmd.params:
+        n = p.name
+        if p.role is Role.PIXELS_OUT:
+            out += [f"        if ({n} != nullptr && !{n}_is_offset && !{n}_via_blob) {{",
+                    f"            av_reply.write_varint(static_cast<uint64_t>({n}_bytes));",
+                    f"            if ({n}_bytes != 0) av_reply.write({n}, {n}_bytes);",
+                    "        }"]
+        elif p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
+            out += [f"        if ({n}_answered) {{",
+                    f"            av_reply.write_varint(static_cast<uint64_t>({n}_bytes));",
+                    "            static const uint8_t av_zeros[64] = {};",
+                    f"            for (size_t av_left = {n}_bytes; av_left != 0;) {{",
+                    "                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;",
+                    "                av_reply.write(av_zeros, av_n);",
+                    "                av_left -= av_n;",
+                    "            }",
+                    "        }"]
+    out += ["        return true;", "    };"]
+    return out
 
 
 def _listed_values(cmd: Command, p: Param) -> list[str]:
@@ -1403,7 +1467,8 @@ def _pixels_in_checks(cmd: Command, p: Param) -> list[str]:
     clears = cmd.name.startswith("glClear")
     specifies = re.match(r"^gl(Compressed)?(Tex|Texture|MultiTex)Image[123]D(EXT)?$", cmd.name)
     null_ok = "true" if clears or specifies else unpack
-    out = [f"    if ({n}_is_offset) {{",
+    out = _not_negative(cmd, [d for d in ("width", "height", "depth") if d in names])
+    out += [f"    if ({n}_is_offset) {{",
            f"        if ({'true' if clears else '!' + unpack}) return false;",
            f"    }} else if ({n} == nullptr) {{",
            f"        if (!({null_ok})) return false;",
@@ -1413,7 +1478,8 @@ def _pixels_in_checks(cmd: Command, p: Param) -> list[str]:
         out.append(f"        if (({n}_needed = pixel_bytes(format, type)) == 0 || {n}_room < {n}_needed) return false;")
     elif p.length is not None and p.length.kind is LengthKind.PARAM:
         size = p.length.text
-        out.append(f"        if ({size} < 0 || !compressed_starts_at_pointer(av_gl)) return false;")
+        out.insert(0, f"    if ({size} < 0) return av_refuse({GL_INVALID_VALUE});")
+        out.append("        if (!compressed_starts_at_pointer(av_gl)) return false;")
         out.append(f"        {n}_needed = static_cast<uint64_t>({size});")
         out.append(f"        if ({n}_room < {n}_needed) return false;")
     elif {"format", "type", "width"} <= names:
@@ -1552,6 +1618,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             c.append("    if (!av_r.read_pod(av_token)) return false;")
         for p in cmd.params:
             _decode_param(p, c, cmd.name in SYNC_TAKEN)
+        refuse_at = len(c)
         c.extend(_refusals(cmd))
         for p in cmd.params:
             if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
@@ -1568,7 +1635,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         c.append(f"    if (av_gl.{cmd.name} == nullptr) return false;")
         if cmd.name in HOST_HOOKED:
             hook = f"av_gl.av_hook_{cmd.name}"
-            c.append(f"    if ({hook} != nullptr && !{hook}(av_gl.av_hook_user, {call_args})) return true;")
+            c.append(f"    if ({hook} != nullptr && !{hook}(av_gl.{_hook_user(cmd.name)}, {call_args})) return true;")
         if cmd.name in SYNC_TAKEN:
             for p in cmd.params:
                 if p.role is Role.SYNC:
@@ -1585,6 +1652,9 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             c.append(f"    av_gl.{cmd.name}({call_args});")
         else:
             c.append(f"    const auto av_ret = av_gl.{cmd.name}({call_args});")
+        if cmd.name in TEXTURE_FOLLOWED:
+            after = f"av_gl.av_after_{cmd.name}"
+            c.append(f"    if ({after} != nullptr) {after}(av_gl.av_texture_user, {call_args});")
         for p in packed:
             c.append(f"    if ({p.name}_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);")
         if cmd.mints_handle:
@@ -1612,6 +1682,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"        av_reply.write_varint(static_cast<uint64_t>({p.name}_bytes));")
                 c.append(f"        if ({p.name}_bytes != 0) av_reply.write({p.name}, {p.name}_bytes);")
                 c.append("    }")
+        if any("av_refuse(" in line for line in c[refuse_at:]):
+            c[refuse_at:refuse_at] = _refuse_lambda(cmd)
         c.append("    return true;")
         c.append("}")
         c.append("")
@@ -1691,6 +1763,10 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    bool av_fixed_function = true;",
            "",
            "    void* av_hook_user = nullptr;",
+           "    void* av_texture_user = nullptr;",
+           "",
+           "    void (*av_record_error)(void*, uint32_t) = nullptr;",
+           "    void* av_error_user = nullptr;",
            "",
            "    // The vertex array objects a draw found reading only from",
            "    // buffers (arrays_verified). Mutable because dispatch is handed",
@@ -1706,6 +1782,10 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
         cmd = reg.commands[name]
         params = ", ".join(["void*"] + [p.type.cpp() for p in cmd.params])
         out.append(f"    bool (*av_hook_{name})({params}) = nullptr;")
+    for name in TEXTURE_FOLLOWED:
+        cmd = reg.commands[name]
+        params = ", ".join(["void*"] + [p.type.cpp() for p in cmd.params])
+        out.append(f"    void (*av_after_{name})({params}) = nullptr;")
     out += ["};", "",
             "// Fills the table. `load` is the platform's resolver:",
             "// eglGetProcAddress, glXGetProcAddress or wglGetProcAddress.",

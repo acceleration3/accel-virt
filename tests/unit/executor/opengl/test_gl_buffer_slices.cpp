@@ -3,6 +3,7 @@
 #include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/gl_buffer_slices.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
+#include "executor/opengl/gl_memory_objects.hpp"
 #include "executor/shim/gl_host_import.hpp"
 #include "executor/shim/gl_native_fences.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,6 +21,7 @@ using av::GlBufferSlices;
 using av::GlErrorQueue;
 using av::GlErrorWord;
 using av::GlHostImport;
+using av::GlMemoryObjects;
 
 namespace {
 
@@ -90,7 +92,8 @@ struct Rig {
     av::EventfdWake        wake;
     GlBatchProgress        progress{gl, natives, wake};
     av::GuestBytes         guest;
-    GlBufferSlices         slices{platform, gl, import, progress, errors, guest, lines};
+    GlMemoryObjects        memories{platform, progress};
+    GlBufferSlices         slices{memories, gl, import, progress, errors, guest, lines};
 
     Rig()
     {
@@ -124,7 +127,7 @@ TEST(gl_buffer_slices, installing_hooks_the_four_calls_it_judges_ahead_of_the_dr
   CHECK(rig.slices.knows(av::glmemproto::kCmd_PlaceBufferSlice));
   CHECK(rig.slices.knows(av::glmemproto::kCmd_ForgetBufferSlice));
   CHECK(!rig.slices.knows(0x10001u));
-  CHECK(rig.slices.invariants_hold()); }
+  CHECK(rig.memories.invariants_hold()); }
 
 TEST(gl_buffer_slices, a_host_that_cannot_import_buffers_is_not_offered_to_place_any)
 { Rig rig;
@@ -133,111 +136,111 @@ TEST(gl_buffer_slices, a_host_that_cannot_import_buffers_is_not_offered_to_place
   CHECK_EQ(supported, 0u);
   CHECK(rig.progress.fences());
   CHECK(!rig.import.places_buffers());
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   std::uint32_t placed = 7u;
   CHECK(rig.slices.on_PlaceBufferSlice(3u, 7u, 0u, 0x1000u, placed));
   CHECK_EQ(placed, 0u);
-  CHECK_EQ(rig.slices.placed(), 0u);
+  CHECK_EQ(rig.memories.placed(), 0u);
   CHECK_EQ(stored, 0u); }
 
 TEST(gl_buffer_slices, a_named_buffer_stored_in_a_memory_is_placed_and_the_driver_is_told_the_same)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
-  CHECK_EQ(rig.slices.count(), 1u);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.count(), 1u);
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0x1000, 7u, 0x2000u));
   CHECK_EQ(stored, 1u);
   CHECK_EQ(stored_buffer, 3u);
   CHECK_EQ(stored_size, 0x1000);
   CHECK_EQ(stored_memory, 7u);
   CHECK_EQ(stored_offset, 0x2000u);
-  CHECK_EQ(rig.slices.placed(), 1u);
+  CHECK_EQ(rig.memories.placed(), 1u);
   CHECK_EQ(rig.word.count(1u), 0u);
-  CHECK(rig.slices.invariants_hold()); }
+  CHECK(rig.memories.invariants_hold()); }
 
 TEST(gl_buffer_slices, a_store_outside_the_memory_or_of_nothing_or_into_unknown_memory_is_an_invalid_value)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0x1000, 7u, 0x4000u));
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0, 7u, 0u));
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, -4, 7u, 0u));
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0x1000, 9u, 0u));
   CHECK_EQ(rig.word.count(1u), 4u);
   CHECK_EQ(stored, 0u);
-  CHECK_EQ(rig.slices.placed(), 0u);
-  CHECK(rig.slices.invariants_hold()); }
+  CHECK_EQ(rig.memories.placed(), 0u);
+  CHECK(rig.memories.invariants_hold()); }
 
 TEST(gl_buffer_slices, an_error_the_driver_raises_storing_a_buffer_is_recorded_and_places_nothing)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   error_on_store = invalid_operation;
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0x1000, 7u, 0u));
   CHECK_EQ(rig.word.count(2u), 1u);
-  CHECK_EQ(rig.slices.placed(), 0u);
-  CHECK(rig.slices.invariants_hold()); }
+  CHECK_EQ(rig.memories.placed(), 0u);
+  CHECK(rig.memories.invariants_hold()); }
 
 TEST(gl_buffer_slices, a_store_into_the_buffer_bound_to_a_target_goes_to_that_buffer)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   bound_buffer = 5;
   CHECK(!rig.slices.on_buffer_storage_mem(array_buffer, 0x800, 7u, 0u));
   CHECK_EQ(asked_binding, array_buffer_binding);
   CHECK_EQ(stored_buffer, 5u);
-  CHECK_EQ(rig.slices.placed(), 1u);
+  CHECK_EQ(rig.memories.placed(), 1u);
   stored = 0u;
   bound_buffer = 0;
   CHECK(rig.slices.on_buffer_storage_mem(array_buffer, 0x800, 7u, 0u));
   CHECK(rig.slices.on_buffer_storage_mem(0x1234u, 0x800, 7u, 0u));
   CHECK_EQ(stored, 0u);
-  CHECK_EQ(rig.slices.placed(), 1u); }
+  CHECK_EQ(rig.memories.placed(), 1u); }
 
 TEST(gl_buffer_slices, a_buffer_deleted_or_forgotten_leaves_its_memory_and_the_driver_still_deletes_it)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0x1000, 7u, 0u));
   CHECK(!rig.slices.on_named_buffer_storage_mem(4u, 0x1000, 7u, 0x1000u));
-  CHECK_EQ(rig.slices.placed(), 2u);
+  CHECK_EQ(rig.memories.placed(), 2u);
   const GLuint gone[] = {3u, 99u};
   CHECK(rig.slices.on_delete_buffers(2, gone));
-  CHECK_EQ(rig.slices.placed(), 1u);
+  CHECK_EQ(rig.memories.placed(), 1u);
   CHECK(rig.slices.on_delete_buffers(0, gone));
   CHECK(rig.slices.on_delete_buffers(2, nullptr));
-  CHECK_EQ(rig.slices.placed(), 1u);
+  CHECK_EQ(rig.memories.placed(), 1u);
   CHECK(rig.slices.on_ForgetBufferSlice(4u));
-  CHECK_EQ(rig.slices.placed(), 0u);
+  CHECK_EQ(rig.memories.placed(), 0u);
   CHECK(rig.slices.on_ForgetBufferSlice(4u));
-  CHECK(rig.slices.invariants_hold()); }
+  CHECK(rig.memories.invariants_hold()); }
 
 TEST(gl_buffer_slices, a_memory_deleted_is_kept_until_nothing_is_placed_in_it_and_the_gpu_has_passed_its_last_batch)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   CHECK(!rig.slices.on_named_buffer_storage_mem(3u, 0x1000, 7u, 0u));
   const GLuint memories[] = {7u};
   CHECK(!rig.slices.on_delete_memory_objects(1, memories));
-  CHECK_EQ(rig.slices.count(), 1u);
+  CHECK_EQ(rig.memories.count(), 1u);
   const GLuint buffers[] = {3u};
   CHECK(rig.slices.on_delete_buffers(1, buffers));
-  rig.slices.reclaim();
-  CHECK_EQ(rig.slices.count(), 1u);
+  rig.memories.reclaim(rig.import);
+  CHECK_EQ(rig.memories.count(), 1u);
   rig.progress.fence();
   signalled_through = 1u;
   CHECK(!rig.progress.settle());
-  rig.slices.reclaim();
-  CHECK_EQ(rig.slices.count(), 0u);
-  CHECK(rig.slices.invariants_hold()); }
+  rig.memories.reclaim(rig.import);
+  CHECK_EQ(rig.memories.count(), 0u);
+  CHECK(rig.memories.invariants_hold()); }
 
 TEST(gl_buffer_slices, retiring_a_memory_by_name_and_deleting_none_change_what_is_held_only_when_asked)
 { Rig rig;
-  CHECK_EQ(rig.slices.add_memory(7u, 0x4000u), av::Status::ok);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   CHECK(!rig.slices.on_delete_memory_objects(1, nullptr));
   CHECK(!rig.slices.on_delete_memory_objects(0, nullptr));
-  CHECK_EQ(rig.slices.count(), 1u);
-  rig.slices.retire_memory(7u);
+  CHECK_EQ(rig.memories.count(), 1u);
+  rig.memories.retire(7u);
   rig.progress.fence();
   signalled_through = 1u;
   CHECK(!rig.progress.settle());
-  rig.slices.reclaim();
-  CHECK_EQ(rig.slices.count(), 0u);
-  CHECK_EQ(rig.slices.add_memory(8u, 0x1000u), av::Status::ok);
-  rig.slices.destroy_all();
-  CHECK_EQ(rig.slices.count(), 0u);
-  CHECK_EQ(rig.slices.placed(), 0u); }
+  rig.memories.reclaim(rig.import);
+  CHECK_EQ(rig.memories.count(), 0u);
+  CHECK_EQ(rig.memories.add(8u, 0x1000u), av::Status::ok);
+  rig.memories.destroy_all(rig.import);
+  CHECK_EQ(rig.memories.count(), 0u);
+  CHECK_EQ(rig.memories.placed(), 0u); }

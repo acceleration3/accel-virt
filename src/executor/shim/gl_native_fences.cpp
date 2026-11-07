@@ -5,11 +5,10 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include <string.h>
 
 namespace av {
 
-GlNativeFences::GlNativeFences() : extensions_(nullptr), display_(nullptr), create_(nullptr), destroy_(nullptr), duplicate_(nullptr),
+GlNativeFences::GlNativeFences() : extensions_(), display_(nullptr), create_(nullptr), destroy_(nullptr), duplicate_(nullptr),
       flush_(nullptr)
 {
     AV_SCOPE("GlNativeFences::GlNativeFences");
@@ -21,8 +20,8 @@ void GlNativeFences::configure(const GlContext &context)
     give_back();
     void *const display = context.display();
     if (display == nullptr) return;
-    extensions_ = eglQueryString(static_cast<EGLDisplay>(display), EGL_EXTENSIONS);
-    if (!lists("EGL_KHR_fence_sync") || !lists("EGL_ANDROID_native_fence_sync")) return;
+    extensions_.configure(display);
+    if (!extensions_.lists("EGL_KHR_fence_sync") || !extensions_.lists("EGL_ANDROID_native_fence_sync")) return;
     create_ = reinterpret_cast<void *(*)(void *, unsigned, const int *)>(eglGetProcAddress("eglCreateSyncKHR"));
     destroy_ = reinterpret_cast<unsigned (*)(void *, void *)>(eglGetProcAddress("eglDestroySyncKHR"));
     duplicate_ = reinterpret_cast<int (*)(void *, void *)>(eglGetProcAddress("eglDupNativeFenceFDANDROID"));
@@ -34,20 +33,10 @@ void GlNativeFences::configure(const GlContext &context)
     give_back();
 }
 
-bool GlNativeFences::lists(const char *wanted) const
-{
-    AV_SCOPE("GlNativeFences::lists");
-    if (extensions_ == nullptr) return false;
-    const size_t length = strlen(wanted);
-    for (const char *at = strstr(extensions_, wanted); at != nullptr; at = strstr(at + length, wanted))
-        if ((at == extensions_ || at[-1] == ' ') && (at[length] == ' ' || at[length] == '\0')) return true;
-    return false;
-}
-
 void GlNativeFences::give_back()
 {
     AV_SCOPE("GlNativeFences::give_back");
-    extensions_ = nullptr;
+    extensions_.forget();
     display_ = nullptr;
     create_ = nullptr;
     destroy_ = nullptr;

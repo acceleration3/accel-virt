@@ -24,6 +24,10 @@ public:
 
     const glproto::RealGl &table() const;
     void set_level_extent(GLint width, GLint height, GLint depth);
+    void set_compressed_size(GLint bytes);
+    void record_error(GLenum error);
+    std::uint32_t errors() const;
+    GLenum        last_error() const;
     void forget_state_queries();
     void be_core();
     std::uint32_t capability_queries() const;
@@ -103,6 +107,9 @@ private:
     GLenum              map_target_;
     GLint               map_order_;
     GLint               level_extent_[3];
+    GLint               compressed_size_;
+    std::uint32_t       errors_;
+    GLenum              last_error_;
     std::uint32_t       reads_;
     std::uint32_t       calls_;
     std::uint32_t       strays_;

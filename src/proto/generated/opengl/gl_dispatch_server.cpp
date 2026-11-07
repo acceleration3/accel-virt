@@ -499,7 +499,11 @@ static bool decode_glBindBuffersBase(const RealGl& av_gl, ::av::WireReader& av_r
             buffers = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(count);
     uint64_t buffers_needed = 0;
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
@@ -605,17 +609,21 @@ static bool decode_glBindBuffersRange(const RealGl& av_gl, ::av::WireReader& av_
             sizes = reinterpret_cast<const GLsizeiptr*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(count);
     uint64_t buffers_needed = 0;
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
     if (buffers == nullptr ? (buffers_needed != 0 && !(true)) : buffers_room < buffers_needed) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t offsets_elements = static_cast<uint64_t>(count);
     uint64_t offsets_needed = 0;
     if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(GLintptr)), &offsets_needed)) return false;
     if (offsets == nullptr ? (offsets_needed != 0 && !(buffers == nullptr)) : offsets_room < offsets_needed) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t sizes_elements = static_cast<uint64_t>(count);
     uint64_t sizes_needed = 0;
     if (__builtin_mul_overflow(sizes_elements, static_cast<uint64_t>(sizeof(GLsizeiptr)), &sizes_needed)) return false;
@@ -776,7 +784,11 @@ static bool decode_glBindImageTextures(const RealGl& av_gl, ::av::WireReader& av
             textures = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(count);
     uint64_t textures_needed = 0;
     if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
@@ -862,7 +874,11 @@ static bool decode_glBindSamplers(const RealGl& av_gl, ::av::WireReader& av_r, :
             samplers = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t samplers_elements = static_cast<uint64_t>(count);
     uint64_t samplers_needed = 0;
     if (__builtin_mul_overflow(samplers_elements, static_cast<uint64_t>(sizeof(GLuint)), &samplers_needed)) return false;
@@ -883,6 +899,7 @@ static bool decode_glBindTexture(const RealGl& av_gl, ::av::WireReader& av_r, ::
       texture = static_cast<GLuint>(av_v); }
     if (av_gl.glBindTexture == nullptr) return false;
     av_gl.glBindTexture(target, texture);
+    if (av_gl.av_after_glBindTexture != nullptr) av_gl.av_after_glBindTexture(av_gl.av_texture_user, target, texture);
     return true;
 }
 
@@ -937,7 +954,11 @@ static bool decode_glBindTextures(const RealGl& av_gl, ::av::WireReader& av_r, :
             textures = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(count);
     uint64_t textures_needed = 0;
     if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
@@ -1085,17 +1106,21 @@ static bool decode_glBindVertexBuffers(const RealGl& av_gl, ::av::WireReader& av
             strides = reinterpret_cast<const GLsizei*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(count);
     uint64_t buffers_needed = 0;
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
     if (buffers == nullptr ? (buffers_needed != 0 && !(true)) : buffers_room < buffers_needed) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t offsets_elements = static_cast<uint64_t>(count);
     uint64_t offsets_needed = 0;
     if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(GLintptr)), &offsets_needed)) return false;
     if (offsets == nullptr ? (offsets_needed != 0 && !(buffers == nullptr)) : offsets_room < offsets_needed) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t strides_elements = static_cast<uint64_t>(count);
     uint64_t strides_needed = 0;
     if (__builtin_mul_overflow(strides_elements, static_cast<uint64_t>(sizeof(GLsizei)), &strides_needed)) return false;
@@ -1373,7 +1398,11 @@ static bool decode_glBufferData(const RealGl& av_gl, ::av::WireReader& av_r, ::a
     GLenum usage{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       usage = static_cast<GLenum>(av_v); }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -1423,7 +1452,11 @@ static bool decode_glBufferStorage(const RealGl& av_gl, ::av::WireReader& av_r, 
     GLbitfield flags{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       flags = static_cast<GLbitfield>(av_v); }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -1473,7 +1506,11 @@ static bool decode_glBufferSubData(const RealGl& av_gl, ::av::WireReader& av_r, 
             data = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -2309,6 +2346,13 @@ static bool decode_glClearTexSubImage(const RealGl& av_gl, ::av::WireReader& av_
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (true) return false;
     } else if (data == nullptr) {
@@ -2579,13 +2623,19 @@ static bool decode_glCompressedTexImage1D(const RealGl& av_gl, ::av::WireReader&
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(true)) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -2654,13 +2704,20 @@ static bool decode_glCompressedTexImage2D(const RealGl& av_gl, ::av::WireReader&
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(true)) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -2732,13 +2789,21 @@ static bool decode_glCompressedTexImage3D(const RealGl& av_gl, ::av::WireReader&
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(true)) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -2804,13 +2869,19 @@ static bool decode_glCompressedTexSubImage1D(const RealGl& av_gl, ::av::WireRead
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(buffer_bound(av_gl, 0x88EF))) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -2882,13 +2953,20 @@ static bool decode_glCompressedTexSubImage2D(const RealGl& av_gl, ::av::WireRead
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(buffer_bound(av_gl, 0x88EF))) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -2966,13 +3044,21 @@ static bool decode_glCompressedTexSubImage3D(const RealGl& av_gl, ::av::WireRead
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(buffer_bound(av_gl, 0x88EF))) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -3038,13 +3124,19 @@ static bool decode_glCompressedTextureSubImage1D(const RealGl& av_gl, ::av::Wire
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(buffer_bound(av_gl, 0x88EF))) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -3116,13 +3208,20 @@ static bool decode_glCompressedTextureSubImage2D(const RealGl& av_gl, ::av::Wire
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(buffer_bound(av_gl, 0x88EF))) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -3200,13 +3299,21 @@ static bool decode_glCompressedTextureSubImage3D(const RealGl& av_gl, ::av::Wire
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (data_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (data == nullptr) {
         if (!(buffer_bound(av_gl, 0x88EF))) return false;
     } else {
         uint64_t data_needed = 0;
-        if (imageSize < 0 || !compressed_starts_at_pointer(av_gl)) return false;
+        if (!compressed_starts_at_pointer(av_gl)) return false;
         data_needed = static_cast<uint64_t>(imageSize);
         if (data_room < data_needed) return false;
     }
@@ -3582,7 +3689,20 @@ static bool decode_glCreateBuffers(const RealGl& av_gl, ::av::WireReader& av_r, 
             buffers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (buffers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(buffers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = buffers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(buffers_bytes / sizeof(GLuint));
@@ -3624,7 +3744,20 @@ static bool decode_glCreateFramebuffers(const RealGl& av_gl, ::av::WireReader& a
             framebuffers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (framebuffers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(framebuffers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = framebuffers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t framebuffers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(framebuffers_bytes / sizeof(GLuint));
@@ -3675,7 +3808,20 @@ static bool decode_glCreateProgramPipelines(const RealGl& av_gl, ::av::WireReade
             pipelines_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pipelines_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(pipelines_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = pipelines_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t pipelines_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(pipelines_bytes / sizeof(GLuint));
@@ -3720,7 +3866,20 @@ static bool decode_glCreateQueries(const RealGl& av_gl, ::av::WireReader& av_r, 
             ids_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (ids_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(ids_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = ids_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(ids_bytes / sizeof(GLuint));
@@ -3762,7 +3921,20 @@ static bool decode_glCreateRenderbuffers(const RealGl& av_gl, ::av::WireReader& 
             renderbuffers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (renderbuffers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(renderbuffers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = renderbuffers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t renderbuffers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(renderbuffers_bytes / sizeof(GLuint));
@@ -3804,7 +3976,20 @@ static bool decode_glCreateSamplers(const RealGl& av_gl, ::av::WireReader& av_r,
             samplers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (samplers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(samplers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = samplers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t samplers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(samplers_bytes / sizeof(GLuint));
@@ -3872,7 +4057,12 @@ static bool decode_glCreateShaderProgramv(const RealGl& av_gl, ::av::WireReader&
             strings_count = av_n;
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        av_reply.write_varint(0);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     if (strings == nullptr ? count != 0 : strings_count < static_cast<uint64_t>(count)) return false;
     if (av_gl.glCreateShaderProgramv == nullptr) return false;
     const auto av_ret = av_gl.glCreateShaderProgramv(type, count, strings);
@@ -3904,7 +4094,20 @@ static bool decode_glCreateTextures(const RealGl& av_gl, ::av::WireReader& av_r,
             textures_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (textures_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(textures_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = textures_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(textures_bytes / sizeof(GLuint));
@@ -3918,6 +4121,7 @@ static bool decode_glCreateTextures(const RealGl& av_gl, ::av::WireReader& av_r,
     }
     if (av_gl.glCreateTextures == nullptr) return false;
     av_gl.glCreateTextures(target, n, textures);
+    if (av_gl.av_after_glCreateTextures != nullptr) av_gl.av_after_glCreateTextures(av_gl.av_texture_user, target, n, textures);
     if (textures_answered) {
         av_reply.write_varint(static_cast<uint64_t>(textures_bytes));
         if (textures_bytes != 0) av_reply.write(textures, textures_bytes);
@@ -3946,7 +4150,20 @@ static bool decode_glCreateTransformFeedbacks(const RealGl& av_gl, ::av::WireRea
             ids_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (ids_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(ids_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = ids_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(ids_bytes / sizeof(GLuint));
@@ -3988,7 +4205,20 @@ static bool decode_glCreateVertexArrays(const RealGl& av_gl, ::av::WireReader& a
             arrays_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (arrays_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(arrays_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = arrays_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t arrays_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(arrays_bytes / sizeof(GLuint));
@@ -4076,7 +4306,11 @@ static bool decode_glDebugMessageControl(const RealGl& av_gl, ::av::WireReader& 
     GLboolean enabled{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       enabled = static_cast<GLboolean>(av_v); }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(count);
     uint64_t ids_needed = 0;
     if (__builtin_mul_overflow(ids_elements, static_cast<uint64_t>(sizeof(GLuint)), &ids_needed)) return false;
@@ -4163,7 +4397,11 @@ static bool decode_glDeleteBuffers(const RealGl& av_gl, ::av::WireReader& av_r, 
             buffers = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(n);
     uint64_t buffers_needed = 0;
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
@@ -4208,7 +4446,11 @@ static bool decode_glDeleteFramebuffers(const RealGl& av_gl, ::av::WireReader& a
             framebuffers = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t framebuffers_elements = static_cast<uint64_t>(n);
     uint64_t framebuffers_needed = 0;
     if (__builtin_mul_overflow(framebuffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &framebuffers_needed)) return false;
@@ -4263,7 +4505,11 @@ static bool decode_glDeleteProgramPipelines(const RealGl& av_gl, ::av::WireReade
             pipelines = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t pipelines_elements = static_cast<uint64_t>(n);
     uint64_t pipelines_needed = 0;
     if (__builtin_mul_overflow(pipelines_elements, static_cast<uint64_t>(sizeof(GLuint)), &pipelines_needed)) return false;
@@ -4307,7 +4553,11 @@ static bool decode_glDeleteQueries(const RealGl& av_gl, ::av::WireReader& av_r, 
             ids = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(n);
     uint64_t ids_needed = 0;
     if (__builtin_mul_overflow(ids_elements, static_cast<uint64_t>(sizeof(GLuint)), &ids_needed)) return false;
@@ -4351,7 +4601,11 @@ static bool decode_glDeleteRenderbuffers(const RealGl& av_gl, ::av::WireReader& 
             renderbuffers = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t renderbuffers_elements = static_cast<uint64_t>(n);
     uint64_t renderbuffers_needed = 0;
     if (__builtin_mul_overflow(renderbuffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &renderbuffers_needed)) return false;
@@ -4395,7 +4649,11 @@ static bool decode_glDeleteSamplers(const RealGl& av_gl, ::av::WireReader& av_r,
             samplers = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t samplers_elements = static_cast<uint64_t>(count);
     uint64_t samplers_needed = 0;
     if (__builtin_mul_overflow(samplers_elements, static_cast<uint64_t>(sizeof(GLuint)), &samplers_needed)) return false;
@@ -4461,12 +4719,17 @@ static bool decode_glDeleteTextures(const RealGl& av_gl, ::av::WireReader& av_r,
             textures = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(n);
     uint64_t textures_needed = 0;
     if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
     if (textures == nullptr ? (textures_needed != 0 && !(false)) : textures_room < textures_needed) return false;
     if (av_gl.glDeleteTextures == nullptr) return false;
+    if (av_gl.av_hook_glDeleteTextures != nullptr && !av_gl.av_hook_glDeleteTextures(av_gl.av_texture_user, n, textures)) return true;
     av_gl.glDeleteTextures(n, textures);
     return true;
 }
@@ -4505,7 +4768,11 @@ static bool decode_glDeleteTransformFeedbacks(const RealGl& av_gl, ::av::WireRea
             ids = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(n);
     uint64_t ids_needed = 0;
     if (__builtin_mul_overflow(ids_elements, static_cast<uint64_t>(sizeof(GLuint)), &ids_needed)) return false;
@@ -4549,7 +4816,11 @@ static bool decode_glDeleteVertexArrays(const RealGl& av_gl, ::av::WireReader& a
             arrays = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t arrays_elements = static_cast<uint64_t>(n);
     uint64_t arrays_needed = 0;
     if (__builtin_mul_overflow(arrays_elements, static_cast<uint64_t>(sizeof(GLuint)), &arrays_needed)) return false;
@@ -4630,7 +4901,11 @@ static bool decode_glDepthRangeArrayv(const RealGl& av_gl, ::av::WireReader& av_
             v = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t v_elements = static_cast<uint64_t>((static_cast<size_t>(static_cast<int64_t>(count)) * 2));
     uint64_t v_needed = 0;
     if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLdouble)), &v_needed)) return false;
@@ -4883,7 +5158,11 @@ static bool decode_glDrawBuffers(const RealGl& av_gl, ::av::WireReader& av_r, ::
             bufs = reinterpret_cast<const GLenum*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t bufs_elements = static_cast<uint64_t>(n);
     uint64_t bufs_needed = 0;
     if (__builtin_mul_overflow(bufs_elements, static_cast<uint64_t>(sizeof(GLenum)), &bufs_needed)) return false;
@@ -5510,7 +5789,20 @@ static bool decode_glGenBuffers(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             buffers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (buffers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(buffers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = buffers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(buffers_bytes / sizeof(GLuint));
@@ -5552,7 +5844,20 @@ static bool decode_glGenFramebuffers(const RealGl& av_gl, ::av::WireReader& av_r
             framebuffers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (framebuffers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(framebuffers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = framebuffers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t framebuffers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(framebuffers_bytes / sizeof(GLuint));
@@ -5594,7 +5899,20 @@ static bool decode_glGenProgramPipelines(const RealGl& av_gl, ::av::WireReader& 
             pipelines_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pipelines_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(pipelines_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = pipelines_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t pipelines_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(pipelines_bytes / sizeof(GLuint));
@@ -5636,7 +5954,20 @@ static bool decode_glGenQueries(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             ids_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (ids_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(ids_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = ids_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(ids_bytes / sizeof(GLuint));
@@ -5678,7 +6009,20 @@ static bool decode_glGenRenderbuffers(const RealGl& av_gl, ::av::WireReader& av_
             renderbuffers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (renderbuffers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(renderbuffers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = renderbuffers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t renderbuffers_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(renderbuffers_bytes / sizeof(GLuint));
@@ -5720,7 +6064,20 @@ static bool decode_glGenSamplers(const RealGl& av_gl, ::av::WireReader& av_r, ::
             samplers_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (samplers_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(samplers_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = samplers_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t samplers_elements = static_cast<uint64_t>(count);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(samplers_bytes / sizeof(GLuint));
@@ -5762,7 +6119,20 @@ static bool decode_glGenTextures(const RealGl& av_gl, ::av::WireReader& av_r, ::
             textures_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (textures_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(textures_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = textures_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(textures_bytes / sizeof(GLuint));
@@ -5804,7 +6174,20 @@ static bool decode_glGenTransformFeedbacks(const RealGl& av_gl, ::av::WireReader
             ids_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (ids_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(ids_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = ids_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t ids_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(ids_bytes / sizeof(GLuint));
@@ -5846,7 +6229,20 @@ static bool decode_glGenVertexArrays(const RealGl& av_gl, ::av::WireReader& av_r
             arrays_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (arrays_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(arrays_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = arrays_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t arrays_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(arrays_bytes / sizeof(GLuint));
@@ -6015,6 +6411,46 @@ static bool decode_glGetActiveAttrib(const RealGl& av_gl, ::av::WireReader& av_r
             name_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (size_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(size_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = size_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (type_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(type_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = type_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (name_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(name_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = name_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -6048,7 +6484,7 @@ static bool decode_glGetActiveAttrib(const RealGl& av_gl, ::av::WireReader& av_r
         for (size_t av_z = 0; av_z < type_storage_count; ++av_z) { type_storage[av_z] = {}; }
         type = type_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t name_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(name_bytes / sizeof(GLchar));
@@ -6126,6 +6562,28 @@ static bool decode_glGetActiveSubroutineName(const RealGl& av_gl, ::av::WireRead
             name_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (name_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(name_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = name_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -6137,7 +6595,7 @@ static bool decode_glGetActiveSubroutineName(const RealGl& av_gl, ::av::WireRead
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t name_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(name_bytes / sizeof(GLchar));
@@ -6207,6 +6665,28 @@ static bool decode_glGetActiveSubroutineUniformName(const RealGl& av_gl, ::av::W
             name_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (name_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(name_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = name_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -6218,7 +6698,7 @@ static bool decode_glGetActiveSubroutineUniformName(const RealGl& av_gl, ::av::W
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t name_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(name_bytes / sizeof(GLchar));
@@ -6372,6 +6852,46 @@ static bool decode_glGetActiveUniform(const RealGl& av_gl, ::av::WireReader& av_
             name_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (size_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(size_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = size_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (type_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(type_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = type_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (name_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(name_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = name_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -6405,7 +6925,7 @@ static bool decode_glGetActiveUniform(const RealGl& av_gl, ::av::WireReader& av_
         for (size_t av_z = 0; av_z < type_storage_count; ++av_z) { type_storage[av_z] = {}; }
         type = type_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t name_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(name_bytes / sizeof(GLchar));
@@ -6480,6 +7000,28 @@ static bool decode_glGetActiveUniformBlockName(const RealGl& av_gl, ::av::WireRe
             uniformBlockName_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (uniformBlockName_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(uniformBlockName_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = uniformBlockName_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -6491,7 +7033,7 @@ static bool decode_glGetActiveUniformBlockName(const RealGl& av_gl, ::av::WireRe
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t uniformBlockName_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(uniformBlockName_bytes / sizeof(GLchar));
@@ -6612,6 +7154,28 @@ static bool decode_glGetActiveUniformName(const RealGl& av_gl, ::av::WireReader&
             uniformName_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (uniformName_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(uniformName_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = uniformName_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -6623,7 +7187,7 @@ static bool decode_glGetActiveUniformName(const RealGl& av_gl, ::av::WireReader&
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t uniformName_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(uniformName_bytes / sizeof(GLchar));
@@ -6703,12 +7267,25 @@ static bool decode_glGetActiveUniformsiv(const RealGl& av_gl, ::av::WireReader& 
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (uniformCount < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (uniformCount < 0) return av_refuse(0x0501);
     const uint64_t uniformIndices_elements = static_cast<uint64_t>(uniformCount);
     uint64_t uniformIndices_needed = 0;
     if (__builtin_mul_overflow(uniformIndices_elements, static_cast<uint64_t>(sizeof(GLuint)), &uniformIndices_needed)) return false;
     if (uniformIndices == nullptr ? (uniformIndices_needed != 0 && !(false)) : uniformIndices_room < uniformIndices_needed) return false;
-    if (uniformCount < 0) return false;
+    if (uniformCount < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(uniformCount);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint));
@@ -6768,6 +7345,28 @@ static bool decode_glGetAttachedShaders(const RealGl& av_gl, ::av::WireReader& a
             shaders_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (count_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(count_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = count_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (shaders_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(shaders_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = shaders_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t count_elements = 1;
     if (count_answered) {
         uint64_t av_room = static_cast<uint64_t>(count_bytes / sizeof(GLsizei));
@@ -6779,7 +7378,7 @@ static bool decode_glGetAttachedShaders(const RealGl& av_gl, ::av::WireReader& a
         for (size_t av_z = 0; av_z < count_storage_count; ++av_z) { count_storage[av_z] = {}; }
         count = count_storage;
     }
-    if (maxCount < 0) return false;
+    if (maxCount < 0) return av_refuse(0x0501);
     const uint64_t shaders_elements = static_cast<uint64_t>(maxCount);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(shaders_bytes / sizeof(GLuint));
@@ -7057,7 +7656,20 @@ static bool decode_glGetBufferSubData(const RealGl& av_gl, ::av::WireReader& av_
             data_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (data_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(data_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = data_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(data_bytes / sizeof(uint8_t));
@@ -7130,7 +7742,10 @@ static bool decode_glGetCompressedTexImage(const RealGl& av_gl, ::av::WireReader
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        return false;
+        GLint av_size = 0;
+        if (av_gl.glGetTexLevelParameteriv == nullptr) return false;
+        av_gl.glGetTexLevelParameteriv(target, level, 0x86A0, &av_size);
+        if (av_size < 0 || static_cast<uint64_t>(av_size) > static_cast<uint64_t>(img_bytes)) return false;
     }
     if (av_gl.glGetCompressedTexImage == nullptr) return false;
     void* img_packed = nullptr;
@@ -7195,13 +7810,22 @@ static bool decode_glGetCompressedTextureImage(const RealGl& av_gl, ::av::WireRe
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetCompressedTextureImage == nullptr) return false;
     void* pixels_packed = nullptr;
@@ -7284,13 +7908,22 @@ static bool decode_glGetCompressedTextureSubImage(const RealGl& av_gl, ::av::Wir
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetCompressedTextureSubImage == nullptr) return false;
     void* pixels_packed = nullptr;
@@ -7405,6 +8038,65 @@ static bool decode_glGetDebugMessageLog(const RealGl& av_gl, ::av::WireReader& a
             messageLog_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        av_reply.write_varint(0);
+        if (sources_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(sources_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = sources_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (types_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(types_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = types_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (ids_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(ids_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = ids_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (severities_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(severities_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = severities_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (lengths_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(lengths_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = lengths_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (messageLog_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(messageLog_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = messageLog_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t sources_elements = static_cast<uint64_t>(count);
     if (sources_answered) {
         uint64_t av_room = static_cast<uint64_t>(sources_bytes / sizeof(GLenum));
@@ -7460,7 +8152,7 @@ static bool decode_glGetDebugMessageLog(const RealGl& av_gl, ::av::WireReader& a
         for (size_t av_z = 0; av_z < lengths_storage_count; ++av_z) { lengths_storage[av_z] = {}; }
         lengths = lengths_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t messageLog_elements = static_cast<uint64_t>(bufSize);
     if (messageLog_answered) {
         uint64_t av_room = static_cast<uint64_t>(messageLog_bytes / sizeof(GLchar));
@@ -8129,7 +8821,20 @@ static bool decode_glGetInternalformati64v(const RealGl& av_gl, ::av::WireReader
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>((static_cast<int64_t>(pname) == 0x80A9 ? static_cast<int64_t>(count) : 1));
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint64));
@@ -8180,7 +8885,20 @@ static bool decode_glGetInternalformativ(const RealGl& av_gl, ::av::WireReader& 
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>((static_cast<int64_t>(pname) == 0x80A9 ? static_cast<int64_t>(count) : 1));
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint));
@@ -8360,7 +9078,20 @@ static bool decode_glGetNamedBufferSubData(const RealGl& av_gl, ::av::WireReader
             data_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (data_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(data_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = data_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(data_bytes / sizeof(uint8_t));
@@ -8558,6 +9289,28 @@ static bool decode_glGetObjectLabel(const RealGl& av_gl, ::av::WireReader& av_r,
             label_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (label_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(label_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = label_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -8569,7 +9322,7 @@ static bool decode_glGetObjectLabel(const RealGl& av_gl, ::av::WireReader& av_r,
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t label_elements = static_cast<uint64_t>(bufSize);
     if (label_answered) {
         uint64_t av_room = static_cast<uint64_t>(label_bytes / sizeof(GLchar));
@@ -8633,6 +9386,28 @@ static bool decode_glGetObjectPtrLabel(const RealGl& av_gl, ::av::WireReader& av
             label_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (label_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(label_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = label_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -8644,7 +9419,7 @@ static bool decode_glGetObjectPtrLabel(const RealGl& av_gl, ::av::WireReader& av
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t label_elements = static_cast<uint64_t>(bufSize);
     if (label_answered) {
         uint64_t av_room = static_cast<uint64_t>(label_bytes / sizeof(GLchar));
@@ -8723,6 +9498,37 @@ static bool decode_glGetProgramBinary(const RealGl& av_gl, ::av::WireReader& av_
             binary_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (binaryFormat_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(binaryFormat_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = binaryFormat_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (binary_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(binary_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = binary_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -8745,7 +9551,7 @@ static bool decode_glGetProgramBinary(const RealGl& av_gl, ::av::WireReader& av_
         for (size_t av_z = 0; av_z < binaryFormat_storage_count; ++av_z) { binaryFormat_storage[av_z] = {}; }
         binaryFormat = binaryFormat_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t binary_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(binary_bytes / sizeof(uint8_t));
@@ -8813,6 +9619,28 @@ static bool decode_glGetProgramInfoLog(const RealGl& av_gl, ::av::WireReader& av
             infoLog_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (infoLog_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = infoLog_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -8824,7 +9652,7 @@ static bool decode_glGetProgramInfoLog(const RealGl& av_gl, ::av::WireReader& av
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t infoLog_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(infoLog_bytes / sizeof(GLchar));
@@ -8935,6 +9763,28 @@ static bool decode_glGetProgramPipelineInfoLog(const RealGl& av_gl, ::av::WireRe
             infoLog_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (infoLog_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = infoLog_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -8946,7 +9796,7 @@ static bool decode_glGetProgramPipelineInfoLog(const RealGl& av_gl, ::av::WireRe
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t infoLog_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(infoLog_bytes / sizeof(GLchar));
@@ -9165,6 +10015,28 @@ static bool decode_glGetProgramResourceName(const RealGl& av_gl, ::av::WireReade
             name_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (name_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(name_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = name_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -9176,7 +10048,7 @@ static bool decode_glGetProgramResourceName(const RealGl& av_gl, ::av::WireReade
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t name_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(name_bytes / sizeof(GLchar));
@@ -9277,7 +10149,29 @@ static bool decode_glGetProgramResourceiv(const RealGl& av_gl, ::av::WireReader&
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (propCount < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (propCount < 0) return av_refuse(0x0501);
     const uint64_t props_elements = static_cast<uint64_t>(propCount);
     uint64_t props_needed = 0;
     if (__builtin_mul_overflow(props_elements, static_cast<uint64_t>(sizeof(GLenum)), &props_needed)) return false;
@@ -9293,7 +10187,7 @@ static bool decode_glGetProgramResourceiv(const RealGl& av_gl, ::av::WireReader&
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(count);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint));
@@ -10083,6 +10977,28 @@ static bool decode_glGetShaderInfoLog(const RealGl& av_gl, ::av::WireReader& av_
             infoLog_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (infoLog_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = infoLog_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -10094,7 +11010,7 @@ static bool decode_glGetShaderInfoLog(const RealGl& av_gl, ::av::WireReader& av_
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t infoLog_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(infoLog_bytes / sizeof(GLchar));
@@ -10232,6 +11148,28 @@ static bool decode_glGetShaderSource(const RealGl& av_gl, ::av::WireReader& av_r
             source_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (source_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(source_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = source_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -10243,7 +11181,7 @@ static bool decode_glGetShaderSource(const RealGl& av_gl, ::av::WireReader& av_r
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t source_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(source_bytes / sizeof(GLchar));
@@ -10900,13 +11838,22 @@ static bool decode_glGetTextureImage(const RealGl& av_gl, ::av::WireReader& av_r
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetTextureImage == nullptr) return false;
     void* pixels_packed = nullptr;
@@ -11265,13 +12212,24 @@ static bool decode_glGetTextureSubImage(const RealGl& av_gl, ::av::WireReader& a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetTextureSubImage == nullptr) return false;
     void* pixels_packed = nullptr;
@@ -11359,6 +12317,46 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& av_gl, ::av::Wire
             name_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (size_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(size_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = size_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (type_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(type_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = type_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (name_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(name_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = name_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -11392,7 +12390,7 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& av_gl, ::av::Wire
         for (size_t av_z = 0; av_z < type_storage_count; ++av_z) { type_storage[av_z] = {}; }
         type = type_storage;
     }
-    if (bufSize < 0) return false;
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t name_elements = static_cast<uint64_t>(bufSize);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(name_bytes / sizeof(GLchar));
@@ -11645,9 +12643,22 @@ static bool decode_glGetUniformIndices(const RealGl& av_gl, ::av::WireReader& av
             uniformIndices_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (uniformCount < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (uniformIndices_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(uniformIndices_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = uniformIndices_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (uniformCount < 0) return av_refuse(0x0501);
     if (uniformNames == nullptr ? uniformCount != 0 : uniformNames_count < static_cast<uint64_t>(uniformCount)) return false;
-    if (uniformCount < 0) return false;
+    if (uniformCount < 0) return av_refuse(0x0501);
     const uint64_t uniformIndices_elements = static_cast<uint64_t>(uniformCount);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(uniformIndices_bytes / sizeof(GLuint));
@@ -12371,13 +13382,22 @@ static bool decode_glGetnCompressedTexImage(const RealGl& av_gl, ::av::WireReade
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetnCompressedTexImage == nullptr) return false;
     void* pixels_packed = nullptr;
@@ -12448,13 +13468,22 @@ static bool decode_glGetnTexImage(const RealGl& av_gl, ::av::WireReader& av_r, :
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetnTexImage == nullptr) return false;
     void* pixels_packed = nullptr;
@@ -12497,7 +13526,20 @@ static bool decode_glGetnUniformdv(const RealGl& av_gl, ::av::WireReader& av_r, 
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (bufSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(bufSize) / 8);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLdouble));
@@ -12545,7 +13587,20 @@ static bool decode_glGetnUniformfv(const RealGl& av_gl, ::av::WireReader& av_r, 
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (bufSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(bufSize) / 4);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLfloat));
@@ -12593,7 +13648,20 @@ static bool decode_glGetnUniformiv(const RealGl& av_gl, ::av::WireReader& av_r, 
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (bufSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(bufSize) / 4);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint));
@@ -12641,7 +13709,20 @@ static bool decode_glGetnUniformuiv(const RealGl& av_gl, ::av::WireReader& av_r,
             params_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (bufSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (params_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = params_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (bufSize < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(bufSize) / 4);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLuint));
@@ -12741,7 +13822,11 @@ static bool decode_glInvalidateFramebuffer(const RealGl& av_gl, ::av::WireReader
             attachments = reinterpret_cast<const GLenum*>(av_run);
         }
     }
-    if (numAttachments < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (numAttachments < 0) return av_refuse(0x0501);
     const uint64_t attachments_elements = static_cast<uint64_t>(numAttachments);
     uint64_t attachments_needed = 0;
     if (__builtin_mul_overflow(attachments_elements, static_cast<uint64_t>(sizeof(GLenum)), &attachments_needed)) return false;
@@ -12788,7 +13873,11 @@ static bool decode_glInvalidateNamedFramebufferData(const RealGl& av_gl, ::av::W
             attachments = reinterpret_cast<const GLenum*>(av_run);
         }
     }
-    if (numAttachments < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (numAttachments < 0) return av_refuse(0x0501);
     const uint64_t attachments_elements = static_cast<uint64_t>(numAttachments);
     uint64_t attachments_needed = 0;
     if (__builtin_mul_overflow(attachments_elements, static_cast<uint64_t>(sizeof(GLenum)), &attachments_needed)) return false;
@@ -12847,7 +13936,11 @@ static bool decode_glInvalidateNamedFramebufferSubData(const RealGl& av_gl, ::av
     GLsizei height{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
-    if (numAttachments < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (numAttachments < 0) return av_refuse(0x0501);
     const uint64_t attachments_elements = static_cast<uint64_t>(numAttachments);
     uint64_t attachments_needed = 0;
     if (__builtin_mul_overflow(attachments_elements, static_cast<uint64_t>(sizeof(GLenum)), &attachments_needed)) return false;
@@ -12906,7 +13999,11 @@ static bool decode_glInvalidateSubFramebuffer(const RealGl& av_gl, ::av::WireRea
     GLsizei height{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
-    if (numAttachments < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (numAttachments < 0) return av_refuse(0x0501);
     const uint64_t attachments_elements = static_cast<uint64_t>(numAttachments);
     uint64_t attachments_needed = 0;
     if (__builtin_mul_overflow(attachments_elements, static_cast<uint64_t>(sizeof(GLenum)), &attachments_needed)) return false;
@@ -13262,12 +14359,16 @@ static bool decode_glMultiDrawArrays(const RealGl& av_gl, ::av::WireReader& av_r
     GLsizei drawcount{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       drawcount = static_cast<GLsizei>(av_v); }
-    if (drawcount < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (drawcount < 0) return av_refuse(0x0501);
     const uint64_t first_elements = static_cast<uint64_t>(drawcount);
     uint64_t first_needed = 0;
     if (__builtin_mul_overflow(first_elements, static_cast<uint64_t>(sizeof(GLint)), &first_needed)) return false;
     if (first == nullptr ? (first_needed != 0 && !(false)) : first_room < first_needed) return false;
-    if (drawcount < 0) return false;
+    if (drawcount < 0) return av_refuse(0x0501);
     const uint64_t count_elements = static_cast<uint64_t>(drawcount);
     uint64_t count_needed = 0;
     if (__builtin_mul_overflow(count_elements, static_cast<uint64_t>(sizeof(GLsizei)), &count_needed)) return false;
@@ -13385,12 +14486,16 @@ static bool decode_glMultiDrawElements(const RealGl& av_gl, ::av::WireReader& av
     GLsizei drawcount{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       drawcount = static_cast<GLsizei>(av_v); }
-    if (drawcount < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (drawcount < 0) return av_refuse(0x0501);
     const uint64_t count_elements = static_cast<uint64_t>(drawcount);
     uint64_t count_needed = 0;
     if (__builtin_mul_overflow(count_elements, static_cast<uint64_t>(sizeof(GLsizei)), &count_needed)) return false;
     if (count == nullptr ? (count_needed != 0 && !(false)) : count_room < count_needed) return false;
-    if (drawcount < 0) return false;
+    if (drawcount < 0) return av_refuse(0x0501);
     if (indices == nullptr ? drawcount != 0 : indices_count < static_cast<uint64_t>(drawcount)) return false;
     if (drawcount != 0 && !buffer_bound(av_gl, 0x8895)) return false;
     if (!arrays_verified(av_gl)) return false;
@@ -13486,13 +14591,17 @@ static bool decode_glMultiDrawElementsBaseVertex(const RealGl& av_gl, ::av::Wire
             basevertex = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (drawcount < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (drawcount < 0) return av_refuse(0x0501);
     const uint64_t count_elements = static_cast<uint64_t>(drawcount);
     uint64_t count_needed = 0;
     if (__builtin_mul_overflow(count_elements, static_cast<uint64_t>(sizeof(GLsizei)), &count_needed)) return false;
     if (count == nullptr ? (count_needed != 0 && !(false)) : count_room < count_needed) return false;
-    if (drawcount < 0) return false;
-    if (drawcount < 0) return false;
+    if (drawcount < 0) return av_refuse(0x0501);
+    if (drawcount < 0) return av_refuse(0x0501);
     const uint64_t basevertex_elements = static_cast<uint64_t>(drawcount);
     uint64_t basevertex_needed = 0;
     if (__builtin_mul_overflow(basevertex_elements, static_cast<uint64_t>(sizeof(GLint)), &basevertex_needed)) return false;
@@ -13851,7 +14960,11 @@ static bool decode_glNamedBufferData(const RealGl& av_gl, ::av::WireReader& av_r
     GLenum usage{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       usage = static_cast<GLenum>(av_v); }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -13901,7 +15014,11 @@ static bool decode_glNamedBufferStorage(const RealGl& av_gl, ::av::WireReader& a
     GLbitfield flags{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       flags = static_cast<GLbitfield>(av_v); }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -13951,7 +15068,11 @@ static bool decode_glNamedBufferSubData(const RealGl& av_gl, ::av::WireReader& a
             data = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -14012,7 +15133,11 @@ static bool decode_glNamedFramebufferDrawBuffers(const RealGl& av_gl, ::av::Wire
             bufs = reinterpret_cast<const GLenum*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t bufs_elements = static_cast<uint64_t>(n);
     uint64_t bufs_needed = 0;
     if (__builtin_mul_overflow(bufs_elements, static_cast<uint64_t>(sizeof(GLenum)), &bufs_needed)) return false;
@@ -14581,7 +15706,11 @@ static bool decode_glProgramBinary(const RealGl& av_gl, ::av::WireReader& av_r, 
     GLsizei length{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       length = static_cast<GLsizei>(av_v); }
-    if (length < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (length < 0) return av_refuse(0x0501);
     const uint64_t binary_elements = static_cast<uint64_t>(length);
     uint64_t binary_needed = 0;
     if (__builtin_mul_overflow(binary_elements, static_cast<uint64_t>(sizeof(uint8_t)), &binary_needed)) return false;
@@ -14664,7 +15793,11 @@ static bool decode_glProgramUniform1dv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -14730,7 +15863,11 @@ static bool decode_glProgramUniform1fv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -14797,7 +15934,11 @@ static bool decode_glProgramUniform1iv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -14864,7 +16005,11 @@ static bool decode_glProgramUniform1uiv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -14932,7 +16077,11 @@ static bool decode_glProgramUniform2dv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -15000,7 +16149,11 @@ static bool decode_glProgramUniform2fv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -15070,7 +16223,11 @@ static bool decode_glProgramUniform2iv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -15140,7 +16297,11 @@ static bool decode_glProgramUniform2uiv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -15210,7 +16371,11 @@ static bool decode_glProgramUniform3dv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -15280,7 +16445,11 @@ static bool decode_glProgramUniform3fv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -15353,7 +16522,11 @@ static bool decode_glProgramUniform3iv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -15426,7 +16599,11 @@ static bool decode_glProgramUniform3uiv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -15498,7 +16675,11 @@ static bool decode_glProgramUniform4dv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -15570,7 +16751,11 @@ static bool decode_glProgramUniform4fv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -15646,7 +16831,11 @@ static bool decode_glProgramUniform4iv(const RealGl& av_gl, ::av::WireReader& av
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -15722,7 +16911,11 @@ static bool decode_glProgramUniform4uiv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -15775,7 +16968,11 @@ static bool decode_glProgramUniformMatrix2dv(const RealGl& av_gl, ::av::WireRead
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -15828,7 +17025,11 @@ static bool decode_glProgramUniformMatrix2fv(const RealGl& av_gl, ::av::WireRead
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -15881,7 +17082,11 @@ static bool decode_glProgramUniformMatrix2x3dv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -15934,7 +17139,11 @@ static bool decode_glProgramUniformMatrix2x3fv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -15987,7 +17196,11 @@ static bool decode_glProgramUniformMatrix2x4dv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16040,7 +17253,11 @@ static bool decode_glProgramUniformMatrix2x4fv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16093,7 +17310,11 @@ static bool decode_glProgramUniformMatrix3dv(const RealGl& av_gl, ::av::WireRead
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*9);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16146,7 +17367,11 @@ static bool decode_glProgramUniformMatrix3fv(const RealGl& av_gl, ::av::WireRead
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*9);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16199,7 +17424,11 @@ static bool decode_glProgramUniformMatrix3x2dv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16252,7 +17481,11 @@ static bool decode_glProgramUniformMatrix3x2fv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16305,7 +17538,11 @@ static bool decode_glProgramUniformMatrix3x4dv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16358,7 +17595,11 @@ static bool decode_glProgramUniformMatrix3x4fv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16411,7 +17652,11 @@ static bool decode_glProgramUniformMatrix4dv(const RealGl& av_gl, ::av::WireRead
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*16);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16464,7 +17709,11 @@ static bool decode_glProgramUniformMatrix4fv(const RealGl& av_gl, ::av::WireRead
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*16);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16517,7 +17766,11 @@ static bool decode_glProgramUniformMatrix4x2dv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16570,7 +17823,11 @@ static bool decode_glProgramUniformMatrix4x2fv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16623,7 +17880,11 @@ static bool decode_glProgramUniformMatrix4x3dv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -16676,7 +17937,11 @@ static bool decode_glProgramUniformMatrix4x3fv(const RealGl& av_gl, ::av::WireRe
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -16817,6 +18082,16 @@ static bool decode_glReadPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
+            if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
+        }
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset || pixels == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
@@ -16902,13 +18177,24 @@ static bool decode_glReadnPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::
             data = data_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (data != nullptr && !data_is_offset && !data_via_blob) {
+            av_reply.write_varint(static_cast<uint64_t>(data_bytes));
+            if (data_bytes != 0) av_reply.write(data, data_bytes);
+        }
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (data_is_offset || data == nullptr) {
         GLint av_bound = 0;
         if (av_gl.glGetIntegerv == nullptr) return false;
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(data_bytes)) return false;
+        if (bufSize < 0) return av_refuse(0x0501);
+        if (static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(data_bytes)) return false;
     }
     if (av_gl.glReadnPixels == nullptr) return false;
     void* data_packed = nullptr;
@@ -17260,7 +18546,11 @@ static bool decode_glScissorArrayv(const RealGl& av_gl, ::av::WireReader& av_r, 
             v = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t v_elements = static_cast<uint64_t>((static_cast<size_t>(static_cast<int64_t>(count)) * 4));
     uint64_t v_needed = 0;
     if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLint)), &v_needed)) return false;
@@ -17461,12 +18751,16 @@ static bool decode_glShaderBinary(const RealGl& av_gl, ::av::WireReader& av_r, :
     GLsizei length{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       length = static_cast<GLsizei>(av_v); }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t shaders_elements = static_cast<uint64_t>(count);
     uint64_t shaders_needed = 0;
     if (__builtin_mul_overflow(shaders_elements, static_cast<uint64_t>(sizeof(GLuint)), &shaders_needed)) return false;
     if (shaders == nullptr ? (shaders_needed != 0 && !(false)) : shaders_room < shaders_needed) return false;
-    if (length < 0) return false;
+    if (length < 0) return av_refuse(0x0501);
     const uint64_t binary_elements = static_cast<uint64_t>(length);
     uint64_t binary_needed = 0;
     if (__builtin_mul_overflow(binary_elements, static_cast<uint64_t>(sizeof(uint8_t)), &binary_needed)) return false;
@@ -17543,9 +18837,13 @@ static bool decode_glShaderSource(const RealGl& av_gl, ::av::WireReader& av_r, :
             length = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     if (string == nullptr ? count != 0 : string_count < static_cast<uint64_t>(count)) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t length_elements = static_cast<uint64_t>(count);
     uint64_t length_needed = 0;
     if (__builtin_mul_overflow(length_elements, static_cast<uint64_t>(sizeof(GLint)), &length_needed)) return false;
@@ -18102,6 +19400,11 @@ static bool decode_glTexImage1D(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -18179,6 +19482,12 @@ static bool decode_glTexImage2D(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -18285,6 +19594,13 @@ static bool decode_glTexImage3D(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -18702,6 +20018,11 @@ static bool decode_glTexSubImage1D(const RealGl& av_gl, ::av::WireReader& av_r, 
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -18779,6 +20100,12 @@ static bool decode_glTexSubImage2D(const RealGl& av_gl, ::av::WireReader& av_r, 
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -18862,6 +20189,13 @@ static bool decode_glTexSubImage3D(const RealGl& av_gl, ::av::WireReader& av_r, 
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -19298,6 +20632,11 @@ static bool decode_glTextureSubImage1D(const RealGl& av_gl, ::av::WireReader& av
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -19375,6 +20714,12 @@ static bool decode_glTextureSubImage2D(const RealGl& av_gl, ::av::WireReader& av
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -19458,6 +20803,13 @@ static bool decode_glTextureSubImage3D(const RealGl& av_gl, ::av::WireReader& av
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -19500,6 +20852,7 @@ static bool decode_glTextureView(const RealGl& av_gl, ::av::WireReader& av_r, ::
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       numlayers = static_cast<GLuint>(av_v); }
     if (av_gl.glTextureView == nullptr) return false;
+    if (av_gl.av_hook_glTextureView != nullptr && !av_gl.av_hook_glTextureView(av_gl.av_texture_user, texture, target, origtexture, internalformat, minlevel, numlevels, minlayer, numlayers)) return true;
     av_gl.glTextureView(texture, target, origtexture, internalformat, minlevel, numlevels, minlayer, numlayers);
     return true;
 }
@@ -19582,7 +20935,11 @@ static bool decode_glTransformFeedbackVaryings(const RealGl& av_gl, ::av::WireRe
     GLenum bufferMode{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       bufferMode = static_cast<GLenum>(av_v); }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     if (varyings == nullptr ? count != 0 : varyings_count < static_cast<uint64_t>(count)) return false;
     if (av_gl.glTransformFeedbackVaryings == nullptr) return false;
     av_gl.glTransformFeedbackVaryings(program, count, varyings, bufferMode);
@@ -19639,7 +20996,11 @@ static bool decode_glUniform1dv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -19699,7 +21060,11 @@ static bool decode_glUniform1fv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -19760,7 +21125,11 @@ static bool decode_glUniform1iv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -19821,7 +21190,11 @@ static bool decode_glUniform1uiv(const RealGl& av_gl, ::av::WireReader& av_r, ::
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -19883,7 +21256,11 @@ static bool decode_glUniform2dv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -19945,7 +21322,11 @@ static bool decode_glUniform2fv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -20009,7 +21390,11 @@ static bool decode_glUniform2iv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -20073,7 +21458,11 @@ static bool decode_glUniform2uiv(const RealGl& av_gl, ::av::WireReader& av_r, ::
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -20137,7 +21526,11 @@ static bool decode_glUniform3dv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -20201,7 +21594,11 @@ static bool decode_glUniform3fv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -20268,7 +21665,11 @@ static bool decode_glUniform3iv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -20335,7 +21736,11 @@ static bool decode_glUniform3uiv(const RealGl& av_gl, ::av::WireReader& av_r, ::
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -20401,7 +21806,11 @@ static bool decode_glUniform4dv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -20467,7 +21876,11 @@ static bool decode_glUniform4fv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -20537,7 +21950,11 @@ static bool decode_glUniform4iv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -20607,7 +22024,11 @@ static bool decode_glUniform4uiv(const RealGl& av_gl, ::av::WireReader& av_r, ::
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -20674,7 +22095,11 @@ static bool decode_glUniformMatrix2dv(const RealGl& av_gl, ::av::WireReader& av_
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -20724,7 +22149,11 @@ static bool decode_glUniformMatrix2fv(const RealGl& av_gl, ::av::WireReader& av_
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -20774,7 +22203,11 @@ static bool decode_glUniformMatrix2x3dv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -20824,7 +22257,11 @@ static bool decode_glUniformMatrix2x3fv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -20874,7 +22311,11 @@ static bool decode_glUniformMatrix2x4dv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -20924,7 +22365,11 @@ static bool decode_glUniformMatrix2x4fv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -20974,7 +22419,11 @@ static bool decode_glUniformMatrix3dv(const RealGl& av_gl, ::av::WireReader& av_
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*9);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -21024,7 +22473,11 @@ static bool decode_glUniformMatrix3fv(const RealGl& av_gl, ::av::WireReader& av_
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*9);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -21074,7 +22527,11 @@ static bool decode_glUniformMatrix3x2dv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -21124,7 +22581,11 @@ static bool decode_glUniformMatrix3x2fv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -21174,7 +22635,11 @@ static bool decode_glUniformMatrix3x4dv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -21224,7 +22689,11 @@ static bool decode_glUniformMatrix3x4fv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -21274,7 +22743,11 @@ static bool decode_glUniformMatrix4dv(const RealGl& av_gl, ::av::WireReader& av_
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*16);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -21324,7 +22797,11 @@ static bool decode_glUniformMatrix4fv(const RealGl& av_gl, ::av::WireReader& av_
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*16);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -21374,7 +22851,11 @@ static bool decode_glUniformMatrix4x2dv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -21424,7 +22905,11 @@ static bool decode_glUniformMatrix4x2fv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -21474,7 +22959,11 @@ static bool decode_glUniformMatrix4x3dv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -21524,7 +23013,11 @@ static bool decode_glUniformMatrix4x3fv(const RealGl& av_gl, ::av::WireReader& a
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -21571,7 +23064,11 @@ static bool decode_glUniformSubroutinesuiv(const RealGl& av_gl, ::av::WireReader
             indices = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t indices_elements = static_cast<uint64_t>(count);
     uint64_t indices_needed = 0;
     if (__builtin_mul_overflow(indices_elements, static_cast<uint64_t>(sizeof(GLuint)), &indices_needed)) return false;
@@ -21870,17 +23367,21 @@ static bool decode_glVertexArrayVertexBuffers(const RealGl& av_gl, ::av::WireRea
             strides = reinterpret_cast<const GLsizei*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t buffers_elements = static_cast<uint64_t>(count);
     uint64_t buffers_needed = 0;
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
     if (buffers == nullptr ? (buffers_needed != 0 && !(true)) : buffers_room < buffers_needed) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t offsets_elements = static_cast<uint64_t>(count);
     uint64_t offsets_needed = 0;
     if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(GLintptr)), &offsets_needed)) return false;
     if (offsets == nullptr ? (offsets_needed != 0 && !(buffers == nullptr)) : offsets_room < offsets_needed) return false;
-    if (count < 0) return false;
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t strides_elements = static_cast<uint64_t>(count);
     uint64_t strides_needed = 0;
     if (__builtin_mul_overflow(strides_elements, static_cast<uint64_t>(sizeof(GLsizei)), &strides_needed)) return false;
@@ -24688,7 +26189,11 @@ static bool decode_glViewportArrayv(const RealGl& av_gl, ::av::WireReader& av_r,
             v = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t v_elements = static_cast<uint64_t>((static_cast<size_t>(static_cast<int64_t>(count)) * 4));
     uint64_t v_needed = 0;
     if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
@@ -24852,12 +26357,26 @@ static bool decode_glAreTexturesResident(const RealGl& av_gl, ::av::WireReader& 
             residences_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        av_reply.write_varint(0);
+        if (residences_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(residences_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = residences_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(n);
     uint64_t textures_needed = 0;
     if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
     if (textures == nullptr ? (textures_needed != 0 && !(false)) : textures_room < textures_needed) return false;
-    if (n < 0) return false;
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t residences_elements = static_cast<uint64_t>(n);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(residences_bytes / sizeof(GLboolean));
@@ -25005,7 +26524,11 @@ static bool decode_glCallLists(const RealGl& av_gl, ::av::WireReader& av_r, ::av
             lists = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t lists_elements = static_cast<uint64_t>(n) * ::av::glproto::type_size(type);
     uint64_t lists_needed = 0;
     if (__builtin_mul_overflow(lists_elements, static_cast<uint64_t>(1), &lists_needed)) return false;
@@ -26151,6 +27674,12 @@ static bool decode_glDrawPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -30187,7 +31716,11 @@ static bool decode_glPixelMapfv(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             values = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (mapsize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (mapsize < 0) return av_refuse(0x0501);
     const uint64_t values_elements = static_cast<uint64_t>(mapsize);
     uint64_t values_needed = 0;
     if (__builtin_mul_overflow(values_elements, static_cast<uint64_t>(sizeof(GLfloat)), &values_needed)) return false;
@@ -30234,7 +31767,11 @@ static bool decode_glPixelMapuiv(const RealGl& av_gl, ::av::WireReader& av_r, ::
             values = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (mapsize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (mapsize < 0) return av_refuse(0x0501);
     const uint64_t values_elements = static_cast<uint64_t>(mapsize);
     uint64_t values_needed = 0;
     if (__builtin_mul_overflow(values_elements, static_cast<uint64_t>(sizeof(GLuint)), &values_needed)) return false;
@@ -30281,7 +31818,11 @@ static bool decode_glPixelMapusv(const RealGl& av_gl, ::av::WireReader& av_r, ::
             values = reinterpret_cast<const GLushort*>(av_run);
         }
     }
-    if (mapsize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (mapsize < 0) return av_refuse(0x0501);
     const uint64_t values_elements = static_cast<uint64_t>(mapsize);
     uint64_t values_needed = 0;
     if (__builtin_mul_overflow(values_elements, static_cast<uint64_t>(sizeof(GLushort)), &values_needed)) return false;
@@ -30465,12 +32006,16 @@ static bool decode_glPrioritizeTextures(const RealGl& av_gl, ::av::WireReader& a
             priorities = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t textures_elements = static_cast<uint64_t>(n);
     uint64_t textures_needed = 0;
     if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
     if (textures == nullptr ? (textures_needed != 0 && !(false)) : textures_room < textures_needed) return false;
-    if (n < 0) return false;
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t priorities_elements = static_cast<uint64_t>(n);
     uint64_t priorities_needed = 0;
     if (__builtin_mul_overflow(priorities_elements, static_cast<uint64_t>(sizeof(GLfloat)), &priorities_needed)) return false;
@@ -34578,6 +36123,28 @@ static bool decode_glGetInfoLogARB(const RealGl& av_gl, ::av::WireReader& av_r, 
             infoLog_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (length_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(length_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = length_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (infoLog_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = infoLog_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t length_elements = 1;
     if (length_answered) {
         uint64_t av_room = static_cast<uint64_t>(length_bytes / sizeof(GLsizei));
@@ -34589,7 +36156,7 @@ static bool decode_glGetInfoLogARB(const RealGl& av_gl, ::av::WireReader& av_r, 
         for (size_t av_z = 0; av_z < length_storage_count; ++av_z) { length_storage[av_z] = {}; }
         length = length_storage;
     }
-    if (maxLength < 0) return false;
+    if (maxLength < 0) return av_refuse(0x0501);
     const uint64_t infoLog_elements = static_cast<uint64_t>(maxLength);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(infoLog_bytes / sizeof(GLcharARB));
@@ -34653,6 +36220,28 @@ static bool decode_glGetAttachedObjectsARB(const RealGl& av_gl, ::av::WireReader
             obj_bytes = static_cast<size_t>(av_bytes);
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (count_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(count_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = count_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        if (obj_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(obj_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = obj_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
     const uint64_t count_elements = 1;
     if (count_answered) {
         uint64_t av_room = static_cast<uint64_t>(count_bytes / sizeof(GLsizei));
@@ -34664,7 +36253,7 @@ static bool decode_glGetAttachedObjectsARB(const RealGl& av_gl, ::av::WireReader
         for (size_t av_z = 0; av_z < count_storage_count; ++av_z) { count_storage[av_z] = {}; }
         count = count_storage;
     }
-    if (maxCount < 0) return false;
+    if (maxCount < 0) return av_refuse(0x0501);
     const uint64_t obj_elements = static_cast<uint64_t>(maxCount);
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(obj_bytes / sizeof(GLhandleARB));
@@ -34898,7 +36487,11 @@ static bool decode_glScissorExclusiveArrayvNV(const RealGl& av_gl, ::av::WireRea
             v = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t v_elements = static_cast<uint64_t>((static_cast<size_t>(static_cast<int64_t>(count)) * 4));
     uint64_t v_needed = 0;
     if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLint)), &v_needed)) return false;
@@ -34948,7 +36541,11 @@ static bool decode_glFramebufferSampleLocationsfvNV(const RealGl& av_gl, ::av::W
             v = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t v_elements = static_cast<uint64_t>((static_cast<size_t>(static_cast<int64_t>(count)) * 2));
     uint64_t v_needed = 0;
     if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
@@ -34998,7 +36595,11 @@ static bool decode_glNamedFramebufferSampleLocationsfvNV(const RealGl& av_gl, ::
             v = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t v_elements = static_cast<uint64_t>((static_cast<size_t>(static_cast<int64_t>(count)) * 2));
     uint64_t v_needed = 0;
     if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
@@ -35165,7 +36766,11 @@ static bool decode_glUniformHandleui64vARB(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLuint64*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64)), &value_needed)) return false;
@@ -35232,7 +36837,11 @@ static bool decode_glProgramUniformHandleui64vARB(const RealGl& av_gl, ::av::Wir
             values = reinterpret_cast<const GLuint64*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t values_elements = static_cast<uint64_t>(count);
     uint64_t values_needed = 0;
     if (__builtin_mul_overflow(values_elements, static_cast<uint64_t>(sizeof(GLuint64)), &values_needed)) return false;
@@ -35516,7 +37125,11 @@ static bool decode_glUniformHandleui64vNV(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLuint64*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64)), &value_needed)) return false;
@@ -35583,7 +37196,11 @@ static bool decode_glProgramUniformHandleui64vNV(const RealGl& av_gl, ::av::Wire
             values = reinterpret_cast<const GLuint64*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t values_elements = static_cast<uint64_t>(count);
     uint64_t values_needed = 0;
     if (__builtin_mul_overflow(values_elements, static_cast<uint64_t>(sizeof(GLuint64)), &values_needed)) return false;
@@ -35663,6 +37280,7 @@ static bool decode_glTextureStorageMem2DEXT(const RealGl& av_gl, ::av::WireReade
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTextureStorageMem2DEXT == nullptr) return false;
+    if (av_gl.av_hook_glTextureStorageMem2DEXT != nullptr && !av_gl.av_hook_glTextureStorageMem2DEXT(av_gl.av_texture_user, texture, levels, internalFormat, width, height, memory, offset)) return true;
     av_gl.glTextureStorageMem2DEXT(texture, levels, internalFormat, width, height, memory, offset);
     return true;
 }
@@ -35701,7 +37319,11 @@ static bool decode_glDeleteMemoryObjectsEXT(const RealGl& av_gl, ::av::WireReade
             memoryObjects = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t memoryObjects_elements = static_cast<uint64_t>(n);
     uint64_t memoryObjects_needed = 0;
     if (__builtin_mul_overflow(memoryObjects_elements, static_cast<uint64_t>(sizeof(GLuint)), &memoryObjects_needed)) return false;
@@ -35746,7 +37368,11 @@ static bool decode_glDeleteSemaphoresEXT(const RealGl& av_gl, ::av::WireReader& 
             semaphores = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t semaphores_elements = static_cast<uint64_t>(n);
     uint64_t semaphores_needed = 0;
     if (__builtin_mul_overflow(semaphores_elements, static_cast<uint64_t>(sizeof(GLuint)), &semaphores_needed)) return false;
@@ -36004,6 +37630,7 @@ static bool decode_glTexStorageMem1DEXT(const RealGl& av_gl, ::av::WireReader& a
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTexStorageMem1DEXT == nullptr) return false;
+    if (av_gl.av_hook_glTexStorageMem1DEXT != nullptr && !av_gl.av_hook_glTexStorageMem1DEXT(av_gl.av_texture_user, target, levels, internalFormat, width, memory, offset)) return true;
     av_gl.glTexStorageMem1DEXT(target, levels, internalFormat, width, memory, offset);
     return true;
 }
@@ -36033,6 +37660,7 @@ static bool decode_glTexStorageMem2DEXT(const RealGl& av_gl, ::av::WireReader& a
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTexStorageMem2DEXT == nullptr) return false;
+    if (av_gl.av_hook_glTexStorageMem2DEXT != nullptr && !av_gl.av_hook_glTexStorageMem2DEXT(av_gl.av_texture_user, target, levels, internalFormat, width, height, memory, offset)) return true;
     av_gl.glTexStorageMem2DEXT(target, levels, internalFormat, width, height, memory, offset);
     return true;
 }
@@ -36065,6 +37693,7 @@ static bool decode_glTexStorageMem2DMultisampleEXT(const RealGl& av_gl, ::av::Wi
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTexStorageMem2DMultisampleEXT == nullptr) return false;
+    if (av_gl.av_hook_glTexStorageMem2DMultisampleEXT != nullptr && !av_gl.av_hook_glTexStorageMem2DMultisampleEXT(av_gl.av_texture_user, target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset)) return true;
     av_gl.glTexStorageMem2DMultisampleEXT(target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset);
     return true;
 }
@@ -36097,6 +37726,7 @@ static bool decode_glTexStorageMem3DEXT(const RealGl& av_gl, ::av::WireReader& a
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTexStorageMem3DEXT == nullptr) return false;
+    if (av_gl.av_hook_glTexStorageMem3DEXT != nullptr && !av_gl.av_hook_glTexStorageMem3DEXT(av_gl.av_texture_user, target, levels, internalFormat, width, height, depth, memory, offset)) return true;
     av_gl.glTexStorageMem3DEXT(target, levels, internalFormat, width, height, depth, memory, offset);
     return true;
 }
@@ -36132,6 +37762,7 @@ static bool decode_glTexStorageMem3DMultisampleEXT(const RealGl& av_gl, ::av::Wi
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTexStorageMem3DMultisampleEXT == nullptr) return false;
+    if (av_gl.av_hook_glTexStorageMem3DMultisampleEXT != nullptr && !av_gl.av_hook_glTexStorageMem3DMultisampleEXT(av_gl.av_texture_user, target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset)) return true;
     av_gl.glTexStorageMem3DMultisampleEXT(target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset);
     return true;
 }
@@ -36158,6 +37789,7 @@ static bool decode_glTextureStorageMem1DEXT(const RealGl& av_gl, ::av::WireReade
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTextureStorageMem1DEXT == nullptr) return false;
+    if (av_gl.av_hook_glTextureStorageMem1DEXT != nullptr && !av_gl.av_hook_glTextureStorageMem1DEXT(av_gl.av_texture_user, texture, levels, internalFormat, width, memory, offset)) return true;
     av_gl.glTextureStorageMem1DEXT(texture, levels, internalFormat, width, memory, offset);
     return true;
 }
@@ -36190,6 +37822,7 @@ static bool decode_glTextureStorageMem2DMultisampleEXT(const RealGl& av_gl, ::av
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTextureStorageMem2DMultisampleEXT == nullptr) return false;
+    if (av_gl.av_hook_glTextureStorageMem2DMultisampleEXT != nullptr && !av_gl.av_hook_glTextureStorageMem2DMultisampleEXT(av_gl.av_texture_user, texture, samples, internalFormat, width, height, fixedSampleLocations, memory, offset)) return true;
     av_gl.glTextureStorageMem2DMultisampleEXT(texture, samples, internalFormat, width, height, fixedSampleLocations, memory, offset);
     return true;
 }
@@ -36222,6 +37855,7 @@ static bool decode_glTextureStorageMem3DEXT(const RealGl& av_gl, ::av::WireReade
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTextureStorageMem3DEXT == nullptr) return false;
+    if (av_gl.av_hook_glTextureStorageMem3DEXT != nullptr && !av_gl.av_hook_glTextureStorageMem3DEXT(av_gl.av_texture_user, texture, levels, internalFormat, width, height, depth, memory, offset)) return true;
     av_gl.glTextureStorageMem3DEXT(texture, levels, internalFormat, width, height, depth, memory, offset);
     return true;
 }
@@ -36257,6 +37891,7 @@ static bool decode_glTextureStorageMem3DMultisampleEXT(const RealGl& av_gl, ::av
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glTextureStorageMem3DMultisampleEXT == nullptr) return false;
+    if (av_gl.av_hook_glTextureStorageMem3DMultisampleEXT != nullptr && !av_gl.av_hook_glTextureStorageMem3DMultisampleEXT(av_gl.av_texture_user, texture, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset)) return true;
     av_gl.glTextureStorageMem3DMultisampleEXT(texture, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset);
     return true;
 }
@@ -36621,7 +38256,11 @@ static bool decode_glUniformui64vNV(const RealGl& av_gl, ::av::WireReader& av_r,
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -36732,7 +38371,11 @@ static bool decode_glProgramUniformui64vNV(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -37081,7 +38724,11 @@ static bool decode_glUniform1i64vNV(const RealGl& av_gl, ::av::WireReader& av_r,
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37128,7 +38775,11 @@ static bool decode_glUniform2i64vNV(const RealGl& av_gl, ::av::WireReader& av_r,
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37175,7 +38826,11 @@ static bool decode_glUniform3i64vNV(const RealGl& av_gl, ::av::WireReader& av_r,
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37222,7 +38877,11 @@ static bool decode_glUniform4i64vNV(const RealGl& av_gl, ::av::WireReader& av_r,
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37343,7 +39002,11 @@ static bool decode_glUniform1ui64vNV(const RealGl& av_gl, ::av::WireReader& av_r
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*1);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -37390,7 +39053,11 @@ static bool decode_glUniform2ui64vNV(const RealGl& av_gl, ::av::WireReader& av_r
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -37437,7 +39104,11 @@ static bool decode_glUniform3ui64vNV(const RealGl& av_gl, ::av::WireReader& av_r
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -37484,7 +39155,11 @@ static bool decode_glUniform4ui64vNV(const RealGl& av_gl, ::av::WireReader& av_r
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -37664,7 +39339,11 @@ static bool decode_glProgramUniform1i64vNV(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37714,7 +39393,11 @@ static bool decode_glProgramUniform2i64vNV(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37764,7 +39447,11 @@ static bool decode_glProgramUniform3i64vNV(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37814,7 +39501,11 @@ static bool decode_glProgramUniform4i64vNV(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint64EXT)), &value_needed)) return false;
@@ -37950,7 +39641,11 @@ static bool decode_glProgramUniform1ui64vNV(const RealGl& av_gl, ::av::WireReade
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -38000,7 +39695,11 @@ static bool decode_glProgramUniform2ui64vNV(const RealGl& av_gl, ::av::WireReade
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -38050,7 +39749,11 @@ static bool decode_glProgramUniform3ui64vNV(const RealGl& av_gl, ::av::WireReade
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -38100,7 +39803,11 @@ static bool decode_glProgramUniform4ui64vNV(const RealGl& av_gl, ::av::WireReade
             value = reinterpret_cast<const GLuint64EXT*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint64EXT)), &value_needed)) return false;
@@ -38677,6 +40384,11 @@ static bool decode_glTextureImage1DEXT(const RealGl& av_gl, ::av::WireReader& av
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -38757,6 +40469,12 @@ static bool decode_glTextureImage2DEXT(const RealGl& av_gl, ::av::WireReader& av
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -38831,6 +40549,11 @@ static bool decode_glTextureSubImage1DEXT(const RealGl& av_gl, ::av::WireReader&
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -38911,6 +40634,12 @@ static bool decode_glTextureSubImage2DEXT(const RealGl& av_gl, ::av::WireReader&
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -39396,6 +41125,13 @@ static bool decode_glTextureImage3DEXT(const RealGl& av_gl, ::av::WireReader& av
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -39482,6 +41218,13 @@ static bool decode_glTextureSubImage3DEXT(const RealGl& av_gl, ::av::WireReader&
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -40310,6 +42053,11 @@ static bool decode_glMultiTexImage1DEXT(const RealGl& av_gl, ::av::WireReader& a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -40390,6 +42138,12 @@ static bool decode_glMultiTexImage2DEXT(const RealGl& av_gl, ::av::WireReader& a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -40464,6 +42218,11 @@ static bool decode_glMultiTexSubImage1DEXT(const RealGl& av_gl, ::av::WireReader
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -40544,6 +42303,12 @@ static bool decode_glMultiTexSubImage2DEXT(const RealGl& av_gl, ::av::WireReader
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -41029,6 +42794,13 @@ static bool decode_glMultiTexImage3DEXT(const RealGl& av_gl, ::av::WireReader& a
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -41115,6 +42887,13 @@ static bool decode_glMultiTexSubImage3DEXT(const RealGl& av_gl, ::av::WireReader
             pixels = pixels_storage;
         }
     }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (width < 0) return av_refuse(0x0501);
+    if (height < 0) return av_refuse(0x0501);
+    if (depth < 0) return av_refuse(0x0501);
     if (pixels_is_offset) {
         if (!buffer_bound(av_gl, 0x88EF)) return false;
     } else if (pixels == nullptr) {
@@ -41473,7 +43252,11 @@ static bool decode_glCompressedTextureImage3DEXT(const RealGl& av_gl, ::av::Wire
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -41539,7 +43322,11 @@ static bool decode_glCompressedTextureImage2DEXT(const RealGl& av_gl, ::av::Wire
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -41602,7 +43389,11 @@ static bool decode_glCompressedTextureImage1DEXT(const RealGl& av_gl, ::av::Wire
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -41677,7 +43468,11 @@ static bool decode_glCompressedTextureSubImage3DEXT(const RealGl& av_gl, ::av::W
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -41746,7 +43541,11 @@ static bool decode_glCompressedTextureSubImage2DEXT(const RealGl& av_gl, ::av::W
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -41809,7 +43608,11 @@ static bool decode_glCompressedTextureSubImage1DEXT(const RealGl& av_gl, ::av::W
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -41875,7 +43678,10 @@ static bool decode_glGetCompressedTextureImageEXT(const RealGl& av_gl, ::av::Wir
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        return false;
+        GLint av_size = 0;
+        if (av_gl.glGetTextureLevelParameterivEXT == nullptr) return false;
+        av_gl.glGetTextureLevelParameterivEXT(texture, target, lod, 0x86A0, &av_size);
+        if (av_size < 0 || static_cast<uint64_t>(av_size) > static_cast<uint64_t>(img_bytes)) return false;
     }
     if (av_gl.glGetCompressedTextureImageEXT == nullptr) return false;
     void* img_packed = nullptr;
@@ -41949,7 +43755,11 @@ static bool decode_glCompressedMultiTexImage3DEXT(const RealGl& av_gl, ::av::Wir
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -42015,7 +43825,11 @@ static bool decode_glCompressedMultiTexImage2DEXT(const RealGl& av_gl, ::av::Wir
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -42078,7 +43892,11 @@ static bool decode_glCompressedMultiTexImage1DEXT(const RealGl& av_gl, ::av::Wir
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -42153,7 +43971,11 @@ static bool decode_glCompressedMultiTexSubImage3DEXT(const RealGl& av_gl, ::av::
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -42222,7 +44044,11 @@ static bool decode_glCompressedMultiTexSubImage2DEXT(const RealGl& av_gl, ::av::
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -42285,7 +44111,11 @@ static bool decode_glCompressedMultiTexSubImage1DEXT(const RealGl& av_gl, ::av::
             bits = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (imageSize < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (imageSize < 0) return av_refuse(0x0501);
     const uint64_t bits_elements = static_cast<uint64_t>(imageSize);
     uint64_t bits_needed = 0;
     if (__builtin_mul_overflow(bits_elements, static_cast<uint64_t>(sizeof(uint8_t)), &bits_needed)) return false;
@@ -42351,7 +44181,10 @@ static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& av_gl, ::av::Wi
         av_gl.glGetIntegerv(0x88ED, &av_bound);
         if (av_bound == 0) return false;
     } else {
-        return false;
+        GLint av_size = 0;
+        if (av_gl.glGetMultiTexLevelParameterivEXT == nullptr) return false;
+        av_gl.glGetMultiTexLevelParameterivEXT(texunit, target, lod, 0x86A0, &av_size);
+        if (av_size < 0 || static_cast<uint64_t>(av_size) > static_cast<uint64_t>(img_bytes)) return false;
     }
     if (av_gl.glGetCompressedMultiTexImageEXT == nullptr) return false;
     void* img_packed = nullptr;
@@ -42579,7 +44412,11 @@ static bool decode_glNamedBufferDataEXT(const RealGl& av_gl, ::av::WireReader& a
     GLenum usage{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       usage = static_cast<GLenum>(av_v); }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>((static_cast<int64_t>(size) < 0 ? 0 : static_cast<size_t>(static_cast<int64_t>(size))));
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -42629,7 +44466,11 @@ static bool decode_glNamedBufferSubDataEXT(const RealGl& av_gl, ::av::WireReader
             data = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>((static_cast<int64_t>(size) < 0 ? 0 : static_cast<size_t>(static_cast<int64_t>(size))));
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -42710,7 +44551,20 @@ static bool decode_glGetNamedBufferSubDataEXT(const RealGl& av_gl, ::av::WireRea
             data_bytes = static_cast<size_t>(av_bytes);
         }
     }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (data_answered) {
+            av_reply.write_varint(static_cast<uint64_t>(data_bytes));
+            static const uint8_t av_zeros[64] = {};
+            for (size_t av_left = data_bytes; av_left != 0;) {
+                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;
+                av_reply.write(av_zeros, av_n);
+                av_left -= av_n;
+            }
+        }
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>((static_cast<int64_t>(size) < 0 ? 0 : static_cast<size_t>(static_cast<int64_t>(size))));
     if (true) {
         uint64_t av_room = static_cast<uint64_t>(data_bytes / sizeof(uint8_t));
@@ -42933,7 +44787,11 @@ static bool decode_glProgramUniform1fvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -42983,7 +44841,11 @@ static bool decode_glProgramUniform2fvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43033,7 +44895,11 @@ static bool decode_glProgramUniform3fvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43083,7 +44949,11 @@ static bool decode_glProgramUniform4fvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43133,7 +45003,11 @@ static bool decode_glProgramUniform1ivEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -43183,7 +45057,11 @@ static bool decode_glProgramUniform2ivEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -43233,7 +45111,11 @@ static bool decode_glProgramUniform3ivEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -43283,7 +45165,11 @@ static bool decode_glProgramUniform4ivEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLint)), &value_needed)) return false;
@@ -43336,7 +45222,11 @@ static bool decode_glProgramUniformMatrix2fvEXT(const RealGl& av_gl, ::av::WireR
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43389,7 +45279,11 @@ static bool decode_glProgramUniformMatrix3fvEXT(const RealGl& av_gl, ::av::WireR
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*9);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43442,7 +45336,11 @@ static bool decode_glProgramUniformMatrix4fvEXT(const RealGl& av_gl, ::av::WireR
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*16);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43495,7 +45393,11 @@ static bool decode_glProgramUniformMatrix2x3fvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43548,7 +45450,11 @@ static bool decode_glProgramUniformMatrix3x2fvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43601,7 +45507,11 @@ static bool decode_glProgramUniformMatrix2x4fvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43654,7 +45564,11 @@ static bool decode_glProgramUniformMatrix4x2fvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43707,7 +45621,11 @@ static bool decode_glProgramUniformMatrix3x4fvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -43760,7 +45678,11 @@ static bool decode_glProgramUniformMatrix4x3fvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLfloat)), &value_needed)) return false;
@@ -44296,7 +46218,11 @@ static bool decode_glProgramUniform1uivEXT(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -44346,7 +46272,11 @@ static bool decode_glProgramUniform2uivEXT(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -44396,7 +46326,11 @@ static bool decode_glProgramUniform3uivEXT(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -44446,7 +46380,11 @@ static bool decode_glProgramUniform4uivEXT(const RealGl& av_gl, ::av::WireReader
             value = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLuint)), &value_needed)) return false;
@@ -44499,7 +46437,11 @@ static bool decode_glNamedProgramLocalParameters4fvEXT(const RealGl& av_gl, ::av
             params = reinterpret_cast<const GLfloat*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t params_needed = 0;
     if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLfloat)), &params_needed)) return false;
@@ -44630,7 +46572,11 @@ static bool decode_glNamedProgramLocalParametersI4ivEXT(const RealGl& av_gl, ::a
             params = reinterpret_cast<const GLint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t params_needed = 0;
     if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLint)), &params_needed)) return false;
@@ -44761,7 +46707,11 @@ static bool decode_glNamedProgramLocalParametersI4uivEXT(const RealGl& av_gl, ::
             params = reinterpret_cast<const GLuint*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t params_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t params_needed = 0;
     if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLuint)), &params_needed)) return false;
@@ -45025,7 +46975,11 @@ static bool decode_glNamedProgramStringEXT(const RealGl& av_gl, ::av::WireReader
             string = reinterpret_cast<const void*>(av_run);
         }
     }
-    if (len < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (len < 0) return av_refuse(0x0501);
     const uint64_t string_elements = static_cast<uint64_t>(len);
     uint64_t string_needed = 0;
     if (__builtin_mul_overflow(string_elements, static_cast<uint64_t>(sizeof(uint8_t)), &string_needed)) return false;
@@ -45720,7 +47674,11 @@ static bool decode_glFramebufferDrawBuffersEXT(const RealGl& av_gl, ::av::WireRe
             bufs = reinterpret_cast<const GLenum*>(av_run);
         }
     }
-    if (n < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
     const uint64_t bufs_elements = static_cast<uint64_t>(n);
     uint64_t bufs_needed = 0;
     if (__builtin_mul_overflow(bufs_elements, static_cast<uint64_t>(sizeof(GLenum)), &bufs_needed)) return false;
@@ -46382,7 +48340,11 @@ static bool decode_glNamedBufferStorageEXT(const RealGl& av_gl, ::av::WireReader
     GLbitfield flags{};
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       flags = static_cast<GLbitfield>(av_v); }
-    if (size < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (size < 0) return av_refuse(0x0501);
     const uint64_t data_elements = static_cast<uint64_t>(size);
     uint64_t data_needed = 0;
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
@@ -46703,7 +48665,11 @@ static bool decode_glProgramUniform1dvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(count);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -46753,7 +48719,11 @@ static bool decode_glProgramUniform2dvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*2);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -46803,7 +48773,11 @@ static bool decode_glProgramUniform3dvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*3);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -46853,7 +48827,11 @@ static bool decode_glProgramUniform4dvEXT(const RealGl& av_gl, ::av::WireReader&
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -46906,7 +48884,11 @@ static bool decode_glProgramUniformMatrix2dvEXT(const RealGl& av_gl, ::av::WireR
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*4);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -46959,7 +48941,11 @@ static bool decode_glProgramUniformMatrix3dvEXT(const RealGl& av_gl, ::av::WireR
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*9);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47012,7 +48998,11 @@ static bool decode_glProgramUniformMatrix4dvEXT(const RealGl& av_gl, ::av::WireR
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*16);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47065,7 +49055,11 @@ static bool decode_glProgramUniformMatrix2x3dvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47118,7 +49112,11 @@ static bool decode_glProgramUniformMatrix2x4dvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47171,7 +49169,11 @@ static bool decode_glProgramUniformMatrix3x2dvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*6);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47224,7 +49226,11 @@ static bool decode_glProgramUniformMatrix3x4dvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47277,7 +49283,11 @@ static bool decode_glProgramUniformMatrix4x2dvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*8);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;
@@ -47330,7 +49340,11 @@ static bool decode_glProgramUniformMatrix4x3dvEXT(const RealGl& av_gl, ::av::Wir
             value = reinterpret_cast<const GLdouble*>(av_run);
         }
     }
-    if (count < 0) return false;
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (count < 0) return av_refuse(0x0501);
     const uint64_t value_elements = static_cast<uint64_t>(static_cast<int64_t>(count)*12);
     uint64_t value_needed = 0;
     if (__builtin_mul_overflow(value_elements, static_cast<uint64_t>(sizeof(GLdouble)), &value_needed)) return false;

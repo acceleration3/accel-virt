@@ -1,7 +1,6 @@
 #ifndef AV_GL_BUFFER_SLICES_HPP
 #define AV_GL_BUFFER_SLICES_HPP
 
-#include "executor/opengl/gl_memory_objects.hpp"
 #include "proto/generated/glmem/glmem_dispatch_server.h"
 #include "proto/generated/opengl/gl_real_dispatch.h"
 
@@ -9,15 +8,15 @@
 
 namespace av {
 
-class BlockSource;
 class DriverLog;
 class GlBatchProgress;
 class GlErrorQueue;
 class GlHostImport;
+class GlMemoryObjects;
 
 class GlBufferSlices final : public glmemproto::ServerDispatch {
 public:
-    GlBufferSlices(BlockSource &blocks, glproto::RealGl &gl, GlHostImport &import, const GlBatchProgress &progress,
+    GlBufferSlices(GlMemoryObjects &memories, glproto::RealGl &gl, GlHostImport &import, const GlBatchProgress &progress,
                    GlErrorQueue &errors, const GuestBytes &guest, DriverLog &lines);
     GlBufferSlices(const GlBufferSlices &) = delete;
     GlBufferSlices &operator=(const GlBufferSlices &) = delete;
@@ -26,11 +25,6 @@ public:
 
     bool knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
-
-    [[nodiscard]] Status add_memory(uint32_t name, uint64_t size);
-    void                 retire_memory(uint32_t name);
-    void                 reclaim();
-    void                 destroy_all();
 
     bool on_QueryBufferSlicesGL(uint32_t &supported) override;
     bool on_PlaceBufferSlice(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes,
@@ -41,11 +35,6 @@ public:
     bool on_named_buffer_storage_mem(GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset);
     bool on_delete_memory_objects(GLsizei count, const GLuint *memories);
     bool on_delete_buffers(GLsizei count, const GLuint *buffers);
-
-    uint32_t count() const;
-    uint32_t placed() const;
-
-    bool invariants_hold() const;
 
 private:
     struct TargetBinding {
@@ -70,7 +59,7 @@ private:
     const GlBatchProgress &progress_;
     GlErrorQueue    &errors_;
     DriverLog       &lines_;
-    GlMemoryObjects  memories_;
+    GlMemoryObjects &memories_;
 };
 
 }

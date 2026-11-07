@@ -26,6 +26,7 @@ constexpr std::uint64_t floating = 0x1406u;
 constexpr std::uint64_t pack_alignment = 0x0D05u;
 constexpr std::uint64_t pack_skip_rows = 0x0D03u;
 constexpr std::uint64_t pixel_pack_buffer = 0x88EBu;
+constexpr std::uint32_t invalid_value = 0x0501u;
 constexpr std::uint8_t  inline_bytes = 1u;
 constexpr std::uint8_t  buffer_offset = 2u;
 
@@ -107,11 +108,20 @@ TEST(opengl_dispatch, the_pack_store_counts_toward_what_a_read_needs)
 TEST(opengl_dispatch, a_read_it_cannot_size_is_refused_and_an_empty_one_runs)
 { GlSession session;
   CHECK(!session.read(0x7FFFFFFF, 0x7FFFFFFF, rgba, floating, 64u));
-  CHECK(!session.read(-1, 4, rgba, unsigned_byte, 64u));
   CHECK(!session.read(4, 4, 0x1A00u, unsigned_byte, 64u));
   CHECK(!session.read(4, 4, rgba, 0x140Au, 1024u));
   CHECK_EQ(session.gl().reads(), 0u);
   CHECK(session.read(0, 4, rgba, unsigned_byte, 0u));
+  CHECK_EQ(session.gl().reads(), 1u); }
+
+TEST(opengl_dispatch, a_read_of_a_negative_extent_is_an_invalid_value_the_context_survives)
+{ GlSession session;
+  CHECK(session.read(-1, 4, rgba, unsigned_byte, 64u));
+  CHECK(session.read(4, -1, rgba, unsigned_byte, 64u));
+  CHECK_EQ(session.gl().errors(), 2u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
+  CHECK_EQ(session.gl().reads(), 0u);
+  CHECK(session.read(4, 4, rgba, unsigned_byte, 64u));
   CHECK_EQ(session.gl().reads(), 1u); }
 
 TEST(opengl_dispatch, a_host_without_state_queries_reads_nothing_inline)
@@ -151,9 +161,11 @@ TEST(opengl_dispatch, a_bounded_read_whose_bound_exceeds_its_room_is_refused)
       frame.write_varint(static_cast<std::uint64_t>(item.bound));
       frame.write_pod<std::uint8_t>(inline_bytes);
       frame.write_varint(item.room);
-      CHECK_EQ(session.run(av::glproto::kCmd_glReadnPixels, frame, bytes), item.runs);
+      CHECK_EQ(session.run(av::glproto::kCmd_glReadnPixels, frame, bytes), item.runs || item.bound < 0);
       if (item.runs) ran++;
   }
+  CHECK_EQ(session.gl().errors(), 1u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
   CHECK_EQ(session.gl().reads(), ran);
   CHECK_EQ(session.gl().strays(), 0u); }
 
@@ -175,16 +187,25 @@ TEST(opengl_dispatch, a_texture_read_is_sized_by_the_level_the_driver_reports)
   CHECK_EQ(session.gl().reads(), 1u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-TEST(opengl_dispatch, a_compressed_read_goes_only_to_a_buffer_and_a_query_needs_one_value)
+TEST(opengl_dispatch, a_compressed_read_into_client_memory_is_sized_by_the_level_image_size)
+{ GlSession session;
+  session.gl().set_compressed_size(256);
+  const std::uint64_t rooms[] = {255u, 256u, 4096u};
+  for (const std::uint64_t room : rooms) {
+      std::uint8_t bytes[frame_bytes];
+      WireWriter frame(bytes, sizeof bytes);
+      frame.write_varint(0x0DE1u);
+      frame.write_varint(0u);
+      frame.write_pod<std::uint8_t>(inline_bytes);
+      frame.write_varint(room);
+      CHECK_EQ(session.run(av::glproto::kCmd_glGetCompressedTexImage, frame, bytes), room >= 256u);
+  }
+  CHECK_EQ(session.gl().reads(), 2u);
+  CHECK_EQ(session.gl().strays(), 0u); }
+
+TEST(opengl_dispatch, a_query_needs_one_value)
 { GlSession session;
   std::uint8_t bytes[frame_bytes];
-  { WireWriter frame(bytes, sizeof bytes);
-    frame.write_varint(0x0DE1u);
-    frame.write_varint(0u);
-    frame.write_pod<std::uint8_t>(inline_bytes);
-    frame.write_varint(4096u);
-    CHECK(!session.run(av::glproto::kCmd_glGetCompressedTexImage, frame, bytes)); }
-  CHECK_EQ(session.gl().reads(), 0u);
   const std::uint64_t rooms[] = {3u, 4u};
   for (const std::uint64_t room : rooms) {
       WireWriter frame(bytes, sizeof bytes);
@@ -306,9 +327,23 @@ TEST(opengl_dispatch, a_count_sized_output_gets_room_for_the_count_the_driver_wr
   CHECK(send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(8u).none()));
   CHECK_EQ(session.answered(), 0u);
   CHECK_EQ(session.gl().calls(), 2u);
-  CHECK(!send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(static_cast<std::uint32_t>(-1)).room(4u)));
+  CHECK(send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(static_cast<std::uint32_t>(-1)).room(4u)));
+  CHECK_EQ(session.answered(), 1u + 4u);
+  CHECK_EQ(session.gl().errors(), 1u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
   CHECK(!send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(1u << 28).room(4u)));
   CHECK_EQ(session.gl().calls(), 2u);
+  CHECK_EQ(session.gl().strays(), 0u); }
+
+TEST(opengl_dispatch, a_negative_count_generates_nothing_and_answers_the_room_it_was_given)
+{ GlSession session;
+  CHECK(send(session, av::glproto::kCmd_glGenTextures, Frame().varint(static_cast<std::uint32_t>(-1)).room(4u)));
+  CHECK_EQ(session.answered(), 1u + 4u);
+  CHECK_EQ(session.gl().errors(), 1u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
+  CHECK_EQ(session.gl().calls(), 0u);
+  CHECK(send(session, av::glproto::kCmd_glGenTextures, Frame().varint(1u).room(4u)));
+  CHECK_EQ(session.gl().errors(), 1u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
 TEST(opengl_dispatch, a_string_output_gets_its_stated_room_and_is_never_null)
@@ -317,7 +352,9 @@ TEST(opengl_dispatch, a_string_output_gets_its_stated_room_and_is_never_null)
   CHECK(send(session, log, Frame().varint(1u).varint(256u).room(4u).room(8u)));
   CHECK(send(session, log, Frame().varint(1u).varint(256u).none().none()));
   CHECK_EQ(session.gl().calls(), 2u);
-  CHECK(!send(session, log, Frame().varint(1u).varint(static_cast<std::uint32_t>(-1)).none().room(8u)));
+  CHECK(send(session, log, Frame().varint(1u).varint(static_cast<std::uint32_t>(-1)).none().room(8u)));
+  CHECK_EQ(session.gl().errors(), 1u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
@@ -333,10 +370,11 @@ TEST(opengl_dispatch, an_input_array_shorter_than_its_count_or_null_is_refused)
       frame.varint(0u).varint(static_cast<std::uint64_t>(static_cast<std::uint32_t>(item.count)));
       if (item.present) frame.run(item.bytes);
       else frame.none();
-      CHECK_EQ(send(session, uniform, frame), item.runs);
+      CHECK_EQ(send(session, uniform, frame), item.runs || item.count < 0);
       if (item.runs) ran++;
   }
   CHECK_EQ(session.gl().calls(), ran);
+  CHECK_EQ(session.gl().errors(), 1u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
 TEST(opengl_dispatch, a_parameter_list_is_held_to_what_its_enum_takes)
@@ -361,7 +399,8 @@ TEST(opengl_dispatch, an_upload_is_held_to_the_unpack_store_and_an_offset_to_a_b
   CHECK(send(session, sub, upload(false, 3, 4).run(89u)));
   CHECK(!send(session, sub, upload(false, 3, 4).none()));
   CHECK(!send(session, sub, upload(false, 3, 4).offset(0x7F0000001000u)));
-  CHECK(!send(session, sub, upload(false, -1, 4).run(89u)));
+  CHECK(send(session, sub, upload(false, -1, 4).run(89u)));
+  CHECK_EQ(session.gl().errors(), 1u);
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK(send(session, av::glproto::kCmd_glTexImage2D, upload(true, 3, 4).none()));
   session.set(av::glproto::kCmd_glBindBuffer, pixel_unpack_buffer, 7u);
@@ -380,7 +419,8 @@ TEST(opengl_dispatch, a_compressed_upload_is_held_to_its_size_and_its_start)
       return frame;
   };
   CHECK(!send(session, compressed, image(64).run(63u)));
-  CHECK(!send(session, compressed, image(-1).run(64u)));
+  CHECK(send(session, compressed, image(-1).run(64u)));
+  CHECK_EQ(session.gl().errors(), 1u);
   CHECK(send(session, compressed, image(64).run(64u)));
   CHECK(send(session, compressed, image(64).none()));
   session.set(av::glproto::kCmd_glPixelStorei, unpack_skip_rows, 1u);
@@ -421,7 +461,10 @@ TEST(opengl_dispatch, call_lists_is_held_to_its_count_times_its_type)
 { GlSession session;
   const std::uint32_t lists = av::glproto::kCmd_glCallLists;
   CHECK(!send(session, lists, Frame().varint(4u).varint(unsigned_short).run(7u)));
-  CHECK(!send(session, lists, Frame().varint(static_cast<std::uint32_t>(-1)).varint(unsigned_short).run(8u)));
+  CHECK_EQ(session.gl().errors(), 0u);
+  CHECK(send(session, lists, Frame().varint(static_cast<std::uint32_t>(-1)).varint(unsigned_short).run(8u)));
+  CHECK_EQ(session.gl().errors(), 1u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
   CHECK(send(session, lists, Frame().varint(4u).varint(unsigned_short).run(8u)));
   constexpr std::uint64_t three_bytes = 0x1408u;
   CHECK(!send(session, lists, Frame().varint(4u).varint(three_bytes).run(12u)));

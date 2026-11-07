@@ -3,6 +3,7 @@
 
 #include <fcntl.h>
 #include <sys/eventfd.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 using av::OwnedFd;
@@ -66,3 +67,18 @@ TEST(owned_fd_copy_to, duplicates_into_another_owner_and_a_held_nothing_copies_n
   CHECK(!other.held());
   CHECK(!open_descriptor(kept));
   CHECK(original.held()); }
+
+TEST(owned_fd_extent, is_the_size_the_descriptor_ends_at_and_leaves_its_position_at_the_start)
+{ const int fd = memfd_create("extent", 0);
+  CHECK(fd >= 0);
+  CHECK_EQ(ftruncate(fd, 12345), 0);
+  CHECK_EQ(lseek(fd, 100, SEEK_SET), 100);
+  OwnedFd owner(fd);
+  CHECK_EQ(owner.extent(), 12345u);
+  CHECK_EQ(lseek(fd, 0, SEEK_CUR), 0); }
+
+TEST(owned_fd_extent, is_nothing_for_an_empty_file_or_no_descriptor)
+{ OwnedFd none;
+  CHECK_EQ(none.extent(), 0u);
+  OwnedFd empty(memfd_create("empty", 0));
+  CHECK_EQ(empty.extent(), 0u); }

@@ -37,6 +37,7 @@ constexpr GLenum current_vertex_attrib = 0x8626u;
 constexpr GLenum texture_width = 0x1000u;
 constexpr GLenum texture_height = 0x1001u;
 constexpr GLenum texture_depth = 0x8071u;
+constexpr GLenum texture_compressed_image_size = 0x86A0u;
 constexpr GLenum texture_border_color = 0x1004u;
 constexpr GLenum uniform_block_active_uniforms = 0x8A42u;
 constexpr GLenum uniform_block_active_uniform_indices = 0x8A43u;
@@ -75,7 +76,14 @@ void get_tex_image(GLenum, GLint, GLenum format, GLenum type, void *pixels)
     live->read_pixels(extent[0], extent[1], extent[2], format, type, pixels);
 }
 
-void get_compressed(GLenum, GLint, void *pixels) { live->read_bounded(1u, pixels); }
+void get_compressed(GLenum, GLint, void *pixels)
+{
+    GLint size = 0;
+    live->level_parameter(texture_compressed_image_size, &size);
+    live->read_bounded(static_cast<std::size_t>(size), pixels);
+}
+
+void note_error(void *, std::uint32_t error) { live->record_error(error); }
 void get_query(GLuint, GLenum, GLint *value) { live->read_bounded(sizeof *value, value); }
 void gen_buffers(GLsizei n, GLuint *names) { live->generate(n, names); }
 void shader_info_log(GLuint, GLsizei room, GLsizei *length, GLchar *log) { live->info_log(room, length, log); }
@@ -190,7 +198,7 @@ RecordingGl::RecordingGl(const std::uint8_t *block, const WireArena &arena)
       unpack_buffer_(0u), array_buffer_(0u), element_buffer_(0u), indirect_buffer_(0u),
       parameter_buffer_(0u), attribute_enabled_{}, attribute_buffer_{},
       vertex_array_enabled_(false), vertex_array_buffer_(0u), texture_array_enabled_{},
-      texture_array_buffer_{}, client_unit_(0), map_target_(0u), map_order_(0), level_extent_{},
+      texture_array_buffer_{}, client_unit_(0), map_target_(0u), map_order_(0), level_extent_{}, compressed_size_(0), errors_(0u), last_error_(0u),
       reads_(0u), calls_(0u), strays_(0u), capability_queries_(0u)
 {
     live = this;
@@ -205,6 +213,7 @@ RecordingGl::RecordingGl(const std::uint8_t *block, const WireArena &arena)
     table_.glGetCompressedTexImage = get_compressed;
     table_.glGetQueryObjectiv = get_query;
     table_.glGenBuffers = gen_buffers;
+    table_.glGenTextures = gen_buffers;
     table_.glGetShaderInfoLog = shader_info_log;
     table_.glUniform4fv = uniform4fv;
     table_.glTexParameteriv = tex_parameteriv;
@@ -237,6 +246,7 @@ RecordingGl::RecordingGl(const std::uint8_t *block, const WireArena &arena)
     table_.glSelectBuffer = select_buffer;
     table_.glGetPolygonStipple = get_polygon_stipple;
     table_.glBitmap = bitmap_entry;
+    table_.av_record_error = note_error;
 }
 
 RecordingGl::~RecordingGl()
@@ -252,6 +262,17 @@ void RecordingGl::set_level_extent(GLint width, GLint height, GLint depth)
     level_extent_[1] = height;
     level_extent_[2] = depth;
 }
+
+void RecordingGl::set_compressed_size(GLint bytes) { compressed_size_ = bytes; }
+
+void RecordingGl::record_error(GLenum error)
+{
+    errors_++;
+    last_error_ = error;
+}
+
+std::uint32_t RecordingGl::errors() const { return errors_; }
+GLenum RecordingGl::last_error() const { return last_error_; }
 
 void RecordingGl::forget_state_queries() { table_.glGetIntegerv = nullptr; }
 void RecordingGl::be_core() { table_.av_fixed_function = false; }
@@ -358,6 +379,7 @@ void RecordingGl::level_parameter(GLenum pname, GLint *value) const
     case texture_width: *value = level_extent_[0]; break;
     case texture_height: *value = level_extent_[1]; break;
     case texture_depth: *value = level_extent_[2]; break;
+    case texture_compressed_image_size: *value = compressed_size_; break;
     default: *value = 0; break;
     }
 }

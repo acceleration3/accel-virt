@@ -58,6 +58,10 @@ struct RealGl {
     bool av_fixed_function = true;
 
     void* av_hook_user = nullptr;
+    void* av_texture_user = nullptr;
+
+    void (*av_record_error)(void*, uint32_t) = nullptr;
+    void* av_error_user = nullptr;
 
     // The vertex array objects a draw found reading only from
     // buffers (arrays_verified). Mutable because dispatch is handed
@@ -1463,6 +1467,20 @@ struct RealGl {
     bool (*av_hook_glNamedBufferStorageMemEXT)(void*, GLuint, GLsizeiptr, GLuint, GLuint64) = nullptr;
     bool (*av_hook_glDeleteMemoryObjectsEXT)(void*, GLsizei, const GLuint*) = nullptr;
     bool (*av_hook_glDeleteBuffers)(void*, GLsizei, const GLuint*) = nullptr;
+    bool (*av_hook_glTexStorageMem1DEXT)(void*, GLenum, GLsizei, GLenum, GLsizei, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTexStorageMem2DEXT)(void*, GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTexStorageMem2DMultisampleEXT)(void*, GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLboolean, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTexStorageMem3DEXT)(void*, GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTexStorageMem3DMultisampleEXT)(void*, GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLboolean, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTextureStorageMem1DEXT)(void*, GLuint, GLsizei, GLenum, GLsizei, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTextureStorageMem2DEXT)(void*, GLuint, GLsizei, GLenum, GLsizei, GLsizei, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTextureStorageMem2DMultisampleEXT)(void*, GLuint, GLsizei, GLenum, GLsizei, GLsizei, GLboolean, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTextureStorageMem3DEXT)(void*, GLuint, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glTextureStorageMem3DMultisampleEXT)(void*, GLuint, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLboolean, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glDeleteTextures)(void*, GLsizei, const GLuint*) = nullptr;
+    bool (*av_hook_glTextureView)(void*, GLuint, GLenum, GLuint, GLenum, GLuint, GLuint, GLuint, GLuint) = nullptr;
+    void (*av_after_glCreateTextures)(void*, GLenum, GLsizei, GLuint*) = nullptr;
+    void (*av_after_glBindTexture)(void*, GLenum, GLuint) = nullptr;
 };
 
 // Fills the table. `load` is the platform's resolver:

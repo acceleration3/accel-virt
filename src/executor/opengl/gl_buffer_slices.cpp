@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
+#include "executor/opengl/gl_memory_objects.hpp"
 #include "executor/shim/gl_host_import.hpp"
 #include "proto/generated/glmem/glmem_command_names.h"
 
@@ -42,11 +43,11 @@ bool hook_delete_buffers(void *user, GLsizei count, const GLuint *buffers)
 
 }
 
-GlBufferSlices::GlBufferSlices(BlockSource &blocks, glproto::RealGl &gl, GlHostImport &import,
+GlBufferSlices::GlBufferSlices(GlMemoryObjects &memories, glproto::RealGl &gl, GlHostImport &import,
                                const GlBatchProgress &progress, GlErrorQueue &errors, const GuestBytes &guest,
                                DriverLog &lines)
     : glmemproto::ServerDispatch(guest), gl_(gl), import_(import), progress_(progress), errors_(errors),
-      lines_(lines), memories_(blocks, progress)
+      lines_(lines), memories_(memories)
 {
     AV_SCOPE("GlBufferSlices::GlBufferSlices");
 }
@@ -73,30 +74,6 @@ bool GlBufferSlices::run(uint32_t command_id, WireReader &payload, WireWriter &r
     if (glmemproto::dispatch_command(*this, command_id, payload, reply, arena)) return true;
     LogLine(lines_).text(glmemproto::command_name(command_id)).text(" could not run").write();
     return false;
-}
-
-Status GlBufferSlices::add_memory(uint32_t name, uint64_t size)
-{
-    AV_SCOPE("GlBufferSlices::add_memory");
-    return memories_.add(name, size);
-}
-
-void GlBufferSlices::retire_memory(uint32_t name)
-{
-    AV_SCOPE("GlBufferSlices::retire_memory");
-    memories_.retire(name);
-}
-
-void GlBufferSlices::reclaim()
-{
-    AV_SCOPE("GlBufferSlices::reclaim");
-    memories_.reclaim(import_);
-}
-
-void GlBufferSlices::destroy_all()
-{
-    AV_SCOPE("GlBufferSlices::destroy_all");
-    memories_.destroy_all(import_);
 }
 
 bool GlBufferSlices::on_QueryBufferSlicesGL(uint32_t &supported)
@@ -219,24 +196,6 @@ uint32_t GlBufferSlices::store(uint32_t buffer, uint64_t bytes, uint32_t memory,
     if (error != 0u) return error;
     const Status placed = memories_.place(buffer, memory, offset, bytes);
     return placed == Status::ok ? 0u : gl_out_of_memory;
-}
-
-uint32_t GlBufferSlices::count() const
-{
-    AV_SCOPE("GlBufferSlices::count");
-    return memories_.count();
-}
-
-uint32_t GlBufferSlices::placed() const
-{
-    AV_SCOPE("GlBufferSlices::placed");
-    return memories_.placed();
-}
-
-bool GlBufferSlices::invariants_hold() const
-{
-    AV_SCOPE("GlBufferSlices::invariants_hold");
-    return memories_.invariants_hold();
 }
 
 }

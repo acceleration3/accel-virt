@@ -1,6 +1,8 @@
 #ifndef AV_GL_NATIVE_FENCES_HPP
 #define AV_GL_NATIVE_FENCES_HPP
 
+#include "executor/shim/egl_extensions.hpp"
+
 namespace av {
 
 class GlContext;
@@ -18,9 +20,7 @@ public:
     [[nodiscard]] int make() const;
 
 private:
-    bool lists(const char *wanted) const;
-
-    const char *extensions_;
+    EglExtensions extensions_;
     void *display_;
     void *(*create_)(void *, unsigned, const int *);
     unsigned (*destroy_)(void *, void *);

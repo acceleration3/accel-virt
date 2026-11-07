@@ -105,6 +105,12 @@ void unpack_blob(void *user)
     static_cast<OpenGlBackend *>(user)->unpack();
 }
 
+void record_invalid(void *user, uint32_t error)
+{
+    AV_SCOPE("record_invalid");
+    static_cast<OpenGlBackend *>(user)->record_error(error);
+}
+
 }
 
 OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
@@ -113,11 +119,13 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), slices_(blocks, gl_, import_, progress_, pending_, guest_, lines), guest_(), region_(guest_, lines), published_(guest_), errors_(),
+    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
+      textures_(blocks, gl_, memories_, images_, pending_), guest_(), region_(guest_, lines), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
       current_(false), poll_failure_logged_(false), lines_(lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
+    import_.attach(images_);
 }
 
 const GlContext &OpenGlBackend::context() const
@@ -136,6 +144,7 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
     install_hooks();
     gl_.av_fixed_function = granted_fixed_function();
     import_.configure(context_);
+    images_.configure(context_);
     natives_.configure(context_);
     buffers_.configure(context_, import_);
     return true;
@@ -152,7 +161,10 @@ void OpenGlBackend::install_hooks()
     gl_.av_pack_blob = pack_blob;
     gl_.av_unpack_blob = unpack_blob;
     gl_.av_blob_user = this;
+    gl_.av_record_error = record_invalid;
+    gl_.av_error_user = this;
     slices_.install();
+    textures_.install();
 }
 
 bool OpenGlBackend::granted_fixed_function()
@@ -172,7 +184,7 @@ void OpenGlBackend::drain()
     if (gl_.glFinish == nullptr || !context_.make_current()) return;
     gl_.glFinish();
     static_cast<void>(progress_.settle());
-    slices_.reclaim();
+    memories_.reclaim(import_);
 }
 
 void OpenGlBackend::shut_down()
@@ -183,7 +195,7 @@ void OpenGlBackend::shut_down()
         pack_.release();
         pack_.abandon_all();
         buffers_.give_back();
-        slices_.destroy_all();
+        memories_.destroy_all(import_);
         import_.give_back();
         progress_.release();
         void *fence = nullptr;
@@ -194,6 +206,7 @@ void OpenGlBackend::shut_down()
         void *fence = nullptr;
         while (fences_.take_any(fence)) fence = nullptr;
     }
+    images_.give_back();
     natives_.give_back();
     wake_.unbind();
     context_.close();
@@ -245,7 +258,7 @@ bool OpenGlBackend::poll()
         return true;
     }
     static_cast<void>(progress_.settle());
-    slices_.reclaim();
+    memories_.reclaim(import_);
     const bool unwatched = progress_.polled();
     if (unwatched) wake_.retry_later();
     else wake_.settled();
@@ -271,7 +284,7 @@ void OpenGlBackend::end_batch()
     if (current_ && context_.make_current()) {
         publish_errors();
         progress_.fence();
-        slices_.reclaim();
+        memories_.reclaim(import_);
         pack_.sweep();
     }
     current_ = false;
@@ -320,13 +333,19 @@ bool OpenGlBackend::lend(const SourceMemory &memory, uint64_t &handle)
         LogLine(lines_).text("no memory object over ").number(memory.size()).text(" lent bytes").write();
         return false;
     }
-    if (slices_.add_memory(name, memory.size()) != Status::ok) {
+    if (memories_.add(name, memory.size()) != Status::ok) {
         import_.delete_memory(name);
         LogLine(lines_).text("no room to track the memory object over ").number(memory.size()).text(" lent bytes").write();
         return false;
     }
     handle = name;
     return true;
+}
+
+void OpenGlBackend::record_error(uint32_t error)
+{
+    AV_SCOPE("OpenGlBackend::record_error");
+    pending_.record(error);
 }
 
 bool OpenGlBackend::pack(uint64_t offset, uint64_t bytes, void *&packed)
@@ -344,8 +363,8 @@ void OpenGlBackend::unpack()
 void OpenGlBackend::abandon(const SourceMemory &, uint64_t handle)
 {
     AV_SCOPE("OpenGlBackend::abandon");
-    slices_.retire_memory(static_cast<uint32_t>(handle));
-    slices_.reclaim();
+    memories_.retire(static_cast<uint32_t>(handle));
+    memories_.reclaim(import_);
 }
 
 void OpenGlBackend::unbind_arena(const SourceMemory &memory)
@@ -426,18 +445,22 @@ bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenGlBackend::import_object");
-    static_cast<void>(shape);
     wire_handle = 0u;
     detail = 0u;
     if (fd < 0 || into != 0u) return false;
     uint32_t name = 0u;
     if (kind == AV_SHARED_MEMORY) {
-        if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || size == 0u || !import_.import_dedicated_memory(fd, size, name))
-            return false;
-        if (slices_.add_memory(name, size) != Status::ok) {
+        if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || size == 0u) return false;
+        OwnedFd probe;
+        if (!probe.hold_copy(fd)) return false;
+        const uint64_t real = probe.extent();
+        const uint64_t bytes = real < size ? real : size;
+        if (bytes == 0u || !import_.import_dedicated_memory(fd, bytes, name)) return false;
+        if (memories_.add(name, bytes) != Status::ok) {
             import_.delete_memory(name);
             return false;
         }
+        if (images_.imports_images() && shape.described()) static_cast<void>(images_.import(name, fd, shape));
     } else if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         if (handle_kind != AV_SHARED_HANDLE_OPAQUE_FD || !import_.import_semaphore(fd, name)) return false;
     } else {
@@ -457,8 +480,8 @@ void OpenGlBackend::destroy_made(uint32_t kind, uint32_t name)
 {
     AV_SCOPE("OpenGlBackend::destroy_made");
     if (kind == AV_SHARED_MEMORY) {
-        slices_.retire_memory(name);
-        slices_.reclaim();
+        memories_.retire(name);
+        memories_.reclaim(import_);
         return;
     }
     import_.delete_semaphore(name);

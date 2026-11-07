@@ -57,6 +57,14 @@ bool OwnedFd::held() const
     return fd_ >= 0;
 }
 
+uint64_t OwnedFd::extent() const
+{
+    AV_SCOPE("OwnedFd::extent");
+    const off_t end = lseek(fd_, 0, SEEK_END);
+    static_cast<void>(lseek(fd_, 0, SEEK_SET));
+    return end > 0 ? static_cast<uint64_t>(end) : 0u;
+}
+
 int OwnedFd::take()
 {
     AV_SCOPE("OwnedFd::take");
