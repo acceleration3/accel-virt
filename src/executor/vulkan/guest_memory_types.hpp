@@ -18,6 +18,7 @@ public:
     void     learn(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed);
     void     properties(VkPhysicalDeviceMemoryProperties &answer) const;
     uint32_t host_type(uint32_t guest) const;
+    uint32_t heap_of(uint32_t guest) const;
     uint32_t source_type(uint32_t guest) const;
     uint32_t guest_bits(uint32_t host_bits) const;
     uint32_t unmapped(uint32_t guest_bits) const;

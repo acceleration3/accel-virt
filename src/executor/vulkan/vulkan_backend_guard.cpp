@@ -69,6 +69,7 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
         return;
     case VulkanDestroyKind::memory:
         RealVulkanDispatch::on_vkFreeMemory(made_by, reinterpret_cast<VkDeviceMemory>(handle), nullptr);
+        vram_.release(handle);
         return;
     case VulkanDestroyKind::acceleration_structure:
         RealVulkanDispatch::on_vkDestroyAccelerationStructureKHR(made_by, reinterpret_cast<VkAccelerationStructureKHR>(handle),

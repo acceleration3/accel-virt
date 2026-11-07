@@ -59,7 +59,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
-      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), progress_(),
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), vram_(blocks), progress_(),
       guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
@@ -449,10 +449,16 @@ void VulkanBackend::learn_types(VkPhysicalDevice physical)
     AV_SCOPE("VulkanBackend::learn_types");
     if (types_learnt_) return;
     types_learnt_ = true;
-    if (source_ != nullptr && source_->vulkan_types(types_)) return;
+    VkPhysicalDeviceMemoryProperties learnt = {};
+    if (source_ != nullptr && source_->vulkan_types(types_)) {
+        types_.properties(learnt);
+        vram_.learn(learnt);
+        return;
+    }
     VkPhysicalDeviceMemoryProperties host = {};
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physical, &host);
     types_.learn(host, 0u);
+    vram_.learn(host);
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
@@ -461,6 +467,7 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice phys
     AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties");
     learn_types(physicalDevice);
     types_.properties(*pMemoryProperties);
+    vram_.clamp(*pMemoryProperties);
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
@@ -470,6 +477,10 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice phy
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
     learn_types(physicalDevice);
     types_.properties(pMemoryProperties->memoryProperties);
+    vram_.clamp(pMemoryProperties->memoryProperties);
+    for (auto *link = static_cast<VkBaseOutStructure *>(pMemoryProperties->pNext); link != nullptr; link = link->pNext)
+        if (link->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT)
+            vram_.report(*reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT *>(link));
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice,
@@ -776,7 +787,14 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
     VkMemoryAllocateInfo allocate = *pAllocateInfo;
     allocate.memoryTypeIndex = types_.host_type(pAllocateInfo->memoryTypeIndex);
     if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    return RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
+    const uint32_t heap = types_.heap_of(pAllocateInfo->memoryTypeIndex);
+    if (!vram_.fits(heap, pAllocateInfo->allocationSize)) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    const VkResult made = RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
+    if (made != VK_SUCCESS) return made;
+    if (vram_.commit(heap, reinterpret_cast<uint64_t>(*pMemory), pAllocateInfo->allocationSize) == Status::ok) return made;
+    RealVulkanDispatch::on_vkFreeMemory(device, *pMemory, nullptr);
+    *pMemory = VK_NULL_HANDLE;
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 bool VulkanBackend::imports_nothing(const void *next) const

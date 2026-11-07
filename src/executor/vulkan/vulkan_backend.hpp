@@ -7,6 +7,7 @@
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/vulkan/spirv_validator.hpp"
+#include "executor/vulkan/vram_budget.hpp"
 #include "executor/vulkan/vulkan_fence_watch.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_host_waits.hpp"
@@ -365,6 +366,7 @@ private:
     DriverLog           &lines_;
     VulkanFenceWatch     fence_watch_;
     SpirvValidator       spirv_;
+    VramBudget           vram_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;
     uint64_t parent_;

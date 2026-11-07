@@ -126,6 +126,12 @@ uint32_t GuestMemoryTypes::host_type(uint32_t guest) const
     return guest < properties_.memoryTypeCount ? hosts_[guest] : no_type;
 }
 
+uint32_t GuestMemoryTypes::heap_of(uint32_t guest) const
+{
+    AV_SCOPE("GuestMemoryTypes::heap_of");
+    return guest < properties_.memoryTypeCount ? properties_.memoryTypes[guest].heapIndex : no_type;
+}
+
 uint32_t GuestMemoryTypes::source_type(uint32_t guest) const
 {
     AV_SCOPE("GuestMemoryTypes::source_type");
