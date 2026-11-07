@@ -205,3 +205,16 @@ TEST(vulkan_lifetimes, letting_everything_go_finishes_the_destroys_the_guest_ask
   CHECK_EQ(rig.lifetimes.nodes(), 0u);
   CHECK_EQ(rig.lifetimes.retired(), 0u);
   CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, a_set_updated_after_a_command_buffer_that_binds_it_was_submitted_gives_the_old_view_up_after_the_run)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(set, view), av::Status::ok);
+  CHECK_STATUS(rig.hold(list, set), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::image_view, view, 0u, 0u), av::Status::ok);
+  rig.lifetimes.submitted(list, 9u);
+  CHECK_STATUS(rig.lifetimes.release(set, 1u), av::Status::ok);
+  CHECK(!rig.destroyer.destroyed(view));
+  rig.lifetimes.reap(8u);
+  CHECK(!rig.destroyer.destroyed(view));
+  rig.lifetimes.reap(9u);
+  CHECK(rig.destroyer.destroyed(view)); }
