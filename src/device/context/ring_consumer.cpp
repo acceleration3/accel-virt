@@ -18,8 +18,20 @@
 
 namespace av {
 
+namespace {
+
+uint64_t watchdog_limit()
+{
+    AV_SCOPE("watchdog_limit");
+    uint64_t milliseconds = 0u;
+    if (!EnvSetting("AV_SUBMIT_WATCHDOG_MS").number(milliseconds)) return SubmissionWatchdog::default_limit_ns;
+    return milliseconds * 1000000u;
+}
+
+}
+
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), running_end_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(EnvSetting("AV_PERFETTO").on()), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), watchdog_(watchdog_limit()), head_(0u), running_end_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(EnvSetting("AV_PERFETTO").on()), prepared_(false),
       attached_(false), faulted_(false), serving_(false), publishing_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
@@ -166,9 +178,18 @@ bool RingConsumer::settle()
     uint64_t reached = 0u;
     executor_.gpu_progress(marked, reached);
     const uint64_t newest = held_.release(reached);
-    if (newest == 0u) return false;
-    fences_.complete(newest);
-    return true;
+    if (newest != 0u) fences_.complete(newest);
+    if (held_.empty()) {
+        watchdog_.nothing_outstanding();
+        return newest != 0u;
+    }
+    const uint64_t now = host_.monotonic_nanoseconds();
+    watchdog_.waiting_at(reached, now);
+    if (watchdog_.overran(now)) {
+        fault(FaultCode::device_lost, "a submission outran the watchdog; last fence", last_fence_);
+        fences_.signal();
+    }
+    return newest != 0u;
 }
 
 bool RingConsumer::has_work() const

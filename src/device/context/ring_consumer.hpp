@@ -4,6 +4,7 @@
 #include "core/support/status.hpp"
 #include "device/context/held_completions.hpp"
 #include "device/context/ring_window.hpp"
+#include "device/context/submission_watchdog.hpp"
 #include "proto/submission/fault_code.hpp"
 #include "proto/submission/ring_progress.hpp"
 
@@ -59,6 +60,7 @@ private:
     RingWindow     ring_;
     RingProgress progress_;
     HeldCompletions held_;
+    SubmissionWatchdog watchdog_;
     uint64_t     head_;
     uint64_t     running_end_;
     uint64_t     last_fence_;

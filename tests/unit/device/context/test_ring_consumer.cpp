@@ -1035,3 +1035,58 @@ TEST(d3d_ordering, a_stream_added_past_the_table_is_not_waited_on)
   CHECK(now_ns() - started < 20000000u);
   ordering.remove(other.consumer());
   for (std::uint32_t member = 0u; member < av::D3dOrdering::capacity; member++) ordering.remove(waiting.consumer()); }
+
+namespace {
+
+constexpr std::uint64_t watchdog_limit_ns = av::SubmissionWatchdog::default_limit_ns;
+
+}
+
+TEST(ring_consumer_watchdog, a_batch_the_gpu_never_reaches_loses_the_context_after_the_limit)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = scripted_progress;
+  gpu_marked = 4u;
+  gpu_reached = 0u;
+  fixture.host().set_clock(1000u);
+  fixture.bind();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK(!fixture.consumer().faulted());
+  fixture.host().set_clock(1000u + watchdog_limit_ns - 1u);
+  CHECK(!fixture.poll());
+  CHECK(!fixture.consumer().faulted());
+  fixture.host().set_clock(1000u + watchdog_limit_ns + 1u);
+  CHECK(!fixture.poll());
+  CHECK(fixture.consumer().faulted());
+  CHECK(fixture.page().faulted());
+  CHECK_EQ(fixture.page().fault_code(), static_cast<std::uint32_t>(FaultCode::device_lost));
+  CHECK_EQ(fixture.page().completed_fence(), 0u); }
+
+TEST(ring_consumer_watchdog, a_gpu_that_keeps_reaching_marks_is_never_judged_however_long_the_backlog_is)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = scripted_progress;
+  gpu_marked = 100u;
+  gpu_reached = 0u;
+  fixture.host().set_clock(1000u);
+  fixture.bind();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  for (std::uint64_t step = 1u; step <= 5u; step++) {
+      fixture.host().set_clock(1000u + step * (watchdog_limit_ns / 2u));
+      gpu_reached = step;
+      CHECK(!fixture.poll());
+  }
+  CHECK(!fixture.consumer().faulted()); }
+
+TEST(ring_consumer_watchdog, a_context_with_nothing_outstanding_is_never_judged)
+{ Fixture fixture;
+  fixture.bind();
+  fixture.host().set_clock(1000u);
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  fixture.host().set_clock(1000u + watchdog_limit_ns * 10u);
+  CHECK(!fixture.poll());
+  CHECK(!fixture.consumer().faulted()); }
