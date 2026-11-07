@@ -15,7 +15,7 @@ constexpr uint64_t drm_format_mod_linear = 0u;
 }
 
 HostImageExport::HostImageExport(DxvkVulkanDevice &vulkan)
-    : vulkan_(vulkan), images_{}, width_(0u), height_(0u), format_(0u), next_(0u), unavailable_(false)
+    : vulkan_(vulkan), slots_{}, retired_(), current_(0u), width_(0u), height_(0u), format_(0u), unavailable_(false)
 {
     AV_SCOPE("HostImageExport::HostImageExport");
 }
@@ -61,20 +61,60 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     return SUCCEEDED(device->CreateQuery(&query, &image.done_));
 }
 
+bool HostImageExport::vacant(uint32_t slot) const
+{
+    AV_SCOPE("HostImageExport::vacant");
+    return slots_[slot].texture_ == nullptr && !retired_.retired(slot);
+}
+
+void HostImageExport::collect()
+{
+    AV_SCOPE("HostImageExport::collect");
+    for (uint32_t slot = 0u; slot < RetiredSlots::capacity; slot++) {
+        if (!retired_.retired(slot) || !retired_.done(slot, vulkan_)) continue;
+        drop(slots_[slot]);
+        retired_.freed(slot);
+    }
+}
+
+void HostImageExport::retire_current()
+{
+    AV_SCOPE("HostImageExport::retire_current");
+    if (slots_[current_].texture_ == nullptr) return;
+    if (retired_.retire(current_, vulkan_)) return;
+    vulkan_.idle();
+    drop(slots_[current_]);
+}
+
+bool HostImageExport::free_slot(uint32_t &slot)
+{
+    AV_SCOPE("HostImageExport::free_slot");
+    for (int pass = 0; pass < 2; pass++) {
+        for (slot = 0u; slot < RetiredSlots::capacity; slot++)
+            if (vacant(slot)) return true;
+        vulkan_.idle();
+        for (uint32_t held = 0u; held < RetiredSlots::capacity; held++) {
+            if (!retired_.retired(held)) continue;
+            drop(slots_[held]);
+            retired_.freed(held);
+        }
+    }
+    return false;
+}
+
 bool HostImageExport::make(ID3D11Device5 *device, uint32_t width, uint32_t height, uint32_t format)
 {
     AV_SCOPE("HostImageExport::make");
-    if (width == width_ && height == height_ && format == format_ && images_[0].texture_ != nullptr) return true;
-    for (Image &image : images_) drop(image);
+    if (width == width_ && height == height_ && format == format_ && slots_[current_].texture_ != nullptr) return true;
+    retire_current();
+    collect();
     width_ = width;
     height_ = height;
     format_ = format;
-    for (Image &image : images_) {
-        if (make_image(device, image)) continue;
-        for (Image &made : images_) drop(made);
-        return false;
-    }
-    return true;
+    if (!free_slot(current_)) return false;
+    if (make_image(device, slots_[current_])) return true;
+    drop(slots_[current_]);
+    return false;
 }
 
 bool HostImageExport::stage(ID3D11Device5 *device, ID3D11DeviceContext4 *context, ID3D11Texture2D *source,
@@ -90,10 +130,9 @@ bool HostImageExport::stage(ID3D11Device5 *device, ID3D11DeviceContext4 *context
         unavailable_ = true;
         return false;
     }
-    slot = next_;
-    next_ = (next_ + 1u) % images;
-    context->CopySubresourceRegion(images_[slot].texture_, 0u, 0u, 0u, 0u, source, 0u, nullptr);
-    context->End(images_[slot].done_);
+    slot = current_;
+    context->CopySubresourceRegion(slots_[slot].texture_, 0u, 0u, 0u, 0u, source, 0u, nullptr);
+    context->End(slots_[slot].done_);
     context->Flush();
     return true;
 }
@@ -102,15 +141,15 @@ bool HostImageExport::copied(ID3D11DeviceContext4 *context, uint32_t slot) const
 {
     AV_SCOPE("HostImageExport::copied");
     BOOL done = FALSE;
-    return context->GetData(images_[slot].done_, &done, sizeof done, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done;
+    return slots_[slot].done_ != nullptr && context->GetData(slots_[slot].done_, &done, sizeof done, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done;
 }
 
 bool HostImageExport::describe(uint32_t slot, AvExportedImage &image) const
 {
     AV_SCOPE("HostImageExport::describe");
-    const Image &shown = images_[slot];
+    const Image &shown = slots_[slot];
     image.slot = slot;
-    return ExportedImageLayout(shown.image_, width_, height_, format_, drm_format_mod_linear)
+    return shown.texture_ != nullptr && ExportedImageLayout(shown.image_, width_, height_, format_, drm_format_mod_linear)
         .describe(shown.fd_.fd(), image);
 }
 
@@ -128,7 +167,13 @@ void HostImageExport::drop(Image &image)
 void HostImageExport::release()
 {
     AV_SCOPE("HostImageExport::release");
-    for (Image &image : images_) drop(image);
+    bool held = retired_.any();
+    for (const Image &image : slots_) held = held || image.texture_ != nullptr;
+    if (held) vulkan_.idle();
+    for (uint32_t slot = 0u; slot < RetiredSlots::capacity; slot++) {
+        drop(slots_[slot]);
+        retired_.freed(slot);
+    }
 }
 
 }
