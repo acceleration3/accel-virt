@@ -1,0 +1,32 @@
+diff --git a/src/dxvk/dxvk_context.cpp b/src/dxvk/dxvk_context.cpp
+index 709068b6..2db380c7 100644
+--- a/src/dxvk/dxvk_context.cpp
++++ b/src/dxvk/dxvk_context.cpp
+@@ -9762,16 +9762,20 @@ namespace dxvk {
+ 
+ 
+   void DxvkContext::prepareSharedImages() {
+-    // Only flush clears for shared images, and restore layouts
+-    bool hasSharedClear = false;
++    DxvkClearBatch clearBatch;
+ 
+-    for (const auto& image : m_nonDefaultLayoutImages) {
+-      if (image->info().shared)
+-        hasSharedClear = flushDeferredClear(*image, image->getAvailableSubresources());
+-    }
++    auto shared = std::stable_partition(m_deferredClears.begin(), m_deferredClears.end(),
++      [] (const DxvkDeferredClear& clear) { return !clear.imageView->image()->info().shared; });
++
++    for (auto i = shared; i != m_deferredClears.end(); i++)
++      clearBatch.add(batchClear(i->imageView, -1, i->discardAspects, i->clearAspects, i->clearValue));
+ 
+-    if (hasSharedClear)
++    m_deferredClears.erase(shared, m_deferredClears.end());
++
++    if (!clearBatch.empty()) {
++      performClears(clearBatch);
+       flushBarriers();
++    }
+ 
+     restoreImageLayouts([] (DxvkImage& image) {
+       return image.info().shared;
