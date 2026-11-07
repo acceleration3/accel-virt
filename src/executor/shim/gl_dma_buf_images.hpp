@@ -13,6 +13,8 @@ class BlockSource;
 class GlContext;
 class SharedImageShape;
 
+struct GlDmaBufImagesProbe;
+
 class GlDmaBufImages {
 public:
     explicit GlDmaBufImages(BlockSource &blocks);
@@ -31,6 +33,8 @@ public:
     uint32_t count() const;
 
 private:
+    friend struct GlDmaBufImagesProbe;
+
     struct Image {
         void    *image_;
         uint32_t width_;

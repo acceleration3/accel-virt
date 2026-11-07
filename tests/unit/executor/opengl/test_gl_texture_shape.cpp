@@ -61,11 +61,31 @@ TEST(gl_texture_shape, array_layers_cube_faces_and_samples_multiply_and_never_ha
   CHECK_EQ(GlTextureShape(texture_3d, rgba8, 3, 1, 4, 4, 4).least_bytes(), (64u + 8u + 1u) * 4u);
   CHECK_EQ(GlTextureShape(texture_2d_multisample, rgba8, 1, 4, 4, 4, 1).least_bytes(), 16u * 4u * 4u); }
 
-TEST(gl_texture_shape, a_compressed_texture_counts_whole_blocks_and_an_unlisted_format_is_the_widest_texel)
+TEST(gl_texture_shape, a_compressed_texture_counts_whole_blocks_and_an_unlisted_format_is_one_byte_a_texel)
 { CHECK_EQ(GlTextureShape(texture_2d, dxt1, 1, 1, 5, 5, 1).least_bytes(), 2u * 2u * 8u);
   CHECK_EQ(GlTextureShape(texture_2d, dxt5, 1, 1, 4, 4, 1).least_bytes(), 16u);
   CHECK_EQ(GlTextureShape(texture_2d, astc_6x6, 1, 1, 7, 6, 1).least_bytes(), 2u * 1u * 16u);
-  CHECK_EQ(GlTextureShape(texture_2d, unlisted, 1, 1, 2, 2, 1).least_bytes(), 4u * 16u); }
+  CHECK_EQ(GlTextureShape(texture_2d, unlisted, 1, 1, 2, 2, 1).least_bytes(), 4u); }
+
+TEST(gl_texture_shape, a_depth_32f_stencil_8_texel_counts_five_bytes)
+{ constexpr std::uint32_t depth32f_stencil8 = 0x8CADu;
+  CHECK_EQ(GlTextureShape(texture_2d, depth32f_stencil8, 1, 1, 4, 4, 1).least_bytes(), 16u * 5u); }
+
+TEST(gl_texture_shape, the_legacy_and_packed_sized_formats_each_have_their_own_texel_size)
+{ struct Row { std::uint32_t format; std::uint64_t bytes; };
+  const Row rows[] = {{0x2A10u, 1u}, {0x8055u, 1u}, {0x804Fu, 2u}, {0x8053u, 8u}, {0x805Au, 8u}, {0x803Bu, 1u},
+                      {0x803Du, 2u}, {0x803Fu, 1u}, {0x8041u, 2u}, {0x8043u, 1u}, {0x8044u, 1u}, {0x8046u, 2u},
+                      {0x8047u, 4u}, {0x804Au, 1u}, {0x804Cu, 2u}, {0x804Du, 2u}};
+  for (const Row &row : rows) CHECK_EQ(GlTextureShape(texture_2d, row.format, 1, 1, 4, 4, 1).least_bytes(), 16u * row.bytes); }
+
+TEST(gl_texture_shape, etc1_latc_and_3dc_blocks_are_four_texels_square)
+{ struct Row { std::uint32_t format; std::uint64_t bytes; };
+  const Row rows[] = {{0x8D64u, 8u}, {0x8C70u, 8u}, {0x8C71u, 8u}, {0x8C72u, 16u}, {0x8C73u, 16u}, {0x87F9u, 8u},
+                      {0x87FAu, 16u}};
+  for (const Row &row : rows) {
+      CHECK_EQ(GlTextureShape(texture_2d, row.format, 1, 1, 4, 4, 1).least_bytes(), row.bytes);
+      CHECK_EQ(GlTextureShape(texture_2d, row.format, 1, 1, 5, 5, 1).least_bytes(), row.bytes * 4u);
+  } }
 
 TEST(gl_texture_shape, a_footprint_that_overflows_is_the_largest_number_so_no_memory_holds_it)
 { CHECK_EQ(GlTextureShape(texture_3d, rgba32f, 1, 1, 0x7FFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF)

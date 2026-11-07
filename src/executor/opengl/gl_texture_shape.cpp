@@ -12,7 +12,7 @@ constexpr uint32_t gl_texture_rectangle = 0x84F5u, gl_texture_cube_map = 0x8513u
 constexpr uint32_t gl_texture_cube_map_array = 0x9009u;
 constexpr uint32_t gl_texture_2d_multisample = 0x9100u, gl_texture_2d_multisample_array = 0x9102u;
 constexpr uint32_t cube_faces = 6u;
-constexpr uint8_t  widest_texel = 16u;
+constexpr uint8_t  narrowest_texel = 1u;
 
 struct TargetRow {
     uint32_t target_;
@@ -47,16 +47,19 @@ constexpr TexelRow texels[] = {
     {0x823Au, 4u},  {0x8239u, 4u},  {0x822Eu, 4u},  {0x8236u, 4u},  {0x8235u, 4u},  {0x81A6u, 4u},  {0x81A7u, 4u},
     {0x8CACu, 4u},  {0x88F0u, 4u},  {0x8052u, 4u},  {0x8048u, 4u},  {0x805Bu, 8u},  {0x8F9Bu, 8u},  {0x881Au, 8u},
     {0x8D76u, 8u},  {0x8D88u, 8u},  {0x8054u, 8u},  {0x881Bu, 8u},  {0x8D77u, 8u},  {0x8D89u, 8u},  {0x8F9Au, 8u},
-    {0x8230u, 8u},  {0x823Cu, 8u},  {0x823Bu, 8u},  {0x8CADu, 8u},  {0x8815u, 12u}, {0x8D71u, 12u}, {0x8D83u, 12u},
+    {0x8230u, 8u},  {0x823Cu, 8u},  {0x823Bu, 8u},  {0x8CADu, 5u},  {0x8815u, 12u}, {0x8D71u, 12u}, {0x8D83u, 12u},
     {0x8814u, 16u}, {0x8D70u, 16u}, {0x8D82u, 16u},
+    {0x2A10u, 1u},  {0x8055u, 1u},  {0x804Fu, 2u},  {0x8053u, 8u},  {0x805Au, 8u},  {0x803Bu, 1u},  {0x803Du, 2u},
+    {0x803Fu, 1u},  {0x8041u, 2u},  {0x8043u, 1u},  {0x8044u, 1u},  {0x8046u, 2u},  {0x8047u, 4u},  {0x804Au, 1u},
+    {0x804Cu, 2u},  {0x804Du, 2u},
 };
 
 constexpr uint32_t half_block_formats[] = {
-    0x83F0u, 0x83F1u, 0x8C4Cu, 0x8C4Du, 0x8DBBu, 0x8DBCu, 0x9274u, 0x9275u, 0x9276u, 0x9277u, 0x9270u, 0x9271u,
+    0x8D64u, 0x8C70u, 0x8C71u, 0x87F9u, 0x83F0u, 0x83F1u, 0x8C4Cu, 0x8C4Du, 0x8DBBu, 0x8DBCu, 0x9274u, 0x9275u, 0x9276u, 0x9277u, 0x9270u, 0x9271u,
 };
 
 constexpr uint32_t full_block_formats[] = {
-    0x83F2u, 0x83F3u, 0x8C4Eu, 0x8C4Fu, 0x8DBDu, 0x8DBEu, 0x8E8Cu, 0x8E8Du, 0x8E8Eu, 0x8E8Fu, 0x9278u, 0x9279u,
+    0x8C72u, 0x8C73u, 0x87FAu, 0x83F2u, 0x83F3u, 0x8C4Eu, 0x8C4Fu, 0x8DBDu, 0x8DBEu, 0x8E8Cu, 0x8E8Du, 0x8E8Eu, 0x8E8Fu, 0x9278u, 0x9279u,
     0x9272u, 0x9273u,
 };
 
@@ -138,7 +141,7 @@ GlTextureShape::Format GlTextureShape::describe_format() const
     for (uint32_t at = 0u; at < astc_formats; at++)
         if (format_ == first_astc + at || format_ == first_astc_srgb + at)
             return Format{format_, astc[at].width_, astc[at].height_, astc_block_bytes};
-    return Format{format_, 1u, 1u, widest_texel};
+    return Format{format_, 1u, 1u, narrowest_texel};
 }
 
 uint64_t GlTextureShape::level_bytes(uint32_t level, const Format &format) const

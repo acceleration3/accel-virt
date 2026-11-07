@@ -12,10 +12,13 @@ namespace av {
 namespace {
 
 constexpr uint32_t dxgi_r8g8b8a8_unorm = 28u;
+constexpr uint32_t dxgi_r8g8b8a8_unorm_srgb = 29u;
 constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
+constexpr uint32_t dxgi_b8g8r8a8_unorm_srgb = 91u;
 constexpr uint32_t drm_format_abgr8888 = 0x34324241u;
 constexpr uint32_t drm_format_argb8888 = 0x34325241u;
 constexpr uint32_t gl_rgba8 = 0x8058u;
+constexpr uint32_t gl_srgb8_alpha8 = 0x8C43u;
 constexpr uint32_t drm_format_mod_linear_low = 0u;
 constexpr uint32_t drm_format_mod_linear_high = 0u;
 constexpr uint32_t texel_bytes = 4u;
@@ -23,8 +26,8 @@ constexpr uint32_t texel_bytes = 4u;
 uint32_t fourcc_of(uint32_t dxgi)
 {
     AV_SCOPE("fourcc_of");
-    if (dxgi == dxgi_r8g8b8a8_unorm) return drm_format_abgr8888;
-    if (dxgi == dxgi_b8g8r8a8_unorm) return drm_format_argb8888;
+    if (dxgi == dxgi_r8g8b8a8_unorm || dxgi == dxgi_r8g8b8a8_unorm_srgb) return drm_format_abgr8888;
+    if (dxgi == dxgi_b8g8r8a8_unorm || dxgi == dxgi_b8g8r8a8_unorm_srgb) return drm_format_argb8888;
     return 0u;
 }
 
@@ -116,7 +119,7 @@ bool GlDmaBufImages::covers(uint32_t memory, uint32_t width, uint32_t height, ui
     AV_SCOPE("GlDmaBufImages::covers");
     const Image *const held = images_.find(memory);
     return held != nullptr && held->width_ == width && held->height_ == height &&
-           held->internal_format_ == internal_format;
+           (held->internal_format_ == internal_format || internal_format == gl_srgb8_alpha8);
 }
 
 bool GlDmaBufImages::bind(uint32_t texture, uint32_t memory)
