@@ -1433,6 +1433,98 @@ static bool decode_CopyTiles12(ServerDispatch& s, ::av::WireReader& r, ::av::Wir
     return true;
 }
 
+static bool decode_ResolveSubresourceRegion12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ResolveSubresourceRegion12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t destination{};
+    if (!r.read_pod(destination)) return false;
+    uint32_t destination_subresource{};
+    if (!r.read_pod(destination_subresource)) return false;
+    uint32_t x{};
+    if (!r.read_pod(x)) return false;
+    uint32_t y{};
+    if (!r.read_pod(y)) return false;
+    uint32_t source{};
+    if (!r.read_pod(source)) return false;
+    uint32_t source_subresource{};
+    if (!r.read_pod(source_subresource)) return false;
+    uint32_t has_rect{};
+    if (!r.read_pod(has_rect)) return false;
+    Rect rect{};
+    if (!r.read_pod(rect)) return false;
+    uint32_t format{};
+    if (!r.read_pod(format)) return false;
+    uint32_t mode{};
+    if (!r.read_pod(mode)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ResolveSubresourceRegion12(list, destination, destination_subresource, x, y, source, source_subresource, has_rect, rect, format, mode)) return false;
+    return true;
+}
+
+static bool decode_SetSamplePositions12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetSamplePositions12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t samples{};
+    if (!r.read_pod(samples)) return false;
+    uint32_t pixels{};
+    if (!r.read_pod(pixels)) return false;
+    uint32_t count{};
+    if (!r.read_pod(count)) return false;
+    if (count > 64u) return false;
+    SamplePosition* positions = nullptr;
+    if (count != 0u) {
+        positions = arena.allocate<SamplePosition>(count);
+        if (positions == nullptr) return false;
+        if (!r.read(positions, sizeof(SamplePosition) * count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetSamplePositions12(list, samples, pixels, count, positions)) return false;
+    return true;
+}
+
+static bool decode_WriteBufferImmediate12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:WriteBufferImmediate12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t count{};
+    if (!r.read_pod(count)) return false;
+    if (count > 64u) return false;
+    ImmediateWrite* writes = nullptr;
+    if (count != 0u) {
+        writes = arena.allocate<ImmediateWrite>(count);
+        if (writes == nullptr) return false;
+        if (!r.read(writes, sizeof(ImmediateWrite) * count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_WriteBufferImmediate12(list, count, writes)) return false;
+    return true;
+}
+
+static bool decode_SetViewInstanceMask12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetViewInstanceMask12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t mask{};
+    if (!r.read_pod(mask)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetViewInstanceMask12(list, mask)) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1504,6 +1596,10 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_SetMarker12:
         case kCmd_ExecuteIndirect12:
         case kCmd_CopyTiles12:
+        case kCmd_ResolveSubresourceRegion12:
+        case kCmd_SetSamplePositions12:
+        case kCmd_WriteBufferImmediate12:
+        case kCmd_SetViewInstanceMask12:
             return true;
         default: return false;
     }
@@ -1581,6 +1677,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_SetMarker12: return decode_SetMarker12(s, r, reply, arena);
         case kCmd_ExecuteIndirect12: return decode_ExecuteIndirect12(s, r, reply, arena);
         case kCmd_CopyTiles12: return decode_CopyTiles12(s, r, reply, arena);
+        case kCmd_ResolveSubresourceRegion12: return decode_ResolveSubresourceRegion12(s, r, reply, arena);
+        case kCmd_SetSamplePositions12: return decode_SetSamplePositions12(s, r, reply, arena);
+        case kCmd_WriteBufferImmediate12: return decode_WriteBufferImmediate12(s, r, reply, arena);
+        case kCmd_SetViewInstanceMask12: return decode_SetViewInstanceMask12(s, r, reply, arena);
         default: return false;
     }
 }

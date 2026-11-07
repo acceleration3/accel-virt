@@ -78,5 +78,9 @@ inline constexpr uint32_t kCmd_EndEvent12 = 0x0004151d;
 inline constexpr uint32_t kCmd_SetMarker12 = 0x0004151e;
 inline constexpr uint32_t kCmd_ExecuteIndirect12 = 0x0004151f;
 inline constexpr uint32_t kCmd_CopyTiles12 = 0x00041520;
+inline constexpr uint32_t kCmd_ResolveSubresourceRegion12 = 0x00041521;
+inline constexpr uint32_t kCmd_SetSamplePositions12 = 0x00041522;
+inline constexpr uint32_t kCmd_WriteBufferImmediate12 = 0x00041523;
+inline constexpr uint32_t kCmd_SetViewInstanceMask12 = 0x00041524;
 
 }  // namespace av::d3d12proto

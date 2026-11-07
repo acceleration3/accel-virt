@@ -45,6 +45,21 @@ struct Viewport {
 static_assert(sizeof(Viewport) == 24, "Viewport crosses as 24 bytes");
 static_assert(__is_trivially_copyable(Viewport), "Viewport is plain data");
 
+struct SamplePosition {
+    int32_t x;
+    int32_t y;
+};
+static_assert(sizeof(SamplePosition) == 8, "SamplePosition crosses as 8 bytes");
+static_assert(__is_trivially_copyable(SamplePosition), "SamplePosition is plain data");
+
+struct ImmediateWrite {
+    uint64_t address;
+    uint32_t value;
+    uint32_t mode;
+};
+static_assert(sizeof(ImmediateWrite) == 16, "ImmediateWrite crosses as 16 bytes");
+static_assert(__is_trivially_copyable(ImmediateWrite), "ImmediateWrite is plain data");
+
 struct DescriptorRef {
     uint32_t heap;
     uint32_t index;

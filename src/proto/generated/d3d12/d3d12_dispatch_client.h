@@ -149,5 +149,13 @@ namespace av::d3d12proto {
 // Copies a region of a reserved resource's tiles to `buffer` at `buffer_offset`, 64 KiB a tile in the
 // region's order - or from it, when flags has D3D12_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE.
 [[nodiscard]] bool av_d3d12_CopyTiles12(::av::ClientTransport& t, uint32_t list, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags);
+// ResolveSubresource12 into a region of the destination: the source's `rect` (the whole subresource when
+// has_rect is 0) lands at `x`, `y`, combined by `mode` (D3D12_RESOLVE_MODE).
+[[nodiscard]] bool av_d3d12_ResolveSubresourceRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t source, uint32_t source_subresource, uint32_t has_rect, const Rect& rect, uint32_t format, uint32_t mode);
+// The positions of `samples` samples in each of `pixels` pixels, samples * pixels of them, for the draws after.
+[[nodiscard]] bool av_d3d12_SetSamplePositions12(::av::ClientTransport& t, uint32_t list, uint32_t samples, uint32_t pixels, uint32_t count, const SamplePosition* positions);
+// Each write stores `value` at `address` in order; mode is D3D12_WRITEBUFFERIMMEDIATE_MODE.
+[[nodiscard]] bool av_d3d12_WriteBufferImmediate12(::av::ClientTransport& t, uint32_t list, uint32_t count, const ImmediateWrite* writes);
+[[nodiscard]] bool av_d3d12_SetViewInstanceMask12(::av::ClientTransport& t, uint32_t list, uint32_t mask);
 
 }  // namespace av::d3d12proto

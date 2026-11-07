@@ -16,6 +16,12 @@ fields = ["u32 left", "u32 top", "u32 front", "u32 right", "u32 bottom", "u32 ba
 [structs.Viewport]
 fields = ["f32 x", "f32 y", "f32 width", "f32 height", "f32 min_depth", "f32 max_depth"]
 
+[structs.SamplePosition]
+fields = ["i32 x", "i32 y"]
+
+[structs.ImmediateWrite]
+fields = ["u64 address", "u32 value", "u32 mode"]
+
 [structs.DescriptorRef]
 fields = ["u32 heap", "u32 index"]
 
@@ -551,3 +557,28 @@ doc = """Copies a region of a reserved resource's tiles to `buffer` at `buffer_o
 region's order - or from it, when flags has D3D12_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE."""
 params = ["u32 list", "u32 resource", "TileCoordinate start", "TileSize size", "u32 buffer", "u64 buffer_offset",
           "u32 flags"]
+
+[[command]]
+name = "ResolveSubresourceRegion12"
+id = 0x1521
+doc = """ResolveSubresource12 into a region of the destination: the source's `rect` (the whole subresource when
+has_rect is 0) lands at `x`, `y`, combined by `mode` (D3D12_RESOLVE_MODE)."""
+params = ["u32 list", "u32 destination", "u32 destination_subresource", "u32 x", "u32 y", "u32 source",
+          "u32 source_subresource", "u32 has_rect", "Rect rect", "u32 format", "u32 mode"]
+
+[[command]]
+name = "SetSamplePositions12"
+id = 0x1522
+doc = """The positions of `samples` samples in each of `pixels` pixels, samples * pixels of them, for the draws after."""
+params = ["u32 list", "u32 samples", "u32 pixels", "u32 count", "SamplePosition positions[count] max 64"]
+
+[[command]]
+name = "WriteBufferImmediate12"
+id = 0x1523
+doc = """Each write stores `value` at `address` in order; mode is D3D12_WRITEBUFFERIMMEDIATE_MODE."""
+params = ["u32 list", "u32 count", "ImmediateWrite writes[count] max 64"]
+
+[[command]]
+name = "SetViewInstanceMask12"
+id = 0x1524
+params = ["u32 list", "u32 mask"]

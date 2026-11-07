@@ -14,7 +14,7 @@ public:
         *answer = desc;
         return answer;
     }
-    D3D12_GPU_VIRTUAL_ADDRESS STDMETHODCALLTYPE GetGPUVirtualAddress() override { return 0u; }
+    D3D12_GPU_VIRTUAL_ADDRESS STDMETHODCALLTYPE GetGPUVirtualAddress() override { return gpu_address; }
     HRESULT STDMETHODCALLTYPE WriteToSubresource(UINT, const D3D12_BOX *, const void *, UINT, UINT) override
     {
         return E_NOTIMPL;
@@ -28,7 +28,8 @@ public:
         return E_NOTIMPL;
     }
 
-    D3D12_RESOURCE_DESC desc = {};
+    D3D12_RESOURCE_DESC       desc = {};
+    D3D12_GPU_VIRTUAL_ADDRESS gpu_address = 0u;
 };
 
 }

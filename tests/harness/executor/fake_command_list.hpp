@@ -7,8 +7,22 @@
 
 namespace av {
 
-class FakeCommandList final : public CountedChild<ID3D12GraphicsCommandList> {
+class FakeCommandList final : public CountedChild<ID3D12GraphicsCommandList2> {
 public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) override
+    {
+        const bool known = (iid == __uuidof(ID3D12GraphicsCommandList2)) ||
+                           (iid == __uuidof(ID3D12GraphicsCommandList1)) ||
+                           (iid == __uuidof(ID3D12GraphicsCommandList)) || (iid == __uuidof(IUnknown));
+        if (!known || !extended) {
+            *object = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        *object = static_cast<ID3D12GraphicsCommandList2 *>(this);
+        return S_OK;
+    }
+
     D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() override { return D3D12_COMMAND_LIST_TYPE_DIRECT; }
     HRESULT STDMETHODCALLTYPE Close() override { return S_OK; }
     HRESULT STDMETHODCALLTYPE Reset(ID3D12CommandAllocator *, ID3D12PipelineState *) override { return S_OK; }
@@ -62,7 +76,54 @@ public:
     void STDMETHODCALLTYPE EndEvent() override { recorded++; }
     void STDMETHODCALLTYPE ExecuteIndirect(ID3D12CommandSignature *, UINT, ID3D12Resource *, UINT64, ID3D12Resource *, UINT64) override { recorded++; }
 
+    void STDMETHODCALLTYPE AtomicCopyBufferUINT(ID3D12Resource *, UINT64, ID3D12Resource *, UINT64, UINT, ID3D12Resource *const *, const D3D12_SUBRESOURCE_RANGE_UINT64 *) override { recorded++; }
+    void STDMETHODCALLTYPE AtomicCopyBufferUINT64(ID3D12Resource *, UINT64, ID3D12Resource *, UINT64, UINT, ID3D12Resource *const *, const D3D12_SUBRESOURCE_RANGE_UINT64 *) override { recorded++; }
+    void STDMETHODCALLTYPE OMSetDepthBounds(FLOAT, FLOAT) override { recorded++; }
+    void STDMETHODCALLTYPE SetSamplePositions(UINT samples, UINT pixels, D3D12_SAMPLE_POSITION *positions) override
+    {
+        recorded++;
+        sample_positions++;
+        sample_samples = samples;
+        sample_pixels = pixels;
+        sample_first_x = positions == nullptr ? 0 : positions[0].X;
+    }
+    void STDMETHODCALLTYPE ResolveSubresourceRegion(ID3D12Resource *, UINT, UINT x, UINT y, ID3D12Resource *, UINT, D3D12_RECT *rect, DXGI_FORMAT, D3D12_RESOLVE_MODE mode) override
+    {
+        recorded++;
+        region_resolves++;
+        resolve_x = x;
+        resolve_y = y;
+        resolve_rect_given = rect != nullptr;
+        resolve_mode = mode;
+    }
+    void STDMETHODCALLTYPE SetViewInstanceMask(UINT mask) override
+    {
+        recorded++;
+        view_instance_mask = mask;
+    }
+    void STDMETHODCALLTYPE WriteBufferImmediate(UINT count, const D3D12_WRITEBUFFERIMMEDIATE_PARAMETER *parameters, const D3D12_WRITEBUFFERIMMEDIATE_MODE *modes) override
+    {
+        recorded++;
+        immediate_writes += count;
+        immediate_last_address = parameters[count - 1u].Dest;
+        immediate_last_mode = modes[count - 1u];
+    }
+
+    bool                       extended = true;
     std::uint32_t recorded = 0u;
+    std::uint32_t sample_positions = 0u;
+    std::uint32_t sample_samples = 0u;
+    std::uint32_t sample_pixels = 0u;
+    std::int32_t  sample_first_x = 0;
+    std::uint32_t region_resolves = 0u;
+    std::uint32_t resolve_x = 0u;
+    std::uint32_t resolve_y = 0u;
+    bool          resolve_rect_given = false;
+    D3D12_RESOLVE_MODE resolve_mode = D3D12_RESOLVE_MODE_DECOMPRESS;
+    std::uint32_t view_instance_mask = 0u;
+    std::uint32_t immediate_writes = 0u;
+    std::uint64_t immediate_last_address = 0u;
+    D3D12_WRITEBUFFERIMMEDIATE_MODE immediate_last_mode = D3D12_WRITEBUFFERIMMEDIATE_MODE_DEFAULT;
     std::uint32_t buffer_copies = 0u;
     std::uint32_t whole_copies = 0u;
     std::uint32_t texture_copies = 0u;

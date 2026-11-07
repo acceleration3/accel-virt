@@ -575,19 +575,19 @@ extern "C" VOID APIENTRY avumd_d3d12l_OMSetDepthBounds(D3D12DDI_HCOMMANDLIST han
 { static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_SetSamplePositions(D3D12DDI_HCOMMANDLIST handle, UINT a1, UINT a2, D3D12DDI_SAMPLE_POSITION * a3)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.set_sample_positions(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("SetSamplePositions", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_ResourceResolveSubresourceRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, D3D12DDI_HRESOURCE a5, UINT a6, D3D12DDI_RECT * a7, DXGI_FORMAT a8, D3D12DDI_RESOLVE_MODE a9)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); static_cast<void>(a7); static_cast<void>(a8); static_cast<void>(a9); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.resource_resolve_subresource_region(handle, a1, a2, a3, a4, a5, a6, a7, a8, a9); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ResourceResolveSubresourceRegion", handle, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_SetProtectedResourceSession(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a1)
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_WriteBufferImmediate(D3D12DDI_HCOMMANDLIST handle, UINT a1, const D3D12DDI_WRITEBUFFERIMMEDIATE_PARAMETER_0032 * a2, const D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_0032 * a3)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.write_buffer_immediate(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("WriteBufferImmediate", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_SetViewInstanceMask(D3D12DDI_HCOMMANDLIST handle, UINT a1)
-{ static_cast<void>(handle); static_cast<void>(a1); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.set_view_instance_mask(handle, a1); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("SetViewInstanceMask", handle, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_InitializeMetaCommand(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HMETACOMMAND_0052 a1, const void * a2, SIZE_T a3)
 { static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }

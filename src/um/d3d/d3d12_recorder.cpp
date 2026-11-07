@@ -24,6 +24,8 @@ constexpr uint32_t barrier_aliasing = 1u;
 constexpr uint32_t barrier_uav = 2u;
 constexpr uint32_t most_barriers = 128u;
 constexpr uint32_t most_views = 16u;
+constexpr uint32_t most_sample_positions = 64u;
+constexpr uint32_t most_immediate_writes = 64u;
 constexpr uint32_t most_buffers = 32u;
 constexpr uint32_t most_targets = 8u;
 constexpr uint32_t most_constants = 64u;
@@ -269,6 +271,60 @@ VOID D3d12Recorder::resource_resolve_subresource(D3D12DDI_HCOMMANDLIST handle, D
                                         destination_subresource, device_.id_of(source.pDrvPrivate), source_subresource,
                                         static_cast<uint32_t>(format)),
          "ResolveSubresource12");
+}
+
+VOID D3d12Recorder::resource_resolve_subresource_region(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE destination,
+                                                        UINT destination_subresource, UINT x, UINT y,
+                                                        D3D12DDI_HRESOURCE source, UINT source_subresource,
+                                                        D3D12DDI_RECT *rect, DXGI_FORMAT format,
+                                                        D3D12DDI_RESOLVE_MODE mode)
+{
+    AV_SCOPE("D3d12Recorder::resource_resolve_subresource_region");
+    const Rect area = rect == nullptr ? Rect{} : Rect{rect->left, rect->top, rect->right, rect->bottom};
+    sent(av_d3d12_ResolveSubresourceRegion12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
+                                              destination_subresource, x, y, device_.id_of(source.pDrvPrivate),
+                                              source_subresource, rect == nullptr ? 0u : 1u, area,
+                                              static_cast<uint32_t>(format), static_cast<uint32_t>(mode)),
+         "ResolveSubresourceRegion12");
+}
+
+VOID D3d12Recorder::set_sample_positions(D3D12DDI_HCOMMANDLIST handle, UINT samples, UINT pixels,
+                                         D3D12DDI_SAMPLE_POSITION *positions)
+{
+    AV_SCOPE("D3d12Recorder::set_sample_positions");
+    SamplePosition made[most_sample_positions] = {};
+    const uint64_t total = static_cast<uint64_t>(samples) * pixels;
+    if (positions == nullptr || total > most_sample_positions) {
+        device_.lost("sample positions that do not fit the most a pixel grid holds");
+        return;
+    }
+    for (uint64_t index = 0u; index < total; index++) made[index] = SamplePosition{positions[index].X, positions[index].Y};
+    sent(av_d3d12_SetSamplePositions12(device_.wire(), list(handle), samples, pixels, static_cast<uint32_t>(total), made),
+         "SetSamplePositions12");
+}
+
+VOID D3d12Recorder::write_buffer_immediate(D3D12DDI_HCOMMANDLIST handle, UINT count,
+                                           const D3D12DDI_WRITEBUFFERIMMEDIATE_PARAMETER_0032 *writes,
+                                           const D3D12DDI_WRITEBUFFERIMMEDIATE_MODE_0032 *modes)
+{
+    AV_SCOPE("D3d12Recorder::write_buffer_immediate");
+    icd::Pieces pieces(writes == nullptr ? 0u : count, most_immediate_writes);
+    while (pieces.next()) {
+        ImmediateWrite batch[most_immediate_writes] = {};
+        const auto     taken = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < taken; index++) {
+            const UINT at = static_cast<UINT>(pieces.offset()) + index;
+            batch[index] = ImmediateWrite{writes[at].Dst, writes[at].Value,
+                                          modes == nullptr ? 0u : static_cast<uint32_t>(modes[at])};
+        }
+        sent(av_d3d12_WriteBufferImmediate12(device_.wire(), list(handle), taken, batch), "WriteBufferImmediate12");
+    }
+}
+
+VOID D3d12Recorder::set_view_instance_mask(D3D12DDI_HCOMMANDLIST handle, UINT mask)
+{
+    AV_SCOPE("D3d12Recorder::set_view_instance_mask");
+    sent(av_d3d12_SetViewInstanceMask12(device_.wire(), list(handle), mask), "SetViewInstanceMask12");
 }
 
 VOID D3d12Recorder::resource_barrier(D3D12DDI_HCOMMANDLIST handle, UINT count,

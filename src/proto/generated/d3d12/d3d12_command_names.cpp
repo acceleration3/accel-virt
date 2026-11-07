@@ -78,6 +78,10 @@ const char* command_name(uint32_t id) {
         case kCmd_SetMarker12: return "SetMarker12";
         case kCmd_ExecuteIndirect12: return "ExecuteIndirect12";
         case kCmd_CopyTiles12: return "CopyTiles12";
+        case kCmd_ResolveSubresourceRegion12: return "ResolveSubresourceRegion12";
+        case kCmd_SetSamplePositions12: return "SetSamplePositions12";
+        case kCmd_WriteBufferImmediate12: return "WriteBufferImmediate12";
+        case kCmd_SetViewInstanceMask12: return "SetViewInstanceMask12";
         default: return nullptr;
     }
 }

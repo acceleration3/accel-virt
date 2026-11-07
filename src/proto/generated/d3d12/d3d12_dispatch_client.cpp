@@ -851,4 +851,51 @@ bool av_d3d12_CopyTiles12(::av::ClientTransport& t, uint32_t list, uint32_t reso
     return t.send_async(kCmd_CopyTiles12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_ResolveSubresourceRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t source, uint32_t source_subresource, uint32_t has_rect, const Rect& rect, uint32_t format, uint32_t mode) {
+    AV_SCOPE("av_d3d12_ResolveSubresourceRegion12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(destination);
+    b.write_pod<uint32_t>(destination_subresource);
+    b.write_pod<uint32_t>(x);
+    b.write_pod<uint32_t>(y);
+    b.write_pod<uint32_t>(source);
+    b.write_pod<uint32_t>(source_subresource);
+    b.write_pod<uint32_t>(has_rect);
+    b.write_pod(rect);
+    b.write_pod<uint32_t>(format);
+    b.write_pod<uint32_t>(mode);
+    return t.send_async(kCmd_ResolveSubresourceRegion12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_SetSamplePositions12(::av::ClientTransport& t, uint32_t list, uint32_t samples, uint32_t pixels, uint32_t count, const SamplePosition* positions) {
+    AV_SCOPE("av_d3d12_SetSamplePositions12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(samples);
+    b.write_pod<uint32_t>(pixels);
+    b.write_pod<uint32_t>(count);
+    if (count > 64u || (count != 0u && positions == nullptr)) return abandon(t);
+    if (count != 0u) b.write(positions, sizeof(*positions) * count);
+    return t.send_async(kCmd_SetSamplePositions12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_WriteBufferImmediate12(::av::ClientTransport& t, uint32_t list, uint32_t count, const ImmediateWrite* writes) {
+    AV_SCOPE("av_d3d12_WriteBufferImmediate12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(count);
+    if (count > 64u || (count != 0u && writes == nullptr)) return abandon(t);
+    if (count != 0u) b.write(writes, sizeof(*writes) * count);
+    return t.send_async(kCmd_WriteBufferImmediate12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_SetViewInstanceMask12(::av::ClientTransport& t, uint32_t list, uint32_t mask) {
+    AV_SCOPE("av_d3d12_SetViewInstanceMask12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(mask);
+    return t.send_async(kCmd_SetViewInstanceMask12, b) == ::av::TransportResult::ok;
+}
+
 }  // namespace av::d3d12proto

@@ -98,6 +98,10 @@ public:
     virtual bool on_SetMarker12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) = 0;
     virtual bool on_ExecuteIndirect12(uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) = 0;
     virtual bool on_CopyTiles12(uint32_t list, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) = 0;
+    virtual bool on_ResolveSubresourceRegion12(uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t source, uint32_t source_subresource, uint32_t has_rect, const Rect& rect, uint32_t format, uint32_t mode) = 0;
+    virtual bool on_SetSamplePositions12(uint32_t list, uint32_t samples, uint32_t pixels, uint32_t count, const SamplePosition* positions) = 0;
+    virtual bool on_WriteBufferImmediate12(uint32_t list, uint32_t count, const ImmediateWrite* writes) = 0;
+    virtual bool on_SetViewInstanceMask12(uint32_t list, uint32_t mask) = 0;
 
 protected:
     // `guest` is the context's blob arena, which the implementation owns and

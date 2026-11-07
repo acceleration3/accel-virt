@@ -133,6 +133,10 @@ public:
     bool on_CopyTextureRegion12(uint32_t list, const d3d12proto::CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const d3d12proto::CopyLocation& source, uint32_t has_box, const d3d12proto::Box& box) override;
     bool on_CopyResource12(uint32_t list, uint32_t destination, uint32_t source) override;
     bool on_ResolveSubresource12(uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) override;
+    bool on_ResolveSubresourceRegion12(uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t source, uint32_t source_subresource, uint32_t has_rect, const d3d12proto::Rect& rect, uint32_t format, uint32_t mode) override;
+    bool on_SetSamplePositions12(uint32_t list, uint32_t samples, uint32_t pixels, uint32_t count, const d3d12proto::SamplePosition* positions) override;
+    bool on_WriteBufferImmediate12(uint32_t list, uint32_t count, const d3d12proto::ImmediateWrite* writes) override;
+    bool on_SetViewInstanceMask12(uint32_t list, uint32_t mask) override;
     bool on_BeginQuery12(uint32_t list, uint32_t heap, uint32_t type, uint32_t index) override;
     bool on_EndQuery12(uint32_t list, uint32_t heap, uint32_t type, uint32_t index) override;
     bool on_ResolveQueryData12(uint32_t list, uint32_t heap, uint32_t type, uint32_t first, uint32_t count, uint32_t destination, uint64_t offset) override;
@@ -183,6 +187,9 @@ private:
     bool                       resolve_holds(const D3D12_RESOURCE_DESC &to, uint32_t to_subresource,
                                              const D3D12_RESOURCE_DESC &from, uint32_t from_subresource,
                                              uint32_t format) const;
+    bool                       region_resolves(const D3D12_RESOURCE_DESC &to, uint32_t to_subresource, uint32_t x,
+                                               uint32_t y, const D3D12_RESOURCE_DESC &from, uint32_t from_subresource,
+                                               const d3d12proto::Box &area, uint32_t format, uint32_t mode) const;
     bool                       retain(uint32_t list, IUnknown *object, D3d12BlockHeap *block);
     bool                       retain_object(uint32_t list, uint32_t id, D3dObjectKind kind);
     bool                       retain_resource(uint32_t list, uint32_t resource);
