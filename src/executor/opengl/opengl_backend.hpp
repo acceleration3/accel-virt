@@ -106,6 +106,9 @@ private:
     GlErrorWord  errors_;
     uint32_t    resolved_;
     uint64_t    ran_;
+    uint64_t    submitted_;
+    uint64_t    fenced_at_;
+    void       *drain_fence_;
     bool        current_;
     bool        poll_failure_logged_;
     DriverLog  &lines_;

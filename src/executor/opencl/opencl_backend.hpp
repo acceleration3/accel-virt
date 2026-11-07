@@ -2,6 +2,7 @@
 #define AV_OPENCL_BACKEND_HPP
 
 #include "executor/opencl/cl_event_signals.hpp"
+#include "executor/opencl/cl_drain_markers.hpp"
 #include "executor/opencl/cl_user_events.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
 #include "executor/opencl/cl_argument_retention.hpp"
@@ -241,6 +242,7 @@ private:
     const ImportTable *imported_;
     ClEventSignals   events_;
     ClUserEvents     user_events_;
+    ClDrainMarkers   drain_markers_;
     ClReadAhead      read_ahead_;
     ClBouncedRect    bounced_;
     MonotonicClock   clock_;

@@ -762,3 +762,113 @@ TEST(opengl_backend_software, open_import_place_retire_drain_and_close_cycles_ov
   }
   for (pthread_t &worker : workers) CHECK_EQ(pthread_join(worker, nullptr), 0);
   CHECK_EQ(faults.load(), 0u); }
+
+namespace {
+
+GLsync (*real_fence)(GLenum, GLbitfield) = nullptr;
+void (*real_flush)(void) = nullptr;
+unsigned fences_made = 0u;
+unsigned flushes_after_fence = 0u;
+bool     fenced_since_flush = false;
+
+GLsync counted_fence(GLenum condition, GLbitfield flags)
+{
+    fences_made++;
+    fenced_since_flush = true;
+    return real_fence(condition, flags);
+}
+
+void counted_flush()
+{
+    if (fenced_since_flush) flushes_after_fence++;
+    fenced_since_flush = false;
+    real_flush();
+}
+
+void count_fences(OpenGlBackend &backend)
+{
+    av::glproto::RealGl &gl = OpenGlBackendProbe::writable(backend);
+    real_wait = gl.glClientWaitSync;
+    real_fence = gl.glFenceSync;
+    real_flush = gl.glFlush;
+    fences_made = 0u;
+    flushes_after_fence = 0u;
+    fenced_since_flush = false;
+    waits = 0u;
+    wait_answer = 0u;
+    gl.glClientWaitSync = counted_wait;
+    gl.glFenceSync = counted_fence;
+    gl.glFlush = counted_flush;
+}
+
+}
+
+TEST(opengl_backend_software, a_drain_that_timed_out_is_retried_on_the_same_fence_and_a_new_one_is_made_only_after_new_work)
+{ if (skipped()) return;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr));
+  count_fences(backend);
+  av::MonotonicClock clock;
+  wait_answer = 0x911Bu;
+  av::TeardownBudget first(clock, 0u);
+  CHECK(!backend.drain(first));
+  CHECK_EQ(fences_made, 1u);
+  CHECK_EQ(flushes_after_fence, 1u);
+  av::TeardownBudget again(clock, 0u);
+  CHECK(!backend.drain(again));
+  CHECK_EQ(fences_made, 1u);
+  wait_answer = 0u;
+  av::TeardownBudget last(clock, 0u);
+  CHECK(backend.drain(last));
+  CHECK_EQ(fences_made, 1u);
+  CHECK(Command(av::glproto::kCmd_glFlush).run(backend));
+  wait_answer = 0x911Bu;
+  av::TeardownBudget later(clock, 0u);
+  CHECK(!backend.drain(later));
+  CHECK_EQ(fences_made, 2u);
+  CHECK(Command(av::glproto::kCmd_glFlush).run(backend));
+  wait_answer = 0u;
+  av::TeardownBudget fresh(clock, 0u);
+  CHECK(backend.drain(fresh));
+  CHECK_EQ(fences_made, 3u);
+  backend.shut_down(); }
+
+namespace {
+
+struct Foreign {
+    OpenGlBackend    *backend;
+    std::atomic<bool> drained;
+    std::atomic<bool> done;
+};
+
+void *drain_and_close(void *context)
+{
+    Foreign &foreign = *static_cast<Foreign *>(context);
+    foreign.drained.store(foreign.backend->drain(av::GenerousBudget().budget()));
+    foreign.backend->shut_down();
+    foreign.done.store(true);
+    return nullptr;
+}
+
+}
+
+TEST(opengl_backend_software, a_backend_whose_context_cannot_be_made_current_is_not_drained_and_still_leaves_its_group)
+{ if (skipped()) return;
+  av::GlMemoryGroup group;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr, &group));
+  Memfd         memfd(memory_bytes);
+  std::uint64_t name = 0u, detail = 0u;
+  CHECK(import_memory(backend, memfd.fd(), memory_bytes, av::SharedImageShape(), name, detail));
+  CHECK_EQ(group.members(), 1u);
+  CHECK_EQ(OpenGlBackendProbe::memories(backend).count(), 1u);
+  OpenGlBackendProbe::gl(backend);
+  Foreign foreign = {&backend, true, false};
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, drain_and_close, &foreign), 0);
+  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  CHECK(foreign.done.load());
+  CHECK(!foreign.drained.load());
+  CHECK_EQ(group.members(), 0u);
+  CHECK_EQ(OpenGlBackendProbe::memories(backend).count(), 0u);
+  eglMakeCurrent(eglGetCurrentDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); }

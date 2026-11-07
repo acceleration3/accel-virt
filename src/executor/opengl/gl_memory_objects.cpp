@@ -185,6 +185,15 @@ void GlMemoryObjects::destroy_all(GlHostImport &import)
     destroy_here(import);
 }
 
+void GlMemoryObjects::forget_all()
+{
+    AV_SCOPE("GlMemoryObjects::forget_all");
+    Hold hold(group_);
+    memories_.clear();
+    placements_.clear();
+    textures_.clear();
+}
+
 bool GlMemoryObjects::holds(uint32_t name)
 {
     AV_SCOPE("GlMemoryObjects::holds");

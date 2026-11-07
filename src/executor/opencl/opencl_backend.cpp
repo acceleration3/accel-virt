@@ -81,7 +81,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -385,21 +385,7 @@ bool OpenClBackend::drain(TeardownBudget &budget)
 bool OpenClBackend::settled(cl_command_queue queue, TeardownBudget &budget)
 {
     AV_SCOPE("OpenClBackend::settled");
-    constexpr uint64_t poll_nanoseconds = 100000u;
-    cl_event           marker = nullptr;
-    if (::clEnqueueMarkerWithWaitList(queue, 0u, nullptr, &marker) != CL_SUCCESS || marker == nullptr) return false;
-    static_cast<void>(::clFlush(queue));
-    bool done = false;
-    for (;;) {
-        cl_int status = CL_QUEUED;
-        done = ::clGetEventInfo(marker, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr) !=
-                   CL_SUCCESS ||
-               status <= CL_COMPLETE;
-        if (done || budget.expired()) break;
-        clock_.pause(poll_nanoseconds);
-    }
-    static_cast<void>(::clReleaseEvent(marker));
-    return done;
+    return drain_markers_.settle(queue, ran_, clock_, budget);
 }
 
 void OpenClBackend::end_batch()
@@ -599,6 +585,7 @@ void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");
     stop_pacing();
+    drain_markers_.release_all();
     il_.forget();
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t, clproto::HandleKind kind, void *object, uint32_t times) {

@@ -1,17 +1,19 @@
 #ifndef AV_CL_USER_EVENTS_HPP
 #define AV_CL_USER_EVENTS_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
 
 #include <stdint.h>
 
 namespace av {
 
+class BlockSource;
+
 class ClUserEvents {
 public:
-    static constexpr uint32_t most = 256u;
-
-    ClUserEvents();
+    explicit ClUserEvents(BlockSource &blocks);
+    ~ClUserEvents();
     ClUserEvents(const ClUserEvents &) = delete;
     ClUserEvents &operator=(const ClUserEvents &) = delete;
 
@@ -21,11 +23,7 @@ public:
     uint32_t count() const;
 
 private:
-    void drop(uint32_t index);
-    void purge();
-
-    cl_event events_[most];
-    uint32_t count_;
+    KeyedSlots<uint64_t, bool> events_;
 };
 
 }

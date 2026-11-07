@@ -126,7 +126,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
       textures_(blocks, gl_, memories_, images_, pending_), guest_(), region_(guest_, lines), published_(guest_), errors_(),
-      resolved_(0u), ran_(0u),
+      resolved_(0u), ran_(0u), submitted_(0u), fenced_at_(0u), drain_fence_(nullptr),
       current_(false), poll_failure_logged_(false), lines_(lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
@@ -191,16 +191,26 @@ bool OpenGlBackend::granted_fixed_function()
 bool OpenGlBackend::drain(TeardownBudget &budget)
 {
     AV_SCOPE("OpenGlBackend::drain");
-    if (gl_.glFinish == nullptr || !context_.make_current()) return true;
-    GLsync fence = nullptr;
-    if (gl_.glFenceSync != nullptr && gl_.glClientWaitSync != nullptr && gl_.glDeleteSync != nullptr)
-        fence = gl_.glFenceSync(gl_sync_gpu_commands_complete, 0u);
-    if (fence == nullptr) {
+    if (gl_.glFinish == nullptr) return true;
+    if (!context_.make_current()) return false;
+    const bool syncs = gl_.glFenceSync != nullptr && gl_.glClientWaitSync != nullptr && gl_.glDeleteSync != nullptr;
+    if (syncs && drain_fence_ != nullptr && fenced_at_ != submitted_) {
+        gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
+        drain_fence_ = nullptr;
+    }
+    if (syncs && drain_fence_ == nullptr) {
+        drain_fence_ = gl_.glFenceSync(gl_sync_gpu_commands_complete, 0u);
+        fenced_at_ = submitted_;
+        if (drain_fence_ != nullptr && gl_.glFlush != nullptr) gl_.glFlush();
+    }
+    if (drain_fence_ == nullptr) {
         gl_.glFinish();
     } else {
-        const uint32_t reached = gl_.glClientWaitSync(fence, gl_sync_flush_commands_bit, budget.remaining());
-        gl_.glDeleteSync(fence);
+        const uint32_t reached =
+            gl_.glClientWaitSync(static_cast<GLsync>(drain_fence_), gl_sync_flush_commands_bit, budget.remaining());
         if (reached != gl_already_signaled && reached != gl_condition_satisfied) return false;
+        gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
+        drain_fence_ = nullptr;
     }
     static_cast<void>(progress_.settle());
     memories_.reclaim(import_);
@@ -211,6 +221,7 @@ void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
     if (context_.make_current()) {
+        if (drain_fence_ != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
         if (gl_.glFinish != nullptr) gl_.glFinish();
         pack_.release();
         pack_.abandon_all();
@@ -223,10 +234,15 @@ void OpenGlBackend::shut_down()
         while (fences_.take_any(fence))
             if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
     } else {
+        memories_.forget_all();
+        memories_.part();
         progress_.forget();
         void *fence = nullptr;
         while (fences_.take_any(fence)) fence = nullptr;
     }
+    drain_fence_ = nullptr;
+    fenced_at_ = 0u;
+    submitted_ = 0u;
     images_.give_back();
     natives_.give_back();
     wake_.unbind();
@@ -252,6 +268,7 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         return false;
     }
     current_ = true;
+    submitted_++;
     if (slices_.knows(command_id)) return slices_.run(command_id, payload, reply, arena);
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
         LogLine(lines_).text(glproto::cmd_id_to_string(command_id)).text(" could not run").write();

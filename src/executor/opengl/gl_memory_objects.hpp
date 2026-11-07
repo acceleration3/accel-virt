@@ -35,6 +35,7 @@ public:
     void                 retire(uint32_t name);
     void                 reclaim(GlHostImport &import);
     void                 destroy_all(GlHostImport &import);
+    void                 forget_all();
 
     bool     holds(uint32_t name);
     uint32_t count() const;
