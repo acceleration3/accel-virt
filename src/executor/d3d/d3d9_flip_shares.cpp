@@ -239,6 +239,10 @@ void D3d9FlipShares::forget(Primary &primary)
         device11_->unlock();
     }
     if (primary.lane_ != nullptr) static_cast<void>(primary.lane_->signalled_.wait(primary.lane_->order_.value(), 1000000000u));
+    if (primary.image_.made() || primary.adopted_.made()) {
+        if (device11_ != nullptr && device11_->opened()) device11_->vulkan().idle();
+        if (primary.lane_ != nullptr) primary.lane_->vulkan_.work().idle();
+    }
     primary.adopted_.release();
     primary.image_.release();
     primary.texture_ = nullptr;
