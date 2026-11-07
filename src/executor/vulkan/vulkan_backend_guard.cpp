@@ -1,5 +1,6 @@
 #include "executor/vulkan/vulkan_backend.hpp"
 
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -60,6 +61,9 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
     case VulkanDestroyKind::descriptor_pool:
         RealVulkanDispatch::on_vkDestroyDescriptorPool(made_by, reinterpret_cast<VkDescriptorPool>(handle), nullptr);
         return;
+    case VulkanDestroyKind::descriptor_pool_reset:
+        static_cast<void>(RealVulkanDispatch::on_vkResetDescriptorPool(made_by, reinterpret_cast<VkDescriptorPool>(handle), 0u));
+        return;
     case VulkanDestroyKind::command_pool:
         RealVulkanDispatch::on_vkDestroyCommandPool(made_by, reinterpret_cast<VkCommandPool>(handle), nullptr);
         return;
@@ -89,6 +93,17 @@ void VulkanBackend::release_children(uint64_t parent, uint64_t device)
 {
     AV_SCOPE("VulkanBackend::release_children");
     handles_.for_each_child(parent, [this, device](uint64_t child) { static_cast<void>(guard_.release(child, device)); });
+}
+
+uint64_t VulkanBackend::children_mark(uint64_t parent, uint64_t device) const
+{
+    AV_SCOPE("VulkanBackend::children_mark");
+    uint64_t newest = 0u;
+    handles_.for_each_child(parent, [&](uint64_t child) {
+        const uint64_t mark = guard_.mark_of(child, device);
+        if (mark > newest) newest = mark;
+    });
+    return newest;
 }
 
 uint64_t VulkanBackend::owning_device(uint64_t handle) const
@@ -178,6 +193,7 @@ void VulkanBackend::on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDescriptorPool");
     release_children(number(descriptorPool), number(device));
+    guard_.orphan_children(number(descriptorPool), number(device));
     guard_.destroy(VulkanDestroyKind::descriptor_pool, number(device), 0u, number(descriptorPool));
 }
 
@@ -185,6 +201,7 @@ void VulkanBackend::on_vkDestroyCommandPool(VkDevice device, VkCommandPool comma
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyCommandPool");
     release_children(number(commandPool), number(device));
+    guard_.orphan_children(number(commandPool), number(device));
     guard_.destroy(VulkanDestroyKind::command_pool, number(device), 0u, number(commandPool));
 }
 
@@ -215,7 +232,13 @@ VkResult VulkanBackend::on_vkResetDescriptorPool(VkDevice device, VkDescriptorPo
                                                  VkDescriptorPoolResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetDescriptorPool");
-    if (!guard_.quiesce(number(device))) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const uint64_t newest = children_mark(number(descriptorPool), number(device));
+    if (!guard_.quiesce_through(newest, number(device))) {
+        guard_.defer_pool_reset(number(descriptorPool), number(device), newest);
+        release_children(number(descriptorPool), number(device));
+        guard_.orphan_children(number(descriptorPool), number(device));
+        return VK_SUCCESS;
+    }
     release_children(number(descriptorPool), number(device));
     const VkResult reset = RealVulkanDispatch::on_vkResetDescriptorPool(device, descriptorPool, flags);
     if (reset == VK_SUCCESS) guard_.orphan_children(number(descriptorPool), number(device));
@@ -226,7 +249,8 @@ VkResult VulkanBackend::on_vkResetCommandPool(VkDevice device, VkCommandPool com
                                               VkCommandPoolResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetCommandPool");
-    if (!guard_.quiesce(number(device))) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (!guard_.quiesce_through(children_mark(number(commandPool), number(device)), number(device)))
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     release_children(number(commandPool), number(device));
     return RealVulkanDispatch::on_vkResetCommandPool(device, commandPool, flags);
 }
@@ -241,7 +265,7 @@ VkResult VulkanBackend::on_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, c
 VkResult VulkanBackend::on_vkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetCommandBuffer");
-    if (!reusable(commandBuffer)) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (!reusable(commandBuffer)) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     return RealVulkanDispatch::on_vkResetCommandBuffer(commandBuffer, flags);
 }
 
@@ -369,7 +393,10 @@ bool VulkanBackend::template_named(VkDescriptorUpdateTemplate made, const void *
 {
     AV_SCOPE("VulkanBackend::template_named");
     const uint64_t number_of = number(made);
-    if (handles_.find(number_of, VulkanObjectKind::descriptor_template) == nullptr) return false;
+    if (handles_.find(number_of, VulkanObjectKind::descriptor_template) == nullptr) {
+        lines_.note("a descriptor update refused, the template is not known, template", number_of);
+        return false;
+    }
     bool held = true;
     const bool named = templates_.each(number_of, data, template_bytes(made), [&](const VulkanTemplates::Descriptor &at) {
         uint64_t first = 0u;
@@ -378,6 +405,7 @@ bool VulkanBackend::template_named(VkDescriptorUpdateTemplate made, const void *
         if (set != 0u && !guard_.bound(set, at.binding_, at.element_, first, second, device)) held = false;
         return true;
     });
+    if (!named) lines_.note("a descriptor update refused, a handle in its data is not known, template", number_of);
     return named && (held || guard_.quiesce(device));
 }
 

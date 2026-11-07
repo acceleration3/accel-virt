@@ -21,6 +21,7 @@ public:
     void     commit(uint64_t mark, uint64_t queue) override;
     void     cancel(uint64_t mark) override;
     bool     wait_idle(uint64_t device) override;
+    bool     wait_through(uint64_t device, uint64_t mark) override;
     void     begin_poll() override;
     void     forget(VkDevice device);
 
@@ -41,6 +42,7 @@ private:
 
     struct Slot {
         VkDevice device_;
+        VkQueue  queue_;
         VkFence  fence_;
         uint64_t mark_;
         State    state_;
@@ -49,6 +51,8 @@ private:
     void     settle();
     void     poll_all();
     bool     waited(Slot &slot);
+    bool     queued(Slot &slot);
+    bool     settled(Slot &slot);
     uint32_t oldest() const;
     uint32_t vacancy();
     uint32_t reserved_for(uint64_t mark) const;

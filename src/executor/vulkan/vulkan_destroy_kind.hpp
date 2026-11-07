@@ -20,6 +20,7 @@ enum class VulkanDestroyKind : uint8_t {
     event,
     descriptor_set_layout,
     descriptor_pool,
+    descriptor_pool_reset,
     descriptor_set,
     command_pool,
     command_buffer,

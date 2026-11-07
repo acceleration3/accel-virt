@@ -21,7 +21,10 @@ public:
     void link(VulkanNode *pool);
     void unlink();
     void orphan();
-    VulkanNode *next_child();
+    void schedule();
+    void unschedule();
+    void stamp(uint64_t mark);
+    VulkanNode *next_child() const;
 
     uint64_t          handle() const;
     uint64_t          device() const;
@@ -31,6 +34,8 @@ public:
     VulkanNode       *pool() const;
     VulkanNode       *first_child() const;
     bool              orphaned() const;
+    bool              scheduled() const;
+    uint64_t          stamped() const;
 
     bool invariants_hold() const;
 
@@ -40,8 +45,10 @@ private:
     uint64_t          device_;
     uint64_t          parent_;
     uint32_t          references_;
+    uint64_t          stamped_;
     VulkanDestroyKind kind_;
     bool              orphaned_;
+    bool              scheduled_;
     VulkanNode       *pool_;
     VulkanNode       *first_child_;
     VulkanNode       *next_;

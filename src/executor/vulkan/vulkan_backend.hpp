@@ -13,6 +13,7 @@
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
+#include "executor/vulkan/vulkan_set_layouts.hpp"
 #include "executor/vulkan/vulkan_templates.hpp"
 #include "executor/shim/physical_device_list.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
@@ -51,6 +52,12 @@ public:
                                  const VkAllocationCallbacks *pAllocator,
                                  VkInstance *pInstance) override;
 
+    VkResult on_vkCreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
+                                            const VkAllocationCallbacks *pAllocator,
+                                            VkDescriptorSetLayout *pSetLayout) override;
+    VkResult on_vkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
+                                       const VkAllocationCallbacks *pAllocator,
+                                       VkPipelineLayout *pPipelineLayout) override;
     VkResult on_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                  const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
@@ -214,6 +221,7 @@ private:
 
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
     void     release_children(uint64_t parent, uint64_t device);
+    uint64_t children_mark(uint64_t parent, uint64_t device) const;
     uint64_t owning_device(uint64_t handle) const;
     bool     reusable(VkCommandBuffer commandBuffer);
     bool     template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device);
@@ -260,6 +268,8 @@ private:
     bool             types_learnt_;
     VulkanSubmitTiming timing_;
     VulkanTemplates      templates_;
+    VulkanSetLayouts     layouts_;
+    DriverLog           &lines_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;
     uint64_t parent_;

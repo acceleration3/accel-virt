@@ -45,6 +45,10 @@ public:
                                      uint32_t count);
     [[nodiscard]] bool await_reset(uint64_t owner, uint64_t device);
     [[nodiscard]] bool quiesce(uint64_t device);
+    [[nodiscard]] bool quiesce_through(uint64_t mark, uint64_t device);
+    void               defer_pool_reset(uint64_t pool, uint64_t device, uint64_t mark);
+    uint64_t           mark_of(uint64_t owner, uint64_t device) const;
+    void               end_batch();
 
     bool holding(uint64_t owner, uint64_t handle) const;
     bool tracked(uint64_t handle) const;

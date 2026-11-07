@@ -27,7 +27,8 @@ struct VulkanBackendProbe {
     bool                    memory_import() const;
     void                    begin_frame(bool recording);
     [[nodiscard]] Status    add_template(uint64_t made, uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
-                                         uint32_t count);
+                                         uint32_t count, const uint32_t *immutable = nullptr,
+                                         uint32_t immutable_count = 0u);
     [[nodiscard]] bool      template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set,
                                            uint64_t device);
     VulkanGuard            &guard();

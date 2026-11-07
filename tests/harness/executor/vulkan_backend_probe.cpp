@@ -36,12 +36,12 @@ bool VulkanBackendProbe::memory_import() const { return backend.memory_import_; 
 void VulkanBackendProbe::begin_frame(bool recording) { backend.guard_.begin_frame(recording); }
 
 Status VulkanBackendProbe::add_template(uint64_t made, uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
-                                        uint32_t count)
+                                        uint32_t count, const uint32_t *immutable, uint32_t immutable_count)
 {
     DescriptorTemplateLayout layout;
     const Status measured = layout.take(entries, count);
     if (measured != Status::ok) return measured;
-    const Status taken = backend.templates_.take(made, device, entries, count);
+    const Status taken = backend.templates_.take(made, device, entries, count, immutable, immutable_count);
     if (taken != Status::ok) return taken;
     backend.made_through(device);
     backend.keep(made, VulkanObjectKind::descriptor_template, layout.bytes());

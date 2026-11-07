@@ -158,3 +158,38 @@ TEST(vulkan_templates, a_template_that_cannot_be_kept_or_is_malformed_is_refused
   CHECK(!templates.known(7u));
   CHECK_EQ(templates.count(), 0u);
   CHECK(templates.invariants_hold()); }
+
+TEST(vulkan_templates, a_binding_with_immutable_samplers_names_no_sampler_whatever_the_blob_holds)
+{ av::MockPlatform platform;
+  VulkanTemplates templates(platform);
+  const VkDescriptorUpdateTemplateEntry entries[3] = {
+      entry_of(0u, 0u, 1u, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0u, 0u),
+      entry_of(1u, 0u, 1u, VK_DESCRIPTOR_TYPE_SAMPLER, 32u, 0u),
+      entry_of(2u, 0u, 1u, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64u, 0u)};
+  const std::uint32_t immutable[2] = {0u, 1u};
+  CHECK_STATUS(templates.take(7u, 1u, entries, 3u, immutable, 2u), av::Status::ok);
+  std::uint8_t blob[128] = {};
+  VkDescriptorImageInfo info = {};
+  info.imageView = reinterpret_cast<VkImageView>(std::uintptr_t{0x10u});
+  info.sampler = reinterpret_cast<VkSampler>(std::uintptr_t{0x20u});
+  std::memcpy(blob, &info, sizeof info);
+  std::memcpy(blob + 32u, &info, sizeof info);
+  std::memcpy(blob + 64u, &info, sizeof info);
+  Seen seen;
+  CHECK(templates.each(7u, blob, sizeof blob, [&](const VulkanTemplates::Descriptor &at) {
+      seen.all[seen.count++] = at;
+      return true;
+  }));
+  CHECK_EQ(seen.count, 2u);
+  CHECK_EQ(seen.all[0].binding_, 0u);
+  CHECK(seen.all[0].first_.kind_ == HandleKind::image_view);
+  CHECK(!seen.all[0].second_.named_);
+  CHECK_EQ(seen.all[1].binding_, 2u);
+  CHECK(seen.all[1].second_.named_);
+  CHECK_EQ(seen.all[1].second_.handle_, 0x20u);
+  CHECK(templates.invariants_hold()); }
+
+TEST(vulkan_templates, immutable_bindings_are_refused_when_they_are_named_without_a_list)
+{ av::MockPlatform platform;
+  VulkanTemplates templates(platform);
+  CHECK_STATUS(templates.take(7u, 1u, nullptr, 0u, nullptr, 1u), av::Status::invalid_parameter); }

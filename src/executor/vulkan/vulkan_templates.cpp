@@ -34,21 +34,33 @@ VulkanTemplates::VulkanTemplates(BlockSource &blocks) : blocks_(blocks), pool_(b
     AV_SCOPE("VulkanTemplates::VulkanTemplates");
 }
 
-VulkanTemplates::Entries::Entries(BlockSource &blocks, uint64_t device) : entries_(blocks, Pool::paged), device_(device)
+VulkanTemplates::Entries::Entries(BlockSource &blocks, uint64_t device)
+    : entries_(blocks, Pool::paged), immutable_(blocks, Pool::paged), device_(device)
 {
     AV_SCOPE("VulkanTemplates::Entries::Entries");
 }
 
+bool VulkanTemplates::Entries::fixes(uint32_t binding) const
+{
+    AV_SCOPE("VulkanTemplates::Entries::fixes");
+    for (uint32_t index = 0u; index < immutable_.size(); index++)
+        if (immutable_.at(index) == binding) return true;
+    return false;
+}
+
 Status VulkanTemplates::take(uint64_t made, uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
-                             uint32_t count)
+                             uint32_t count, const uint32_t *immutable, uint32_t immutable_count)
 {
     AV_SCOPE("VulkanTemplates::take");
-    if (made == 0u || (entries == nullptr && count != 0u)) return Status::invalid_parameter;
+    if (made == 0u || (entries == nullptr && count != 0u) || (immutable == nullptr && immutable_count != 0u))
+        return Status::invalid_parameter;
     forget(made);
     Entries *listed = nullptr;
     if (pool_.create(listed, blocks_, device) != Status::ok) return Status::no_memory;
     Status kept = listed->entries_.reserve(count);
     for (uint32_t index = 0u; index < count && kept == Status::ok; index++) kept = listed->entries_.append(entries[index]);
+    for (uint32_t index = 0u; index < immutable_count && kept == Status::ok; index++)
+        kept = listed->immutable_.append(immutable[index]);
     uint32_t slot = 0u;
     if (kept == Status::ok) kept = templates_.insert(made, listed, slot);
     if (kept != Status::ok) static_cast<void>(pool_.destroy(listed));
@@ -80,7 +92,7 @@ void VulkanTemplates::clear()
 }
 
 Status VulkanTemplates::describe(const VkDescriptorUpdateTemplateEntry &entry, uint32_t index, const void *data,
-                                 uint64_t bytes, Descriptor &described) const
+                                 uint64_t bytes, bool immutable_sampler, Descriptor &described) const
 {
     AV_SCOPE("VulkanTemplates::describe");
     described = Descriptor{entry.dstBinding, entry.dstArrayElement + index, none(), none()};
@@ -116,11 +128,11 @@ Status VulkanTemplates::describe(const VkDescriptorUpdateTemplateEntry &entry, u
         VkDescriptorImageInfo info = {};
         __builtin_memcpy(&info, read, sizeof info);
         if (type == VK_DESCRIPTOR_TYPE_SAMPLER) {
-            described.first_ = named_as(HandleKind::sampler, number(info.sampler));
+            if (!immutable_sampler) described.first_ = named_as(HandleKind::sampler, number(info.sampler));
             return Status::ok;
         }
         described.first_ = named_as(HandleKind::image_view, number(info.imageView));
-        if (type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+        if (type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && !immutable_sampler)
             described.second_ = named_as(HandleKind::sampler, number(info.sampler));
         return Status::ok;
     }
@@ -164,7 +176,7 @@ bool VulkanTemplates::invariants_hold() const
     if (!pool_.invariants_hold() || !templates_.invariants_hold() || pool_.live() != templates_.count()) return false;
     bool sound = true;
     templates_.for_each([&sound](uint64_t, Entries *const &listed) {
-        sound = sound && listed != nullptr && listed->entries_.invariants_hold();
+        sound = sound && listed != nullptr && listed->entries_.invariants_hold() && listed->immutable_.invariants_hold();
     });
     return sound;
 }

@@ -66,9 +66,11 @@ struct Rig {
         backend.made_through(0u);
     }
 
-    bool add(const VkDescriptorUpdateTemplateEntry *entries, std::uint32_t count)
+    bool add(const VkDescriptorUpdateTemplateEntry *entries, std::uint32_t count, const std::uint32_t *immutable = nullptr,
+             std::uint32_t immutable_count = 0u)
     {
-        return probe.add_template(template_handle, device_handle, entries, count) == av::Status::ok;
+        return probe.add_template(template_handle, device_handle, entries, count, immutable, immutable_count) ==
+               av::Status::ok;
     }
 
     bool update(const void *data, std::uint64_t set = set_handle)
@@ -226,3 +228,48 @@ TEST(vulkan_backend_templates, a_hold_that_cannot_be_kept_waits_for_the_gpu_and_
   rig.platform.fail_allocation_at(1u);
   CHECK(rig.update(blob.bytes));
   CHECK(!rig.held(0u, 0u, buffer_a)); }
+
+TEST(vulkan_backend_templates, a_binding_with_immutable_samplers_is_updated_whatever_sampler_the_blob_names)
+{ Rig rig;
+  const VkDescriptorUpdateTemplateEntry entries[2] = {
+      entry_of(0u, 0u, 1u, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0u, 0u),
+      entry_of(1u, 0u, 1u, VK_DESCRIPTOR_TYPE_SAMPLER, 64u, 0u)};
+  const std::uint32_t immutable[2] = {0u, 1u};
+  CHECK(rig.add(entries, 2u, immutable, 2u));
+  Blob blob;
+  blob.image_info(0u, view_a, forged);
+  blob.image_info(64u, 0u, forged);
+  CHECK(rig.update(blob.bytes));
+  CHECK(rig.held(0u, 0u, view_a));
+  CHECK(!rig.held(0u, 0u, forged));
+  CHECK(!rig.held(1u, 0u, forged));
+  CHECK_EQ(rig.sink.lines(), 0u);
+  CHECK(rig.probe.guard().invariants_hold()); }
+
+TEST(vulkan_backend_templates, a_binding_without_immutable_samplers_still_refuses_a_sampler_nothing_made)
+{ Rig rig;
+  const VkDescriptorUpdateTemplateEntry entries[2] = {
+      entry_of(0u, 0u, 1u, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0u, 0u),
+      entry_of(1u, 0u, 1u, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64u, 0u)};
+  const std::uint32_t immutable[1] = {0u};
+  CHECK(rig.add(entries, 2u, immutable, 1u));
+  Blob blob;
+  blob.image_info(0u, view_a, forged);
+  blob.image_info(64u, view_a, forged);
+  CHECK(!rig.update(blob.bytes));
+  CHECK(!rig.held(1u, 0u, forged)); }
+
+TEST(vulkan_backend_templates, a_refused_update_is_written_to_the_log_with_the_template_it_came_from)
+{ Rig rig;
+  const VkDescriptorUpdateTemplateEntry entries[1] = {
+      entry_of(0u, 0u, 1u, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0u, 0u)};
+  CHECK(rig.add(entries, 1u));
+  Blob blob;
+  blob.buffer_info(0u, forged);
+  CHECK(!rig.update(blob.bytes));
+  CHECK_EQ(rig.sink.lines(), 1u);
+  CHECK(std::strstr(rig.sink.line(0u), "refused") != nullptr);
+  CHECK(std::strstr(rig.sink.line(0u), "5120") != nullptr);
+  rig.backend.ended(template_handle);
+  CHECK(!rig.update(blob.bytes));
+  CHECK_EQ(rig.sink.lines(), 2u); }

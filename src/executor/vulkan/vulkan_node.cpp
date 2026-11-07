@@ -6,8 +6,8 @@
 namespace av {
 
 VulkanNode::VulkanNode(VulkanLifetimes &owner, uint64_t handle, uint64_t device, uint64_t parent)
-    : owner_(owner), handle_(handle), device_(device), parent_(parent), references_(1u), kind_(VulkanDestroyKind::none),
-      orphaned_(false), pool_(nullptr), first_child_(nullptr), next_(nullptr), previous_(nullptr)
+    : owner_(owner), handle_(handle), device_(device), parent_(parent), references_(1u), stamped_(0u), kind_(VulkanDestroyKind::none),
+      orphaned_(false), scheduled_(false), pool_(nullptr), first_child_(nullptr), next_(nullptr), previous_(nullptr)
 {
     AV_SCOPE("VulkanNode::VulkanNode");
 }
@@ -67,7 +67,37 @@ void VulkanNode::orphan()
     if (alive) Release();
 }
 
-VulkanNode *VulkanNode::next_child()
+void VulkanNode::schedule()
+{
+    AV_SCOPE("VulkanNode::schedule");
+    scheduled_ = true;
+}
+
+void VulkanNode::unschedule()
+{
+    AV_SCOPE("VulkanNode::unschedule");
+    scheduled_ = false;
+}
+
+void VulkanNode::stamp(uint64_t mark)
+{
+    AV_SCOPE("VulkanNode::stamp");
+    if (mark > stamped_) stamped_ = mark;
+}
+
+uint64_t VulkanNode::stamped() const
+{
+    AV_SCOPE("VulkanNode::stamped");
+    return stamped_;
+}
+
+bool VulkanNode::scheduled() const
+{
+    AV_SCOPE("VulkanNode::scheduled");
+    return scheduled_;
+}
+
+VulkanNode *VulkanNode::next_child() const
 {
     AV_SCOPE("VulkanNode::next_child");
     return next_;

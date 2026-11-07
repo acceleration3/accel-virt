@@ -36,7 +36,8 @@ public:
     VulkanTemplates &operator=(const VulkanTemplates &) = delete;
 
     [[nodiscard]] Status take(uint64_t made, uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
-                              uint32_t count);
+                              uint32_t count, const uint32_t *immutable = nullptr,
+                              uint32_t immutable_count = 0u);
     void                 forget(uint64_t made);
     void                 forget_device(uint64_t device);
     void                 clear();
@@ -53,7 +54,8 @@ public:
             const uint32_t                         repeats = named.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ? 0u : named.descriptorCount;
             for (uint32_t index = 0u; index < repeats; index++) {
                 Descriptor described = {};
-                if (describe(named, index, data, bytes, described) != Status::ok) return false;
+                if (describe(named, index, data, bytes, listed.fixes(named.dstBinding), described) != Status::ok)
+                    return false;
                 if ((described.first_.named_ || described.second_.named_) && !visit(described)) return false;
             }
         }
@@ -69,12 +71,15 @@ private:
     struct Entries {
         Entries(BlockSource &blocks, uint64_t device);
 
+        bool fixes(uint32_t binding) const;
+
         GrowableArray<VkDescriptorUpdateTemplateEntry> entries_;
+        GrowableArray<uint32_t>                        immutable_;
         uint64_t                                       device_;
     };
 
     Status describe(const VkDescriptorUpdateTemplateEntry &entry, uint32_t index, const void *data, uint64_t bytes,
-                    Descriptor &described) const;
+                    bool immutable_sampler, Descriptor &described) const;
 
     BlockSource                      &blocks_;
     ObjectPool<Entries>               pool_;

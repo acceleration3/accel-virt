@@ -35,6 +35,7 @@ void VulkanSubmitProgress::poll_all()
 {
     AV_SCOPE("VulkanSubmitProgress::poll_all");
     for (Slot &slot : slots_) {
+        if (slot.state_ == State::stuck) static_cast<void>(queued(slot));
         if (slot.state_ != State::pending) continue;
         const VkResult status = ::vkGetFenceStatus(slot.device_, slot.fence_);
         if (status == VK_SUCCESS) static_cast<void>(::vkResetFences(slot.device_, 1u, &slot.fence_));
@@ -132,8 +133,30 @@ void VulkanSubmitProgress::commit(uint64_t mark, uint64_t queue)
     const uint32_t at = reserved_for(mark);
     if (at == slots) return;
     Slot &slot = slots_[at];
-    const bool signalled = ::vkQueueSubmit(reinterpret_cast<VkQueue>(queue), 0u, nullptr, slot.fence_) == VK_SUCCESS;
-    slot.state_ = signalled ? State::pending : State::stuck;
+    slot.queue_ = reinterpret_cast<VkQueue>(queue);
+    slot.state_ = State::stuck;
+    static_cast<void>(queued(slot));
+}
+
+bool VulkanSubmitProgress::queued(Slot &slot)
+{
+    AV_SCOPE("VulkanSubmitProgress::queued");
+    const VkResult status = ::vkQueueSubmit(slot.queue_, 0u, nullptr, slot.fence_);
+    if (status == VK_ERROR_DEVICE_LOST) slot.state_ = State::vacant;
+    else if (status == VK_SUCCESS) slot.state_ = State::pending;
+    return status == VK_SUCCESS || status == VK_ERROR_DEVICE_LOST;
+}
+
+bool VulkanSubmitProgress::settled(Slot &slot)
+{
+    AV_SCOPE("VulkanSubmitProgress::settled");
+    if (slot.state_ == State::stuck && !queued(slot)) {
+        if (::vkDeviceWaitIdle(slot.device_) != VK_SUCCESS) return false;
+        slot.state_ = State::vacant;
+        return true;
+    }
+    if (slot.state_ == State::vacant) return true;
+    return slot.state_ == State::pending && waited(slot);
 }
 
 void VulkanSubmitProgress::cancel(uint64_t mark)
@@ -146,9 +169,15 @@ void VulkanSubmitProgress::cancel(uint64_t mark)
 bool VulkanSubmitProgress::wait_idle(uint64_t device)
 {
     AV_SCOPE("VulkanSubmitProgress::wait_idle");
+    return wait_through(device, ~uint64_t{0});
+}
+
+bool VulkanSubmitProgress::wait_through(uint64_t device, uint64_t mark)
+{
+    AV_SCOPE("VulkanSubmitProgress::wait_through");
     for (Slot &slot : slots_) {
-        if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
-        if (slot.state_ != State::pending || !waited(slot)) return false;
+        if (slot.state_ == State::vacant || number(slot.device_) != device || slot.mark_ > mark) continue;
+        if (!settled(slot)) return false;
     }
     return true;
 }

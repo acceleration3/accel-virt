@@ -70,6 +70,11 @@ void VulkanGuard::begin_frame(bool recording)
     recording_ = recording;
     owner_ = 0u;
     owner_device_ = 0u;
+}
+
+void VulkanGuard::end_batch()
+{
+    AV_SCOPE("VulkanGuard::end_batch");
     progress_.begin_poll();
 }
 
@@ -262,8 +267,33 @@ bool VulkanGuard::await_reset(uint64_t owner, uint64_t device)
 {
     AV_SCOPE("VulkanGuard::await_reset");
     VulkanLifetimes *const lifetimes = lifetimes_of(device);
-    if (lifetimes == nullptr || lifetimes->mark_of(owner) <= progress_.reached(device)) return true;
-    return progress_.wait_idle(device);
+    if (lifetimes == nullptr) return true;
+    const uint64_t mark = lifetimes->mark_of(owner);
+    if (mark <= progress_.reached(device)) return true;
+    return progress_.wait_through(device, mark);
+}
+
+bool VulkanGuard::quiesce_through(uint64_t mark, uint64_t device)
+{
+    AV_SCOPE("VulkanGuard::quiesce_through");
+    if (mark <= progress_.reached(device)) return true;
+    return progress_.wait_through(device, mark);
+}
+
+void VulkanGuard::defer_pool_reset(uint64_t pool, uint64_t device, uint64_t mark)
+{
+    AV_SCOPE("VulkanGuard::defer_pool_reset");
+    VulkanLifetimes *const lifetimes = lifetimes_for(device);
+    if (lifetimes == nullptr) return;
+    static_cast<void>(lifetimes->destroy(VulkanDestroyKind::descriptor_pool_reset, device, 0u, pool, mark,
+                                         progress_.reached(device)));
+}
+
+uint64_t VulkanGuard::mark_of(uint64_t owner, uint64_t device) const
+{
+    AV_SCOPE("VulkanGuard::mark_of");
+    const VulkanLifetimes *const lifetimes = lifetimes_of(device);
+    return lifetimes != nullptr ? lifetimes->mark_of(owner) : 0u;
 }
 
 bool VulkanGuard::quiesce(uint64_t device)

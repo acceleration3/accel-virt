@@ -208,7 +208,7 @@ TEST(vulkan_lifetimes, letting_everything_go_finishes_the_destroys_the_guest_ask
 
 TEST(vulkan_lifetimes, a_set_updated_after_a_command_buffer_that_binds_it_was_submitted_gives_the_old_view_up_after_the_run)
 { Rig rig;
-  CHECK_STATUS(rig.hold(set, view), av::Status::ok);
+  CHECK_STATUS(rig.lifetimes.write(set, av::VulkanLifetimes::Descriptor{0u, 0u}, view, 0u, device, 0u), av::Status::ok);
   CHECK_STATUS(rig.hold(list, set), av::Status::ok);
   CHECK_STATUS(rig.destroy(VulkanDestroyKind::image_view, view, 0u, 0u), av::Status::ok);
   rig.lifetimes.submitted(list, 9u);
@@ -302,7 +302,8 @@ TEST(vulkan_lifetimes, a_set_s_descriptors_are_marked_by_a_submission_and_given_
   CHECK_STATUS(rig.hold(list, set), av::Status::ok);
   rig.lifetimes.submitted(list, 7u);
   CHECK_EQ(rig.lifetimes.mark_of(set), 7u);
-  CHECK_EQ(rig.lifetimes.mark_of(view), 7u);
+  CHECK_EQ(rig.lifetimes.mark_of(view), 0u);
+  CHECK_EQ(rig.lifetimes.mark_of(image), 0u);
   CHECK_STATUS(rig.destroy(VulkanDestroyKind::image_view, view, 7u, 0u), av::Status::ok);
   CHECK_STATUS(rig.lifetimes.release(set, 0u), av::Status::ok);
   CHECK_STATUS(rig.lifetimes.release(list, 0u), av::Status::ok);
@@ -325,3 +326,38 @@ TEST(vulkan_lifetimes, copying_descriptors_slot_by_slot_leaves_the_source_alone_
   CHECK_STATUS(rig.lifetimes.copy(pool, Descriptor{9u, 0u}, set, Descriptor{1u, 0u}, 1u, 0u),
                av::Status::no_memory);
   CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, a_node_a_submission_names_keeps_that_mark_with_no_list_or_table)
+{ Rig rig;
+  CHECK_STATUS(rig.lifetimes.track(set, device), av::Status::ok);
+  CHECK_EQ(rig.lifetimes.mark_of(set), 0u);
+  rig.lifetimes.submitted(set, 4u);
+  CHECK_EQ(rig.lifetimes.mark_of(set), 4u);
+  rig.lifetimes.submitted(set, 2u);
+  CHECK_EQ(rig.lifetimes.mark_of(set), 4u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, an_object_destroyed_again_while_the_first_request_waits_goes_when_the_later_request_does)
+{ Rig rig;
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::descriptor_pool_reset, pool, 5u, 0u), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::descriptor_pool, pool, 6u, 0u), av::Status::ok);
+  rig.lifetimes.reap(5u);
+  CHECK_EQ(rig.destroyer.count, 0u);
+  rig.lifetimes.reap(6u);
+  CHECK_EQ(rig.destroyer.count, 1u);
+  CHECK(rig.destroyer.kinds[0] == VulkanDestroyKind::descriptor_pool);
+  CHECK_EQ(rig.lifetimes.nodes(), 0u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, letting_everything_go_destroys_the_children_asked_for_before_their_pool_and_drops_the_rest)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(list, set, pool), av::Status::ok);
+  CHECK_STATUS(rig.hold(list, view, pool), av::Status::ok);
+  CHECK_STATUS(rig.lifetimes.release(list, 0u), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::descriptor_pool, pool, 0u, 0u), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::descriptor_set, set, 0u, 0u, pool), av::Status::ok);
+  CHECK_EQ(rig.destroyer.count, 1u);
+  rig.lifetimes.release_all(true);
+  CHECK(rig.destroyer.destroyed(pool));
+  CHECK(!rig.destroyer.destroyed(view));
+  CHECK_EQ(rig.lifetimes.nodes(), 0u); }

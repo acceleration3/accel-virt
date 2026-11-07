@@ -26,6 +26,9 @@ struct FakeDriver {
     std::uint32_t submits = 0u;
     bool          create_fails = false;
     bool          submit_fails = false;
+    bool          idle_fails = false;
+    bool          submit_lost = false;
+    std::uint32_t idles = 0u;
     VkFence       last_submitted = VK_NULL_HANDLE;
 };
 
@@ -117,10 +120,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice, uint32_t, const VkFence
     return state.signalled ? VK_SUCCESS : VK_TIMEOUT;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice)
+{
+    driver.idles++;
+    return driver.idle_fails ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue, uint32_t, const VkSubmitInfo *, VkFence fence)
 {
     driver.submits++;
     driver.last_submitted = fence;
+    if (driver.submit_lost) return VK_ERROR_DEVICE_LOST;
     return driver.submit_fails ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_SUCCESS;
 }
 
@@ -198,7 +208,7 @@ TEST(vulkan_submit_progress, a_reservation_gives_the_device_a_pending_mark_befor
   rig.progress.cancel(mark);
   CHECK(rig.progress.invariants_hold()); }
 
-TEST(vulkan_submit_progress, a_submission_whose_fence_cannot_be_queued_holds_its_device_back_until_the_device_is_forgotten)
+TEST(vulkan_submit_progress, a_submission_whose_fence_cannot_be_queued_holds_its_device_back_until_the_next_poll_queues_it)
 { Rig rig;
   driver.submit_fails = true;
   CHECK_EQ(rig.submit(), 1u);
@@ -208,13 +218,59 @@ TEST(vulkan_submit_progress, a_submission_whose_fence_cannot_be_queued_holds_its
   rig.signal_all();
   rig.progress.begin_poll();
   CHECK_EQ(rig.progress.reached(device), 0u);
-  CHECK(!rig.progress.wait_idle(device));
+  CHECK_EQ(rig.progress.stuck(device), 2u);
   CHECK_EQ(rig.progress.reached(other_device), 2u);
-  rig.progress.forget(device_of(device));
+  for (std::uint32_t index = 0u; index < driver.made; index++) driver.fences[index].signalled = false;
+  driver.submit_fails = false;
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 0u);
   CHECK_EQ(rig.progress.stuck(device), 0u);
+  rig.signal_all();
+  rig.progress.begin_poll();
   CHECK_EQ(rig.progress.reached(device), 2u);
   CHECK(rig.progress.wait_idle(device));
+  CHECK_EQ(driver.idles, 0u);
   CHECK(rig.progress.invariants_hold()); }
+
+TEST(vulkan_submit_progress, a_wait_for_a_submission_whose_fence_cannot_be_queued_retries_it_then_waits_for_the_whole_device)
+{ Rig rig;
+  driver.submit_fails = true;
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(rig.progress.stuck(device), 1u);
+  driver.idle_fails = true;
+  CHECK(!rig.progress.wait_idle(device));
+  CHECK_EQ(driver.idles, 1u);
+  CHECK_EQ(rig.progress.stuck(device), 1u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  driver.idle_fails = false;
+  CHECK(rig.progress.wait_idle(device));
+  CHECK_EQ(driver.idles, 2u);
+  CHECK_EQ(rig.progress.stuck(device), 0u);
+  CHECK_EQ(rig.progress.reached(device), 1u);
+  CHECK(rig.progress.invariants_hold()); }
+
+TEST(vulkan_submit_progress, a_wait_through_a_mark_leaves_the_later_submissions_alone)
+{ Rig rig;
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(rig.submit(), 2u);
+  CHECK_EQ(rig.submit(), 3u);
+  driver.fences[0].signalled = true;
+  driver.fences[1].signalled = true;
+  const std::uint32_t waited = driver.waits;
+  CHECK(rig.progress.wait_through(device, 2u));
+  CHECK_EQ(driver.waits - waited, 2u);
+  CHECK_EQ(rig.progress.reached(device), 2u);
+  CHECK(!rig.progress.wait_through(device, 3u));
+  CHECK(rig.progress.wait_through(device, 0u)); }
+
+TEST(vulkan_submit_progress, a_queue_that_reports_the_device_lost_when_the_fence_is_retried_counts_the_work_as_done)
+{ Rig rig;
+  driver.submit_fails = true;
+  CHECK_EQ(rig.submit(), 1u);
+  driver.submit_lost = true;
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 1u);
+  CHECK_EQ(rig.progress.stuck(device), 0u); }
 
 TEST(vulkan_submit_progress, a_hundred_and_twenty_eight_pending_submissions_make_the_next_wait_for_the_oldest_and_refuse_when_it_times_out)
 { Rig rig;

@@ -60,6 +60,7 @@ private:
     VulkanNode *node_for(uint64_t handle, uint64_t device, uint64_t parent);
     uint64_t    key_of(const Descriptor &at) const;
     Status      let_go(Tables::Slot &slot, uint64_t mark, uint64_t reached);
+    void        destroy_pending();
 
     VulkanDestroyer                   &destroyer_;
     ObjectPool<VulkanNode>             pool_;

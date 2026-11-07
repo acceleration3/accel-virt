@@ -110,10 +110,11 @@ void VulkanLifetimes::submitted(uint64_t owner, uint64_t mark)
     if (mark_of(owner) >= mark) return;
     holds_.submitted(owner, mark);
     tables_.submitted(owner, mark);
-    holds_.for_each_held(owner, [this, mark](VulkanNode *const held) { submitted(held->handle(), mark); });
-    tables_.for_each_slot(owner, [this, mark](const Tables::Slot &slot) {
-        if (slot.first_ != nullptr) submitted(slot.first_->handle(), mark);
-        if (slot.second_ != nullptr) submitted(slot.second_->handle(), mark);
+    VulkanNode **const named = nodes_.find(owner);
+    if (named != nullptr) (*named)->stamp(mark);
+    holds_.for_each_held(owner, [this, mark](VulkanNode *const held) {
+        if (held->pool() != nullptr) submitted(held->handle(), mark);
+        else tables_.submitted(held->handle(), mark);
     });
 }
 
@@ -155,8 +156,15 @@ Status VulkanLifetimes::destroy(VulkanDestroyKind kind, uint64_t device, uint64_
     }
     VulkanNode *const node = node_for(handle, device, parent);
     if (node == nullptr) return Status::no_memory;
+    const bool queued = node->scheduled();
+    if (queued) node->AddRef();
     node->request(kind, device, parent);
-    return holds_.retire(node, marked, reached);
+    if (marked > reached) node->schedule();
+    const Status retired = holds_.retire(node, marked, reached);
+    if (retired == Status::ok) return retired;
+    if (queued) node->Release();
+    else node->unschedule();
+    return retired;
 }
 
 uint64_t VulkanLifetimes::mark_of(uint64_t owner) const
@@ -164,7 +172,10 @@ uint64_t VulkanLifetimes::mark_of(uint64_t owner) const
     AV_SCOPE("VulkanLifetimes::mark_of");
     const uint64_t listed = holds_.mark_of(owner);
     const uint64_t tabled = tables_.mark_of(owner);
-    return listed > tabled ? listed : tabled;
+    VulkanNode *const *const named = nodes_.find(owner);
+    const uint64_t stamped = named != nullptr ? (*named)->stamped() : 0u;
+    const uint64_t newest = listed > tabled ? listed : tabled;
+    return newest > stamped ? newest : stamped;
 }
 
 void VulkanLifetimes::reap(uint64_t reached)
@@ -202,8 +213,19 @@ void VulkanLifetimes::release_all(bool idle)
             if (slot.second_ != nullptr) slot.second_->Release();
         });
     } while (holds_.lists() != 0u || holds_.retired() != 0u || tables_.count() != 0u);
+    destroy_pending();
     nodes_.clear();
     pool_.destroy_all();
+}
+
+void VulkanLifetimes::destroy_pending()
+{
+    AV_SCOPE("VulkanLifetimes::destroy_pending");
+    nodes_.for_each([&](uint64_t, VulkanNode *&node) {
+        if (node->kind() == VulkanDestroyKind::none) return;
+        if (!leaking_) destroyer_.destroy(node->kind(), node->device(), node->parent(), node->handle());
+        node->request(VulkanDestroyKind::none, node->device(), node->parent());
+    });
 }
 
 bool VulkanLifetimes::holding(uint64_t owner, uint64_t handle) const
