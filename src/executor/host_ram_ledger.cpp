@@ -69,6 +69,12 @@ bool HostRamLedger::take(uint64_t bytes)
     return false;
 }
 
+bool HostRamLedger::take_session(uint64_t bytes)
+{
+    AV_SCOPE("HostRamLedger::take_session");
+    return ByteLedger::take(bytes);
+}
+
 bool HostRamLedger::admit(uint64_t bytes)
 {
     AV_SCOPE("HostRamLedger::admit");

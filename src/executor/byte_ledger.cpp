@@ -36,6 +36,12 @@ bool ByteLedger::take(uint64_t bytes)
     }
 }
 
+bool ByteLedger::take_session(uint64_t bytes)
+{
+    AV_SCOPE("ByteLedger::take_session");
+    return take(bytes);
+}
+
 void ByteLedger::give(uint64_t bytes)
 {
     AV_SCOPE("ByteLedger::give");

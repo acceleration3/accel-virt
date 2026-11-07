@@ -12,6 +12,7 @@ public:
     ByteLedger &operator=(const ByteLedger &) = delete;
 
     [[nodiscard]] virtual bool take(uint64_t bytes);
+    [[nodiscard]] virtual bool take_session(uint64_t bytes);
     void               give(uint64_t bytes);
 
     uint64_t cap() const;

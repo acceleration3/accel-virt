@@ -42,6 +42,14 @@ bool VramAccount::take(uint64_t bytes)
     return true;
 }
 
+bool VramAccount::take_session(uint64_t bytes)
+{
+    AV_SCOPE("VramAccount::take_session");
+    if (ledger_ != nullptr && !ledger_->take_session(bytes)) return false;
+    __atomic_fetch_add(&held_, bytes, __ATOMIC_RELAXED);
+    return true;
+}
+
 void VramAccount::give(uint64_t bytes)
 {
     AV_SCOPE("VramAccount::give");

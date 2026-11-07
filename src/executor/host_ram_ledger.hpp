@@ -17,6 +17,7 @@ public:
     HostRamLedger();
 
     [[nodiscard]] bool take(uint64_t bytes) override;
+    [[nodiscard]] bool take_session(uint64_t bytes) override;
 
     void     budget(uint64_t bytes);
     uint64_t budget() const;

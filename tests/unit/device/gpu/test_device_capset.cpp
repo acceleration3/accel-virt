@@ -219,7 +219,7 @@ TEST(device_capset_host_ram, the_executor_is_told_the_floor_host_memory_may_not_
   host.set_guest_memory_bytes(16ull << 30);
   DeviceCapset capset(host);
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
-  CHECK_EQ(capset.info().host_ram_floor(), 7ull << 30);
+  CHECK_EQ(capset.info().host_ram_floor(), (15ull << 27));
   MockHost asked;
   asked.add_gpu(first);
   meminfo(asked, "MemTotal:       31457280 kB\n");

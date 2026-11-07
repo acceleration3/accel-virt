@@ -18,6 +18,7 @@ public:
     bool               bound() const;
     bool               bound_to(const ByteLedger *ledger) const;
     [[nodiscard]] bool take(uint64_t bytes);
+    [[nodiscard]] bool take_session(uint64_t bytes);
     void               give(uint64_t bytes);
     uint64_t           close();
 

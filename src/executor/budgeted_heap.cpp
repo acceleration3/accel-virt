@@ -21,7 +21,7 @@ void *BudgetedHeap::allocate(size_t bytes, Pool pool)
     AV_SCOPE("BudgetedHeap::allocate");
     if (bytes > SIZE_MAX - header_bytes) return nullptr;
     const uint64_t total = bytes + header_bytes;
-    if (account_.held() > limit_ || total > limit_ - account_.held() || !account_.take(total)) {
+    if (account_.held() > limit_ || total > limit_ - account_.held() || !account_.take_session(total)) {
         __atomic_fetch_add(&refusals_, 1u, __ATOMIC_RELAXED);
         return nullptr;
     }

@@ -10,6 +10,7 @@
 #include "proto/resources/surface_point.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "harness/executor/generous_budget.hpp"
 #include "harness/executor/mock_host_apis.hpp"
 #include "proto/resources/host_memory_request.hpp"
@@ -235,6 +236,24 @@ TEST(executor_root, the_floor_a_domain_opens_with_is_what_the_vms_host_ram_ledge
   const std::uint32_t domain = root.open_domain(intel, 0u, 8192u, 7777u);
   CHECK(domain != 0u);
   CHECK_EQ(apis.host_ram().floor(), 7777u);
+  root.close_domain(domain); }
+
+TEST(executor_root, a_session_opens_on_a_host_below_its_floor)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 1ull << 20;
+  apis.host_ram().watch(&gauge);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 8ull << 30, 7ull << 30);
+  CHECK(domain != 0u);
+  const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
+  ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
+  CHECK(session != nullptr);
+  CHECK_EQ(apis.host_ram().tight_refusals(), 0u);
+  close_settled(root, session);
   root.close_domain(domain); }
 
 TEST(executor_root, a_domain_opened_with_no_host_ram_means_no_budget)

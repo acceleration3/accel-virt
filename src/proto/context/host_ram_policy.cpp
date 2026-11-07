@@ -30,16 +30,12 @@ uint64_t HostRamPolicy::reserve_for(uint64_t host_total) const
     return host_total / auto_divisor > auto_floor ? host_total / auto_divisor : auto_floor;
 }
 
-uint64_t HostRamPolicy::floor_for(uint64_t host_total, uint64_t guest_ram) const
+uint64_t HostRamPolicy::floor_for(uint64_t host_total) const
 {
     AV_SCOPE("HostRamPolicy::floor_for");
     if (host_total == 0u) return 0u;
-    const uint64_t reserve = reserve_for(host_total);
-    if (reserve_mib_ != 0u) return reserve;
-    const uint64_t taken = guest_ram > host_total ? host_total : guest_ram;
-    const uint64_t half_left = (host_total - taken) / 2u;
-    const uint64_t cap = half_left > least_reserve ? half_left : least_reserve;
-    return reserve < cap ? reserve : cap;
+    if (reserve_mib_ != 0u) return reserve_for(host_total);
+    return host_total / floor_divisor > least_floor ? host_total / floor_divisor : least_floor;
 }
 
 uint64_t HostRamPolicy::budget_for(uint64_t host_total, uint64_t guest_ram) const

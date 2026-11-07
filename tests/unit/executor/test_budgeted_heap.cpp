@@ -86,18 +86,20 @@ TEST(budgeted_heap, rebinding_to_another_ledger_returns_what_the_old_one_lent)
   CHECK_EQ(new_ledger.used(), 0u);
   CHECK_EQ(heap.limit(), 100u * mib); }
 
-TEST(budgeted_heap, a_block_the_host_cannot_spare_is_refused_and_comes_again_when_memory_recovers)
+TEST(budgeted_heap, a_block_is_granted_while_the_host_is_below_its_floor_and_still_counts_toward_the_budget)
 { HostRamLedger ledger;
   av::FakeMemoryGauge gauge;
   gauge.free_bytes = 5u * mib;
   ledger.watch(&gauge);
   ledger.floor(4u * mib);
+  ledger.budget(3u * mib);
   BudgetedHeap heap;
   heap.bind(&ledger, 100u * mib);
-  CHECK(heap.allocate(2u * mib, Pool::paged) == nullptr);
-  CHECK_EQ(heap.refusals(), 1u);
-  CHECK_EQ(heap.held(), 0u);
-  gauge.set(64u * mib, HostRamLedger::refresh_ms);
   void *const block = heap.allocate(2u * mib, Pool::paged);
   CHECK(block != nullptr);
-  heap.release(block); }
+  CHECK_EQ(ledger.tight_refusals(), 0u);
+  CHECK_EQ(ledger.used(), 2u * mib + BudgetedHeap::header_bytes);
+  CHECK(heap.allocate(2u * mib, Pool::paged) == nullptr);
+  CHECK_EQ(ledger.tight_refusals(), 0u);
+  heap.release(block);
+  CHECK_EQ(ledger.used(), 0u); }

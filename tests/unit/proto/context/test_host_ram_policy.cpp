@@ -34,24 +34,28 @@ TEST(host_ram_policy, a_host_whose_memory_is_unknown_has_no_budget)
 { const HostRamPolicy policy;
   CHECK_EQ(policy.budget_for(0u, 4 * gib), 0u); }
 
-TEST(host_ram_policy, an_explicit_reserve_replaces_the_auto_one_and_is_never_below_a_gibibyte)
+TEST(host_ram_policy, an_explicit_reserve_replaces_the_auto_one_and_is_never_below_half_a_gibibyte)
 { CHECK_EQ(HostRamPolicy(2048u).reserve_for(30 * gib), 2 * gib);
   CHECK_EQ(HostRamPolicy(2048u).budget_for(30 * gib, 9 * gib), 19 * gib);
-  CHECK_EQ(HostRamPolicy(1u).reserve_for(30 * gib), gib);
+  CHECK_EQ(HostRamPolicy(1u).reserve_for(30 * gib), gib / 2u);
   CHECK_EQ(HostRamPolicy(16384u).budget_for(30 * gib, 9 * gib), 5 * gib);
   CHECK_EQ(HostRamPolicy(2048u).reserve_mib(), 2048u);
   CHECK_EQ(HostRamPolicy().reserve_mib(), 0u); }
 
-TEST(host_ram_policy, the_auto_floor_is_the_reserve_but_never_more_than_half_of_what_the_guest_leaves_nor_less_than_one_gibibyte)
+TEST(host_ram_policy, the_auto_floor_is_a_sixteenth_of_the_host_and_never_less_than_one_gibibyte_whatever_the_guest_holds)
 { const HostRamPolicy policy;
-  CHECK_EQ(policy.floor_for(30 * gib, 8 * gib), 7 * gib + gib / 2u);
-  CHECK_EQ(policy.floor_for(30 * gib, 16 * gib), 7 * gib);
-  CHECK_EQ(policy.floor_for(30 * gib, 28 * gib), gib);
-  CHECK_EQ(policy.floor_for(8 * gib, 100 * gib), gib);
-  CHECK_EQ(policy.floor_for(64 * gib, 8 * gib), 16 * gib);
-  CHECK_EQ(policy.floor_for(0u, 4 * gib), 0u); }
+  CHECK_EQ(policy.floor_for(30 * gib), gib + gib * 7u / 8u);
+  CHECK_EQ(policy.floor_for(64 * gib), 4 * gib);
+  CHECK_EQ(policy.floor_for(8 * gib), gib);
+  CHECK_EQ(policy.floor_for(16 * gib), gib);
+  CHECK_EQ(policy.floor_for(0u), 0u); }
 
-TEST(host_ram_policy, an_explicit_floor_is_what_was_asked_not_clamped_by_the_guest)
-{ CHECK_EQ(HostRamPolicy(2048u).floor_for(30 * gib, 28 * gib), 2 * gib);
-  CHECK_EQ(HostRamPolicy(16384u).floor_for(30 * gib, 16 * gib), 16 * gib);
-  CHECK_EQ(HostRamPolicy(1u).floor_for(30 * gib, 1 * gib), gib); }
+TEST(host_ram_policy, the_auto_floor_of_a_busy_host_stays_below_what_a_fully_touched_guest_leaves_available)
+{ const HostRamPolicy policy;
+  CHECK(policy.floor_for(30 * gib + gib / 2u) < 6 * gib);
+  CHECK(policy.floor_for(30 * gib + gib / 2u) < policy.reserve_for(30 * gib + gib / 2u) / 3u); }
+
+TEST(host_ram_policy, an_explicit_floor_is_what_was_asked_and_never_below_half_a_gibibyte)
+{ CHECK_EQ(HostRamPolicy(2048u).floor_for(30 * gib), 2 * gib);
+  CHECK_EQ(HostRamPolicy(16384u).floor_for(30 * gib), 16 * gib);
+  CHECK_EQ(HostRamPolicy(1u).floor_for(30 * gib), gib / 2u); }

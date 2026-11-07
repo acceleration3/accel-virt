@@ -201,3 +201,45 @@ TEST(host_ram_ledger_floor, racing_takes_never_pass_what_the_host_has_above_its_
   std::uint64_t total = 0u;
   for (const std::uint64_t one : granted) total += one;
   CHECK_EQ(total, 1000u); }
+
+TEST(host_ram_ledger_floor, bulk_memory_is_refused_while_the_host_is_below_its_floor_and_session_memory_is_not)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 2 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  ledger.budget(10 * gib);
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(ledger.tight_refusals(), 1u);
+  CHECK(ledger.take_session(gib));
+  CHECK_EQ(ledger.used(), gib);
+  CHECK_EQ(ledger.tight_refusals(), 1u);
+  ledger.give(gib);
+  CHECK_EQ(ledger.used(), 0u); }
+
+TEST(host_ram_ledger_floor, session_memory_still_counts_toward_the_budget_and_is_refused_past_it)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 2 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  ledger.budget(2 * gib);
+  CHECK(ledger.take_session(2 * gib));
+  CHECK(!ledger.take_session(1u));
+  CHECK_EQ(ledger.refusals(), 1u);
+  CHECK_EQ(ledger.tight_refusals(), 0u);
+  CHECK_EQ(gauge.reads, 0u); }
+
+TEST(host_ram_ledger_floor, an_account_takes_session_memory_through_a_tight_host_and_gives_it_back_on_close)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 2 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  VramAccount account(ledger);
+  CHECK(!account.take(1u));
+  CHECK_EQ(account.held(), 0u);
+  CHECK(account.take_session(gib));
+  CHECK_EQ(account.held(), gib);
+  CHECK_EQ(account.close(), gib);
+  CHECK_EQ(ledger.used(), 0u); }

@@ -668,7 +668,7 @@ TEST(context_session_host_ram, an_answer_the_session_limit_cannot_hold_is_refuse
   CHECK_EQ(ledger.used(), 0u);
   CHECK(session.invariants_hold()); }
 
-TEST(context_session_host_ram, a_decode_that_overflows_its_block_is_refused_while_the_host_is_below_its_floor)
+TEST(context_session_host_ram, a_decode_that_overflows_its_block_still_runs_while_the_host_is_below_its_floor)
 { Bound bound;
   ContextSession &session = bound.session();
   av::HostRamLedger ledger;
@@ -679,7 +679,7 @@ TEST(context_session_host_ram, a_decode_that_overflows_its_block_is_refused_whil
   session.use_host_ram(&ledger, 256u << 20);
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::roomy_id, payload, sizeof payload, nullptr, 0u, answer),
-           std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(session.starved(), 1u);
-  CHECK(ledger.tight_refusals() != 0u);
+           std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(session.starved(), 0u);
+  CHECK_EQ(ledger.tight_refusals(), 0u);
   CHECK_EQ(ledger.used(), 0u); }
