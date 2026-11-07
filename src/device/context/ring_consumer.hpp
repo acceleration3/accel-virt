@@ -37,6 +37,7 @@ public:
     uint64_t head() const;
     uint64_t earliest_pending() const;
     bool     has_work() const;
+    uint64_t watchdog_deadline() const;
     void     announce_awake(bool awake);
     bool     poll();
     void     order_with(D3dOrdering &ordering);

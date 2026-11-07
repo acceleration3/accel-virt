@@ -29,6 +29,12 @@ bool SubmissionWatchdog::overran(uint64_t now) const
     return limit_ns_ != 0u && since_ns_ != 0u && now > since_ns_ && now - since_ns_ >= limit_ns_;
 }
 
+uint64_t SubmissionWatchdog::deadline() const
+{
+    AV_SCOPE("SubmissionWatchdog::deadline");
+    return limit_ns_ != 0u && since_ns_ != 0u ? since_ns_ + limit_ns_ : 0u;
+}
+
 uint64_t SubmissionWatchdog::limit() const
 {
     AV_SCOPE("SubmissionWatchdog::limit");

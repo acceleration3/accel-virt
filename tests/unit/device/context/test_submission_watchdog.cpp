@@ -42,3 +42,17 @@ TEST(submission_watchdog, a_clock_reading_of_zero_still_starts_the_wait)
 { SubmissionWatchdog dog(100u);
   dog.waiting_at(1u, 0u);
   CHECK(dog.overran(200u)); }
+
+TEST(submission_watchdog, the_deadline_is_the_wait_start_plus_the_limit_and_zero_when_nothing_waits)
+{ SubmissionWatchdog dog(100u);
+  CHECK_EQ(dog.deadline(), std::uint64_t{0});
+  dog.waiting_at(5u, 1000u);
+  CHECK_EQ(dog.deadline(), std::uint64_t{1100});
+  dog.nothing_outstanding();
+  CHECK_EQ(dog.deadline(), std::uint64_t{0});
+  SubmissionWatchdog off(0u);
+  off.waiting_at(1u, 10u);
+  CHECK_EQ(off.deadline(), std::uint64_t{0}); }
+
+TEST(submission_watchdog, the_default_limit_stays_below_the_kernel_ring_timeout)
+{ CHECK(SubmissionWatchdog::default_limit_ns < 2000000000ull); }

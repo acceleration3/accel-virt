@@ -1090,3 +1090,19 @@ TEST(ring_consumer_watchdog, a_context_with_nothing_outstanding_is_never_judged)
   fixture.host().set_clock(1000u + watchdog_limit_ns * 10u);
   CHECK(!fixture.poll());
   CHECK(!fixture.consumer().faulted()); }
+
+TEST(ring_consumer_watchdog, a_held_submission_exposes_the_deadline_an_idle_worker_must_wake_for)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = scripted_progress;
+  gpu_marked = 4u;
+  gpu_reached = 0u;
+  fixture.host().set_clock(1000u);
+  fixture.bind();
+  CHECK_EQ(fixture.consumer().watchdog_deadline(), std::uint64_t{0});
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.consumer().watchdog_deadline(), 1000u + watchdog_limit_ns);
+  fixture.host().set_clock(1000u + watchdog_limit_ns + 1u);
+  CHECK(!fixture.poll());
+  CHECK_EQ(fixture.consumer().watchdog_deadline(), std::uint64_t{0}); }

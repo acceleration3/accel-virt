@@ -175,7 +175,11 @@ void Worker::run()
     for (;;) {
         if (!work_within_spin()) {
             ring_.announce_awake(false);
-            if (!ring_.has_work()) host_.wait_event(wake_);
+            if (!ring_.has_work()) {
+                const uint64_t deadline = ring_.watchdog_deadline();
+                if (deadline != 0u) static_cast<void>(host_.wait_event_until(wake_, deadline));
+                else host_.wait_event(wake_);
+            }
             ring_.announce_awake(true);
         }
         WorkItem item;

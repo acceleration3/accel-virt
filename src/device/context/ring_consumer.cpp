@@ -192,6 +192,12 @@ bool RingConsumer::settle()
     return newest != 0u;
 }
 
+uint64_t RingConsumer::watchdog_deadline() const
+{
+    AV_SCOPE("RingConsumer::watchdog_deadline");
+    return attached_ && !faulted_ ? watchdog_.deadline() : 0u;
+}
+
 bool RingConsumer::has_work() const
 {
     AV_SCOPE("RingConsumer::has_work");

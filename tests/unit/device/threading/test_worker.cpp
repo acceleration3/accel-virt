@@ -6,6 +6,7 @@
 #include "device/memory/blob_window.hpp"
 #include "device/context/ring_consumer.hpp"
 #include "device/context/ring_window.hpp"
+#include "device/context/submission_watchdog.hpp"
 #include "device/threading/work_item.hpp"
 #include "device/threading/doorbell.hpp"
 #include "device/threading/worker.hpp"
@@ -442,3 +443,30 @@ TEST(worker_run, a_batch_published_as_the_worker_gives_up_spinning_is_served_wit
   CHECK(fixture.published(32u));
   fixture.worker().stop();
   CHECK(fixture.worker().invariants_hold()); }
+
+namespace {
+
+void hung_progress(void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+{
+    *marked = 4u;
+    *reached = 0u;
+}
+
+}
+
+TEST(worker_run, an_idle_worker_with_a_hung_submission_wakes_at_the_watchdog_deadline_and_loses_the_context)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = hung_progress;
+  fixture.host().set_clock(1000u);
+  CHECK_STATUS(fixture.ring().prepare(fixture.window()), Status::ok);
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.worker().post(WorkItem(&attach, nullptr, &fixture.ring())), Status::ok);
+  fixture.guest().write_batch(1u, 8u);
+  fixture.guest().publish();
+  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ring().watchdog_deadline() == 0u; spins++) sched_yield();
+  CHECK_EQ(fixture.ring().watchdog_deadline(), 1000u + av::SubmissionWatchdog::default_limit_ns);
+  CHECK(!fixture.ring().faulted());
+  fixture.host().set_clock(1000u + av::SubmissionWatchdog::default_limit_ns + 1u);
+  for (std::uint32_t spins = 0u; spins < 50000000u && !fixture.ring().faulted(); spins++) sched_yield();
+  CHECK(fixture.ring().faulted());
+  fixture.worker().stop(); }
