@@ -422,3 +422,25 @@ TEST(d3d12_session_execution, a_drain_that_timed_out_is_retried_against_the_same
   scene.session().gpu_progress(marked, reached);
   CHECK_EQ(marked, after_first);
   scene.session().shut_down(); }
+
+TEST(d3d12_session_execution, a_session_removed_on_a_shared_device_leaves_its_peer_running)
+{ Scene removed;
+  Scene peer;
+  peer.rig.place(removed.device);
+  peer.insert(list, D3dObjectKind::list12, &peer.commands);
+  peer.insert(allocator, D3dObjectKind::allocator12, &peer.alloc);
+  peer.insert(target, D3dObjectKind::resource12, &peer.dst);
+  peer.insert(source, D3dObjectKind::resource12, &peer.src);
+  peer.insert(queue_a, D3dObjectKind::queue12, &peer.first_queue);
+  CHECK(peer.session().on_ResetCommandList12(list, allocator, 0u));
+  removed.first_queue.refuse_signal = true;
+  removed.rig.hurry(quick);
+  CHECK(removed.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(!removed.execute(queue_a, list));
+  CHECK(removed.session().removed_reason() != 0u);
+  CHECK(peer.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(peer.execute(queue_a, list));
+  CHECK_EQ(peer.session().removed_reason(), 0u);
+  CHECK(!peer.session().lost());
+  CHECK_EQ(peer.first_queue.executions, 1u);
+  CHECK_EQ(peer.first_queue.signals, 1u); }
