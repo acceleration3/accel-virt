@@ -6,6 +6,7 @@
 #include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
+#include "icd/d3d/d3d12_commitment.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/pipeline_library_blob.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
@@ -77,6 +78,8 @@ private:
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
     HRESULT                  heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap);
     HRESULT                  send_heap(const HeapRecord &heap, uint64_t alignment);
+    HRESULT                  charge_heap(HeapRecord &heap);
+    void                     uncharge_heap(HeapRecord &heap);
     void                     release_heap_memory(HeapRecord &heap);
     void                     trim_memory();
     HRESULT                  open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap,
@@ -121,6 +124,7 @@ private:
     ObjectStorage<D3d12Residency>         residency_;
     ObjectStorage<d3d::D3dDeviceChannel>  channel_;
     d3d::D3d12AddressSpace                addresses_;
+    d3d::D3d12Commitment                  commitment_;
     D3d12Recorder                         recorder_;
     ResourceRecord                        null_resource_;
     icd::LossLatch                        loss_;

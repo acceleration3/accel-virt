@@ -42,6 +42,14 @@ namespace av::d3d12proto {
 // A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
 // hresult is S_OK, or the host's own answer when it made no resource - E_OUTOFMEMORY when it has no memory for one.
 [[nodiscard]] bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address, uint32_t* hresult);
+// CreateHeap12 without an answer, for a guest that kept its own count of the device-local bytes it has committed
+// and found the heap well inside the host's budget. If the host makes no heap it notes the HRESULT against `heap`
+// and carries on: the guest learns of it only if it uses the heap, which a command naming a refused id does by
+// removing the device. Destroy12 of a refused id forgets it.
+[[nodiscard]] bool av_d3d12_CreateHeapAsync12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset);
+// CreateCommittedResource12 without an answer, under the same terms as CreateHeapAsync12: a refusal is noted
+// against `resource` and costs the device only if the resource is used.
+[[nodiscard]] bool av_d3d12_CreateCommittedResourceAsync12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
 // `resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to
 // the host GPU's Direct3D 11 device under `key`, the identity the miniport minted over its kernel allocation,
 // which the compositor opens it by. The same memory on both devices: nothing is copied.

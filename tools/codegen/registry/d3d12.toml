@@ -179,6 +179,23 @@ params = ["u32 resource", "HeapProperties properties", "u32 heap_flags", "Resour
 reply = ["u32 hresult"]
 
 [[command]]
+name = "CreateHeapAsync12"
+id = 0x1107
+doc = """CreateHeap12 without an answer, for a guest that kept its own count of the device-local bytes it has committed
+and found the heap well inside the host's budget. If the host makes no heap it notes the HRESULT against `heap`
+and carries on: the guest learns of it only if it uses the heap, which a command naming a refused id does by
+removing the device. Destroy12 of a refused id forgets it."""
+params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 memory", "u64 offset"]
+
+[[command]]
+name = "CreateCommittedResourceAsync12"
+id = 0x1108
+doc = """CreateCommittedResource12 without an answer, under the same terms as CreateHeapAsync12: a refusal is noted
+against `resource` and costs the device only if the resource is used."""
+params = ["u32 resource", "HeapProperties properties", "u32 heap_flags", "ResourceDesc desc", "u32 state",
+          "ClearValue clear", "u64 address"]
+
+[[command]]
 name = "ShareResource12"
 id = 0x1104
 doc = """`resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to

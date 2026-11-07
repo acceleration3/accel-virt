@@ -23,6 +23,7 @@ public:
 
     [[nodiscard]] bool learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter);
     bool               learned() const;
+    uint64_t           local_budget() const;
 
     HRESULT answer(const D3D12DDIARG_GETCAPS &args) const;
     UINT    format_support(DXGI_FORMAT format) const;
@@ -38,6 +39,7 @@ private:
 
     d3d12proto::Caps12 caps_;
     d3d::DxgiFormatTable formats_;
+    uint64_t           local_budget_;
     bool               learned_;
 };
 

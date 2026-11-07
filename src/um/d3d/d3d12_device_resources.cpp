@@ -166,6 +166,14 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
         LogLine(lines_).text("no guest address space for a heap of ").number(args.ByteSize).text(" bytes").write();
         return E_OUTOFMEMORY;
     }
+    if (heap.type == heap_default) {
+        const HRESULT charged = charge_heap(heap);
+        if (FAILED(charged)) {
+            addresses_.release(heap.address, args.ByteSize);
+            heap.address = 0u;
+            return charged;
+        }
+    }
     if (heap.type != heap_default) {
         const HRESULT memory = heap_memory(args, heap);
         if (FAILED(memory)) {
@@ -179,6 +187,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     const HRESULT sent_heap = send_heap(heap, args.Alignment);
     if (FAILED(sent_heap)) {
         release_heap_memory(heap);
+        uncharge_heap(heap);
         addresses_.release(heap.address, args.ByteSize);
         heap.address = 0u;
         return sent_heap;
@@ -194,12 +203,40 @@ HRESULT D3d12Device::send_heap(const HeapRecord &heap, uint64_t alignment)
     const uint64_t          size = backing != nullptr ? backing->window_bytes(heap.size) : heap.size;
     const uint64_t          memory = backing != nullptr ? backing->handle() : 0u;
     const uint64_t          offset = backing != nullptr ? backing->offset() : 0u;
+    if (heap.charged != 0u && heap.asked == 0u) {
+        if (!sent(d3d12proto::av_d3d12_CreateHeapAsync12(wire(), heap.header.stamp.id(), properties_of(heap.type),
+                                                          heap.flags, size, alignment, memory, offset),
+                  "CreateHeapAsync12"))
+            return DXGI_ERROR_DEVICE_REMOVED;
+        return S_OK;
+    }
     uint32_t hresult = 0u;
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
                                                  size, alignment, memory, offset, &hresult),
               "CreateHeap12"))
         return DXGI_ERROR_DEVICE_REMOVED;
     return static_cast<HRESULT>(hresult);
+}
+
+HRESULT D3d12Device::charge_heap(HeapRecord &heap)
+{
+    AV_SCOPE("D3d12Device::charge_heap");
+    const d3d::D3d12Commitment::Admission admission = commitment_.charge(heap.size);
+    if (admission == d3d::D3d12Commitment::Admission::refused) {
+        LogLine(lines_).text("a heap of ").number(heap.size).text(" bytes is past the ").number(commitment_.budget())
+            .text(" the host reports, with ").number(commitment_.committed()).text(" committed").write();
+        return E_OUTOFMEMORY;
+    }
+    heap.charged = heap.size;
+    heap.asked = admission == d3d::D3d12Commitment::Admission::ask ? 1u : 0u;
+    return S_OK;
+}
+
+void D3d12Device::uncharge_heap(HeapRecord &heap)
+{
+    AV_SCOPE("D3d12Device::uncharge_heap");
+    commitment_.release(heap.charged);
+    heap.charged = 0u;
 }
 
 HRESULT D3d12Device::heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap)
@@ -242,7 +279,11 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
     uint32_t       hresult = 0u;
     resource.placed_in = &heap;
     resource.heap_offset = offset;
-    if (heap.made == 0u) {
+    if (heap.made == 0u && heap.asked == 0u) {
+        made = d3d12proto::av_d3d12_CreateCommittedResourceAsync12(wire(), resource.header.stamp.id(),
+                                                                    properties_of(heap_default), heap.flags & heap_shared,
+                                                                    desc, state, value, resource.address);
+    } else if (heap.made == 0u) {
         made = d3d12proto::av_d3d12_CreateCommittedResource12(wire(), resource.header.stamp.id(), properties_of(heap_default),
                                                                heap.flags & heap_shared, desc, state, value,
                                                                resource.address, &hresult);
@@ -325,6 +366,7 @@ HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_a
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
         const HRESULT   resource_made = make_resource(*args, clear, heap, 0u, resource);
         if (FAILED(resource_made) && heap.made == 0u) {
+            uncharge_heap(heap);
             addresses_.release(heap.address, sized.ByteSize);
             heap.address = 0u;
         }
@@ -452,6 +494,7 @@ VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI
     if (!heap.header.stamp.holds(HeapRecord::tag)) return;
     if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     release_heap_memory(heap);
+    uncharge_heap(heap);
     session_.shared_memory().reclaim();
     heap = HeapRecord{};
 }

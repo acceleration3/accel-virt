@@ -178,6 +178,32 @@ bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resou
     return r.remaining() == 0u;
 }
 
+bool av_d3d12_CreateHeapAsync12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) {
+    AV_SCOPE("av_d3d12_CreateHeapAsync12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(heap);
+    b.write_pod(properties);
+    b.write_pod<uint32_t>(flags);
+    b.write_pod<uint64_t>(size);
+    b.write_pod<uint64_t>(alignment);
+    b.write_pod<uint64_t>(memory);
+    b.write_pod<uint64_t>(offset);
+    return t.send_async(kCmd_CreateHeapAsync12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_CreateCommittedResourceAsync12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
+    AV_SCOPE("av_d3d12_CreateCommittedResourceAsync12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(properties);
+    b.write_pod<uint32_t>(heap_flags);
+    b.write_pod(desc);
+    b.write_pod<uint32_t>(state);
+    b.write_pod(clear);
+    b.write_pod<uint64_t>(address);
+    return t.send_async(kCmd_CreateCommittedResourceAsync12, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key) {
     AV_SCOPE("av_d3d12_ShareResource12");
     ::av::WireWriter b = t.request_writer();

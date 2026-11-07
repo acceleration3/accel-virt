@@ -21,6 +21,8 @@ const char* command_name(uint32_t id) {
         case kCmd_ShareResource12: return "ShareResource12";
         case kCmd_CreateReservedResource12: return "CreateReservedResource12";
         case kCmd_ResourceTiling12: return "ResourceTiling12";
+        case kCmd_CreateHeapAsync12: return "CreateHeapAsync12";
+        case kCmd_CreateCommittedResourceAsync12: return "CreateCommittedResourceAsync12";
         case kCmd_CreateDescriptorHeap12: return "CreateDescriptorHeap12";
         case kCmd_CreateShaderResourceView12: return "CreateShaderResourceView12";
         case kCmd_CreateUnorderedAccessView12: return "CreateUnorderedAccessView12";

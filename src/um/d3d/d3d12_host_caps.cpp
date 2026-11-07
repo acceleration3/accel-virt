@@ -1,6 +1,7 @@
 #include "um/d3d/d3d12_host_caps.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/adapter_memory.hpp"
 #include "icd/d3d/caps_reply.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
@@ -30,12 +31,12 @@ constexpr UINT     no_output_sample_counts = 0x1fu;
 
 }
 
-D3d12HostCaps::D3d12HostCaps() : caps_{}, formats_(), learned_(false)
+D3d12HostCaps::D3d12HostCaps() : caps_{}, formats_(), local_budget_(0u), learned_(false)
 {
     AV_SCOPE("D3d12HostCaps::D3d12HostCaps");
 }
 
-bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &, uint32_t)
+bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter)
 {
     AV_SCOPE("D3d12HostCaps::learn");
     if (learned_) return true;
@@ -46,8 +47,16 @@ bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &, uint32_t)
         hresult != 0u)
         return false;
     formats_.learn(rows, static_cast<uint32_t>(answered / sizeof(rows[0])));
+    icd::AdapterMemory memory(kmt, adapter);
+    local_budget_ = memory.read() == Status::ok ? memory.budget(MemorySegmentGroup::local) : 0u;
     learned_ = true;
     return true;
+}
+
+uint64_t D3d12HostCaps::local_budget() const
+{
+    AV_SCOPE("D3d12HostCaps::local_budget");
+    return local_budget_;
 }
 
 UINT D3d12HostCaps::quality_levels(DXGI_FORMAT format, UINT samples) const

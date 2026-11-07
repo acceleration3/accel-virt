@@ -135,7 +135,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
                            EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
-      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), allocators_(blocks), queries_(blocks), views_(objects_, addresses_),
+      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), allocators_(blocks), queries_(blocks), refused_creates_(), views_(objects_, addresses_),
       pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), retained_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), polled_at_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -180,6 +180,7 @@ void D3d12Session::shut_down()
     }
     allocators_.clear();
     queries_.clear();
+    refused_creates_.clear();
     presentation_.bind(nullptr, nullptr, nullptr);
     progress_.clear();
     addresses_.clear();
@@ -526,6 +527,7 @@ bool D3d12Session::on_Destroy12(uint32_t id)
 {
     AV_SCOPE("D3d12Session::on_Destroy12");
     if (D3d12PipelineJob *const job = compiles_.pending(id)) static_cast<void>(settle(*job));
+    if (refused_creates_.forget(id)) return true;
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12 ||
         kind > D3dObjectKind::command_signature12)
@@ -591,6 +593,23 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
                                    uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_CreateHeap12");
+    return create_heap(heap, properties, flags, size, alignment, memory, offset, hresult);
+}
+
+bool D3d12Session::on_CreateHeapAsync12(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
+                                        uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset)
+{
+    AV_SCOPE("D3d12Session::on_CreateHeapAsync12");
+    uint32_t hresult = static_cast<uint32_t>(S_OK);
+    if (!create_heap(heap, properties, flags, size, alignment, memory, offset, hresult)) return false;
+    return hresult == static_cast<uint32_t>(S_OK) || refused_creates_.note(heap, hresult);
+}
+
+bool D3d12Session::create_heap(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
+                               uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset,
+                               uint32_t &hresult)
+{
+    AV_SCOPE("D3d12Session::create_heap");
     hresult = static_cast<uint32_t>(S_OK);
     if (properties.type == 0u || properties.type > most_heap_type || size == 0u || D3d12HeapFlags(flags).refused())
         return false;
@@ -622,6 +641,25 @@ bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12pr
                                                 uint64_t address, uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_CreateCommittedResource12");
+    return create_committed(resource, properties, heap_flags, desc, state, clear, address, hresult);
+}
+
+bool D3d12Session::on_CreateCommittedResourceAsync12(uint32_t resource, const d3d12proto::HeapProperties &properties,
+                                                     uint32_t heap_flags, const d3d12proto::ResourceDesc &desc,
+                                                     uint32_t state, const d3d12proto::ClearValue &clear,
+                                                     uint64_t address)
+{
+    AV_SCOPE("D3d12Session::on_CreateCommittedResourceAsync12");
+    uint32_t hresult = static_cast<uint32_t>(S_OK);
+    if (!create_committed(resource, properties, heap_flags, desc, state, clear, address, hresult)) return false;
+    return hresult == static_cast<uint32_t>(S_OK) || refused_creates_.note(resource, hresult);
+}
+
+bool D3d12Session::create_committed(uint32_t resource, const d3d12proto::HeapProperties &properties,
+                                    uint32_t heap_flags, const d3d12proto::ResourceDesc &desc, uint32_t state,
+                                    const d3d12proto::ClearValue &clear, uint64_t address, uint32_t &hresult)
+{
+    AV_SCOPE("D3d12Session::create_committed");
     hresult = static_cast<uint32_t>(S_OK);
     if (device_ == nullptr || properties.type != heap_default || !resource_holds(desc) ||
         D3d12HeapFlags(heap_flags).refused())

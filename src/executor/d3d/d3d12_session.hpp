@@ -11,6 +11,7 @@
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_query_heaps.hpp"
+#include "executor/d3d/d3d12_refused_creates.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d12_retain_memo.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
@@ -78,6 +79,8 @@ public:
     bool on_QueryHeapSlices12(uint32_t& supported) override;
     bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t& hresult) override;
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address, uint32_t& hresult) override;
+    bool on_CreateHeapAsync12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) override;
+    bool on_CreateCommittedResourceAsync12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_CreateReservedResource12(uint32_t resource, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) override;
     bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
@@ -142,6 +145,13 @@ public:
     bool invariants_hold() const;
 
 private:
+    bool                       create_heap(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
+                                           uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset,
+                                           uint32_t &hresult);
+    bool                       create_committed(uint32_t resource, const d3d12proto::HeapProperties &properties,
+                                                uint32_t heap_flags, const d3d12proto::ResourceDesc &desc,
+                                                uint32_t state, const d3d12proto::ClearValue &clear,
+                                                uint64_t address, uint32_t &hresult);
     void                       refresh_progress();
     ID3D12GraphicsCommandList *list(uint32_t id) const;
     bool                       cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t type, size_t &handle) const;
@@ -203,6 +213,7 @@ private:
     D3d12DescriptorHolds   descriptors_;
     D3d12AllocatorMarks    allocators_;
     D3d12QueryHeaps        queries_;
+    D3d12RefusedCreates    refused_creates_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     D3d12PipelineCompiles  compiles_;

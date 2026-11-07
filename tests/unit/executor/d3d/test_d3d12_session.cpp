@@ -122,6 +122,26 @@ TEST(d3d12_session_on_Finish12, answers_the_removed_reason_and_nothing_else_with
   CHECK_EQ(hresult, 0u);
   CHECK_EQ(fresh.session().removed_reason(), 0u); }
 
+TEST(d3d12_session, a_refused_deferred_create_costs_the_device_only_when_its_id_is_used)
+{ FreshSession fresh;
+  D3d12Session &session = fresh.session();
+  const HeapProperties device_local = {1u, 0u, 0u, 0u};
+  constexpr std::uint64_t too_big = std::uint64_t{1} << 40u;
+  CHECK(session.on_CreateHeapAsync12(5u, device_local, 0u, too_big, 0u, 0u, 0u));
+  CHECK(session.on_CreateHeapAsync12(6u, device_local, 0u, too_big, 0u, 0u, 0u));
+  ResourceDesc buffer = {};
+  buffer.width = 256u;
+  buffer.dimension = 1u;
+  buffer.height = 1u;
+  buffer.depth_or_array = 1u;
+  buffer.mip_levels = 1u;
+  buffer.sample_count = 1u;
+  const ClearValue none = {};
+  CHECK(!session.on_CreatePlacedResource12(9u, 5u, 0u, buffer, 0u, none, 0u));
+  CHECK(session.on_Destroy12(5u));
+  CHECK(!session.on_Destroy12(5u));
+  CHECK(session.on_Destroy12(6u)); }
+
 TEST(d3d12_session, makes_nothing_without_a_device)
 { FreshSession fresh;
   D3d12Session &session = fresh.session();

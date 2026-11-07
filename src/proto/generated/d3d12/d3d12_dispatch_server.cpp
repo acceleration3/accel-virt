@@ -189,6 +189,54 @@ static bool decode_CreateCommittedResource12(ServerDispatch& s, ::av::WireReader
     return true;
 }
 
+static bool decode_CreateHeapAsync12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CreateHeapAsync12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t heap{};
+    if (!r.read_pod(heap)) return false;
+    HeapProperties properties{};
+    if (!r.read_pod(properties)) return false;
+    uint32_t flags{};
+    if (!r.read_pod(flags)) return false;
+    uint64_t size{};
+    if (!r.read_pod(size)) return false;
+    uint64_t alignment{};
+    if (!r.read_pod(alignment)) return false;
+    uint64_t memory{};
+    if (!r.read_pod(memory)) return false;
+    uint64_t offset{};
+    if (!r.read_pod(offset)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CreateHeapAsync12(heap, properties, flags, size, alignment, memory, offset)) return false;
+    return true;
+}
+
+static bool decode_CreateCommittedResourceAsync12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CreateCommittedResourceAsync12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    HeapProperties properties{};
+    if (!r.read_pod(properties)) return false;
+    uint32_t heap_flags{};
+    if (!r.read_pod(heap_flags)) return false;
+    ResourceDesc desc{};
+    if (!r.read_pod(desc)) return false;
+    uint32_t state{};
+    if (!r.read_pod(state)) return false;
+    ClearValue clear{};
+    if (!r.read_pod(clear)) return false;
+    uint64_t address{};
+    if (!r.read_pod(address)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CreateCommittedResourceAsync12(resource, properties, heap_flags, desc, state, clear, address)) return false;
+    return true;
+}
+
 static bool decode_ShareResource12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:ShareResource12");
     (void)s;
@@ -1394,6 +1442,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_QueryHeapSlices12:
         case kCmd_CreateHeap12:
         case kCmd_CreateCommittedResource12:
+        case kCmd_CreateHeapAsync12:
+        case kCmd_CreateCommittedResourceAsync12:
         case kCmd_ShareResource12:
         case kCmd_CreatePlacedResource12:
         case kCmd_CreateReservedResource12:
@@ -1469,6 +1519,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_QueryHeapSlices12: return decode_QueryHeapSlices12(s, r, reply, arena);
         case kCmd_CreateHeap12: return decode_CreateHeap12(s, r, reply, arena);
         case kCmd_CreateCommittedResource12: return decode_CreateCommittedResource12(s, r, reply, arena);
+        case kCmd_CreateHeapAsync12: return decode_CreateHeapAsync12(s, r, reply, arena);
+        case kCmd_CreateCommittedResourceAsync12: return decode_CreateCommittedResourceAsync12(s, r, reply, arena);
         case kCmd_ShareResource12: return decode_ShareResource12(s, r, reply, arena);
         case kCmd_CreatePlacedResource12: return decode_CreatePlacedResource12(s, r, reply, arena);
         case kCmd_CreateReservedResource12: return decode_CreateReservedResource12(s, r, reply, arena);
