@@ -1,25 +1,25 @@
 #include "executor/vulkan/vram_budget.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/context/vram_policy.hpp"
+#include "executor/vram_ledger.hpp"
 
 namespace av {
 
-VramBudget::VramBudget(BlockSource &blocks) : host_(), caps_{}, used_{}, allocations_(blocks, Pool::paged)
+VramBudget::VramBudget(BlockSource &blocks) : host_(), account_(), used_{}, allocations_(blocks, Pool::paged)
 {
     AV_SCOPE("VramBudget::VramBudget");
 }
 
-void VramBudget::learn(const VkPhysicalDeviceMemoryProperties &host, const VramPolicy &policy)
+void VramBudget::bind(VramLedger *ledger)
+{
+    AV_SCOPE("VramBudget::bind");
+    account_.bind(ledger);
+}
+
+void VramBudget::learn(const VkPhysicalDeviceMemoryProperties &host)
 {
     AV_SCOPE("VramBudget::learn");
     host_ = host;
-    for (uint32_t heap = 0u; heap < VK_MAX_MEMORY_HEAPS; heap++) {
-        caps_[heap] = 0u;
-        if (heap >= host.memoryHeapCount) continue;
-        const bool local = (host.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u;
-        caps_[heap] = local ? policy.cap_for(host.memoryHeaps[heap].size) : host.memoryHeaps[heap].size;
-    }
 }
 
 bool VramBudget::capped(uint32_t heap) const
@@ -31,29 +31,42 @@ bool VramBudget::capped(uint32_t heap) const
 void VramBudget::clamp(VkPhysicalDeviceMemoryProperties &answer) const
 {
     AV_SCOPE("VramBudget::clamp");
+    const uint64_t cap = account_.cap();
     for (uint32_t heap = 0u; heap < answer.memoryHeapCount && heap < VK_MAX_MEMORY_HEAPS; heap++)
-        if (capped(heap) && caps_[heap] < answer.memoryHeaps[heap].size) answer.memoryHeaps[heap].size = caps_[heap];
+        if (capped(heap) && cap < answer.memoryHeaps[heap].size) answer.memoryHeaps[heap].size = cap;
 }
 
 void VramBudget::report(VkPhysicalDeviceMemoryBudgetPropertiesEXT &budget) const
 {
     AV_SCOPE("VramBudget::report");
+    const uint64_t cap = account_.cap();
+    const uint64_t ledger_used = account_.used();
     for (uint32_t heap = 0u; heap < VK_MAX_MEMORY_HEAPS; heap++) {
         if (heap >= host_.memoryHeapCount) {
             budget.heapBudget[heap] = 0u;
             budget.heapUsage[heap] = 0u;
             continue;
         }
-        budget.heapUsage[heap] = used_[heap];
-        budget.heapBudget[heap] = caps_[heap] > used_[heap] ? caps_[heap] : used_[heap];
+        const bool     local = capped(heap);
+        const uint64_t size = host_.memoryHeaps[heap].size;
+        const uint64_t usage = local ? ledger_used : used_[heap];
+        const uint64_t limit = local && cap < size ? cap : size;
+        budget.heapUsage[heap] = usage;
+        budget.heapBudget[heap] = limit > usage ? limit : usage;
     }
 }
 
-bool VramBudget::fits(uint32_t heap, uint64_t size) const
+bool VramBudget::admit(uint32_t heap, uint64_t size)
 {
-    AV_SCOPE("VramBudget::fits");
+    AV_SCOPE("VramBudget::admit");
     if (heap >= VK_MAX_MEMORY_HEAPS || !capped(heap)) return true;
-    return size <= caps_[heap] && used_[heap] <= caps_[heap] - size;
+    return account_.take(size);
+}
+
+void VramBudget::refund(uint32_t heap, uint64_t size)
+{
+    AV_SCOPE("VramBudget::refund");
+    if (heap < VK_MAX_MEMORY_HEAPS && capped(heap)) account_.give(size);
 }
 
 Status VramBudget::commit(uint32_t heap, uint64_t memory, uint64_t size)
@@ -73,6 +86,19 @@ void VramBudget::release(uint64_t memory)
     Allocation gone = {};
     if (!allocations_.take(memory, gone)) return;
     used_[gone.heap_] -= gone.size_;
+    refund(gone.heap_, gone.size_);
+}
+
+void VramBudget::close()
+{
+    AV_SCOPE("VramBudget::close");
+    static_cast<void>(account_.close());
+}
+
+uint64_t VramBudget::held() const
+{
+    AV_SCOPE("VramBudget::held");
+    return account_.held();
 }
 
 uint64_t VramBudget::used(uint32_t heap) const

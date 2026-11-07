@@ -75,6 +75,12 @@ void VulkanBackend::initialize(const HostGpu &gpu, HostMemorySource *source, Imp
     imports_ = &imports;
 }
 
+void VulkanBackend::use_vram(VramLedger *ledger)
+{
+    AV_SCOPE("VulkanBackend::use_vram");
+    vram_.bind(ledger);
+}
+
 VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
 {
     AV_SCOPE("VulkanBackend::bound_device");
@@ -474,13 +480,13 @@ void VulkanBackend::learn_types(VkPhysicalDevice physical)
     VkPhysicalDeviceMemoryProperties learnt = {};
     if (source_ != nullptr && source_->vulkan_types(types_)) {
         types_.properties(learnt);
-        vram_.learn(learnt, source_->vram_policy());
+        vram_.learn(learnt);
         return;
     }
     VkPhysicalDeviceMemoryProperties host = {};
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physical, &host);
     types_.learn(host, 0u);
-    vram_.learn(host, source_ != nullptr ? source_->vram_policy() : VramPolicy());
+    vram_.learn(host);
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
@@ -812,10 +818,14 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
     allocate.memoryTypeIndex = types_.host_type(pAllocateInfo->memoryTypeIndex);
     if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     const uint32_t heap = types_.heap_of(pAllocateInfo->memoryTypeIndex);
-    if (!vram_.fits(heap, pAllocateInfo->allocationSize)) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    if (!vram_.admit(heap, pAllocateInfo->allocationSize)) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     const VkResult made = RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
-    if (made != VK_SUCCESS) return made;
+    if (made != VK_SUCCESS) {
+        vram_.refund(heap, pAllocateInfo->allocationSize);
+        return made;
+    }
     if (vram_.commit(heap, reinterpret_cast<uint64_t>(*pMemory), pAllocateInfo->allocationSize) == Status::ok) return made;
+    vram_.refund(heap, pAllocateInfo->allocationSize);
     RealVulkanDispatch::on_vkFreeMemory(device, *pMemory, nullptr);
     *pMemory = VK_NULL_HANDLE;
     return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -1059,6 +1069,7 @@ void VulkanBackend::shut_down()
     buffer_device_ = BufferDevice{};
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
+    vram_.close();
     templates_.clear();
     layouts_.clear();
     families_.clear();

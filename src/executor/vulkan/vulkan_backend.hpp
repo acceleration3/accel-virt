@@ -42,6 +42,7 @@ class HostGpu;
 class HostMemorySource;
 class ImportTable;
 class SourceMemory;
+class VramLedger;
 class VulkanSubmitSet;
 
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend, private VulkanDestroyer, private VulkanParkHost {
@@ -49,6 +50,7 @@ public:
     explicit VulkanBackend(DriverLog &lines);
     VulkanBackend(BlockSource &blocks, DriverLog &lines);
 
+    void use_vram(VramLedger *ledger);
     void initialize(const HostGpu &gpu, HostMemorySource *source, ImportTable &imports);
 
     bool knows(uint32_t command_id) const override;

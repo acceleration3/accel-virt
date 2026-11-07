@@ -26,6 +26,7 @@ public:
     void add_gpu(const uint8_t *uuid, uint32_t sub_apis);
 
     uint32_t questions() const;
+    uint32_t ledger_questions() const;
     void             give_d3d11(uint32_t index);
     void             give_gl(const GlDisplay *display);
     D3d11HostDevice &d3d11();
@@ -57,6 +58,7 @@ private:
     Gpu             gpus_[max_gpus];
     uint32_t        count_;
     uint32_t        questions_;
+    uint32_t        ledger_questions_;
     RecordingLog    log_;
     DriverLog       lines_;
     D3d11HostDevice d3d11_;

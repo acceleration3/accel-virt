@@ -202,6 +202,21 @@ TEST(executor_root, the_vram_reserve_a_domain_opens_with_reaches_that_gpu_s_memo
   CHECK_EQ(apis.source().vram_policy().reserve_mib(), 3072u);
   root.close_domain(domain); }
 
+TEST(executor_root, a_vulkan_session_is_bound_to_its_gpu_s_ledger)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = root.open_domain(intel, 0u);
+  const std::uint32_t before = apis.ledger_questions();
+  const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
+  ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
+  CHECK(session != nullptr);
+  CHECK(apis.ledger_questions() > before);
+  close_settled(root, session);
+  root.close_domain(domain); }
+
 TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
 { MockHostApis apis;
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);

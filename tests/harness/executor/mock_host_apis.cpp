@@ -2,7 +2,7 @@
 
 namespace av {
 
-MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), log_(), lines_(log_, "shares: "), d3d11_(lines_), d3d11_index_(max_gpus), gl_(nullptr), heap_(), surfaces_(heap_),
+MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), ledger_questions_(0u), log_(), lines_(log_, "shares: "), d3d11_(lines_), d3d11_index_(max_gpus), gl_(nullptr), heap_(), surfaces_(heap_),
       shares_(heap_, lines_), exporter_(), source_(exporter_, heap_), ledger_(),
       memory_withheld_(false) {}
 
@@ -96,8 +96,14 @@ HostShares *MockHostApis::shares(uint32_t index)
     return index < count_ ? &shares_ : nullptr;
 }
 
+uint32_t MockHostApis::ledger_questions() const
+{
+    return __atomic_load_n(&ledger_questions_, __ATOMIC_RELAXED);
+}
+
 VramLedger *MockHostApis::vram_ledger(uint32_t index)
 {
+    __atomic_fetch_add(&ledger_questions_, 1u, __ATOMIC_RELAXED);
     __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return index < count_ ? &ledger_ : nullptr;
 }

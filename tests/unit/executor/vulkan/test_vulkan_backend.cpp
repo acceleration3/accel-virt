@@ -8,6 +8,7 @@
 #include "executor/host_gpu.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
+#include "executor/vram_ledger.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
@@ -657,9 +658,13 @@ TEST(vulkan_backend, the_guest_s_device_local_heap_is_capped_by_the_reserve_the_
   const std::uint32_t     heap = exporter.add_heap(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, card);
   exporter.add_type(av::MockMemoryExporter::device_local, true, heap);
   source.reserve_vram(6144u);
+  av::VramLedger ledger;
+  ledger.learn(card);
+  ledger.reserve_vram(6144u);
   av::HostGpu   gpu;
   Rig rig;
   VulkanBackend backend(rig.lines);
+  backend.use_vram(&ledger);
   backend.initialize(gpu, &source, rig.imports);
   VkPhysicalDeviceMemoryProperties guest = {};
   backend.on_vkGetPhysicalDeviceMemoryProperties(VK_NULL_HANDLE, &guest);

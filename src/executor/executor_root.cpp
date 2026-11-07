@@ -395,6 +395,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
                                               apis_->d3d9_device(gpu.index()));
     }
     default:
+        vulkan_[slot].object().use_vram(apis_->vram_ledger(gpu.index()));
         vulkan_[slot].object().initialize(gpu, apis_->memory_source(gpu.index()), sessions_[slot].object().imports());
         return true;
     }

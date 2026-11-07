@@ -3,6 +3,7 @@
 
 #include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
+#include "executor/vram_account.hpp"
 
 #include <stdint.h>
 
@@ -11,7 +12,7 @@
 namespace av {
 
 class BlockSource;
-class VramPolicy;
+class VramLedger;
 
 class VramBudget {
 public:
@@ -19,13 +20,17 @@ public:
     VramBudget(const VramBudget &) = delete;
     VramBudget &operator=(const VramBudget &) = delete;
 
-    void     learn(const VkPhysicalDeviceMemoryProperties &host, const VramPolicy &policy);
+    void     bind(VramLedger *ledger);
+    void     learn(const VkPhysicalDeviceMemoryProperties &host);
     void     clamp(VkPhysicalDeviceMemoryProperties &answer) const;
     void     report(VkPhysicalDeviceMemoryBudgetPropertiesEXT &budget) const;
-    bool     fits(uint32_t heap, uint64_t size) const;
+    [[nodiscard]] bool admit(uint32_t heap, uint64_t size);
+    void     refund(uint32_t heap, uint64_t size);
     [[nodiscard]] Status commit(uint32_t heap, uint64_t memory, uint64_t size);
     void     release(uint64_t memory);
+    void     close();
     uint64_t used(uint32_t heap) const;
+    uint64_t held() const;
 
     bool invariants_hold() const;
 
@@ -38,7 +43,7 @@ private:
     bool capped(uint32_t heap) const;
 
     VkPhysicalDeviceMemoryProperties host_;
-    uint64_t                         caps_[VK_MAX_MEMORY_HEAPS];
+    VramAccount                      account_;
     uint64_t                         used_[VK_MAX_MEMORY_HEAPS];
     KeyedSlots<uint64_t, Allocation> allocations_;
 };
