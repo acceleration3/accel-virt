@@ -5,7 +5,11 @@
 #include "core/support/object_pool.hpp"
 #include "executor/vulkan/guest_device.hpp"
 #include "executor/vulkan/vulkan_destroyer.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
+#include "executor/vulkan/vulkan_host_waits.hpp"
+#include "executor/vulkan/vulkan_park_host.hpp"
+#include "executor/vulkan/vulkan_parked_submits.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
 #include "executor/vulkan/vulkan_queue_families.hpp"
 #include "executor/vulkan/vulkan_submit_progress.hpp"
@@ -18,6 +22,7 @@
 #include "executor/vulkan/vulkan_templates.hpp"
 #include "executor/shim/physical_device_list.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
+#include "proto/wire/wire_reader.hpp"
 
 #include <stdint.h>
 
@@ -31,9 +36,9 @@ class HostGpu;
 class HostMemorySource;
 class ImportTable;
 class SourceMemory;
-class WireReader;
+class VulkanSubmitSet;
 
-class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend, private VulkanDestroyer {
+class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend, private VulkanDestroyer, private VulkanParkHost {
 public:
     explicit VulkanBackend(DriverLog &lines);
     VulkanBackend(BlockSource &blocks, DriverLog &lines);
@@ -90,6 +95,18 @@ public:
                                  VkQueue *pQueue) override;
     VkResult on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                               VkFence fence) override;
+    VkResult on_vkSetEvent(VkDevice device, VkEvent event) override;
+    void     on_vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
+                                VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
+                                uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers,
+                                uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier *pBufferMemoryBarriers,
+                                uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *pImageMemoryBarriers) override;
+    void     on_vkCmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
+                                 const VkDependencyInfo *pDependencyInfos) override;
+    void     on_vkCmdWaitEvents2KHR(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
+                                    const VkDependencyInfo *pDependencyInfos) override;
+    void     on_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount,
+                                     const VkCommandBuffer *pCommandBuffers) override;
     VkResult on_vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo *pCreateInfo,
                                     const VkAllocationCallbacks *pAllocator, VkCommandPool *pCommandPool) override;
 
@@ -223,6 +240,24 @@ public:
 private:
     friend struct VulkanBackendProbe;
 
+    enum class Hold : uint8_t { proceed, parked, refused };
+
+    bool event_unset(uint64_t device, uint64_t event) override;
+    bool replay(uint32_t command, const uint8_t *frame, size_t bytes) override;
+    void release_mark(uint64_t mark) override;
+    void lose() override;
+
+    [[nodiscard]] Status gather(const VkSubmitInfo *submits, uint32_t count, VulkanSubmitSet &set) const;
+    [[nodiscard]] Status gather(const VkSubmitInfo2 *submits, uint32_t count, VulkanSubmitSet &set) const;
+    template <typename Submit>
+    Hold hold_back(VkQueue queue, uint64_t device, uint64_t mark, const Submit *submits, uint32_t count);
+    bool events_unset(uint64_t device, const VulkanSubmitSet &set);
+    bool host_settable(const VkDependencyInfo &dependency) const;
+    void note_waits(VkCommandBuffer commandBuffer, uint32_t count, const VkEvent *events);
+    void wait_events2(VkCommandBuffer commandBuffer, uint32_t count, const VkEvent *events,
+                      const VkDependencyInfo *dependencies);
+    void forget_waits_under(uint64_t pool);
+
     [[nodiscard]] Status enable_identity(VkInstanceCreateInfo &create);
     void adopt_host_version(VkInstanceCreateInfo &create);
     [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
@@ -283,6 +318,14 @@ private:
     VulkanTemplates      templates_;
     VulkanSetLayouts     layouts_;
     VulkanQueueFamilies  families_;
+    VulkanHostWaits      host_waits_;
+    MonotonicClock       park_clock_;
+    VulkanParkedSubmits  parked_;
+    WireReader           frame_;
+    uint32_t             frame_command_;
+    bool                 framed_;
+    bool                 replaying_;
+    VkResult             last_submit_;
     DriverLog           &lines_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;

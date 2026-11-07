@@ -10,6 +10,7 @@
 
 namespace av {
 
+class PollClock;
 class WireArena;
 class WireReader;
 class WireWriter;
@@ -32,6 +33,9 @@ struct VulkanBackendProbe {
     [[nodiscard]] bool      template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set,
                                            uint64_t device);
     VulkanGuard            &guard();
+    VulkanParkedSubmits    &parked();
+    VulkanHostWaits        &host_waits();
+    void                    use_clock(const PollClock &clock);
 
     VulkanBackend &backend;
 };

@@ -45,8 +45,9 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
-      templates_(blocks), layouts_(blocks), families_(blocks), lines_(lines), progress_(), guard_(blocks, *this, progress_), parent_(0u),
-      ran_(0u), lost_(false)
+      templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), progress_(),
+      guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -116,7 +117,7 @@ bool VulkanBackend::room_for(uint64_t handles)
 void VulkanBackend::made(vkproto::HandleKind kind, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::made");
-    keep(handle, object_kind(kind), 0u);
+    keep(handle, object_kind(kind), kind == vkproto::HandleKind::command_buffer ? families_.flags_of(parent_) : 0u);
 }
 
 bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t &handle) const
@@ -318,9 +319,15 @@ bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         lost_ = true;
         return true;
     }
+    if (!recording) parked_.service();
+    if (lost_) return true;
     guard_.begin_frame(recording);
     guard_.reap();
+    frame_ = payload;
+    frame_command_ = command_id;
+    framed_ = true;
     const bool decoded = vkproto::dispatch_command(*this, command_id, payload, reply, arena);
+    framed_ = false;
     parent_ = 0u;
     if (!decoded) return false;
     ran_++;
@@ -334,8 +341,9 @@ bool VulkanBackend::queue_admits(uint32_t command_id, const WireReader &payload)
     if (queues == 0u) return true;
     WireReader peek = payload;
     uint64_t   buffer = 0u;
-    if (!peek.read_pod(buffer) || !knows_handle(buffer, VulkanObjectKind::command_buffer)) return true;
-    return families_.admits(handles_.parent_of(buffer), queues);
+    if (!peek.read_pod(buffer)) return true;
+    const uint64_t *const flags = handles_.find(buffer, VulkanObjectKind::command_buffer);
+    return flags == nullptr || (*flags & queues) != 0u;
 }
 
 bool VulkanBackend::family_flags(VkDevice device, uint32_t family, uint32_t &flags)
@@ -651,23 +659,10 @@ void VulkanBackend::on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyInd
     if (timing_.enabled() && pQueue != nullptr) timing_.queue_made(physical_, device, queueFamilyIndex, *pQueue);
 }
 
-VkResult VulkanBackend::on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
-                                         VkFence fence)
-{
-    AV_SCOPE("VulkanBackend::on_vkQueueSubmit");
-    const uint64_t device = handles_.parent_of(reinterpret_cast<uint64_t>(queue));
-    const uint64_t mark = guard_.reserve(device);
-    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    const VkResult result = timing_.enabled() ? timing_.submit(queue, submitCount, pSubmits, fence)
-                                              : RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence);
-    if (result != VK_SUCCESS) guard_.cancel(mark);
-    else guard_.submitted(mark, device, reinterpret_cast<uint64_t>(queue), pSubmits, submitCount);
-    return result;
-}
-
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
+    parked_.drop_device(reinterpret_cast<uint64_t>(device));
     guard_.release_all(reinterpret_cast<uint64_t>(device));
     templates_.forget_device(reinterpret_cast<uint64_t>(device));
     layouts_.forget_device(reinterpret_cast<uint64_t>(device));
@@ -915,7 +910,8 @@ void VulkanBackend::retire_arena(const SourceMemory &)
 bool VulkanBackend::poll()
 {
     AV_SCOPE("VulkanBackend::poll");
-    return false;
+    parked_.service();
+    return parked_.pending() || lost_;
 }
 
 void VulkanBackend::bind_signal(void (*)(void *context), void *)
@@ -933,12 +929,14 @@ void VulkanBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 bool VulkanBackend::drain(TeardownBudget &budget)
 {
     AV_SCOPE("VulkanBackend::drain");
+    parked_.drop_all();
     return guard_.drain(budget);
 }
 
 void VulkanBackend::end_batch()
 {
     AV_SCOPE("VulkanBackend::end_batch");
+    parked_.service();
     guard_.end_batch();
 }
 
@@ -972,6 +970,8 @@ void VulkanBackend::let_go_of_thread()
 void VulkanBackend::shut_down()
 {
     AV_SCOPE("VulkanBackend::shut_down");
+    parked_.drop_all();
+    host_waits_.clear();
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
     templates_.clear();

@@ -137,6 +137,94 @@ public:
         return send(vkproto::kCmd_vkCmdResetQueryPool, writer);
     }
 
+    bool wait_events(std::uint64_t command_buffer_handle, const std::uint64_t *events, std::uint32_t count,
+                     VkPipelineStageFlags source)
+    {
+        WireWriter writer = frame();
+        writer.write_pod(command_buffer_handle);
+        writer.write_pod(count);
+        for (std::uint32_t index = 0u; index < count; index++) writer.write_pod(events[index]);
+        writer.write_pod(source);
+        writer.write_pod<VkPipelineStageFlags>(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+        for (std::uint32_t field = 0u; field < 3u; field++) writer.write_pod<std::uint32_t>(0u);
+        return send(vkproto::kCmd_vkCmdWaitEvents, writer);
+    }
+
+    bool wait_events2(std::uint64_t command_buffer_handle, std::uint64_t event_handle, VkPipelineStageFlags2 source,
+                      bool with_barrier)
+    {
+        WireWriter writer = frame();
+        writer.write_pod(command_buffer_handle);
+        writer.write_pod<std::uint32_t>(1u);
+        writer.write_pod(event_handle);
+        VkMemoryBarrier2 barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+        barrier.srcStageMask = source;
+        VkDependencyInfo dependency = {};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.memoryBarrierCount = with_barrier ? 1u : 0u;
+        dependency.pMemoryBarriers = with_barrier ? &barrier : nullptr;
+        vkproto::serialize_VkDependencyInfo(writer, identity_, dependency);
+        return send(vkproto::kCmd_vkCmdWaitEvents2, writer);
+    }
+
+    bool begin(std::uint64_t command_buffer_handle)
+    {
+        WireWriter writer = frame();
+        writer.write_pod(command_buffer_handle);
+        VkCommandBufferBeginInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        vkproto::serialize_VkCommandBufferBeginInfo(writer, identity_, info);
+        return send(vkproto::kCmd_vkBeginCommandBuffer, writer);
+    }
+
+    bool set_event(std::uint64_t event_handle)
+    {
+        WireWriter writer = frame();
+        writer.write_pod(device);
+        writer.write_pod(event_handle);
+        return send(vkproto::kCmd_vkSetEvent, writer);
+    }
+
+    bool destroy_event(std::uint64_t event_handle)
+    {
+        WireWriter writer = frame();
+        writer.write_pod(device);
+        writer.write_pod(event_handle);
+        return send(vkproto::kCmd_vkDestroyEvent, writer);
+    }
+
+    bool submit(std::uint64_t on_queue, std::uint64_t command_buffer_handle, std::uint64_t guest_fence,
+                const std::uint64_t *waits = nullptr, std::uint32_t wait_count = 0u,
+                const std::uint64_t *signals = nullptr, std::uint32_t signal_count = 0u)
+    {
+        WireWriter writer = frame();
+        writer.write_pod(on_queue);
+        writer.write_pod<std::uint32_t>(1u);
+        VkSemaphore wait_handles[4] = {};
+        VkSemaphore signal_handles[4] = {};
+        VkPipelineStageFlags stages[4] = {};
+        for (std::uint32_t index = 0u; index < wait_count; index++) {
+            wait_handles[index] = reinterpret_cast<VkSemaphore>(waits[index]);
+            stages[index] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        }
+        for (std::uint32_t index = 0u; index < signal_count; index++)
+            signal_handles[index] = reinterpret_cast<VkSemaphore>(signals[index]);
+        const VkCommandBuffer buffers[1] = {reinterpret_cast<VkCommandBuffer>(command_buffer_handle)};
+        VkSubmitInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        info.waitSemaphoreCount = wait_count;
+        info.pWaitSemaphores = wait_count != 0u ? wait_handles : nullptr;
+        info.pWaitDstStageMask = wait_count != 0u ? stages : nullptr;
+        info.commandBufferCount = command_buffer_handle != 0u ? 1u : 0u;
+        info.pCommandBuffers = command_buffer_handle != 0u ? buffers : nullptr;
+        info.signalSemaphoreCount = signal_count;
+        info.pSignalSemaphores = signal_count != 0u ? signal_handles : nullptr;
+        vkproto::serialize_VkSubmitInfo(writer, identity_, info);
+        writer.write_pod(guest_fence);
+        return send(vkproto::kCmd_vkQueueSubmit, writer) && result() == VK_SUCCESS;
+    }
+
     vkproto::HandleIdentity &identity() { return identity_; }
 
 private:

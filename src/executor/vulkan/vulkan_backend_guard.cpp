@@ -189,6 +189,8 @@ void VulkanBackend::on_vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool
 void VulkanBackend::on_vkDestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyEvent");
+    parked_.drop_event(number(event));
+    host_waits_.forget_event(number(event));
     guard_.destroy(VulkanDestroyKind::event, number(device), 0u, number(event));
 }
 
@@ -211,6 +213,7 @@ void VulkanBackend::on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool
 void VulkanBackend::on_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyCommandPool");
+    forget_waits_under(number(commandPool));
     release_children(number(commandPool), number(device));
     guard_.orphan_children(number(commandPool), number(device));
     families_.forget(number(commandPool));
@@ -222,6 +225,7 @@ void VulkanBackend::on_vkFreeCommandBuffers(VkDevice device, VkCommandPool comma
 {
     AV_SCOPE("VulkanBackend::on_vkFreeCommandBuffers");
     for (uint32_t index = 0u; index < commandBufferCount; index++) {
+        host_waits_.forget_buffer(number(pCommandBuffers[index]));
         static_cast<void>(guard_.release(number(pCommandBuffers[index]), number(device)));
         guard_.destroy(VulkanDestroyKind::command_buffer, number(device), number(commandPool),
                        number(pCommandBuffers[index]));
@@ -285,6 +289,7 @@ VkResult VulkanBackend::on_vkResetCommandPool(VkDevice device, VkCommandPool com
     const bool     counted = children_marks(number(commandPool), owner, marks, count);
     if (!(counted ? guard_.quiesce_marks(marks, count, owner) : guard_.quiesce(owner)))
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    forget_waits_under(number(commandPool));
     release_children(number(commandPool), owner);
     return RealVulkanDispatch::on_vkResetCommandPool(device, commandPool, flags);
 }
@@ -308,7 +313,9 @@ bool VulkanBackend::reusable(VkCommandBuffer commandBuffer)
     AV_SCOPE("VulkanBackend::reusable");
     const uint64_t buffer = number(commandBuffer);
     const uint64_t device = owning_device(buffer);
-    return guard_.await_reset(buffer, device) && guard_.release(buffer, device);
+    if (!guard_.await_reset(buffer, device) || !guard_.release(buffer, device)) return false;
+    host_waits_.forget_buffer(buffer);
+    return true;
 }
 
 VkResult VulkanBackend::on_vkBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory,
@@ -478,32 +485,6 @@ void VulkanBackend::on_vkCmdPushDescriptorSetWithTemplate2KHR(
                         pPushDescriptorSetWithTemplateInfo->pData, 0u, 0u))
         return;
     RealVulkanDispatch::on_vkCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, pPushDescriptorSetWithTemplateInfo);
-}
-
-VkResult VulkanBackend::on_vkQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
-                                          VkFence fence)
-{
-    AV_SCOPE("VulkanBackend::on_vkQueueSubmit2");
-    const uint64_t device = handles_.parent_of(number(queue));
-    const uint64_t mark = guard_.reserve(device);
-    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2(queue, submitCount, pSubmits, fence);
-    if (result != VK_SUCCESS) guard_.cancel(mark);
-    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
-    return result;
-}
-
-VkResult VulkanBackend::on_vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
-                                             VkFence fence)
-{
-    AV_SCOPE("VulkanBackend::on_vkQueueSubmit2KHR");
-    const uint64_t device = handles_.parent_of(number(queue));
-    const uint64_t mark = guard_.reserve(device);
-    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2KHR(queue, submitCount, pSubmits, fence);
-    if (result != VK_SUCCESS) guard_.cancel(mark);
-    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
-    return result;
 }
 
 }

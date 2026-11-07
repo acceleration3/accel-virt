@@ -32,7 +32,6 @@ struct FakeVulkanDriver {
     VkResult      set_result = VK_EVENT_SET;
 
     std::uint32_t submits = 0u;
-    std::uint32_t submits2 = 0u;
     VkQueue       submitted_queue[most_calls] = {};
     VkFence       submitted_fence[most_calls] = {};
     VkCommandBuffer submitted_buffer[most_calls] = {};
@@ -59,7 +58,7 @@ inline std::uint64_t fake_handle()
 
 inline std::uint32_t fake_event_index(VkEvent event)
 {
-    return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(event) & 0xFu);
+    return static_cast<std::uint32_t>((reinterpret_cast<std::uintptr_t>(event) >> 8u) & 0xFu);
 }
 
 }
@@ -113,6 +112,83 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer, uint32_t, uint32_t, ui
 VKAPI_ATTR void VKAPI_CALL vkCmdResetQueryPool(VkCommandBuffer, VkQueryPool, uint32_t, uint32_t)
 {
     av::fake_vulkan.query_resets++;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents(VkCommandBuffer, uint32_t, const VkEvent *, VkPipelineStageFlags,
+                                           VkPipelineStageFlags, uint32_t, const VkMemoryBarrier *, uint32_t,
+                                           const VkBufferMemoryBarrier *, uint32_t, const VkImageMemoryBarrier *)
+{
+    av::fake_vulkan.waits_recorded++;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2(VkCommandBuffer, uint32_t, const VkEvent *, const VkDependencyInfo *)
+{
+    av::fake_vulkan.waits_recorded++;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetEventStatus(VkDevice, VkEvent event)
+{
+    av::fake_vulkan.event_polls++;
+    return av::fake_vulkan.event_status[av::fake_event_index(event)];
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkSetEvent(VkDevice, VkEvent event)
+{
+    av::fake_vulkan.events_set++;
+    av::fake_vulkan.event_status[av::fake_event_index(event)] = VK_EVENT_SET;
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateFence(VkDevice, const VkFenceCreateInfo *, const VkAllocationCallbacks *,
+                                             VkFence *fence)
+{
+    av::fake_vulkan.fences_made++;
+    *fence = reinterpret_cast<VkFence>(static_cast<std::uintptr_t>(av::fake_vulkan.fences_made));
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyFence(VkDevice, VkFence, const VkAllocationCallbacks *)
+{
+    av::fake_vulkan.fences_destroyed++;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkResetFences(VkDevice, uint32_t, const VkFence *)
+{
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceStatus(VkDevice, VkFence)
+{
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice, uint32_t, const VkFence *, VkBool32, uint64_t)
+{
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkBeginCommandBuffer(VkCommandBuffer, const VkCommandBufferBeginInfo *)
+{
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice)
+{
+    av::fake_vulkan.idles++;
+    return av::fake_vulkan.idle_result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits, VkFence fence)
+{
+    av::FakeVulkanDriver &driver = av::fake_vulkan;
+    if (count == 0u) return VK_SUCCESS;
+    if (driver.submits < av::FakeVulkanDriver::most_calls) {
+        driver.submitted_queue[driver.submits] = queue;
+        driver.submitted_fence[driver.submits] = fence;
+        driver.submitted_buffer[driver.submits] = submits[0].commandBufferCount != 0u ? submits[0].pCommandBuffers[0] : nullptr;
+    }
+    driver.submits++;
+    return driver.submit_result;
 }
 
 }

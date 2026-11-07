@@ -253,6 +253,12 @@ void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, cons
 {
     AV_SCOPE("VulkanGuard::submitted");
     progress_.commit(mark, queue);
+    held(mark, device, submits, count);
+}
+
+void VulkanGuard::held(uint64_t mark, uint64_t device, const VkSubmitInfo *submits, uint32_t count)
+{
+    AV_SCOPE("VulkanGuard::held");
     VulkanLifetimes *const lifetimes = lifetimes_of(device);
     if (lifetimes == nullptr) return;
     for (uint32_t at = 0u; at < count; at++)
@@ -264,6 +270,12 @@ void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, cons
 {
     AV_SCOPE("VulkanGuard::submitted");
     progress_.commit(mark, queue);
+    held(mark, device, submits, count);
+}
+
+void VulkanGuard::held(uint64_t mark, uint64_t device, const VkSubmitInfo2 *submits, uint32_t count)
+{
+    AV_SCOPE("VulkanGuard::held");
     VulkanLifetimes *const lifetimes = lifetimes_of(device);
     if (lifetimes == nullptr) return;
     for (uint32_t at = 0u; at < count; at++)

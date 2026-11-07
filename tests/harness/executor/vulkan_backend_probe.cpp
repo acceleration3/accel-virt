@@ -57,3 +57,13 @@ bool VulkanBackendProbe::template_named(VkDescriptorUpdateTemplate made, const v
 VulkanGuard &VulkanBackendProbe::guard() { return backend.guard_; }
 
 }
+
+namespace av {
+
+VulkanParkedSubmits &VulkanBackendProbe::parked() { return backend.parked_; }
+
+VulkanHostWaits &VulkanBackendProbe::host_waits() { return backend.host_waits_; }
+
+void VulkanBackendProbe::use_clock(const PollClock &clock) { backend.parked_.clock_from(clock); }
+
+}

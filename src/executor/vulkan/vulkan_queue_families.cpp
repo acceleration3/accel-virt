@@ -37,12 +37,11 @@ void VulkanQueueFamilies::clear()
     pools_.clear();
 }
 
-bool VulkanQueueFamilies::admits(uint64_t pool, uint32_t queues) const
+uint32_t VulkanQueueFamilies::flags_of(uint64_t pool) const
 {
-    AV_SCOPE("VulkanQueueFamilies::admits");
+    AV_SCOPE("VulkanQueueFamilies::flags_of");
     const uint32_t *const flags = pools_.find(pool);
-    if (flags == nullptr) return false;
-    return queues == 0u || (*flags & queues) != 0u;
+    return flags != nullptr ? *flags : 0u;
 }
 
 uint32_t VulkanQueueFamilies::count() const

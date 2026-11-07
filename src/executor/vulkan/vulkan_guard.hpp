@@ -44,6 +44,8 @@ public:
                                      uint32_t count);
     void                   submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits,
                                      uint32_t count);
+    void               held(uint64_t mark, uint64_t device, const VkSubmitInfo *submits, uint32_t count);
+    void               held(uint64_t mark, uint64_t device, const VkSubmitInfo2 *submits, uint32_t count);
     [[nodiscard]] bool await_reset(uint64_t owner, uint64_t device);
     [[nodiscard]] bool quiesce(uint64_t device);
     [[nodiscard]] bool quiesce_marks(const uint64_t *marks, uint32_t count, uint64_t device);

@@ -19,7 +19,7 @@ public:
     [[nodiscard]] Status record(uint64_t pool, uint32_t family_flags);
     void                 forget(uint64_t pool);
     void                 clear();
-    bool                 admits(uint64_t pool, uint32_t queues) const;
+    uint32_t             flags_of(uint64_t pool) const;
     uint32_t             count() const;
 
     bool invariants_hold() const;
