@@ -26,6 +26,7 @@ public:
 
     HRESULT answer(const D3D10_2DDIARG_GETCAPS &args) const;
     uint32_t feature_level() const;
+    uint64_t max_buffer_bytes() const;
     bool     present_snapshots() const;
     UINT     format_support(DXGI_FORMAT format) const;
     UINT     quality_levels(DXGI_FORMAT format, UINT samples) const;

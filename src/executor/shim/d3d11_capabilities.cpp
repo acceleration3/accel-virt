@@ -1,6 +1,7 @@
 #include "executor/shim/d3d11_capabilities.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/shim/d3d11_buffer_limit.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "proto/d3d/dxgi_format.hpp"
 
@@ -23,6 +24,7 @@ void D3d11Capabilities::measure(ID3D11Device5 &device, uint32_t feature_level)
     caps_.feature_level = feature_level;
     measure_options(device);
     measure_formats(device);
+    measure_buffer_limit(device);
 }
 
 void D3d11Capabilities::measure_options(ID3D11Device5 &device)
@@ -81,6 +83,22 @@ void D3d11Capabilities::measure_options(ID3D11Device5 &device)
         caps_.vp_and_rt_array_index_from_any_shader = static_cast<uint32_t>(options3.VPAndRTArrayIndexFromAnyShaderFeedingRasterizer);
     caps_.extended_nv12_shared_texture = 0u;
     caps_.shared_resource_tier = 0u;
+}
+
+void D3d11Capabilities::measure_buffer_limit(ID3D11Device5 &device)
+{
+    AV_SCOPE("D3d11Capabilities::measure_buffer_limit");
+    uint64_t       video_memory = 0u;
+    IDXGIDevice   *dxgi = nullptr;
+    IDXGIAdapter  *adapter = nullptr;
+    if (SUCCEEDED(device.QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void **>(&dxgi)))) {
+        DXGI_ADAPTER_DESC described = {};
+        if (SUCCEEDED(dxgi->GetAdapter(&adapter)) && SUCCEEDED(adapter->GetDesc(&described)))
+            video_memory = described.DedicatedVideoMemory;
+        if (adapter != nullptr) adapter->Release();
+        dxgi->Release();
+    }
+    caps_.max_buffer_mebibytes = D3d11BufferLimit(video_memory).mebibytes();
 }
 
 void D3d11Capabilities::measure_formats(ID3D11Device5 &device)

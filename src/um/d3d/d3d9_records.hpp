@@ -55,6 +55,7 @@ struct D3d9Query {
     uint32_t        id;
     D3DDDIQUERYTYPE type;
     uint32_t        data_bytes;
+    bool            local;
 };
 
 }

@@ -561,12 +561,18 @@ bool av_d3d9_DrawIndexedPrimitive9(::av::ClientTransport& t, uint32_t type, int3
     return t.send_async(kCmd_DrawIndexedPrimitive9, b) == ::av::TransportResult::ok;
 }
 
-bool av_d3d9_CreateQuery9(::av::ClientTransport& t, uint32_t query, uint32_t type) {
+bool av_d3d9_CreateQuery9(::av::ClientTransport& t, uint32_t query, uint32_t type, uint32_t* hresult) {
     AV_SCOPE("av_d3d9_CreateQuery9");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(query);
     b.write_pod<uint32_t>(type);
-    return t.send_async(kCmd_CreateQuery9, b) == ::av::TransportResult::ok;
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_CreateQuery9, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (hresult != nullptr) *hresult = value; }
+    return r.remaining() == 0u;
 }
 
 bool av_d3d9_IssueQuery9(::av::ClientTransport& t, uint32_t query, uint32_t flags) {

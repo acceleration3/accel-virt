@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/common/pieces.hpp"
+#include "icd/d3d/vcache_info.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"
@@ -28,10 +29,11 @@ constexpr UINT stateset_end = 1u;
 constexpr UINT stateset_delete = 2u;
 constexpr UINT stateset_execute = 3u;
 constexpr UINT stateset_capture = 4u;
-constexpr DWORD vcache_pattern = 0x48434143u;
 constexpr uint32_t issue_end = 0x1u;
 constexpr uint32_t issue_begin = 0x2u;
 constexpr uint32_t get_data_flush = 0x1u;
+
+static_assert(sizeof(D3DDDIDEVINFO_VCACHE) == d3d::VcacheInfo::bytes, "the VCACHE answer is the DDI's structure");
 
 uint32_t query_bytes(D3DDDIQUERYTYPE type)
 {
@@ -563,10 +565,17 @@ HRESULT D3d9Device::create_query(D3DDDIARG_CREATEQUERY *args)
     AV_SCOPE("D3d9Device::create_query");
     D3d9Query *made = nullptr;
     if (queries_.create(made) != Status::ok) return E_OUTOFMEMORY;
-    *made = D3d9Query{next_id(), args->QueryType, query_bytes(args->QueryType)};
-    if (!d3d9proto::av_d3d9_CreateQuery9(wire(), made->id, static_cast<uint32_t>(args->QueryType))) {
+    const bool local = args->QueryType == D3DDDIQUERYTYPE_VCACHE;
+    *made = D3d9Query{local ? 0u : next_id(), args->QueryType, query_bytes(args->QueryType), local};
+    uint32_t hresult = S_OK;
+    if (!local && !d3d9proto::av_d3d9_CreateQuery9(wire(), made->id, static_cast<uint32_t>(args->QueryType),
+                                                   &hresult)) {
         static_cast<void>(queries_.destroy(made));
         return lost(__func__);
+    }
+    if (hresult != S_OK) {
+        static_cast<void>(queries_.destroy(made));
+        return static_cast<HRESULT>(hresult);
     }
     args->hQuery = made;
     return S_OK;
@@ -577,7 +586,7 @@ HRESULT D3d9Device::destroy_query(const HANDLE handle)
     AV_SCOPE("D3d9Device::destroy_query");
     D3d9Query *const query = queries_.find(handle);
     if (query == nullptr) return E_INVALIDARG;
-    const bool sent = d3d9proto::av_d3d9_Destroy9(wire(), query->id);
+    const bool sent = query->local || d3d9proto::av_d3d9_Destroy9(wire(), query->id);
     static_cast<void>(queries_.destroy(query));
     return sent ? S_OK : lost(__func__);
 }
@@ -587,6 +596,7 @@ HRESULT D3d9Device::issue_query(const D3DDDIARG_ISSUEQUERY *args)
     AV_SCOPE("D3d9Device::issue_query");
     const D3d9Query *const query = queries_.find(args->hQuery);
     if (query == nullptr) return E_INVALIDARG;
+    if (query->local) return S_OK;
     const uint32_t flags = args->Flags.Begin != 0u ? issue_begin : issue_end;
     if (!send_states() || !d3d9proto::av_d3d9_IssueQuery9(wire(), query->id, flags)) return lost(__func__);
     return S_OK;
@@ -597,6 +607,8 @@ HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
     AV_SCOPE("D3d9Device::get_query_data");
     const D3d9Query *const query = queries_.find(args->hQuery);
     if (query == nullptr) return E_INVALIDARG;
+    if (query->local)
+        return args->pData == nullptr || d3d::VcacheInfo().write(args->pData, query->data_bytes) ? S_OK : E_INVALIDARG;
     uint8_t  answer[sizeof(D3DDDIDEVINFO_VCACHE)] = {};
     uint32_t hresult = 1u;
     uint64_t answered = 0u;
@@ -736,10 +748,7 @@ HRESULT D3d9Device::get_info(UINT info, void *data, UINT bytes)
 {
     AV_SCOPE("D3d9Device::get_info");
     if (info != D3DDDIDEVINFOID_VCACHE || data == nullptr || bytes < sizeof(D3DDDIDEVINFO_VCACHE)) return E_FAIL;
-    D3DDDIDEVINFO_VCACHE answer = {};
-    answer.Pattern = vcache_pattern;
-    memcpy(data, &answer, sizeof(answer));
-    return S_OK;
+    return d3d::VcacheInfo().write(data, bytes) ? S_OK : E_FAIL;
 }
 
 HRESULT D3d9Device::multiply_transform(const D3DDDIARG_MULTIPLYTRANSFORM *)

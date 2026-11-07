@@ -88,7 +88,8 @@ fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_comm
           "u32 typed_uav_load_additional_formats", "u32 rovs", "u32 conservative_rasterization_tier",
           "u32 tiled_resources_tier", "u32 map_on_default_textures", "u32 standard_swizzle",
           "u32 unified_memory_architecture", "u32 vp_and_rt_array_index_from_any_shader",
-          "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 reserved[6]"]
+          "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 max_buffer_mebibytes",
+          "u32 reserved[5]"]
 
 [structs.FormatCaps]
 fields = ["u32 support", "u32 support2", "u32 quality_levels[4]"]

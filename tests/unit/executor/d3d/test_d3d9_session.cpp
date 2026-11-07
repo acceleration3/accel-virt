@@ -194,7 +194,9 @@ TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
     CHECK(!session.on_SetClipPlane9(0u, 4u, values));
     CHECK(!session.on_DrawPrimitive9(4u, 0u, 1u));
     CHECK(!session.on_DrawIndexedPrimitive9(4u, 0, 0u, 3u, 0u, 1u));
-    CHECK(!session.on_CreateQuery9(1u, 8u));
+    std::uint32_t query_hresult = 0u;
+    CHECK(!session.on_CreateQuery9(1u, 8u, query_hresult));
+    CHECK_EQ(query_hresult, static_cast<std::uint32_t>(D3DERR_INVALIDCALL));
     CHECK(!session.on_IssueQuery9(nobody, 1u));
     CHECK(!session.on_SetRenderTarget9(0u, nobody, 0u));
     CHECK(!session.on_Clear9(0u, nullptr, 1u, 0u, 1.0f, 0u));

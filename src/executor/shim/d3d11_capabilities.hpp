@@ -22,6 +22,7 @@ public:
 private:
     void measure_options(ID3D11Device5 &device);
     void measure_formats(ID3D11Device5 &device);
+    void measure_buffer_limit(ID3D11Device5 &device);
 
     d3dproto::Caps11 caps_;
     FormatCapsRows   formats_;

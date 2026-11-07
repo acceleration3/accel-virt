@@ -59,7 +59,7 @@ constexpr uint32_t known_bind_flags = D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDE
                                       D3D11_BIND_STREAM_OUTPUT | D3D11_BIND_RENDER_TARGET |
                                       D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
 constexpr uint32_t max_dimension = 16384u;
-constexpr uint32_t max_buffer_bytes = 1u << 30u;
+constexpr uint32_t mebibyte_shift = 20u;
 constexpr uint32_t no_stream = 0xffffffffu;
 constexpr size_t   container_slack = 64u * 1024u;
 
@@ -790,7 +790,7 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     IUnknown *made = nullptr;
     HRESULT result = E_INVALIDARG;
     if (desc.dimension == dimension_buffer) {
-        if (desc.width > max_buffer_bytes) return false;
+        if (desc.width > (uint64_t{device11_->capabilities().caps().max_buffer_mebibytes} << mebibyte_shift)) return false;
         constexpr uint32_t ddi_usage_dynamic = 2u;
         constexpr uint32_t not_dynamic = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_STREAM_OUTPUT;
         const bool dynamic = desc.usage == ddi_usage_dynamic && (desc.bind_flags & not_dynamic) == 0u &&

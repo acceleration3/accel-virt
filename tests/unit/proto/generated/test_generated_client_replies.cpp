@@ -25,6 +25,7 @@
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 #include "proto/generated/vulkan/vk_default_dispatch.h"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -589,3 +590,15 @@ TEST(generated_client_replies, vulkan_an_extension_name_filling_its_array_is_ter
   CHECK_EQ(read.extensionName[VK_MAX_EXTENSION_NAME_SIZE - 1u], '\0');
   CHECK_EQ(read.specVersion, 7u);
   CHECK(extensions.untouched_from(sizeof(VkExtensionProperties))); }
+
+TEST(generated_client_replies, d3d9_a_query_the_host_refuses_comes_back_as_its_hresult_and_a_cut_reply_fails)
+{ constexpr std::uint32_t not_available = 0x8876086Au;
+  Rig rig(SubApi::d3d);
+  rig.host().d3d_finish(not_available);
+  std::uint32_t hresult = 1u;
+  CHECK(av::d3d9proto::av_d3d9_CreateQuery9(rig.transport(), 5u, 8u, &hresult));
+  CHECK_EQ(hresult, not_available);
+  rig.host().d3d_finish(0u);
+  hresult = 1u;
+  CHECK(av::d3d9proto::av_d3d9_CreateQuery9(rig.transport(), 6u, 9u, &hresult));
+  CHECK_EQ(hresult, 0u); }

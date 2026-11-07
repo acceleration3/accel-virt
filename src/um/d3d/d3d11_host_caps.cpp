@@ -12,6 +12,7 @@ namespace {
 
 constexpr uint32_t level_11_1 = 0xb100u;
 constexpr uint32_t level_11_0 = 0xb000u;
+constexpr uint32_t mebibyte_shift = 20u;
 
 }
 
@@ -51,6 +52,12 @@ uint32_t D3d11HostCaps::feature_level() const
 {
     AV_SCOPE("D3d11HostCaps::feature_level");
     return caps_.feature_level;
+}
+
+uint64_t D3d11HostCaps::max_buffer_bytes() const
+{
+    AV_SCOPE("D3d11HostCaps::max_buffer_bytes");
+    return uint64_t{caps_.max_buffer_mebibytes} << mebibyte_shift;
 }
 
 UINT D3d11HostCaps::pipeline_levels() const

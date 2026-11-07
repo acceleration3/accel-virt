@@ -11,6 +11,7 @@
 #include "proto/d3d/resource_misc.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "icd/d3d/shared_rows_request.hpp"
+#include "um/d3d/d3d11_host_caps.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -75,6 +76,10 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     }
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
+    if (args->ResourceDimension == D3D10DDIRESOURCE_BUFFER && args->pMipInfoList[0].TexelWidth > caps_.max_buffer_bytes()) {
+        set_error(E_OUTOFMEMORY);
+        return;
+    }
     resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
     resource.dimension = static_cast<uint32_t>(args->ResourceDimension);
     resource.usage = args->Usage;

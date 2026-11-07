@@ -334,13 +334,19 @@ bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, u
                                                               primitive_count));
 }
 
-bool D3d9Session::on_CreateQuery9(uint32_t query, uint32_t type)
+bool D3d9Session::on_CreateQuery9(uint32_t query, uint32_t type, uint32_t &hresult)
 {
     AV_SCOPE("D3d9Session::on_CreateQuery9");
+    hresult = static_cast<uint32_t>(D3DERR_INVALIDCALL);
     if (device() == nullptr) return false;
     IDirect3DQuery9 *made = nullptr;
-    return SUCCEEDED(device()->CreateQuery(static_cast<D3DQUERYTYPE>(type), &made)) &&
-           keep(query, D3dObjectKind::query9, made);
+    const HRESULT created = device()->CreateQuery(static_cast<D3DQUERYTYPE>(type), &made);
+    if (FAILED(created)) {
+        hresult = static_cast<uint32_t>(created);
+        return true;
+    }
+    hresult = S_OK;
+    return keep(query, D3dObjectKind::query9, made);
 }
 
 bool D3d9Session::on_IssueQuery9(uint32_t query, uint32_t flags)
