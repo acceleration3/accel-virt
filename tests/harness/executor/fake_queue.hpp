@@ -25,13 +25,13 @@ public:
     HRESULT STDMETHODCALLTYPE Wait(ID3D12Fence *, UINT64) override { return S_OK; }
     HRESULT STDMETHODCALLTYPE GetTimestampFrequency(UINT64 *rate) override
     {
-        if (clock_frequency == 0u) return E_NOTIMPL;
+        if (clock_frequency == 0u && !answer_zero_rate) return E_NOTIMPL;
         *rate = clock_frequency;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetClockCalibration(UINT64 *gpu, UINT64 *cpu) override
     {
-        if (clock_frequency == 0u || refuse_calibration) return E_FAIL;
+        if ((clock_frequency == 0u && !answer_zero_rate) || refuse_calibration) return E_FAIL;
         *gpu = clock_ticks;
         *cpu = 1u;
         return S_OK;
@@ -45,6 +45,7 @@ public:
     std::uint32_t tile_copies = 0u;
     bool          refuse_signal = false;
     bool          refuse_calibration = false;
+    bool          answer_zero_rate = false;
     std::uint64_t clock_frequency = 0u;
     std::uint64_t clock_ticks = 0u;
 };

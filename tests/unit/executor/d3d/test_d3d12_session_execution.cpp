@@ -516,6 +516,14 @@ TEST(d3d12_session_execution, a_queue_whose_host_cannot_calibrate_answers_no_clo
   CHECK(scene.session().on_GetClockOrigin12(queue_a, ticks, frequency));
   CHECK_EQ(ticks, 0u);
   CHECK_EQ(frequency, 0u);
+  scene.first_queue.refuse_calibration = false;
+  scene.first_queue.answer_zero_rate = true;
+  scene.first_queue.clock_frequency = 0u;
+  scene.first_queue.clock_ticks = 99u;
+  ticks = frequency = 1u;
+  CHECK(scene.session().on_GetClockOrigin12(queue_a, ticks, frequency));
+  CHECK_EQ(ticks, 0u);
+  CHECK_EQ(frequency, 0u);
   CHECK(!scene.session().on_GetClockOrigin12(target, ticks, frequency));
   CHECK(!scene.session().on_GetClockOrigin12(queue_a + 100u, ticks, frequency));
   CHECK_EQ(frequency, 0u); }

@@ -87,7 +87,7 @@ public:
 
     av::FakeDevice          device;
     av::FakeCommandList     commands;
-    av::FakeResource        target, source, written;
+    av::FakeResource        target, source, written, odd;
     av::D3d12SessionLoopback rig;
 };
 
@@ -122,6 +122,10 @@ TEST(d3d12_session_extended_lists, sample_positions_that_do_not_fit_a_grid_or_th
   positions[2].y = -9;
   CHECK(!scene.session().on_SetSamplePositions12(list, 4u, 1u, 4u, positions));
   positions[2].y = 0;
+  positions[3].x = 8;
+  CHECK(!scene.session().on_SetSamplePositions12(list, 4u, 1u, 4u, positions));
+  positions[3].x = -9;
+  CHECK(!scene.session().on_SetSamplePositions12(list, 4u, 1u, 4u, positions));
   positions[3].x = 7;
   CHECK(scene.session().on_SetSamplePositions12(list, 4u, 1u, 4u, positions));
   CHECK_EQ(scene.commands.sample_positions, 1u); }
@@ -235,6 +239,21 @@ TEST(d3d12_session_extended_lists, immediate_writes_outside_a_buffer_or_misalign
   CHECK(!scene.session().on_WriteBufferImmediate12(list, 65u, many));
   CHECK(scene.session().on_WriteBufferImmediate12(list, 64u, many));
   CHECK_EQ(scene.commands.immediate_writes, 64u); }
+
+TEST(d3d12_session_extended_lists, an_immediate_write_must_fit_its_four_bytes_inside_the_buffer)
+{ Scene scene;
+  scene.odd.gpu_address = 0x9000u;
+  scene.device.committed = &scene.odd;
+  constexpr std::uint64_t odd_address = 0x400000000ull;
+  std::uint32_t answer = 1u;
+  CHECK(av_d3d12_CreateCommittedResource12(scene.rig, 9u, HeapProperties{heap_default, 0u, 0u, 0u}, 0u,
+                                           buffer_of(1026u), 0u, ClearValue{}, odd_address, &answer));
+  CHECK_EQ(answer, 0u);
+  ImmediateWrite write = {odd_address + 1020u, 1u, 0u};
+  CHECK(scene.session().on_WriteBufferImmediate12(list, 1u, &write));
+  write.address = odd_address + 1024u;
+  CHECK(!scene.session().on_WriteBufferImmediate12(list, 1u, &write));
+  CHECK_EQ(scene.commands.immediate_writes, 1u); }
 
 TEST(d3d12_session_extended_lists, a_buffer_written_immediately_stays_alive_after_the_guest_destroys_it)
 { Scene scene;
