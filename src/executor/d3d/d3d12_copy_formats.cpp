@@ -62,6 +62,16 @@ bool D3d12CopyFormats::block_pair() const
     return plain.family() == family_r16g16b16a16 || plain.family() == family_r32g32;
 }
 
+bool D3d12CopyFormats::same_layout() const
+{
+    AV_SCOPE("D3d12CopyFormats::same_layout");
+    if (!destination_.known() || !source_.known() || destination_.depth() || source_.depth()) return false;
+    if (planar(destination_format_) || planar(source_format_)) return false;
+    return destination_.element_bytes() != 0u && destination_.element_bytes() == source_.element_bytes() &&
+           destination_.element_width() == source_.element_width() &&
+           destination_.element_height() == source_.element_height();
+}
+
 bool D3d12CopyFormats::same_texels() const
 {
     AV_SCOPE("D3d12CopyFormats::same_texels");
@@ -104,7 +114,7 @@ d3d12proto::Box D3d12CopyFormats::rescaled(const d3d12proto::Box &written) const
 bool D3d12CopyFormats::footprint_of_plane(uint32_t plane) const
 {
     AV_SCOPE("D3d12CopyFormats::footprint_of_plane");
-    if (!planar(destination_format_)) return plane == 0u && same_texels();
+    if (!planar(destination_format_)) return plane == 0u && (same_texels() || same_layout());
     for (const PlaneRow &row : plane_rows)
         if (row.texture_ == destination_format_ && row.plane_ == plane && row.footprint_ == source_format_) return true;
     return false;

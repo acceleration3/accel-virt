@@ -164,6 +164,17 @@ TEST(d3d12_copy_formats, a_planar_video_texture_is_laid_out_plane_by_plane)
 TEST(d3d12_copy_formats, any_other_texture_has_one_plane_laid_out_in_a_format_of_its_typeless_group)
 { CHECK(D3d12CopyFormats(r8g8b8a8_unorm, r8g8b8a8_uint).footprint_of_plane(0u));
   CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, r8g8b8a8_uint).footprint_of_plane(1u));
-  CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, r32_float).footprint_of_plane(0u));
+  CHECK(D3d12CopyFormats(r8g8b8a8_unorm, r32_float).footprint_of_plane(0u));
+  CHECK(D3d12CopyFormats(r8g8b8a8_unorm, b8g8r8a8_unorm).footprint_of_plane(0u));
+  CHECK(D3d12CopyFormats(r32_float, r8g8b8a8_unorm).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, r32_float).footprint_of_plane(1u));
+  CHECK(!D3d12CopyFormats(r32_float, d32_float).footprint_of_plane(1u));
+  CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, d24_unorm_s8).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, d32_float).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(d32_float, r8g8b8a8_unorm).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(nv12, r8g8b8a8_unorm).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, nv12).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(bc1_unorm, bc3_unorm).footprint_of_plane(0u));
+  CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, unknown_format).footprint_of_plane(0u));
   CHECK(!D3d12CopyFormats(r8g8b8a8_unorm, r8_unorm).footprint_of_plane(0u));
   CHECK(D3d12CopyFormats(bc1_unorm, r32g32_float).footprint_of_plane(0u)); }

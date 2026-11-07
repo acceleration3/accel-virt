@@ -20,6 +20,7 @@ public:
 
 private:
     bool block_pair() const;
+    bool same_layout() const;
 
     uint32_t   destination_format_;
     uint32_t   source_format_;
