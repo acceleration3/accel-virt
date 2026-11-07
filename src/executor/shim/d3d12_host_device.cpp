@@ -44,7 +44,6 @@ void D3d12HostDevice::close()
 {
     AV_SCOPE("D3d12HostDevice::close");
     frames_.bind(nullptr);
-    if (device_ != nullptr && runtime_ != nullptr) runtime_->abandon_waits(device_);
     if (device_ != nullptr) device_->Release();
     device_ = nullptr;
     runtime_ = nullptr;
