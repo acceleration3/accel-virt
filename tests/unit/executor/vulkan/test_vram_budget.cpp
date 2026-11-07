@@ -337,3 +337,54 @@ TEST(vram_budget, memory_in_a_heap_that_is_not_capped_never_touches_the_ledger)
   CHECK_EQ(ledger.used(), gib);
   budget.release(0x10u);
   CHECK_EQ(ledger.used(), std::uint64_t{0}); }
+
+namespace {
+
+constexpr std::uint32_t vulkan_kill_steps = 10u;
+constexpr std::uint32_t vulkan_kill_points = 20u;
+
+void vulkan_step(Rig &rig, std::uint32_t index, VkDeviceMemory (&held)[5], std::uint32_t &released)
+{
+    const std::uint32_t type = rig.device_local_type();
+    const auto make = [&](std::uint32_t slot, std::uint64_t size) {
+        if (rig.allocate(type, size, held[slot]) != VK_SUCCESS) held[slot] = VK_NULL_HANDLE;
+    };
+    const auto give = [&](std::uint32_t slot) {
+        if (held[slot] == VK_NULL_HANDLE) return;
+        rig.backend().on_vkFreeMemory(rig.device(), held[slot], nullptr);
+        held[slot] = VK_NULL_HANDLE;
+        released++;
+    };
+    switch (index) {
+    case 0u: make(0u, gib); break;
+    case 1u: make(1u, 2 * gib); break;
+    case 2u: give(0u); break;
+    case 3u: make(2u, 3 * gib); break;
+    case 4u: make(3u, 4 * gib); break;
+    case 5u: give(1u); break;
+    case 6u: make(3u, 4 * gib); break;
+    case 7u: give(2u); break;
+    case 8u: make(4u, gib); break;
+    default: give(3u); break;
+    }
+}
+
+}
+
+TEST(vulkan_vram_cap, a_backend_killed_after_any_of_its_memory_calls_gives_back_every_byte_and_frees_nothing_twice)
+{ std::uint32_t seed = 0x2545F491u;
+  for (std::uint32_t point = 0u; point < vulkan_kill_points; point++) {
+      seed = seed * 1664525u + 1013904223u;
+      const std::uint32_t killed_after = (seed >> 16u) % (vulkan_kill_steps + 1u);
+      Rig rig;
+      static_cast<void>(rig.properties());
+      VkDeviceMemory held[5] = {};
+      std::uint32_t  released = 0u;
+      for (std::uint32_t index = 0u; index < killed_after; index++) vulkan_step(rig, index, held, released);
+      rig.backend().shut_down();
+      CHECK_EQ(rig.ledger().used(), std::uint64_t{0});
+      CHECK_EQ(driver.frees, released);
+      rig.backend().shut_down();
+      CHECK_EQ(rig.ledger().used(), std::uint64_t{0});
+      CHECK_EQ(driver.frees, released);
+  } }

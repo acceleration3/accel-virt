@@ -929,3 +929,61 @@ TEST(opengl_backend_software, letting_go_leaves_another_context_current_on_the_t
   CHECK(eglGetCurrentContext() == EGL_NO_CONTEXT);
   first.shut_down();
   second.shut_down(); }
+
+namespace {
+
+constexpr std::uint32_t gl_kill_steps = 12u;
+constexpr std::uint32_t gl_kill_points = 20u;
+
+struct GlKillScript {
+    explicit GlKillScript(OpenGlBackend &backend) : backend_(backend), first_(memory_bytes), second_(memory_bytes) {}
+
+    bool step(std::uint32_t index)
+    {
+        switch (index) {
+        case 0u: return import_memory(backend_, first_.fd(), memory_bytes, av::SharedImageShape(), name_[0], detail_[0]);
+        case 1u: texture_[0] = make_texture(backend_); return texture_[0] != 0u;
+        case 2u: return store_in_memory(backend_, texture_[0], side, name_[0], 0u);
+        case 3u: return Command(av::glproto::kCmd_glFlush).run(backend_);
+        case 4u: backend_.end_batch(); return true;
+        case 5u: return import_memory(backend_, second_.fd(), memory_bytes, av::SharedImageShape(), name_[1], detail_[1]);
+        case 6u: texture_[1] = make_texture(backend_); return texture_[1] != 0u;
+        case 7u: return store_in_memory(backend_, texture_[1], side, name_[1], 0u);
+        case 8u: return delete_texture(backend_, texture_[0]);
+        case 9u: backend_.release_object(AV_SHARED_MEMORY, name_[0], detail_[0]); return true;
+        case 10u: return Command(av::glproto::kCmd_glFlush).run(backend_);
+        default: backend_.end_batch(); return true;
+        }
+    }
+
+private:
+    OpenGlBackend &backend_;
+    Memfd          first_, second_;
+    std::uint64_t  name_[2] = {};
+    std::uint64_t  detail_[2] = {};
+    unsigned       texture_[2] = {};
+};
+
+}
+
+TEST(opengl_backend_software, a_backend_killed_after_any_of_its_commands_drains_and_shuts_down_with_nothing_left_tracked)
+{ if (skipped()) return;
+  std::uint32_t seed = 0x2545F491u;
+  for (std::uint32_t point = 0u; point < gl_kill_points; point++) {
+      seed = seed * 1664525u + 1013904223u;
+      const std::uint32_t killed_after = (seed >> 16u) % (gl_kill_steps + 1u);
+      OpenGlBackend backend(executor_log.opengl());
+      CHECK(backend.initialize(software().display(), nullptr, nullptr));
+      {
+          GlKillScript script(backend);
+          for (std::uint32_t index = 0u; index < killed_after; index++) CHECK(script.step(index));
+          CHECK(backend.drain(av::GenerousBudget().budget()));
+          std::uint64_t marked = 0u, reached = 0u;
+          backend.gpu_progress(marked, reached);
+          CHECK_EQ(reached, marked);
+          backend.shut_down();
+      }
+      CHECK_EQ(OpenGlBackendProbe::memories(backend).count(), 0u);
+      CHECK_EQ(OpenGlBackendProbe::images(backend).count(), 0u);
+      backend.shut_down();
+  } }

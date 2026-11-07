@@ -241,3 +241,52 @@ TEST(opencl_backend_drain, a_lost_backend_with_a_queue_that_never_finishes_repor
   CHECK(backend.lost());
   CHECK(!backend.drain(budget));
   OpenClBackendProbe::borrow_queue(backend, nullptr); }
+
+namespace {
+
+constexpr std::uint32_t kill_steps = 11u;
+constexpr std::uint32_t kill_points = 20u;
+
+FakeEvent *newest_marker()
+{
+    for (std::uint32_t at = made_events; at > 0u; at--)
+        if (!events[at - 1u].user) return &events[at - 1u];
+    return nullptr;
+}
+
+void kill_step(OpenClBackend &backend, std::uint32_t index)
+{
+    cl_int error = CL_INVALID_VALUE;
+    av::MonotonicClock clock;
+    av::TeardownBudget none(clock, 0u);
+    switch (index) {
+    case 0u: case 3u: case 8u: CHECK(backend.on_clCreateUserEvent(nullptr, &error) != nullptr); break;
+    case 1u: case 4u: case 9u: OpenClBackendProbe::submit(backend); break;
+    case 2u: case 5u: case 10u: marker_status = CL_RUNNING; static_cast<void>(backend.drain(none)); break;
+    case 6u: marker_status = CL_COMPLETE; if (newest_marker() != nullptr) newest_marker()->status = CL_COMPLETE; break;
+    default: OpenClBackendProbe::submit(backend); static_cast<void>(backend.drain(none)); break;
+    }
+}
+
+}
+
+TEST(opencl_backend_drain, a_backend_killed_after_any_of_its_commands_lets_go_of_every_marker_and_fails_every_user_event)
+{ std::uint32_t seed = 0x2545F491u;
+  for (std::uint32_t point = 0u; point < kill_points; point++) {
+      seed = seed * 1664525u + 1013904223u;
+      const std::uint32_t killed_after = (seed >> 16u) % (kill_steps + 1u);
+      forget_marked();
+      {
+          OpenClBackend backend(executor_log.opencl());
+          OpenClBackendProbe::borrow_queue(backend, fake_queue(0x1000u));
+          for (std::uint32_t index = 0u; index < killed_after; index++) kill_step(backend, index);
+          av::MonotonicClock clock;
+          av::TeardownBudget budget(clock, 0u);
+          static_cast<void>(backend.drain(budget));
+          OpenClBackendProbe::borrow_queue(backend, nullptr);
+      }
+      for (std::uint32_t at = 0u; at < made_events; at++) {
+          if (events[at].user) CHECK(events[at].was_set);
+          else CHECK_EQ(events[at].retains, -1);
+      }
+  } }
