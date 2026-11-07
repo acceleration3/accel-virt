@@ -112,6 +112,7 @@ TEST(d3d12_block_heaps, a_new_set_holds_no_block_and_knows_no_window)
   CHECK(!held.heaps.window(1u, base, size));
   CHECK_EQ(base, 7u);
   CHECK(!held.heaps.attach(1u, 1u));
+  CHECK(held.heaps.pin(1u) == nullptr);
   held.heaps.detach(1u);
   held.heaps.release_heap(1u);
   held.heaps.reclaim();

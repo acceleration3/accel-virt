@@ -47,10 +47,18 @@ TEST(d3d12_indirect_signature, the_shapes_applications_use_hold)
   const IndirectArgument with_constants[] = {{constant, 0u, 0u, 3u}, {draw, 0u, 0u, 0u}};
   CHECK(holds(with_constants, 2u, 28u, &root));
   CHECK(!holds(with_constants, 2u, 24u, &root));
-  const IndirectArgument views[] = {{vertex_buffer_view, 31u, 0u, 0u}, {index_buffer_view, 0u, 0u, 0u},
-                                    {constant_buffer_view, 1u, 0u, 0u}, {shader_resource_view, 2u, 0u, 0u},
-                                    {unordered_access_view, 3u, 0u, 0u}, {draw_indexed, 0u, 0u, 0u}};
-  CHECK(holds(views, 6u, 16u + 16u + 8u + 8u + 8u + 20u, &root)); }
+  CHECK(holds(draws, 1u, 16u, &root)); }
+
+TEST(d3d12_indirect_signature, an_argument_that_carries_a_gpu_address_the_host_cannot_translate_is_refused)
+{ const D3d12RootLayout root = rooted();
+  const std::uint32_t addressed[] = {vertex_buffer_view, index_buffer_view, constant_buffer_view,
+                                     shader_resource_view, unordered_access_view};
+  const std::uint32_t roots[] = {0u, 0u, 1u, 2u, 3u};
+  for (std::uint32_t at = 0u; at < 5u; at++) {
+      const IndirectArgument arguments[] = {{addressed[at], roots[at], 0u, 0u}, {draw, 0u, 0u, 0u}};
+      CHECK(!holds(arguments, 2u, 64u, &root));
+      CHECK(!holds(arguments, 2u, 64u, nullptr));
+  } }
 
 TEST(d3d12_indirect_signature, a_stride_that_is_no_command_s_is_refused)
 { const IndirectArgument draws[] = {{draw, 0u, 0u, 0u}};
@@ -61,7 +69,8 @@ TEST(d3d12_indirect_signature, a_stride_that_is_no_command_s_is_refused)
   CHECK(!holds(draws, 1u, D3d12IndirectSignature::max_stride + 4u, nullptr));
   CHECK(!holds(draws, 0u, 16u, nullptr));
   IndirectArgument many[D3d12IndirectSignature::max_arguments + 1u] = {};
-  for (IndirectArgument &each : many) each = {index_buffer_view, 0u, 0u, 0u};
+  for (IndirectArgument &each : many) each = {draw, 0u, 0u, 0u};
+  CHECK(holds(many, D3d12IndirectSignature::max_arguments, 1024u, nullptr));
   many[D3d12IndirectSignature::max_arguments] = {draw, 0u, 0u, 0u};
   CHECK(!holds(many, D3d12IndirectSignature::max_arguments + 1u, 1024u, nullptr)); }
 

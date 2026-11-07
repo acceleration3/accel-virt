@@ -133,6 +133,12 @@ void D3dObjectTable::let_go(D3dObjectKind kind, const Entry &entry)
 {
     AV_SCOPE("D3dObjectTable::let_go");
     entry.object_->Release();
+    unlist(kind, entry);
+}
+
+void D3dObjectTable::unlist(D3dObjectKind kind, const Entry &entry)
+{
+    AV_SCOPE("D3dObjectTable::unlist");
     if (!view_kind(kind)) return;
     const uint32_t moved = views_.at(views_.size() - 1u);
     views_.remove_swap(entry.view_at_);
@@ -150,6 +156,18 @@ void D3dObjectTable::remove(uint32_t id)
     if (entry == nullptr) return;
     let_go(kind, *entry);
     objects_.forget(id);
+}
+
+IUnknown *D3dObjectTable::take(uint32_t id)
+{
+    AV_SCOPE("D3dObjectTable::take");
+    D3dObjectKind      kind = D3dObjectKind::none;
+    const Entry *const entry = objects_.find_any(id, kind);
+    if (entry == nullptr) return nullptr;
+    IUnknown *const object = entry->object_;
+    unlist(kind, *entry);
+    objects_.forget(id);
+    return object;
 }
 
 void D3dObjectTable::remove_kinds(D3dObjectKind first, D3dObjectKind last)

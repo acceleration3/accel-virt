@@ -30,6 +30,7 @@ public:
     [[nodiscard]] bool window(uint32_t heap, uint64_t &base, uint64_t &size) const;
     [[nodiscard]] bool attach(uint32_t resource, uint32_t heap);
     void               detach(uint32_t resource);
+    D3d12BlockHeap    *pin(uint32_t resource);
     void               release_heap(uint32_t heap);
     void               abandon(const SourceMemory &store);
     void               reclaim();

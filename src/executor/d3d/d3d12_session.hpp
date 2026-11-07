@@ -5,6 +5,7 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "executor/d3d/d3d12_block_heaps.hpp"
+#include "executor/d3d/d3d12_object_holds.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
@@ -18,6 +19,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct ID3D12CommandQueue;
 struct ID3D12Fence;
 struct ID3D12GraphicsCommandList;
 struct ID3D12PipelineState;
@@ -25,6 +27,7 @@ struct IUnknown;
 struct ID3D12Heap;
 struct ID3D12Resource;
 struct D3D12_TEXTURE_COPY_LOCATION;
+struct D3D12_RESOURCE_DESC;
 
 namespace av {
 
@@ -35,6 +38,7 @@ class SourceMemory;
 class SharedSurfaces;
 class WatchedBlocks;
 class D3d12HostDevice;
+class D3d12BlockHeap;
 class EventfdWake;
 class WakeSignal;
 class GuestBytes;
@@ -64,8 +68,8 @@ public:
     bool on_Destroy12(uint32_t object) override;
     bool on_Finish12(uint32_t& hresult) override;
     bool on_QueryHeapSlices12(uint32_t& supported) override;
-    bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) override;
-    bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
+    bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t& hresult) override;
+    bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address, uint32_t& hresult) override;
     bool on_CreateReservedResource12(uint32_t resource, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) override;
     bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
@@ -141,11 +145,26 @@ private:
                                       const d3d12proto::ClearValue &clear, uint64_t address);
     bool                       copy_location(const d3d12proto::CopyLocation &location,
                                              D3D12_TEXTURE_COPY_LOCATION &made) const;
+    bool                       copy_bounds_hold(const d3d12proto::CopyLocation &location,
+                                                const D3D12_TEXTURE_COPY_LOCATION &made,
+                                                const d3d12proto::Box &region) const;
+    bool                       copy_formats_hold(const d3d12proto::CopyLocation &destination,
+                                                 const d3d12proto::CopyLocation &source,
+                                                 const D3D12_TEXTURE_COPY_LOCATION &to,
+                                                 const D3D12_TEXTURE_COPY_LOCATION &from) const;
+    bool                       footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t footprint_format) const;
     bool                       footprint_holds(const d3d12proto::CopyLocation &location,
                                                const d3d12proto::Box &region) const;
     bool                       tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,
                                           const d3d12proto::TileSize &size) const;
     void                       drain();
+    bool                       retain(uint32_t list, IUnknown *object, D3d12BlockHeap *block);
+    bool                       retain_object(uint32_t list, uint32_t id, D3dObjectKind kind);
+    bool                       retain_resource(uint32_t list, uint32_t resource);
+    bool                       retain_address(uint32_t list, uint64_t address);
+    void                       release_holds(uint32_t list);
+    void                       retire(IUnknown *object);
+    bool                       follow_queue(uint32_t queue, ID3D12CommandQueue *on, IUnknown *first, IUnknown *second);
     ID3D12PipelineState       *pipeline(uint32_t id);
     D3d12PipelineJob          *vacant_job();
     bool                       settle(D3d12PipelineJob &job);
@@ -163,6 +182,7 @@ private:
     D3d12AddressMap        addresses_;
     D3d12QueueProgress     progress_;
     D3d12BlockHeaps        block_heaps_;
+    D3d12ObjectHolds       holds_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     D3d12PipelineCompiles  compiles_;

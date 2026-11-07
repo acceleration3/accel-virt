@@ -1,16 +1,10 @@
 #include "executor/d3d/d3d12_copy_extent.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/d3d/d3d12_subresource_extent.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "proto/resources/mip_extent.hpp"
-#include "proto/resources/subresource_layout.hpp"
 
 namespace av {
-
-namespace {
-constexpr uint32_t most_planes = 2u;
-
-}
 
 D3d12CopyExtent::D3d12CopyExtent(const D3D12_TEXTURE_COPY_LOCATION &source, const d3d12proto::Box *box)
     : read_{}, known_(true)
@@ -21,20 +15,10 @@ D3d12CopyExtent::D3d12CopyExtent(const D3D12_TEXTURE_COPY_LOCATION &source, cons
         read_ = box != nullptr ? *box : d3d12proto::Box{0u, 0u, 0u, footprint.Width, footprint.Height, footprint.Depth};
         return;
     }
-    const D3D12_RESOURCE_DESC desc = source.pResource->GetDesc();
-    const bool                volume = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D;
-    const uint32_t            mips = desc.MipLevels == 0u ? 1u : desc.MipLevels;
-    const uint32_t            layers = volume ? 1u : desc.DepthOrArraySize;
-    const SubresourceLayout subresources(mips, layers, most_planes);
-    known_ = subresources.holds(source.SubresourceIndex);
-    if (box != nullptr) {
-        read_ = *box;
-        return;
-    }
-    const MipExtent extent(desc.Width, desc.Height, volume ? desc.DepthOrArraySize : 1u,
-                            subresources.mip_of(source.SubresourceIndex));
-    if (extent.width() > UINT32_MAX) known_ = false;
-    read_ = d3d12proto::Box{0u, 0u, 0u, static_cast<uint32_t>(extent.width()), extent.height(), extent.depth()};
+    const D3D12_RESOURCE_DESC    desc = source.pResource->GetDesc();
+    const D3d12SubresourceExtent mip(desc, source.SubresourceIndex);
+    known_ = mip.known();
+    read_ = box != nullptr ? *box : mip.whole();
 }
 
 bool D3d12CopyExtent::known() const

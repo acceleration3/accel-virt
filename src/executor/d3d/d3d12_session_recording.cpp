@@ -3,6 +3,9 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d12_copy_extent.hpp"
+#include "executor/d3d/d3d12_copy_formats.hpp"
+#include "executor/d3d/d3d12_copy_pair.hpp"
+#include "executor/d3d/d3d12_subresource_extent.hpp"
 #include "executor/d3d/d3d12_footprint.hpp"
 #include "executor/d3d/d3d12_indirect_stride.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
@@ -41,6 +44,9 @@ bool D3d12Session::on_ResourceBarrier12(uint32_t id, uint32_t count, const d3d12
         ID3D12Resource *const after = objects_.find_as<ID3D12Resource>(barrier.resource_after, D3dObjectKind::resource12);
         if ((barrier.resource != 0u && resource == nullptr) || (barrier.resource_after != 0u && after == nullptr))
             return false;
+        if ((resource != nullptr && !retain_resource(id, barrier.resource)) ||
+            (after != nullptr && !retain_resource(id, barrier.resource_after)))
+            return false;
         made[index].Type = static_cast<D3D12_RESOURCE_BARRIER_TYPE>(barrier.type);
         made[index].Flags = static_cast<D3D12_RESOURCE_BARRIER_FLAGS>(barrier.flags);
         if (barrier.type == barrier_transition) {
@@ -64,7 +70,7 @@ bool D3d12Session::on_SetPipelineState12(uint32_t id, uint32_t pipeline)
     AV_SCOPE("D3d12Session::on_SetPipelineState12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12PipelineState       *const state = this->pipeline(pipeline);
-    if (recorded == nullptr || state == nullptr) return false;
+    if (recorded == nullptr || state == nullptr || !retain(id, state, nullptr)) return false;
     recorded->SetPipelineState(state);
     return true;
 }
@@ -74,7 +80,9 @@ bool D3d12Session::on_SetRootSignature12(uint32_t id, uint32_t compute, uint32_t
     AV_SCOPE("D3d12Session::on_SetRootSignature12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12RootSignature       *const signature = objects_.find_as<ID3D12RootSignature>(root, D3dObjectKind::root_signature12);
-    if (recorded == nullptr || (root != 0u && signature == nullptr)) return false;
+    if (recorded == nullptr || (root != 0u && signature == nullptr) ||
+        (signature != nullptr && !retain(id, signature, nullptr)))
+        return false;
     if (compute != 0u) recorded->SetComputeRootSignature(signature);
     else recorded->SetGraphicsRootSignature(signature);
     return true;
@@ -88,7 +96,7 @@ bool D3d12Session::on_SetDescriptorHeaps12(uint32_t id, uint32_t count, const ui
     ID3D12DescriptorHeap *made[2] = {};
     for (uint32_t index = 0u; index < count; index++) {
         made[index] = objects_.find_as<ID3D12DescriptorHeap>(heaps[index], D3dObjectKind::descriptor_heap12);
-        if (made[index] == nullptr) return false;
+        if (made[index] == nullptr || !retain(id, made[index], nullptr)) return false;
     }
     recorded->SetDescriptorHeaps(count, made);
     return true;
@@ -100,7 +108,9 @@ bool D3d12Session::on_SetRootDescriptorTable12(uint32_t id, uint32_t compute, ui
     AV_SCOPE("D3d12Session::on_SetRootDescriptorTable12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     uint64_t                         handle = 0u;
-    if (recorded == nullptr || !gpu_handle(base, handle)) return false;
+    if (recorded == nullptr || !gpu_handle(base, handle) ||
+        !retain_object(id, base.heap, D3dObjectKind::descriptor_heap12))
+        return false;
     if (compute != 0u) recorded->SetComputeRootDescriptorTable(parameter, D3D12_GPU_DESCRIPTOR_HANDLE{handle});
     else recorded->SetGraphicsRootDescriptorTable(parameter, D3D12_GPU_DESCRIPTOR_HANDLE{handle});
     return true;
@@ -122,7 +132,7 @@ bool D3d12Session::on_SetRootView12(uint32_t id, uint32_t compute, uint32_t para
     AV_SCOPE("D3d12Session::on_SetRootView12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     const uint64_t host = address == 0u ? 0u : addresses_.translate(address, 0u);
-    if (recorded == nullptr || (address != 0u && host == 0u)) return false;
+    if (recorded == nullptr || (address != 0u && host == 0u) || !retain_address(id, address)) return false;
     if (kind == view_constant) {
         if (compute != 0u) recorded->SetComputeRootConstantBufferView(parameter, host);
         else recorded->SetGraphicsRootConstantBufferView(parameter, host);
@@ -158,7 +168,7 @@ bool D3d12Session::on_SetVertexBuffers12(uint32_t id, uint32_t start, uint32_t c
     for (uint32_t index = 0u; index < count; index++) {
         const d3d12proto::VertexBufferView &view = views[index];
         const uint64_t host = view.address == 0u ? 0u : addresses_.translate(view.address, view.size);
-        if (view.address != 0u && host == 0u) return false;
+        if ((view.address != 0u && host == 0u) || !retain_address(id, view.address)) return false;
         made[index] = {host, view.size, view.stride};
     }
     recorded->IASetVertexBuffers(start, count, count == 0u ? nullptr : made);
@@ -176,7 +186,7 @@ bool D3d12Session::on_SetIndexBuffer12(uint32_t id, uint64_t address, uint32_t s
     }
     if (format != DXGI_FORMAT_R16_UINT && format != DXGI_FORMAT_R32_UINT) return false;
     const uint64_t host = addresses_.translate(address, size);
-    if (host == 0u) return false;
+    if (host == 0u || !retain_address(id, address)) return false;
     const D3D12_INDEX_BUFFER_VIEW view = {host, size, static_cast<DXGI_FORMAT>(format)};
     recorded->IASetIndexBuffer(&view);
     return true;
@@ -216,12 +226,16 @@ bool D3d12Session::on_SetRenderTargets12(uint32_t id, uint32_t count, const d3d1
     D3D12_CPU_DESCRIPTOR_HANDLE made[8] = {};
     for (uint32_t index = 0u; index < count; index++) {
         size_t handle = 0u;
-        if (!cpu_handle(targets[index], D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle)) return false;
+        if (!cpu_handle(targets[index], D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) ||
+            !retain_object(id, targets[index].heap, D3dObjectKind::descriptor_heap12))
+            return false;
         made[index].ptr = handle;
     }
     D3D12_CPU_DESCRIPTOR_HANDLE depth_handle = {};
     size_t                      handle = 0u;
-    if (has_depth != 0u && !cpu_handle(depth, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle)) return false;
+    if (has_depth != 0u && (!cpu_handle(depth, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) ||
+                            !retain_object(id, depth.heap, D3dObjectKind::descriptor_heap12)))
+        return false;
     depth_handle.ptr = handle;
     recorded->OMSetRenderTargets(count, count == 0u ? nullptr : made, FALSE, has_depth != 0u ? &depth_handle : nullptr);
     return true;
@@ -252,7 +266,9 @@ bool D3d12Session::on_ClearRenderTargetView12(uint32_t id, const d3d12proto::Des
     AV_SCOPE("D3d12Session::on_ClearRenderTargetView12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     size_t                           handle = 0u;
-    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle)) return false;
+    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) ||
+        !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12))
+        return false;
     D3D12_RECT made[16] = {};
     for (uint32_t index = 0u; index < rect_count && index < 16u; index++)
         made[index] = {rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
@@ -268,7 +284,9 @@ bool D3d12Session::on_ClearDepthStencilView12(uint32_t id, const d3d12proto::Des
     AV_SCOPE("D3d12Session::on_ClearDepthStencilView12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     size_t                           handle = 0u;
-    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle)) return false;
+    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) ||
+        !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12))
+        return false;
     D3D12_RECT made[16] = {};
     for (uint32_t index = 0u; index < rect_count && index < 16u; index++)
         made[index] = {rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
@@ -335,6 +353,9 @@ bool D3d12Session::on_ExecuteIndirect12(uint32_t id, uint32_t signature, uint32_
             count_offset > count_desc.Width || count_desc.Width - count_offset < count_bytes)
             return false;
     }
+    if (!retain(id, signed_by, nullptr) || !retain_resource(id, argument_buffer) ||
+        (counts != nullptr && !retain_resource(id, count_buffer)))
+        return false;
     recorded->ExecuteIndirect(signed_by, max_count, arguments, argument_offset, counts,
                               counts != nullptr ? count_offset : 0u);
     return true;
@@ -354,6 +375,7 @@ bool D3d12Session::on_CopyBufferRegion12(uint32_t id, uint32_t destination, uint
         destination_offset > to_desc.Width || bytes > to_desc.Width - destination_offset ||
         source_offset > from_desc.Width || bytes > from_desc.Width - source_offset)
         return false;
+    if (!retain_resource(id, destination) || !retain_resource(id, source)) return false;
     recorded->CopyBufferRegion(to, destination_offset, from, source_offset, bytes);
     return true;
 }
@@ -372,6 +394,9 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
     d3d12proto::Box       written = {};
     if (!extent.known() || !extent.written_at(x, y, z, written)) return false;
     if (!footprint_holds(destination, written) || !footprint_holds(source, extent.read())) return false;
+    if (!copy_bounds_hold(destination, to, written) || !copy_bounds_hold(source, from, extent.read())) return false;
+    if (!copy_formats_hold(destination, source, to, from)) return false;
+    if (!retain_resource(id, destination.resource) || !retain_resource(id, source.resource)) return false;
     const D3D12_BOX made_box = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     recorded->CopyTextureRegion(&to, x, y, z, &from, has_box != 0u ? &made_box : nullptr);
     return true;
@@ -396,6 +421,39 @@ bool D3d12Session::copy_location(const d3d12proto::CopyLocation &location, D3D12
     return true;
 }
 
+bool D3d12Session::copy_bounds_hold(const d3d12proto::CopyLocation &location, const D3D12_TEXTURE_COPY_LOCATION &made,
+                                    const d3d12proto::Box &region) const
+{
+    AV_SCOPE("D3d12Session::copy_bounds_hold");
+    if (location.type != copy_subresource) return true;
+    const D3d12SubresourceExtent mip(made.pResource->GetDesc(), location.subresource);
+    return mip.known() && mip.holds(region);
+}
+
+bool D3d12Session::copy_formats_hold(const d3d12proto::CopyLocation &destination,
+                                     const d3d12proto::CopyLocation &source, const D3D12_TEXTURE_COPY_LOCATION &to,
+                                     const D3D12_TEXTURE_COPY_LOCATION &from) const
+{
+    AV_SCOPE("D3d12Session::copy_formats_hold");
+    const D3D12_RESOURCE_DESC to_desc = to.pResource->GetDesc();
+    const D3D12_RESOURCE_DESC from_desc = from.pResource->GetDesc();
+    if (destination.type == copy_subresource && source.type == copy_subresource)
+        return D3d12CopyPair(to_desc, from_desc).texels();
+    if (destination.type == copy_footprint)
+        return to_desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && from_desc.SampleDesc.Count == 1u &&
+               footprint_placeable(from_desc, destination.format);
+    return from_desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && to_desc.SampleDesc.Count == 1u &&
+           footprint_placeable(to_desc, source.format);
+}
+
+bool D3d12Session::footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t footprint_format) const
+{
+    AV_SCOPE("D3d12Session::footprint_placeable");
+    const D3d12CopyFormats formats(static_cast<uint32_t>(texture.Format), footprint_format);
+    return texture.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER &&
+           (formats.same_texels() || formats.plane_of_destination());
+}
+
 bool D3d12Session::footprint_holds(const d3d12proto::CopyLocation &location, const d3d12proto::Box &region) const
 {
     AV_SCOPE("D3d12Session::footprint_holds");
@@ -413,7 +471,13 @@ bool D3d12Session::on_CopyResource12(uint32_t id, uint32_t destination, uint32_t
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
     ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
-    if (recorded == nullptr || to == nullptr || from == nullptr) return false;
+    if (recorded == nullptr || to == nullptr || from == nullptr || to == from) return false;
+    if (!D3d12CopyPair(to->GetDesc(), from->GetDesc()).whole()) {
+        LogLine(lines_).text("CopyResource12 on list ").number(id).text(" between resources ").number(destination)
+            .text(" and ").number(source).text(" that differ in dimension, size or format").write();
+        return false;
+    }
+    if (!retain_resource(id, destination) || !retain_resource(id, source)) return false;
     recorded->CopyResource(to, from);
     return true;
 }
@@ -426,6 +490,7 @@ bool D3d12Session::on_ResolveSubresource12(uint32_t id, uint32_t destination, ui
     ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
     ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
     if (recorded == nullptr || to == nullptr || from == nullptr || !DxgiFormatLayout(format).known()) return false;
+    if (!retain_resource(id, destination) || !retain_resource(id, source)) return false;
     recorded->ResolveSubresource(to, destination_subresource, from, source_subresource, static_cast<DXGI_FORMAT>(format));
     return true;
 }
@@ -435,7 +500,8 @@ bool D3d12Session::on_BeginQuery12(uint32_t id, uint32_t heap, uint32_t type, ui
     AV_SCOPE("D3d12Session::on_BeginQuery12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
-    if (recorded == nullptr || queries == nullptr || type > most_query_type) return false;
+    if (recorded == nullptr || queries == nullptr || type > most_query_type || !retain(id, queries, nullptr))
+        return false;
     recorded->BeginQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
 }
@@ -445,7 +511,8 @@ bool D3d12Session::on_EndQuery12(uint32_t id, uint32_t heap, uint32_t type, uint
     AV_SCOPE("D3d12Session::on_EndQuery12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
-    if (recorded == nullptr || queries == nullptr || type > most_query_type) return false;
+    if (recorded == nullptr || queries == nullptr || type > most_query_type || !retain(id, queries, nullptr))
+        return false;
     recorded->EndQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
 }
@@ -463,6 +530,7 @@ bool D3d12Session::on_ResolveQueryData12(uint32_t id, uint32_t heap, uint32_t ty
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || offset % 8u != 0u || offset > desc.Width ||
         static_cast<uint64_t>(count) * result_bytes[type] > desc.Width - offset)
         return false;
+    if (!retain(id, queries, nullptr) || !retain_resource(id, destination)) return false;
     recorded->ResolveQueryData(queries, static_cast<D3D12_QUERY_TYPE>(type), first, count, to, offset);
     return true;
 }

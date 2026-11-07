@@ -172,24 +172,28 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     } else if (committed) {
         return S_OK;
     }
-    if (!send_heap(heap, args.Alignment)) {
+    const HRESULT sent_heap = send_heap(heap, args.Alignment);
+    if (FAILED(sent_heap)) {
         release_heap_memory(heap);
-        return E_OUTOFMEMORY;
+        return sent_heap;
     }
     heap.made = 1u;
     return S_OK;
 }
 
-bool D3d12Device::send_heap(const HeapRecord &heap, uint64_t alignment)
+HRESULT D3d12Device::send_heap(const HeapRecord &heap, uint64_t alignment)
 {
     AV_SCOPE("D3d12Device::send_heap");
     const HeapMemory *const backing = heap.backing;
     const uint64_t          size = backing != nullptr ? backing->window_bytes(heap.size) : heap.size;
     const uint64_t          memory = backing != nullptr ? backing->handle() : 0u;
     const uint64_t          offset = backing != nullptr ? backing->offset() : 0u;
-    return sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
-                                                   size, alignment, memory, offset),
-                "CreateHeap12");
+    uint32_t hresult = 0u;
+    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
+                                                 size, alignment, memory, offset, &hresult),
+              "CreateHeap12"))
+        return E_OUTOFMEMORY;
+    return static_cast<HRESULT>(hresult);
 }
 
 HRESULT D3d12Device::heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap)
@@ -229,18 +233,20 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
     const d3d12proto::ClearValue value = clear_value(clear);
     const uint32_t               state = initial_state(args, heap.type);
     bool           made = false;
+    uint32_t       hresult = 0u;
     resource.placed_in = &heap;
     resource.heap_offset = offset;
     if (heap.made == 0u) {
         made = d3d12proto::av_d3d12_CreateCommittedResource12(wire(), resource.header.stamp.id(), properties_of(heap_default),
                                                                heap.flags & heap_shared, desc, state, value,
-                                                               resource.address);
+                                                               resource.address, &hresult);
     } else {
         resource.heap = heap.header.stamp.id();
         made = d3d12proto::av_d3d12_CreatePlacedResource12(wire(), resource.header.stamp.id(), heap.header.stamp.id(), offset, desc,
                                                              state, value, resource.address);
     }
-    return sent(made, "CreateResource12") ? S_OK : E_OUTOFMEMORY;
+    if (!sent(made, "CreateResource12")) return E_OUTOFMEMORY;
+    return heap.made == 0u ? static_cast<HRESULT>(hresult) : S_OK;
 }
 
 void D3d12Device::record_resource(const d3d12proto::ResourceDesc &desc, ResourceRecord &resource)
@@ -384,9 +390,10 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
         lender_.close(*lent);
         return E_OUTOFMEMORY;
     }
-    if (!send_heap(heap, buffer_alignment)) {
+    const HRESULT sent_heap = send_heap(heap, buffer_alignment);
+    if (FAILED(sent_heap)) {
         release_heap_memory(heap);
-        return E_OUTOFMEMORY;
+        return sent_heap;
     }
     heap.made = 1u;
     D3D12DDIARG_CREATERESOURCE_0109 spanning = {};

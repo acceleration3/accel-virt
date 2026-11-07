@@ -36,18 +36,9 @@ uint64_t D3d12IndirectSignature::bytes_of(const d3d12proto::IndirectArgument &ar
     case draw: return sizeof(D3D12_DRAW_ARGUMENTS);
     case draw_indexed: return sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
     case dispatch: return sizeof(D3D12_DISPATCH_ARGUMENTS);
-    case vertex_buffer_view: return argument.a < vertex_buffer_slots ? sizeof(D3D12_VERTEX_BUFFER_VIEW) : 0u;
-    case index_buffer_view: return sizeof(D3D12_INDEX_BUFFER_VIEW);
     case constant:
         return root != nullptr && root->has_constants(argument.a, argument.b, argument.c)
                    ? uint64_t{argument.c} * word_bytes
-                   : 0u;
-    case constant_buffer_view:
-    case shader_resource_view:
-    case unordered_access_view:
-        return root != nullptr &&
-                       root->has_descriptor(argument.a, root_descriptor_first + argument.type - constant_buffer_view)
-                   ? sizeof(D3D12_GPU_VIRTUAL_ADDRESS)
                    : 0u;
     default: return 0u;
     }

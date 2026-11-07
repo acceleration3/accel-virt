@@ -1,3 +1,4 @@
+#include "core/log/keyed_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
@@ -61,6 +62,16 @@ const d3d12proto::SignatureEntry *signatures_of(const ShaderRecord &shader)
     const size_t aligned = (shader.code_bytes + 7u) & ~size_t{7};
     return reinterpret_cast<const d3d12proto::SignatureEntry *>(reinterpret_cast<const uint8_t *>(&shader + 1) +
                                                                 aligned);
+}
+
+bool argument_names_address(const D3D12DDI_INDIRECT_ARGUMENT_DESC &from)
+{
+    AV_SCOPE("argument_names_address");
+    return from.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW ||
+           from.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW ||
+           from.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW ||
+           from.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW ||
+           from.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW;
 }
 
 d3d12proto::IndirectArgument indirect_argument(const D3D12DDI_INDIRECT_ARGUMENT_DESC &from)
@@ -383,8 +394,13 @@ HRESULT D3d12Device::create_command_signature(const D3D12DDIARG_CREATE_COMMAND_S
         (args->NumArgumentDescs != 0u && args->pArgumentDescs == nullptr))
         return E_INVALIDARG;
     d3d12proto::IndirectArgument arguments[most_indirect_arguments] = {};
-    for (UINT index = 0u; index < args->NumArgumentDescs; index++)
+    for (UINT index = 0u; index < args->NumArgumentDescs; index++) {
+        if (argument_names_address(args->pArgumentDescs[index])) {
+            lines_.write("a command signature argument carries a GPU address the host cannot translate; refused");
+            return E_INVALIDARG;
+        }
         arguments[index] = indirect_argument(args->pArgumentDescs[index]);
+    }
     ObjectRecord &signature = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     signature = ObjectRecord{};
     stamp(signature.header, ObjectRecord::tag, next_id());

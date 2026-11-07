@@ -130,6 +130,29 @@ TEST(d3d_object_table_remove, gives_the_reference_back_and_every_other_id_is_sti
   CHECK(table.invariants_hold());
   table.release_all(); }
 
+TEST(d3d_object_table_take, hands_back_the_object_still_referenced_and_forgets_its_id)
+{ MockPlatform   platform;
+  D3dObjectTable table(platform);
+  Counted resource, view, other;
+  CHECK_STATUS(table.insert(1u, D3dObjectKind::resource12, &resource), Status::ok);
+  CHECK_STATUS(table.insert(2u, D3dObjectKind::shader_resource_view, &view), Status::ok);
+  CHECK_STATUS(table.insert(3u, D3dObjectKind::shader_resource_view, &other), Status::ok);
+  CHECK(table.take(1u) == &resource);
+  CHECK_EQ(resource.references, 1u);
+  CHECK_EQ(resource.released, 0u);
+  CHECK(table.find(1u, D3dObjectKind::resource12) == nullptr);
+  CHECK(table.take(1u) == nullptr);
+  CHECK(table.take(0u) == nullptr);
+  CHECK(table.take(2u) == &view);
+  CHECK_EQ(view.references, 1u);
+  CHECK(table.find_view(2u) == nullptr);
+  CHECK(table.find_view(3u) == &other);
+  CHECK_EQ(table.views(), 1u);
+  CHECK_EQ(table.count(), 1u);
+  CHECK(table.invariants_hold());
+  CHECK_STATUS(table.insert(1u, D3dObjectKind::resource12, &resource), Status::ok);
+  table.release_all(); }
+
 TEST(d3d_object_table_exchange, swaps_an_object_of_the_same_kind_and_hands_back_the_old)
 { MockPlatform   platform;
   D3dObjectTable table(platform);

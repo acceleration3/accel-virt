@@ -19,6 +19,7 @@
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "harness/executor/d3d12_answers.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/executor/local_import.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -521,34 +522,33 @@ constexpr std::uint32_t named_heap = 40u;
 
 using HeapMisuse = void (*)(av::D3dLoopback &wire);
 
+std::uint32_t answered = 0u;
+
 const HeapMisuse heap_misuses[] = {
     [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, 0x1234u, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, 0x1234u, 0u, &answered));
     },
     [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, 0u, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, 0u, 0u, &answered));
     },
     [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes + 4096u, 0u,
-                                    heaps.readback, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes + 4096u, 0u,
+                                    heaps.readback, 0u, &answered));
     },
     [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(0u), 0u, heap_bytes, 0u, heaps.readback, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(0u), 0u, heap_bytes, 0u, heaps.readback, 0u, &answered));
     },
     [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(5u), 0u, heap_bytes, 0u, heaps.readback, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(5u), 0u, heap_bytes, 0u, heaps.readback, 0u, &answered));
     },
     [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, 0u, 0u, heaps.readback, 0u));
-    },
-    [](av::D3dLoopback &wire) {
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_default), 0u, ~std::uint64_t{0}, 0u, 0u, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, 0u, 0u, heaps.readback, 0u, &answered));
     },
     [](av::D3dLoopback &wire) {
         const std::uint64_t gone = wire.open_memory(upload_memory, heap_bytes);
         CHECK(gone != 0u);
         wire.close_memory(gone);
-        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, gone, 0u));
+        static_cast<void>(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, gone, 0u, &answered));
     },
 };
 
@@ -1017,5 +1017,113 @@ TEST(d3d12_session_device, heap_windows_are_offered_over_memory_the_host_can_ope
     CHECK(!windows.window(9u, base, extent));
     CHECK(windows.invariants_hold());
     wire.close_memory(memory);
+    backend.shut_down();
+}
+
+namespace {
+
+constexpr std::uint32_t copied_to = vertices;
+constexpr std::uint32_t copied_from = constants;
+constexpr std::uint64_t copied_bytes = 4096u;
+
+void make_copy(av::D3dLoopback &wire)
+{
+    std::uint32_t hresult = 1u;
+    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK(av_d3d12_CreateCommandQueue12(wire, queue, 0u, 0u, 0u));
+    CHECK(av_d3d12_CreateCommandAllocator12(wire, allocator, 0u));
+    CHECK(av_d3d12_CreateCommandList12(wire, list, allocator, 0u, 0u));
+    CHECK(av_d3d12_CreateCommittedResource12(wire, copied_to, heap_of(heap_default), 0u, buffer_of(copied_bytes), 0u,
+                                              ClearValue{}, 0x300000000ull, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK(av_d3d12_CreateCommittedResource12(wire, copied_from, heap_of(heap_default), 0u, buffer_of(copied_bytes), 0u,
+                                              ClearValue{}, 0x400000000ull, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK(av_d3d12_CopyBufferRegion12(wire, list, copied_to, 0u, copied_from, 0u, copied_bytes));
+    CHECK(av_d3d12_CloseCommandList12(wire, list));
+}
+
+void judge_healthy(av::D3dLoopback &wire)
+{
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+}
+
+}
+
+TEST(d3d12_session_device, a_list_runs_its_copy_after_the_guest_destroyed_the_buffers_it_names)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    make_copy(wire);
+    CHECK(av_d3d12_Destroy12(wire, copied_to));
+    CHECK(av_d3d12_Destroy12(wire, copied_from));
+    const std::uint32_t lists[1] = {list};
+    CHECK(av_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
+    judge_healthy(wire);
+    CHECK(av_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
+    judge_healthy(wire);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
+TEST(d3d12_session_device, buffers_and_a_list_destroyed_while_the_gpu_runs_them_are_released_after_it)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    make_copy(wire);
+    const std::uint32_t lists[1] = {list};
+    CHECK(av_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
+    CHECK(av_d3d12_Destroy12(wire, copied_to));
+    CHECK(av_d3d12_Destroy12(wire, copied_from));
+    CHECK(av_d3d12_Destroy12(wire, list));
+    CHECK(av_d3d12_Destroy12(wire, allocator));
+    CHECK(av_d3d12_Destroy12(wire, queue));
+    judge_healthy(wire);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
+TEST(d3d12_session_device, a_heap_past_what_the_host_makes_is_answered_out_of_memory_and_the_device_lives)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    std::uint32_t hresult = 1u;
+    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_default), 0u, std::uint64_t{17} << 30u, 0u, 0u, 0u,
+                                &hresult));
+    CHECK_EQ(hresult, 0x8007000Eu);
+    judge_healthy(wire);
     backend.shut_down();
 }

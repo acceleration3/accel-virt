@@ -125,7 +125,8 @@ reply = ["u32 hresult"]
 [[command]]
 name = "Destroy12"
 id = 0x1002
-doc = """Any object made by these commands, by id. The host keeps what the GPU still uses alive until it is done."""
+doc = """Any object made by these commands, by id. The host keeps what the GPU still uses alive until it is done, and
+what a recorded command list names until that list is reset or destroyed and its last execution is done."""
 params = ["u32 object"]
 
 [[command]]
@@ -162,15 +163,20 @@ is the window of `size` bytes at `offset` in the host memory the guest opened an
 IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` is a multiple of 64 KiB.
 It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
 released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
-host GPU's own and memory and offset are ignored."""
+host GPU's own and memory and offset are ignored. The host keeps only the heap flags that name how
+the heap may be used: a guest never reads memory it did not write. hresult is
+S_OK, or the host's own answer when it made no heap - E_OUTOFMEMORY when it has no memory for one."""
 params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 memory", "u64 offset"]
+reply = ["u32 hresult"]
 
 [[command]]
 name = "CreateCommittedResource12"
 id = 0x1101
-doc = """A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on."""
+doc = """A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
+hresult is S_OK, or the host's own answer when it made no resource - E_OUTOFMEMORY when it has no memory for one."""
 params = ["u32 resource", "HeapProperties properties", "u32 heap_flags", "ResourceDesc desc", "u32 state",
           "ClearValue clear", "u64 address"]
+reply = ["u32 hresult"]
 
 [[command]]
 name = "ShareResource12"
@@ -263,7 +269,10 @@ params = ["u32 root", "u32 flags", "u32 parameter_count", "RootParameter paramet
 name = "CreateCommandSignature12"
 id = 0x1303
 doc = """What ExecuteIndirect12 reads each command from: byte_stride bytes a command, laid out as the
-arguments say. root is the root signature the arguments that set root parameters name, 0 for none."""
+arguments say. root is the root signature the arguments that set root parameters name, 0 for none. An argument
+that carries a GPU address - a vertex or index buffer view, a constant buffer, shader resource or unordered access
+view buffer - is refused: the GPU would read the guest's address from the argument buffer, which the host cannot
+translate."""
 params = ["u32 signature", "u32 root", "u32 byte_stride", "u32 argument_count",
           "IndirectArgument arguments[argument_count] max 16"]
 

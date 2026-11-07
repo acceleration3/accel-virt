@@ -8,7 +8,9 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/watched_blocks.hpp"
+#include "executor/d3d/d3d12_heap_flags.hpp"
 #include "executor/d3d/d3d12_indirect_signature.hpp"
+#include "executor/d3d/d3d12_resource_flags.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
 #include "core/platform/poll_budget.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
@@ -83,7 +85,7 @@ D3D12_RESOURCE_DESC host_desc(const d3d12proto::ResourceDesc &desc)
     made.Format = static_cast<DXGI_FORMAT>(desc.format);
     made.SampleDesc = {desc.sample_count, desc.sample_quality};
     made.Layout = static_cast<D3D12_TEXTURE_LAYOUT>(desc.layout);
-    made.Flags = static_cast<D3D12_RESOURCE_FLAGS>(desc.flags);
+    made.Flags = static_cast<D3D12_RESOURCE_FLAGS>(D3d12ResourceFlags(desc.flags).kept());
     return made;
 }
 
@@ -130,7 +132,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
                            EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
-      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), views_(objects_, addresses_),
+      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), views_(objects_, addresses_),
       pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_()
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -162,6 +164,7 @@ void D3d12Session::shut_down()
     }
     compiles_.bind(nullptr);
     drain();
+    holds_.release_all();
     presentation_.bind(nullptr, nullptr, nullptr);
     progress_.clear();
     addresses_.clear();
@@ -193,6 +196,7 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
 {
     AV_SCOPE("D3d12Session::run");
     block_heaps_.reclaim();
+    if (holds_.retired() != 0u) holds_.reap(progress_.reached());
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
     if (ran) return true;
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
@@ -285,6 +289,72 @@ bool D3d12Session::kept(uint32_t id, D3dObjectKind kind, IUnknown *made)
     return false;
 }
 
+bool D3d12Session::retain(uint32_t list, IUnknown *object, D3d12BlockHeap *block)
+{
+    AV_SCOPE("D3d12Session::retain");
+    const Status held = holds_.hold(list, object, block);
+    if (held == Status::ok) return true;
+    LogLine(lines_).text("list ").number(list).text(" kept nothing alive, status ").number(static_cast<uint32_t>(held))
+        .write();
+    return false;
+}
+
+bool D3d12Session::retain_object(uint32_t list, uint32_t id, D3dObjectKind kind)
+{
+    AV_SCOPE("D3d12Session::retain_object");
+    IUnknown *const object = objects_.find(id, kind);
+    return object != nullptr && retain(list, object, nullptr);
+}
+
+bool D3d12Session::retain_resource(uint32_t list, uint32_t resource)
+{
+    AV_SCOPE("D3d12Session::retain_resource");
+    IUnknown *const object = objects_.find(resource, D3dObjectKind::resource12);
+    return object != nullptr && retain(list, object, block_heaps_.pin(resource));
+}
+
+bool D3d12Session::retain_address(uint32_t list, uint64_t address)
+{
+    AV_SCOPE("D3d12Session::retain_address");
+    if (address == 0u) return true;
+    uint64_t       offset = 0u;
+    const uint32_t owner = addresses_.owner(address, offset);
+    return owner != 0u && retain_resource(list, owner);
+}
+
+void D3d12Session::release_holds(uint32_t list)
+{
+    AV_SCOPE("D3d12Session::release_holds");
+    if (holds_.release_list(list, progress_.reached()) == Status::ok) return;
+    drain();
+    static_cast<void>(holds_.release_list(list, progress_.reached()));
+}
+
+void D3d12Session::retire(IUnknown *object)
+{
+    AV_SCOPE("D3d12Session::retire");
+    if (holds_.retire(object, progress_.marked(), progress_.reached()) == Status::ok) return;
+    drain();
+    object->Release();
+}
+
+bool D3d12Session::follow_queue(uint32_t queue, ID3D12CommandQueue *on, IUnknown *first, IUnknown *second)
+{
+    AV_SCOPE("D3d12Session::follow_queue");
+    if (!progress_.executed(queue, on, device_->device())) {
+        LogLine(lines_).text("the progress of queue ").number(queue).text(" is not followed after its tile work; the device is removed").write();
+        drain();
+        return false;
+    }
+    IUnknown *const used[2] = {first, second};
+    for (IUnknown *const object : used) {
+        if (object == nullptr) continue;
+        object->AddRef();
+        retire(object);
+    }
+    return true;
+}
+
 void D3d12Session::drain()
 {
     AV_SCOPE("D3d12Session::drain");
@@ -361,7 +431,8 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     }
     if (kind == D3dObjectKind::heap12) block_heaps_.release_heap(id);
     if (kind == D3dObjectKind::queue12) progress_.forget(id);
-    objects_.remove(id);
+    if (kind == D3dObjectKind::list12) release_holds(id);
+    retire(objects_.take(id));
     return true;
 }
 
@@ -400,40 +471,55 @@ bool D3d12Session::window_heap(uint32_t heap, uint64_t size, uint64_t memory, ui
 }
 
 bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
-                                   uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset)
+                                   uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset,
+                                   uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_CreateHeap12");
-    if (device_ == nullptr || properties.type == 0u || properties.type > most_heap_type || size == 0u ||
-        size > max_heap_bytes)
-        return false;
+    hresult = static_cast<uint32_t>(S_OK);
+    if (properties.type == 0u || properties.type > most_heap_type || size == 0u) return false;
+    if (size > max_heap_bytes) {
+        LogLine(lines_).text("a heap of ").number(size).text(" bytes is past the ").number(max_heap_bytes).text(" the host makes").write();
+        hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
+        return true;
+    }
+    if (device_ == nullptr) return false;
     if (cpu_visible(properties)) return window_heap(heap, size, memory, offset);
     D3D12_HEAP_DESC desc = {};
     desc.SizeInBytes = size;
     desc.Properties = host_properties(properties);
     desc.Alignment = alignment;
-    desc.Flags = static_cast<D3D12_HEAP_FLAGS>(flags);
-    ID3D12Heap *made = nullptr;
-    if (FAILED(device_->device()->CreateHeap(&desc, __uuidof(ID3D12Heap), reinterpret_cast<void **>(&made))))
-        return false;
+    desc.Flags = static_cast<D3D12_HEAP_FLAGS>(D3d12HeapFlags(flags).kept());
+    ID3D12Heap   *made = nullptr;
+    const HRESULT result = device_->device()->CreateHeap(&desc, __uuidof(ID3D12Heap), reinterpret_cast<void **>(&made));
+    if (FAILED(result)) {
+        LogLine(lines_).text("the host made no heap of ").number(size).text(" bytes (").hex(static_cast<uint32_t>(result), 8u).text(")").write();
+        hresult = static_cast<uint32_t>(result);
+        return true;
+    }
     return kept(heap, D3dObjectKind::heap12, made);
 }
 
 bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties &properties,
                                                 uint32_t heap_flags, const d3d12proto::ResourceDesc &desc,
                                                 uint32_t state, const d3d12proto::ClearValue &clear,
-                                                uint64_t address)
+                                                uint64_t address, uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_CreateCommittedResource12");
+    hresult = static_cast<uint32_t>(S_OK);
     if (device_ == nullptr || properties.type != heap_default || !resource_holds(desc)) return false;
     const D3D12_HEAP_PROPERTIES heap = host_properties(properties);
     const D3D12_RESOURCE_DESC   made_desc = host_desc(desc);
     D3D12_CLEAR_VALUE           value = {};
     ID3D12Resource             *made = nullptr;
-    if (FAILED(device_->device()->CreateCommittedResource(&heap, static_cast<D3D12_HEAP_FLAGS>(heap_flags), &made_desc,
-                                                          static_cast<D3D12_RESOURCE_STATES>(state),
-                                                          host_clear(clear, value), __uuidof(ID3D12Resource),
-                                                          reinterpret_cast<void **>(&made))))
-        return false;
+    const HRESULT result = device_->device()->CreateCommittedResource(
+        &heap, static_cast<D3D12_HEAP_FLAGS>(D3d12HeapFlags(heap_flags).kept()), &made_desc,
+        static_cast<D3D12_RESOURCE_STATES>(state), host_clear(clear, value), __uuidof(ID3D12Resource),
+        reinterpret_cast<void **>(&made));
+    if (FAILED(result)) {
+        LogLine(lines_).text("the host made no resource of ").number(desc.width).text(" bytes (").hex(static_cast<uint32_t>(result), 8u).text(")").write();
+        hresult = static_cast<uint32_t>(result);
+        return true;
+    }
     return place(resource, made, desc.dimension == buffer_dimension ? address : 0u, desc.width);
 }
 
@@ -760,7 +846,8 @@ bool D3d12Session::on_CreateCommandList12(uint32_t id, uint32_t allocator, uint3
                                                     __uuidof(ID3D12GraphicsCommandList),
                                                     reinterpret_cast<void **>(&made))))
         return false;
-    return kept(id, D3dObjectKind::list12, made);
+    if (!kept(id, D3dObjectKind::list12, made)) return false;
+    return retain(id, with, nullptr) && (initial == nullptr || retain(id, initial, nullptr));
 }
 
 bool D3d12Session::on_ResetCommandList12(uint32_t id, uint32_t allocator, uint32_t pipeline)
@@ -770,7 +857,9 @@ bool D3d12Session::on_ResetCommandList12(uint32_t id, uint32_t allocator, uint32
     ID3D12CommandAllocator    *const with = objects_.find_as<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
     ID3D12PipelineState       *const initial = pipeline == 0u ? nullptr : this->pipeline(pipeline);
     if (recorded == nullptr || with == nullptr || (pipeline != 0u && initial == nullptr)) return false;
-    return SUCCEEDED(recorded->Reset(with, initial));
+    if (FAILED(recorded->Reset(with, initial))) return false;
+    release_holds(id);
+    return retain(id, with, nullptr) && (initial == nullptr || retain(id, initial, nullptr));
 }
 
 bool D3d12Session::on_CloseCommandList12(uint32_t id)
@@ -808,6 +897,7 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
     }
     if (count == 0u) return true;
     if (!progress_.after_siblings(queue, on)) return false;
+    for (uint32_t index = 0u; index < count; index++) holds_.submitted(lists[index], progress_.marked() + 1u);
     on->ExecuteCommandLists(count, executed);
     if (progress_.executed(queue, on, device_->device())) return true;
     LogLine(lines_).text("the progress of queue ").number(queue).text(" is not followed after its lists ran; the device is removed").write();
@@ -835,6 +925,7 @@ bool D3d12Session::invariants_hold() const
 {
     AV_SCOPE("D3d12Session::invariants_hold");
     return objects_.invariants_hold() && addresses_.invariants_hold() && compiles_.invariants_hold() &&
+           holds_.invariants_hold() &&
            (device_ != nullptr ||
             objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
 }

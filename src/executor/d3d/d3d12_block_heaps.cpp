@@ -102,6 +102,15 @@ void D3d12BlockHeaps::detach(uint32_t resource)
     if (placed_.take(resource, block)) block->let_go_resource(progress_.marked());
 }
 
+D3d12BlockHeap *D3d12BlockHeaps::pin(uint32_t resource)
+{
+    AV_SCOPE("D3d12BlockHeaps::pin");
+    D3d12BlockHeap **const found = placed_.find(resource);
+    if (found == nullptr) return nullptr;
+    (*found)->took_resource();
+    return *found;
+}
+
 void D3d12BlockHeaps::release_heap(uint32_t heap)
 {
     AV_SCOPE("D3d12BlockHeaps::release_heap");

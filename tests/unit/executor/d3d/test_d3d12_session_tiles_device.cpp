@@ -15,6 +15,7 @@
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "harness/executor/d3d12_answers.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/executor/executor_log_rig.hpp"
 #include "harness/executor/local_import.hpp"

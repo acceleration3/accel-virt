@@ -92,10 +92,22 @@ TEST(d3d12_copy_extent, a_volume_s_depth_halves_and_an_absent_subresource_is_unk
   volume.desc.MipLevels = 2u;
   const D3d12CopyExtent mip1(subresource_of(volume, 1u), nullptr);
   CHECK(same(mip1.read(), Box{0u, 0u, 0u, 32u, 16u, 8u}));
+  CHECK(!D3d12CopyExtent(subresource_of(volume, 2u), nullptr).known());
+  volume.desc.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
   CHECK(D3d12CopyExtent(subresource_of(volume, 3u), nullptr).known());
   CHECK(!D3d12CopyExtent(subresource_of(volume, 4u), nullptr).known());
+  volume.desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
   volume.desc.MipLevels = 0u;
   CHECK(!D3d12CopyExtent(subresource_of(volume, 2u), nullptr).known()); }
+
+TEST(d3d12_copy_extent, a_buffer_is_no_subresource_to_read)
+{ ScriptedResource buffer;
+  buffer.desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  buffer.desc.Width = 256u;
+  buffer.desc.Height = 1u;
+  buffer.desc.DepthOrArraySize = 1u;
+  buffer.desc.MipLevels = 1u;
+  CHECK(!D3d12CopyExtent(subresource_of(buffer, 0u), nullptr).known()); }
 
 TEST(d3d12_copy_extent, a_box_is_read_and_a_footprint_without_one_is_read_whole)
 { ScriptedResource texture;

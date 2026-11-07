@@ -16,7 +16,8 @@ namespace av::d3d12proto {
 // The session's Direct3D 12 device: the host's shared device for this GPU. One per session; a second
 // open answers the same device. hresult is not S_OK when this GPU has none.
 [[nodiscard]] bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult);
-// Any object made by these commands, by id. The host keeps what the GPU still uses alive until it is done.
+// Any object made by these commands, by id. The host keeps what the GPU still uses alive until it is done, and
+// what a recorded command list names until that list is reset or destroyed and its last execution is done.
 [[nodiscard]] bool av_d3d12_Destroy12(::av::ClientTransport& t, uint32_t object);
 // Waits until every queue of the session has finished what was executed on it. hresult is the device's
 // removed reason: S_OK while it is not removed.
@@ -34,10 +35,13 @@ namespace av::d3d12proto {
 // IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` is a multiple of 64 KiB.
 // It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
 // released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
-// host GPU's own and memory and offset are ignored.
-[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset);
+// host GPU's own and memory and offset are ignored. The host keeps only the heap flags that name how
+// the heap may be used: a guest never reads memory it did not write. hresult is
+// S_OK, or the host's own answer when it made no heap - E_OUTOFMEMORY when it has no memory for one.
+[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t* hresult);
 // A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
-[[nodiscard]] bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
+// hresult is S_OK, or the host's own answer when it made no resource - E_OUTOFMEMORY when it has no memory for one.
+[[nodiscard]] bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address, uint32_t* hresult);
 // `resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to
 // the host GPU's Direct3D 11 device under `key`, the identity the miniport minted over its kernel allocation,
 // which the compositor opens it by. The same memory on both devices: nothing is copied.
@@ -65,7 +69,10 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_CopyDescriptors12(::av::ClientTransport& t, const DescriptorRef& destination, const DescriptorRef& source, uint32_t count);
 [[nodiscard]] bool av_d3d12_CreateRootSignature12(::av::ClientTransport& t, uint32_t root, uint32_t flags, uint32_t parameter_count, const RootParameter* parameters, uint32_t range_count, const DescriptorRange* ranges, uint32_t sampler_count, const StaticSampler* samplers);
 // What ExecuteIndirect12 reads each command from: byte_stride bytes a command, laid out as the
-// arguments say. root is the root signature the arguments that set root parameters name, 0 for none.
+// arguments say. root is the root signature the arguments that set root parameters name, 0 for none. An argument
+// that carries a GPU address - a vertex or index buffer view, a constant buffer, shader resource or unordered access
+// view buffer - is refused: the GPU would read the guest's address from the argument buffer, which the host cannot
+// translate.
 [[nodiscard]] bool av_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments);
 // A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
 // container, a DXIL program, or a DXBC token stream - and empty for a stage the pipeline does not have; the

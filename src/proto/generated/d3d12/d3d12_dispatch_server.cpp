@@ -156,8 +156,10 @@ static bool decode_CreateHeap12(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     if (!r.read_pod(memory)) return false;
     uint64_t offset{};
     if (!r.read_pod(offset)) return false;
+    uint32_t hresult{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateHeap12(heap, properties, flags, size, alignment, memory, offset)) return false;
+    if (!s.on_CreateHeap12(heap, properties, flags, size, alignment, memory, offset, hresult)) return false;
+    reply.write_pod(hresult);
     return true;
 }
 
@@ -180,8 +182,10 @@ static bool decode_CreateCommittedResource12(ServerDispatch& s, ::av::WireReader
     if (!r.read_pod(clear)) return false;
     uint64_t address{};
     if (!r.read_pod(address)) return false;
+    uint32_t hresult{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateCommittedResource12(resource, properties, heap_flags, desc, state, clear, address)) return false;
+    if (!s.on_CreateCommittedResource12(resource, properties, heap_flags, desc, state, clear, address, hresult)) return false;
+    reply.write_pod(hresult);
     return true;
 }
 

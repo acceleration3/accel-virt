@@ -35,8 +35,6 @@ private:
         shader_resource_view,
         unordered_access_view,
     };
-    static constexpr uint32_t vertex_buffer_slots = 32u;
-    static constexpr uint32_t root_descriptor_first = 2u;
     static constexpr uint32_t word_bytes = 4u;
 
     uint64_t bytes_of(const d3d12proto::IndirectArgument &argument, const D3d12RootLayout *root) const;

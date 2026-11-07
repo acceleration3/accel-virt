@@ -94,7 +94,7 @@ bool D3d12Session::on_UpdateTileMappings12(uint32_t queue, uint32_t resource, ui
     for (uint32_t index = 0u; index < range_count; index++)
         if (!tile_update_.add_range(ranges[index], heap_tiles)) return false;
     tile_update_.apply(on, tiled, in, flags);
-    return true;
+    return follow_queue(queue, on, tiled, in);
 }
 
 bool D3d12Session::on_CopyTileMappings12(uint32_t queue, uint32_t destination,
@@ -113,7 +113,7 @@ bool D3d12Session::on_CopyTileMappings12(uint32_t queue, uint32_t destination,
     const D3D12_TILED_RESOURCE_COORDINATE from_start = host_coordinate(source_start);
     const D3D12_TILE_REGION_SIZE          region = host_size(size);
     on->CopyTileMappings(to, &to_start, from, &from_start, &region, static_cast<D3D12_TILE_MAPPING_FLAGS>(flags));
-    return true;
+    return follow_queue(queue, on, to, from);
 }
 
 bool D3d12Session::on_CopyTiles12(uint32_t id, uint32_t resource, const d3d12proto::TileCoordinate &start,
@@ -128,6 +128,7 @@ bool D3d12Session::on_CopyTiles12(uint32_t id, uint32_t resource, const d3d12pro
     if (recorded == nullptr || tiled == nullptr || linear == nullptr || (flags & ~(no_hazard | both_ways)) != 0u ||
         (flags & both_ways) == both_ways || !tiles_hold(tiled, start, size))
         return false;
+    if (!retain_resource(id, resource) || !retain_resource(id, buffer)) return false;
     const D3D12_RESOURCE_DESC tiled_desc = tiled->GetDesc();
     const D3D12_RESOURCE_DESC linear_desc = linear->GetDesc();
     const uint64_t            texel = DxgiFormatLayout(static_cast<uint32_t>(tiled_desc.Format)).element_bytes();

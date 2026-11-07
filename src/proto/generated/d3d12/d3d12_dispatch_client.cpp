@@ -140,7 +140,7 @@ bool av_d3d12_QueryHeapSlices12(::av::ClientTransport& t, uint32_t* supported) {
     return r.remaining() == 0u;
 }
 
-bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) {
+bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t* hresult) {
     AV_SCOPE("av_d3d12_CreateHeap12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(heap);
@@ -150,10 +150,16 @@ bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapPr
     b.write_pod<uint64_t>(alignment);
     b.write_pod<uint64_t>(memory);
     b.write_pod<uint64_t>(offset);
-    return t.send_async(kCmd_CreateHeap12, b) == ::av::TransportResult::ok;
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_CreateHeap12, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (hresult != nullptr) *hresult = value; }
+    return r.remaining() == 0u;
 }
 
-bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
+bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address, uint32_t* hresult) {
     AV_SCOPE("av_d3d12_CreateCommittedResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
@@ -163,7 +169,13 @@ bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resou
     b.write_pod<uint32_t>(state);
     b.write_pod(clear);
     b.write_pod<uint64_t>(address);
-    return t.send_async(kCmd_CreateCommittedResource12, b) == ::av::TransportResult::ok;
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_CreateCommittedResource12, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (hresult != nullptr) *hresult = value; }
+    return r.remaining() == 0u;
 }
 
 bool av_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key) {

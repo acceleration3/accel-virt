@@ -84,6 +84,7 @@ public:
     void               note_viewed(uint32_t slot, IUnknown *resource);
     IUnknown          *at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const;
     void               remove(uint32_t id);
+    IUnknown          *take(uint32_t id);
     void               remove_kinds(D3dObjectKind first, D3dObjectKind last);
     uint32_t           count_kinds(D3dObjectKind first, D3dObjectKind last) const;
     void               release_all();
@@ -99,6 +100,7 @@ private:
     };
 
     void let_go(D3dObjectKind kind, const Entry &entry);
+    void unlist(D3dObjectKind kind, const Entry &entry);
 
     HostObjectRegistry<uint32_t, D3dObjectKind, Entry> objects_;
     GrowableArray<uint32_t>                            views_;

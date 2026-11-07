@@ -1,0 +1,83 @@
+#include "executor/d3d/d3d12_list_hold.hpp"
+#include "harness/executor/counted_object.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
+
+#include <cstdint>
+
+using av::CountedObject;
+using av::D3d12ListHold;
+
+namespace {
+
+D3d12ListHold::Held held_of(CountedObject &object)
+{
+    return D3d12ListHold::Held{&object, nullptr};
+}
+
+}
+
+TEST(d3d12_list_hold, an_object_is_held_once_however_often_it_is_added)
+{ av::MockPlatform platform;
+  D3d12ListHold hold(platform);
+  CountedObject first, second;
+  bool fresh = false;
+  CHECK_STATUS(hold.add(held_of(first), fresh), av::Status::ok);
+  CHECK(fresh);
+  CHECK_STATUS(hold.add(held_of(first), fresh), av::Status::ok);
+  CHECK(!fresh);
+  CHECK_STATUS(hold.add(held_of(second), fresh), av::Status::ok);
+  CHECK(fresh);
+  CHECK_EQ(hold.size(), 2u);
+  CHECK(hold.holds(&first));
+  CHECK(hold.holds(&second));
+  CHECK(hold.invariants_hold()); }
+
+TEST(d3d12_list_hold, nothing_is_held_for_no_object)
+{ av::MockPlatform platform;
+  D3d12ListHold hold(platform);
+  bool fresh = true;
+  CHECK_STATUS(hold.add(D3d12ListHold::Held{nullptr, nullptr}, fresh), av::Status::invalid_parameter);
+  CHECK(!fresh);
+  CHECK_EQ(hold.size(), 0u);
+  CHECK(!hold.holds(nullptr) || hold.size() == 0u);
+  CHECK(hold.invariants_hold()); }
+
+TEST(d3d12_list_hold, the_last_submission_is_the_highest_mark_and_is_forgotten_on_request)
+{ av::MockPlatform platform;
+  D3d12ListHold hold(platform);
+  CHECK_EQ(hold.mark(), 0u);
+  hold.submitted(7u);
+  hold.submitted(3u);
+  CHECK_EQ(hold.mark(), 7u);
+  hold.submitted(9u);
+  CHECK_EQ(hold.mark(), 9u);
+  hold.forget_mark();
+  CHECK_EQ(hold.mark(), 0u); }
+
+TEST(d3d12_list_hold, popping_gives_up_the_most_recently_added_object_first)
+{ av::MockPlatform platform;
+  D3d12ListHold hold(platform);
+  CountedObject first, second;
+  bool fresh = false;
+  CHECK_STATUS(hold.add(held_of(first), fresh), av::Status::ok);
+  CHECK_STATUS(hold.add(held_of(second), fresh), av::Status::ok);
+  CHECK(hold.at(1u).object_ == &second);
+  hold.pop();
+  CHECK(hold.holds(&first));
+  CHECK(!hold.holds(&second));
+  hold.pop();
+  hold.pop();
+  CHECK_EQ(hold.size(), 0u);
+  CHECK(hold.invariants_hold()); }
+
+TEST(d3d12_list_hold, an_allocation_that_fails_holds_nothing)
+{ av::MockPlatform platform;
+  D3d12ListHold hold(platform);
+  CountedObject object;
+  platform.fail_allocation_at(1u);
+  bool fresh = true;
+  CHECK_STATUS(hold.add(held_of(object), fresh), av::Status::no_memory);
+  CHECK(!fresh);
+  CHECK(!hold.holds(&object));
+  CHECK(hold.invariants_hold()); }
