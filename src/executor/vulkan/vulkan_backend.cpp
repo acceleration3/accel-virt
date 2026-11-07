@@ -44,7 +44,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
-      parent_(0u), ran_(0u)
+      progress_(), guard_(blocks, *this, progress_), parent_(0u), ran_(0u)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -123,6 +123,7 @@ bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t
     const VulkanObjectKind judged = object_kind(kind);
     const bool named = judged == VulkanObjectKind::other ? knows_handle(wire) : knows_handle(wire, judged);
     if (!named) return false;
+    if (!guard_.reference(kind, wire, handles_.parent_of(wire))) return false;
     handle = wire;
     return true;
 }
@@ -257,6 +258,9 @@ bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
                         WireArena &arena)
 {
     AV_SCOPE("VulkanBackend::run");
+    const char *const name = vkproto::cmd_id_to_string(command_id);
+    guard_.begin_frame(name[0] == 'v' && name[1] == 'k' && name[2] == 'C' && name[3] == 'm' && name[4] == 'd');
+    guard_.reap();
     const bool decoded = vkproto::dispatch_command(*this, command_id, payload, reply, arena);
     parent_ = 0u;
     if (!decoded) return false;
@@ -554,13 +558,16 @@ VkResult VulkanBackend::on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, co
                                          VkFence fence)
 {
     AV_SCOPE("VulkanBackend::on_vkQueueSubmit");
-    if (timing_.enabled()) return timing_.submit(queue, submitCount, pSubmits, fence);
-    return RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence);
+    if (timing_.enabled()) return submitted(timing_.submit(queue, submitCount, pSubmits, fence), queue, pSubmits, submitCount);
+    return submitted(RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence), queue, pSubmits,
+                     submitCount);
 }
 
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
+    guard_.release_all();
+    progress_.forget(device);
     timing_.forget(device);
     GuestDevice *const ending = device_of(reinterpret_cast<uint64_t>(device));
     if (ending != nullptr && ending == adopting_) {
@@ -577,7 +584,7 @@ void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, cons
     const uint64_t            handle = reinterpret_cast<uint64_t>(memory);
     const SourceMemory *const imported = imports_ != nullptr ? imports_->named(handle) : nullptr;
     if (imported == nullptr) {
-        RealVulkanDispatch::on_vkFreeMemory(device, memory, nullptr);
+        guard_.destroy(VulkanDestroyKind::memory, reinterpret_cast<uint64_t>(device), 0u, handle);
         return;
     }
     abandon(*imported, handle);

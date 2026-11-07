@@ -4,7 +4,10 @@
 #include "core/support/extension_names.hpp"
 #include "core/support/object_pool.hpp"
 #include "executor/vulkan/guest_device.hpp"
+#include "executor/vulkan/vulkan_destroyer.hpp"
+#include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
+#include "executor/vulkan/vulkan_submit_progress.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/host_object_registry.hpp"
 #include "executor/session_backend.hpp"
@@ -26,7 +29,7 @@ class HostMemorySource;
 class ImportTable;
 class SourceMemory;
 
-class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
+class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend, private VulkanDestroyer {
 public:
     explicit VulkanBackend(DriverLog &lines);
     VulkanBackend(BlockSource &blocks, DriverLog &lines);
@@ -106,6 +109,41 @@ public:
     void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                          const VkAllocationCallbacks *pAllocator) override;
 
+    void destroy(VulkanDestroyKind kind, uint64_t device, uint64_t parent, uint64_t handle) override;
+
+    void     on_vkDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyBufferView(VkDevice device, VkBufferView bufferView, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroySampler(VkDevice device, VkSampler sampler, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyRenderPass(VkDevice device, VkRenderPass renderPass, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers) override;
+    VkResult on_vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets) override;
+    VkResult on_vkResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags) override;
+    VkResult on_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) override;
+    VkResult on_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo) override;
+    VkResult on_vkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags) override;
+    VkResult on_vkBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) override;
+    VkResult on_vkBindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) override;
+    VkResult on_vkBindBufferMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfo *pBindInfos) override;
+    VkResult on_vkBindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfo *pBindInfos) override;
+    VkResult on_vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo *pBindInfos) override;
+    VkResult on_vkBindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo *pBindInfos) override;
+    VkResult on_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkImageView *pView) override;
+    VkResult on_vkCreateBufferView(VkDevice device, const VkBufferViewCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkBufferView *pView) override;
+    VkResult on_vkCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkFramebuffer *pFramebuffer) override;
+    void     on_vkUpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies) override;
+    VkResult on_vkQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence) override;
+    VkResult on_vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence) override;
+
     VkResult on_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo,
                                  int *pFd) override;
     VkResult on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *pGetFdInfo,
@@ -159,6 +197,9 @@ private:
     [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
 
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
+    VkResult submitted(VkResult result, VkQueue queue, const VkSubmitInfo *submits, uint32_t count);
+    VkResult submitted(VkResult result, VkQueue queue, const VkSubmitInfo2 *submits, uint32_t count);
+    void     release_children(uint64_t parent);
     void let_go(uint64_t raw, VulkanObjectKind kind);
     [[nodiscard]] bool kept_on(const GuestDevice &device, uint64_t made);
     GuestDevice       *forgot(uint64_t made);
@@ -200,6 +241,8 @@ private:
     GuestMemoryTypes types_;
     bool             types_learnt_;
     VulkanSubmitTiming timing_;
+    VulkanSubmitProgress progress_;
+    mutable VulkanGuard guard_;
     uint64_t parent_;
     uint64_t ran_;
 };
