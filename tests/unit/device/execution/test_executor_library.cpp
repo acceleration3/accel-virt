@@ -55,6 +55,14 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
   CHECK(library.create(SubApi::vulkan, AvContextOptions{}, nullptr) == nullptr);
   library.close_domain(); }
 
+TEST(executor_library, the_vram_reserve_goes_to_the_executor_with_the_domain)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 2048u), Status::ok);
+  CHECK_EQ(ops.last_vram_reserve_mib(), 2048u);
+  library.close_domain(); }
+
 TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_refused)
 { for (std::uint32_t broken = 0u; broken <= 27u; broken++) {
       MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);

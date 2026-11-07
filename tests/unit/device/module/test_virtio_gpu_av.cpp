@@ -361,6 +361,22 @@ void make_the_ring(MockHost &host, VirtioGpuAv &device)
 
 }
 
+TEST(virtio_gpu_av_realize, the_vram_reserve_is_carried_in_the_capset_the_guest_reads)
+{ MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x10000u);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuAv device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 3072u, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
+  GpuRequestBuilder capset(0x0109u);
+  capset.u32(av::CapsetInfo::capset_id).u32(av::DeviceCapset::capset_version);
+  MockRequest read(capset.bytes(), capset.size());
+  CHECK(device.control(&read, 0x0109u));
+  CHECK_EQ(read.response_u32(24u + 18u), 3072u); }
+
 TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts_before_their_blobs)
 { MockHost host;
   host.add_gpu(first);

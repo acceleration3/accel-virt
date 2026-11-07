@@ -190,6 +190,18 @@ TEST(executor_root_memory, a_gpu_with_no_memory_source_gives_none)
   root.close_domain(domain);
   CHECK(root.invariants_hold()); }
 
+TEST(executor_root, the_vram_reserve_a_domain_opens_with_reaches_that_gpu_s_memory_source)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  CHECK_EQ(apis.source().vram_policy().reserve_mib(), 0u);
+  const std::uint32_t domain = root.open_domain(intel, 3072u);
+  CHECK(domain != 0u);
+  CHECK_EQ(apis.source().vram_policy().reserve_mib(), 3072u);
+  root.close_domain(domain); }
+
 TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
 { MockHostApis apis;
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);

@@ -89,6 +89,15 @@ TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
   CHECK_EQ(fixture.plane().sub_apis(), vulkan_only);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_state); }
 
+TEST(local_context_plane, starting_opens_the_domain_with_the_capset_s_vram_reserve)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  const std::uint8_t other_gpu[16] = {1u};
+  av::CapsetInfo capset;
+  capset.reserve_vram(4096u);
+  CHECK_STATUS(fixture.plane().start(other_gpu, capset), Status::ok);
+  CHECK_EQ(fixture.ops().last_vram_reserve_mib(), 4096u); }
+
 TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain)
 { Fixture fixture;
   AvHostMemory memory = {-1, 0u, 0u};
