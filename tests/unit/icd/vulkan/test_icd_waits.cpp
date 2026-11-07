@@ -107,14 +107,14 @@ private:
 
 }
 
-TEST(icd_waits, a_1200_ms_fence_wait_is_three_host_waits_of_at_most_500_ms_and_times_out)
+TEST(icd_waits, a_1200_ms_fence_wait_is_three_non_blocking_host_asks_one_slice_apart_and_times_out)
 { WaitRig rig;
   const std::uint32_t waits = rig.kmt().calls(MockKmt::Call::wait_for_context);
   rig.answer(VK_TIMEOUT, 3u);
   CHECK_EQ(rig.wait_for_fence(1200u * ms), VK_TIMEOUT);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), waits + 3u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
-  const std::uint64_t sent[] = {198u * ms, 500u * ms, 500u * ms};
+  const std::uint64_t sent[] = {0u, 0u, 0u};
   for (std::uint32_t back = 0u; back < 3u; back++) {
       CHECK_EQ(rig.id_back(back), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
       CHECK_EQ(rig.timeout_back(back), sent[back]);
@@ -133,7 +133,7 @@ TEST(icd_waits, a_fence_signalled_in_the_second_slice_answers_success)
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.wait_for_fence(1200u * ms), VK_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent + 2u);
-  CHECK_EQ(rig.timeout_back(0u), 500u * ms); }
+  CHECK_EQ(rig.timeout_back(0u), 0u); }
 
 TEST(icd_waits, a_zero_timeout_is_one_host_wait_of_zero)
 { WaitRig rig;
@@ -143,14 +143,14 @@ TEST(icd_waits, a_zero_timeout_is_one_host_wait_of_zero)
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
   CHECK_EQ(rig.timeout_back(0u), 0u); }
 
-TEST(icd_waits, an_infinite_wait_asks_again_in_slices_until_the_host_answers)
+TEST(icd_waits, an_infinite_wait_asks_again_without_blocking_the_host_until_it_answers)
 { WaitRig rig;
   rig.answer(VK_TIMEOUT, 6u);
   rig.answer(VK_SUCCESS, 1u);
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.wait_for_fence(SlicedWait::forever), VK_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent + 7u);
-  for (std::uint32_t back = 0u; back < 7u; back++) CHECK_EQ(rig.timeout_back(back), 500u * ms); }
+  for (std::uint32_t back = 0u; back < 7u; back++) CHECK_EQ(rig.timeout_back(back), 0u); }
 
 TEST(icd_waits, a_lost_device_answer_or_a_lost_transport_ends_the_wait)
 { WaitRig rig;
@@ -223,7 +223,7 @@ TEST(icd_waits, a_queue_waits_idle_on_a_fence_submitted_with_nothing_in_slices)
   CHECK_EQ(submitted.read_u64(), fence_host);
   for (std::uint32_t back = 0u; back <= 2u; back++) {
       CHECK_EQ(rig.id_back(back), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
-      CHECK_EQ(rig.timeout_back(back), 500u * ms);
+      CHECK_EQ(rig.timeout_back(back), 0u);
   }
   const std::uint32_t idle = rig.kmt().commands();
   CHECK_EQ(rig.entry<QueueWaitIdle>("vkQueueWaitIdle")(queue), VK_SUCCESS);

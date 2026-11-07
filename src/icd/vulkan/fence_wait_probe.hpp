@@ -2,6 +2,7 @@
 #define AV_ICD_FENCE_WAIT_PROBE_HPP
 
 #include "icd/common/completion_probe.hpp"
+#include "icd/common/poll_pause.hpp"
 
 #include <stdint.h>
 
@@ -9,6 +10,7 @@
 
 namespace av {
 class ClientTransport;
+class Kmt;
 }
 
 namespace av::vkproto {
@@ -19,7 +21,8 @@ namespace av::icd {
 
 class FenceWaitProbe final : public CompletionProbe {
 public:
-    FenceWaitProbe(ClientTransport &wire, vkproto::HandleTranslation &handles, VkDevice device, uint32_t count, const VkFence *fences, VkBool32 wait_all);
+    FenceWaitProbe(ClientTransport &wire, vkproto::HandleTranslation &handles, Kmt &kmt, VkDevice device, uint32_t count, const VkFence *fences,
+                   VkBool32 wait_all);
 
     [[nodiscard]] bool ask(uint64_t slice) override;
     void               pause(uint64_t slice) override;
@@ -28,6 +31,7 @@ public:
 private:
     ClientTransport &wire_;
     vkproto::HandleTranslation &handles_;
+    PollPause        polls_;
     VkDevice         device_;
     uint32_t         count_;
     const VkFence   *fences_;

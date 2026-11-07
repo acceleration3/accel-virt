@@ -1425,7 +1425,7 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
-    FenceWaitProbe     probe(made->connection()->transport(), translation_, device, count, fences, wait_all);
+    FenceWaitProbe     probe(made->connection()->transport(), translation_, kmt_, device, count, fences, wait_all);
     HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
     return probe.result();
