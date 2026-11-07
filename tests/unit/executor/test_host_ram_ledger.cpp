@@ -165,19 +165,24 @@ TEST(host_ram_ledger_floor, going_tight_asks_the_host_to_give_memory_back_once_p
   gauge.set(2 * gib, HostRamLedger::refresh_ms);
   CHECK(!ledger.take(1u));
   CHECK_EQ(gauge.relieved, 1u);
-  gauge.set(2 * gib, HostRamLedger::refresh_ms);
+  gauge.set(2 * gib, HostRamLedger::relieve_ms);
   CHECK(!ledger.take(1u));
   CHECK_EQ(gauge.relieved, 1u);
   gauge.set(10 * gib, HostRamLedger::refresh_ms);
   CHECK(ledger.take(1u));
   gauge.set(2 * gib, HostRamLedger::refresh_ms);
   CHECK(!ledger.take(1u));
-  CHECK_EQ(gauge.relieved, 1u);
+  CHECK_EQ(gauge.relieved, 2u);
+  gauge.set(10 * gib, HostRamLedger::refresh_ms);
+  CHECK(ledger.take(1u));
+  gauge.set(2 * gib, HostRamLedger::refresh_ms);
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(gauge.relieved, 2u);
   gauge.set(10 * gib, HostRamLedger::refresh_ms);
   CHECK(ledger.take(1u));
   gauge.set(2 * gib, HostRamLedger::relieve_ms);
   CHECK(!ledger.take(1u));
-  CHECK_EQ(gauge.relieved, 2u); }
+  CHECK_EQ(gauge.relieved, 3u); }
 
 TEST(host_ram_ledger_floor, racing_takes_never_pass_what_the_host_has_above_its_floor)
 { HostRamLedger ledger;
