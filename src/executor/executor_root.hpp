@@ -79,12 +79,14 @@ public:
     uint32_t        wedged() const;
     void            retry_wedged();
     void            watch_wedged();
+    void            stop_watching();
     void            report(StateWriter &writer) override;
 
     bool invariants_hold() const;
 
 private:
     friend struct ExecutorRootProbe;
+    friend class WatcherExit;
 
     static constexpr uint32_t max_sessions = sessions;
 
@@ -94,6 +96,7 @@ private:
     GlMemoryGroup *reserve_group(const ContextSession *share, uint32_t slot);
     void           release_group(uint32_t slot);
     void           note_wedged();
+    void           halt_watcher();
     const HostGpu *gpu_of(uint32_t domain) const;
     HostMemorySource *source_of(uint32_t domain) const;
     uint32_t       slot_of(const ContextSession *session) const;

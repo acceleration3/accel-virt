@@ -43,6 +43,7 @@ public:
     virtual void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) = 0;
 
     virtual void shut_down() = 0;
+    virtual void let_go_of_thread() {}
 
 protected:
     SessionBackend() = default;

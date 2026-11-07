@@ -34,6 +34,8 @@ public:
     [[nodiscard]] Status initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes);
     [[nodiscard]] bool   drain(TeardownBudget &budget);
     [[nodiscard]] bool   release(TeardownBudget &budget);
+    void                 vacate();
+    void                 let_go_of_thread();
     bool                 live() const;
     bool                 faulted() const;
     void                 hold_clocks(GpuClockHold &clocks);

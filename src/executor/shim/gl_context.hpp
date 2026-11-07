@@ -18,6 +18,7 @@ public:
     bool               open() const;
 
     [[nodiscard]] bool make_current();
+    void               let_go();
     void              *resolve(const char *name) const;
     void              *handle() const;
     void              *display() const;

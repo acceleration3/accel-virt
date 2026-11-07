@@ -82,7 +82,7 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
   CHECK(std::strstr(writer.dump(), "\nexecutor/0/session/0 api=opencl gpu=0 domain=0 wedged=false\n"
                                    "executor/0/session/1 api=opengl gpu=0 domain=0 wedged=false\n"
                                    "executor/0/session/2 api=unknown gpu=0 domain=0 wedged=false") != nullptr);
-  for (std::uint32_t slot = 0u; slot < 3u; slot++) static_cast<void>(probe.session_at(slot).release(av::GenerousBudget().budget())); }
+  for (std::uint32_t slot = 0u; slot < 3u; slot++) { static_cast<void>(probe.session_at(slot).release(av::GenerousBudget().budget())); probe.session_at(slot).vacate(); } }
 
 TEST(executor_root_report, a_gpu_s_device_reports_its_exportable_images)
 { MockHostApis apis;

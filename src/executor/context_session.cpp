@@ -63,8 +63,19 @@ bool ContextSession::release(TeardownBudget &budget)
     answer_length_ = 0u;
     faulted_ = false;
     drained_ = false;
-    __atomic_store_n(&backend_, nullptr, __ATOMIC_RELEASE);
     return true;
+}
+
+void ContextSession::vacate()
+{
+    AV_SCOPE("ContextSession::vacate");
+    __atomic_store_n(&backend_, nullptr, __ATOMIC_RELEASE);
+}
+
+void ContextSession::let_go_of_thread()
+{
+    AV_SCOPE("ContextSession::let_go_of_thread");
+    if (backend_ != nullptr) backend_->let_go_of_thread();
 }
 
 bool ContextSession::live() const

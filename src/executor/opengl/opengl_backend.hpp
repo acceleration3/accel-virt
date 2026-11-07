@@ -44,6 +44,7 @@ public:
                                   const OpenGlBackend *share, GlMemoryGroup *group = nullptr);
     const GlContext   &context() const;
     void               shut_down() override;
+    void               let_go_of_thread() override;
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,

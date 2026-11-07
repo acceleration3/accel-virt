@@ -15,6 +15,7 @@
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/teardown_budget.hpp"
+#include "executor/watcher_exit.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
@@ -50,12 +51,7 @@ ExecutorRoot::ExecutorRoot(ExecutorLog &log)
 ExecutorRoot::~ExecutorRoot()
 {
     AV_SCOPE("ExecutorRoot::~ExecutorRoot");
-    lock_.acquire();
-    const bool joined = watching_;
-    stopping_ = true;
-    wake_.signal();
-    lock_.release();
-    if (joined) pthread_join(watcher_, nullptr);
+    stop_watching();
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         d3d_[slot].destroy();
         opengl_[slot].destroy();
@@ -63,6 +59,25 @@ ExecutorRoot::~ExecutorRoot()
         vulkan_[slot].destroy();
         sessions_[slot].destroy();
     }
+}
+
+void ExecutorRoot::stop_watching()
+{
+    AV_SCOPE("ExecutorRoot::stop_watching");
+    WatcherExit::disarm(*this);
+    halt_watcher();
+}
+
+void ExecutorRoot::halt_watcher()
+{
+    AV_SCOPE("ExecutorRoot::halt_watcher");
+    lock_.acquire();
+    const bool joined = watching_;
+    watching_ = false;
+    stopping_ = true;
+    wake_.signal();
+    lock_.release();
+    if (joined) pthread_join(watcher_, nullptr);
 }
 
 Status ExecutorRoot::initialize(HostApis &apis)
@@ -230,9 +245,15 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
             const bool released = sessions_[slot].object().release(budget);
             lock_.acquire();
             wedged_[slot] = !released;
-            if (released) release_group(slot);
+            if (released) {
+                release_group(slot);
+                sessions_[slot].object().vacate();
+            }
             lock_.release();
-            if (!released) note_wedged();
+            if (!released) {
+                sessions_[slot].object().let_go_of_thread();
+                note_wedged();
+            }
             return nullptr;
         }
         lock_.acquire();
@@ -326,6 +347,7 @@ void ExecutorRoot::close(ContextSession *session)
     const uint32_t slot = slot_of(session);
     TeardownBudget budget(clock_, teardown_nanoseconds);
     if (finish(slot, budget)) return;
+    session->let_go_of_thread();
     lock_.acquire();
     wedged_[slot] = true;
     apis_of_[slot] = 0u;
@@ -346,6 +368,7 @@ bool ExecutorRoot::finish(uint32_t slot, TeardownBudget &budget)
     apis_of_[slot] = 0u;
     gpus_of_[slot] = 0u;
     release_group(slot);
+    session.vacate();
     lock_.release();
     retire(gpu);
     return true;
@@ -354,6 +377,10 @@ bool ExecutorRoot::finish(uint32_t slot, TeardownBudget &budget)
 void ExecutorRoot::reap_wedged()
 {
     AV_SCOPE("ExecutorRoot::reap_wedged");
+    lock_.acquire();
+    const bool over = stopping_;
+    lock_.release();
+    if (over) return;
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         lock_.acquire();
         const bool claimed = wedged_[slot] && !reaping_[slot];
@@ -361,7 +388,7 @@ void ExecutorRoot::reap_wedged()
         lock_.release();
         if (!claimed) continue;
         TeardownBudget budget(clock_, 0u);
-        static_cast<void>(finish(slot, budget));
+        if (!finish(slot, budget)) sessions_[slot].object().let_go_of_thread();
         const ThreadLockHold held(lock_);
         reaping_[slot] = false;
     }
@@ -394,7 +421,10 @@ void ExecutorRoot::note_wedged()
     AV_SCOPE("ExecutorRoot::note_wedged");
     const ThreadLockHold held(lock_);
     if (stopping_) return;
-    if (!watching_ && pthread_create(&watcher_, nullptr, &run_wedged_watch, this) == 0) watching_ = true;
+    if (!watching_ && pthread_create(&watcher_, nullptr, &run_wedged_watch, this) == 0) {
+        watching_ = true;
+        WatcherExit::arm(*this);
+    }
     wake_.signal();
 }
 

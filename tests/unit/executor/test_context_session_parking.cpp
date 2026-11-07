@@ -59,7 +59,7 @@ public:
     }
     ~Parking()
     {
-        static_cast<void>(session_.release(av::GenerousBudget().budget()));
+        static_cast<void>(session_.release(av::GenerousBudget().budget())); session_.vacate();
         for (const AvHostMemory &made : memory_)
             if (made.fd >= 0) close(made.fd);
     }
@@ -182,7 +182,7 @@ TEST(context_session_parking, releasing_the_session_retires_what_still_waits)
   parking.backend().set_progress(7u, 3u);
   parking.session().release_blob(5u);
   CHECK_EQ(parking.session().parked(), 1u);
-  static_cast<void>(parking.session().release(av::GenerousBudget().budget()));
+  static_cast<void>(parking.session().release(av::GenerousBudget().budget())); parking.session().vacate();
   CHECK_EQ(parking.session().parked(), 0u);
   CHECK_EQ(parking.backend().abandoned(), 1u);
   CHECK(parking.session().invariants_hold()); }

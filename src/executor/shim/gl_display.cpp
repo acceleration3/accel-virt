@@ -107,6 +107,13 @@ bool GlDisplay::make_current(void *context) const
     return eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, context) == EGL_TRUE;
 }
 
+void GlDisplay::release_current() const
+{
+    AV_SCOPE("GlDisplay::release_current");
+    if (display_ == nullptr) return;
+    (void)eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+}
+
 void GlDisplay::destroy_context(void *context) const
 {
     AV_SCOPE("GlDisplay::destroy_context");

@@ -23,6 +23,7 @@ public:
     void *handle() const;
     [[nodiscard]] bool make_current(void *context) const;
     void  destroy_context(void *context) const;
+    void  release_current() const;
 
 private:
     void *display_;

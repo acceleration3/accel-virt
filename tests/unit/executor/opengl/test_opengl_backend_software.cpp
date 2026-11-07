@@ -878,3 +878,54 @@ TEST(opengl_backend_software, a_backend_whose_context_cannot_be_made_current_is_
   CHECK_EQ(group.members(), 0u);
   CHECK_EQ(OpenGlBackendProbe::memories(backend).count(), 0u);
   eglMakeCurrent(eglGetCurrentDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); }
+
+TEST(opengl_backend_software, a_context_left_current_by_a_failed_drain_cannot_be_drained_from_another_thread)
+{ if (skipped()) return;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr));
+  real_wait = OpenGlBackendProbe::writable(backend).glClientWaitSync;
+  wait_answer = 0x911Bu;
+  OpenGlBackendProbe::writable(backend).glClientWaitSync = counted_wait;
+  CHECK(!backend.drain(av::GenerousBudget().budget()));
+  CHECK(eglGetCurrentContext() != EGL_NO_CONTEXT);
+  wait_answer = 0u;
+  Foreign foreign = {&backend, true, false};
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, drain_and_close, &foreign), 0);
+  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  CHECK(!foreign.drained.load());
+  eglMakeCurrent(eglGetCurrentDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); }
+
+TEST(opengl_backend_software, a_context_let_go_of_after_a_failed_drain_is_drained_and_closed_by_another_thread)
+{ if (skipped()) return;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr));
+  real_wait = OpenGlBackendProbe::writable(backend).glClientWaitSync;
+  wait_answer = 0x911Bu;
+  OpenGlBackendProbe::writable(backend).glClientWaitSync = counted_wait;
+  CHECK(!backend.drain(av::GenerousBudget().budget()));
+  CHECK(eglGetCurrentContext() != EGL_NO_CONTEXT);
+  backend.let_go_of_thread();
+  CHECK(eglGetCurrentContext() == EGL_NO_CONTEXT);
+  wait_answer = 0u;
+  Foreign foreign = {&backend, false, false};
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, drain_and_close, &foreign), 0);
+  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  CHECK(foreign.done.load());
+  CHECK(foreign.drained.load()); }
+
+TEST(opengl_backend_software, letting_go_leaves_another_context_current_on_the_thread_alone)
+{ if (skipped()) return;
+  OpenGlBackend first(executor_log.opengl());
+  OpenGlBackend second(executor_log.opengl());
+  CHECK(first.initialize(software().display(), nullptr, nullptr));
+  CHECK(second.initialize(software().display(), nullptr, nullptr));
+  const EGLContext current = eglGetCurrentContext();
+  CHECK(current != EGL_NO_CONTEXT);
+  first.let_go_of_thread();
+  CHECK(eglGetCurrentContext() == current);
+  second.let_go_of_thread();
+  CHECK(eglGetCurrentContext() == EGL_NO_CONTEXT);
+  first.shut_down();
+  second.shut_down(); }

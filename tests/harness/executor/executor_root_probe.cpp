@@ -25,4 +25,8 @@ uint32_t ExecutorRootProbe::group_of(const ContextSession &session) const
 
 uint32_t ExecutorRootProbe::group_refs(uint32_t group) const { return root.group_refs_[group]; }
 
+void ExecutorRootProbe::hold_lock() { root.lock_.acquire(); }
+
+void ExecutorRootProbe::drop_lock() { root.lock_.release(); }
+
 }

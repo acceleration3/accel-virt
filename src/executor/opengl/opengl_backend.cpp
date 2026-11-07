@@ -253,6 +253,12 @@ void OpenGlBackend::shut_down()
     ran_ = 0u;
 }
 
+void OpenGlBackend::let_go_of_thread()
+{
+    AV_SCOPE("OpenGlBackend::let_go_of_thread");
+    context_.let_go();
+}
+
 bool OpenGlBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("OpenGlBackend::knows");

@@ -48,6 +48,13 @@ bool GlContext::make_current()
     return display_->make_current(context_);
 }
 
+void GlContext::let_go()
+{
+    AV_SCOPE("GlContext::let_go");
+    if (context_ == nullptr) return;
+    if (eglGetCurrentContext() == static_cast<EGLContext>(context_)) display_->release_current();
+}
+
 void *GlContext::handle() const
 {
     AV_SCOPE("GlContext::handle");

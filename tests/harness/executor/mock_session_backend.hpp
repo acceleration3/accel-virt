@@ -67,6 +67,8 @@ public:
 
     void          shut_down() override;
     std::uint32_t shut_downs() const;
+    void          let_go_of_thread() override;
+    std::uint32_t let_goes() const;
     std::uint32_t abandoned_before_shut_down() const;
     std::uint32_t released_before_shut_down() const;
 
@@ -97,6 +99,7 @@ private:
     std::uint32_t released_objects_;
     std::uint64_t last_released_detail_ = 0u;
     std::uint32_t shut_downs_ = 0u;
+    std::uint32_t let_goes_ = 0u;
     std::uint32_t drains_ = 0u;
     std::uint32_t finished_drains_ = 0u;
     bool          drains_in_time_ = true;

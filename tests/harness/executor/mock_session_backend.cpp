@@ -152,6 +152,10 @@ void MockSessionBackend::shut_down()
     released_before_shut_down_ = released_objects_;
 }
 
+void MockSessionBackend::let_go_of_thread() { __atomic_fetch_add(&let_goes_, 1u, __ATOMIC_RELAXED); }
+
+std::uint32_t MockSessionBackend::let_goes() const { return __atomic_load_n(&let_goes_, __ATOMIC_RELAXED); }
+
 std::uint32_t MockSessionBackend::shut_downs() const { return __atomic_load_n(&shut_downs_, __ATOMIC_RELAXED); }
 std::uint32_t MockSessionBackend::abandoned_before_shut_down() const { return abandoned_before_shut_down_; }
 std::uint32_t MockSessionBackend::released_before_shut_down() const { return released_before_shut_down_; }

@@ -21,6 +21,8 @@ struct ExecutorRootProbe {
     void            remember(uint32_t slot, uint32_t sub_api, uint32_t gpu);
     uint32_t        group_of(const ContextSession &session) const;
     uint32_t        group_refs(uint32_t group) const;
+    void            hold_lock();
+    void            drop_lock();
 
     ExecutorRoot &root;
 };

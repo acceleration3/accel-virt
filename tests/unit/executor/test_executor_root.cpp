@@ -6,6 +6,7 @@
 #include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
+#include "executor/watcher_exit.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -22,6 +23,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
+#include <atomic>
 #include <cstdint>
 #include <pthread.h>
 #include <cstdio>
@@ -444,11 +446,11 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
   CHECK(stranger.imported_handle(9u) != 0u);
   CHECK_EQ(opened.root().imported_handle(&stranger, 9u), 0u);
   CHECK_EQ(opened.root().imported_handle(nullptr, 9u), 0u);
-  static_cast<void>(stranger.release(av::GenerousBudget().budget()));
+  static_cast<void>(stranger.release(av::GenerousBudget().budget())); stranger.vacate();
 
   session->release_blob(9u);
   CHECK_EQ(opened.root().imported_handle(session, 9u), 0u);
-  static_cast<void>(session->release(av::GenerousBudget().budget()));
+  static_cast<void>(session->release(av::GenerousBudget().budget())); session->vacate();
   opened.root().free_memory(domain, 0x30u);
   CHECK_EQ(opened.apis().exporter().live(), 0u);
   close(memory.fd); }
@@ -643,11 +645,11 @@ TEST(executor_root, the_shared_object_calls_reach_the_domain_as_the_session_that
            std::uint32_t{AV_DEVICE_LOST});
   CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_REFUSED});
   CHECK_EQ(root.share_object(reader, 0x2Du, AV_SHARED_MEMORY, 4096u, 0x41u), std::uint32_t{AV_SHARED_REFUSED});
-  static_cast<void>(stranger.release(av::GenerousBudget().budget()));
+  static_cast<void>(stranger.release(av::GenerousBudget().budget())); stranger.vacate();
   probe.shares_at(1u).end();
   probe.shares_at(0u).end();
-  static_cast<void>(reader->release(av::GenerousBudget().budget()));
-  static_cast<void>(maker->release(av::GenerousBudget().budget())); }
+  static_cast<void>(reader->release(av::GenerousBudget().budget())); reader->vacate();
+  static_cast<void>(maker->release(av::GenerousBudget().budget())); maker->vacate(); }
 
 TEST(executor_root, closing_a_session_shuts_down_the_backend_it_ran_after_its_shares)
 { Opened opened;
@@ -714,8 +716,8 @@ TEST(executor_root, an_object_is_opened_into_what_the_session_names_and_closed_b
   CHECK_EQ(reader_backend.released_objects(), 2u);
   probe.shares_at(1u).end();
   probe.shares_at(0u).end();
-  static_cast<void>(reader->release(av::GenerousBudget().budget()));
-  static_cast<void>(maker->release(av::GenerousBudget().budget())); }
+  static_cast<void>(reader->release(av::GenerousBudget().budget())); reader->vacate();
+  static_cast<void>(maker->release(av::GenerousBudget().budget())); maker->vacate(); }
 
 TEST(executor_root, a_session_is_drained_before_its_shared_objects_are_released)
 { Opened opened;
@@ -1038,3 +1040,231 @@ TEST(executor_root_concurrency, closing_a_session_drains_its_backend_once_before
   root.close(session);
   CHECK_EQ(backend.drains(), 1u);
   CHECK_EQ(backend.shut_downs(), 1u); }
+
+namespace {
+
+struct Closing {
+    ExecutorRoot   *root;
+    ContextSession *session;
+};
+
+void *close_session(void *context)
+{
+    Closing &closing = *static_cast<Closing *>(context);
+    closing.root->close(closing.session);
+    return nullptr;
+}
+
+void nap_for(long milliseconds)
+{
+    timespec nap = {0, milliseconds * 1000 * 1000};
+    nanosleep(&nap, nullptr);
+}
+
+}
+
+TEST(executor_root_concurrency, a_closing_slot_cannot_be_claimed_until_its_records_are_cleared)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  static std::uint8_t other_block[4096];
+  MockSessionBackend  backend;
+  MockSessionBackend  claimant;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  probe.hold_lock();
+  Closing closing = {&root, session};
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, close_session, &closing), 0);
+  for (std::uint32_t looks = 0u; looks < 2000u && backend.shut_downs() == 0u; looks++) nap_for(1);
+  CHECK_EQ(backend.shut_downs(), 1u);
+  nap_for(30);
+  CHECK_STATUS(probe.session_at(0u).initialize(claimant, other_block, sizeof other_block), Status::invalid_state);
+  CHECK(session->live());
+  probe.drop_lock();
+  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  CHECK(!session->live());
+  CHECK_EQ(root.live(), 0u);
+  CHECK_STATUS(session->initialize(claimant, other_block, sizeof other_block), Status::ok);
+  static_cast<void>(session->release(av::GenerousBudget().budget()));
+  session->vacate(); }
+
+namespace {
+
+struct OpenThenClose {
+    ExecutorRoot                  *root;
+    std::uint32_t                  domain;
+    std::atomic<ContextSession *>  session;
+    std::atomic<bool>              go;
+};
+
+void *open_then_close(void *context)
+{
+    OpenThenClose &job = *static_cast<OpenThenClose *>(context);
+    AvContextOptions options = {};
+    options.domain = job.domain;
+    ContextSession *const made = job.root->open(AV_EXECUTOR_SUB_API_OPENGL, options, nullptr);
+    job.session.store(made);
+    while (made != nullptr && !job.go.load()) nap_for(1);
+    if (made != nullptr) job.root->close(made);
+    return nullptr;
+}
+
+}
+
+TEST(executor_root_concurrency, a_closing_opengl_slot_drops_its_group_before_the_slot_can_be_claimed)
+{ av::SoftwareGl software;
+  if (!software.usable()) {
+      std::fprintf(stderr, "no llvmpipe EGL device: software GL test skipped\n");
+      return;
+  }
+  MockHostApis apis;
+  apis.add_gpu(software.uuid(), AV_EXECUTOR_SUB_API_OPENGL);
+  apis.give_gl(software.display());
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  ExecutorRootProbe probe(root);
+  static std::uint8_t other_block[4096];
+  MockSessionBackend  claimant;
+  OpenThenClose job = {&root, held.domain_of(software.uuid()), {nullptr}, {false}};
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, open_then_close, &job), 0);
+  for (std::uint32_t looks = 0u; looks < 2000u && job.session.load() == nullptr; looks++) nap_for(1);
+  ContextSession *const first = job.session.load();
+  CHECK(first != nullptr);
+  if (first == nullptr) {
+      pthread_join(thread, nullptr);
+      return;
+  }
+  const std::uint32_t group = probe.group_of(*first);
+  CHECK_EQ(probe.group_refs(group), 1u);
+  probe.hold_lock();
+  job.go.store(true);
+  nap_for(150);
+  CHECK_STATUS(first->initialize(claimant, other_block, sizeof other_block), Status::invalid_state);
+  CHECK_EQ(probe.group_refs(group), 1u);
+  probe.drop_lock();
+  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  CHECK_EQ(probe.group_refs(group), 0u);
+  CHECK_EQ(root.live(), 0u);
+  ContextSession *const again = held.open(AV_EXECUTOR_SUB_API_OPENGL, software.uuid());
+  CHECK(again != nullptr);
+  if (again != nullptr) {
+      CHECK_EQ(probe.group_refs(probe.group_of(*again)), 1u);
+      root.close(again);
+  }
+  CHECK(root.invariants_hold()); }
+
+namespace {
+
+struct Churn {
+    ExecutorRoot      *root;
+    ExecutorRootProbe *probe;
+    std::uint32_t      domain;
+    std::atomic<std::uint32_t> broken;
+};
+
+void churn_one(void *context, std::uint32_t)
+{
+    Churn &churn = *static_cast<Churn *>(context);
+    AvContextOptions options = {};
+    options.domain = churn.domain;
+    for (std::uint32_t round = 0u; round < 12u; round++) {
+        ContextSession *const first = churn.root->open(AV_EXECUTOR_SUB_API_OPENGL, options, nullptr);
+        if (first == nullptr) {
+            churn.broken++;
+            continue;
+        }
+        ContextSession *const second = churn.root->open(AV_EXECUTOR_SUB_API_OPENGL, options, first);
+        if (second == nullptr || churn.probe->group_of(*first) != churn.probe->group_of(*second)) churn.broken++;
+        if (second != nullptr) churn.root->close(second);
+        churn.root->close(first);
+    }
+}
+
+}
+
+TEST(executor_root_concurrency, opengl_slots_closing_and_reopening_at_once_keep_every_group_record)
+{ av::SoftwareGl software;
+  if (!software.usable()) {
+      std::fprintf(stderr, "no llvmpipe EGL device: software GL test skipped\n");
+      return;
+  }
+  MockHostApis apis;
+  apis.add_gpu(software.uuid(), AV_EXECUTOR_SUB_API_OPENGL);
+  apis.give_gl(software.display());
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  ExecutorRootProbe probe(root);
+  Churn churn = {&root, &probe, held.domain_of(software.uuid()), {0u}};
+  Spread(6u, churn_one, &churn).run();
+  CHECK_EQ(churn.broken.load(), 0u);
+  CHECK_EQ(root.live(), 0u);
+  for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
+  CHECK(root.invariants_hold()); }
+
+TEST(executor_root_concurrency, a_failed_close_and_every_failed_reap_let_the_backend_go_of_the_thread)
+{ Opened opened;
+  Wedged wedged(opened);
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) CHECK(wedged.backend(slot).let_goes() >= 1u);
+  std::uint32_t before = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) before += wedged.backend(slot).let_goes();
+  opened.root().retry_wedged();
+  std::uint32_t after = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) after += wedged.backend(slot).let_goes();
+  CHECK(after >= before);
+  wedged.finish_in_time();
+  for (std::uint32_t looks = 0u; looks < 100u && opened.root().wedged() != 0u; looks++) nap_for(50);
+  CHECK_EQ(opened.root().wedged(), 0u);
+  std::uint32_t settled = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) settled += wedged.backend(slot).let_goes();
+  opened.root().retry_wedged();
+  std::uint32_t last = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) last += wedged.backend(slot).let_goes();
+  CHECK_EQ(last, settled); }
+
+TEST(executor_root_concurrency, a_closed_session_does_not_let_go_of_the_thread)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  root.close(session);
+  CHECK_EQ(backend.shut_downs(), 1u);
+  CHECK_EQ(backend.let_goes(), 0u); }
+
+TEST(executor_root_concurrency, the_watcher_stops_at_exit_and_never_reaps_after_it)
+{ Opened opened;
+  Wedged wedged(opened);
+  std::uint32_t baseline = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) baseline += wedged.backend(slot).drains();
+  std::uint32_t looked = baseline;
+  for (std::uint32_t looks = 0u; looks < 80u && looked < baseline + wedged_slots; looks++) {
+      nap_for(50);
+      looked = 0u;
+      for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) looked += wedged.backend(slot).drains();
+  }
+  CHECK(looked >= baseline + wedged_slots);
+  av::WatcherExit::stop_all();
+  std::uint32_t stopped = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) stopped += wedged.backend(slot).drains();
+  nap_for(700);
+  opened.root().retry_wedged();
+  std::uint32_t later = 0u;
+  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) later += wedged.backend(slot).drains();
+  CHECK_EQ(later, stopped);
+  CHECK_EQ(opened.root().wedged(), wedged_slots);
+  wedged.finish_in_time();
+  nap_for(700);
+  CHECK_EQ(opened.root().wedged(), wedged_slots); }
