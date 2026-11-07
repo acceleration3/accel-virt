@@ -566,3 +566,17 @@ TEST(context_session, a_malformed_statistics_report_is_counted_as_rejected_in_th
   av::StateWriter writer(text, sizeof text);
   session.report_channel(writer);
   CHECK(std::strstr(writer.dump(), "reports=0 rejected=1") != nullptr); }
+
+TEST(context_session_release, waits_for_the_gpu_before_any_blob_or_source_memory_goes)
+{ Drawing drawing;
+  for (std::uint64_t id = 1u; id <= 2u; id++)
+      CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.backend().drains(), 0u);
+  drawing.session().release();
+  CHECK_EQ(drawing.backend().drains(), 1u);
+  CHECK_EQ(drawing.backend().abandoned_before_drain(), 0u);
+  CHECK_EQ(drawing.backend().abandoned(), 2u);
+  CHECK_EQ(drawing.exporter().live(), 0u);
+  drawing.session().release();
+  CHECK_EQ(drawing.backend().drains(), 1u); }

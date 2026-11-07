@@ -38,6 +38,7 @@ Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_
 void ContextSession::release()
 {
     AV_SCOPE("ContextSession::release");
+    if (backend_ != nullptr) backend_->drain();
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) retire_blob(blob->id());
     parked_count_ = 0u;
     if (backend_ != nullptr) backend_->shut_down();

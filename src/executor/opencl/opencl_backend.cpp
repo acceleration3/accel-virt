@@ -364,6 +364,19 @@ void OpenClBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
     reached = 0u;
 }
 
+void OpenClBackend::drain()
+{
+    AV_SCOPE("OpenClBackend::drain");
+    if (queue_ != nullptr) static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
+    for (uint32_t slot = handles_.next_held(0u); slot != handles_.no_slot; slot = handles_.next_held(slot + 1u)) {
+        uint64_t                key = 0u;
+        clproto::HandleKind     kind = clproto::HandleKind::platform;
+        void *const *const object = handles_.at(slot, key, kind);
+        if (kind == clproto::HandleKind::command_queue && object != nullptr && *object != nullptr)
+            static_cast<void>(::clFinish(static_cast<cl_command_queue>(*object)));
+    }
+}
+
 void OpenClBackend::end_batch()
 {
     AV_SCOPE("OpenClBackend::end_batch");

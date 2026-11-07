@@ -886,6 +886,12 @@ void VulkanBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
     reached = 0u;
 }
 
+void VulkanBackend::drain()
+{
+    AV_SCOPE("VulkanBackend::drain");
+    guard_.drain();
+}
+
 void VulkanBackend::end_batch()
 {
     AV_SCOPE("VulkanBackend::end_batch");

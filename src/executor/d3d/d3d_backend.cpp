@@ -198,6 +198,15 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
                           blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR)));
 }
 
+void D3dBackend::drain()
+{
+    AV_SCOPE("D3dBackend::drain");
+    if (device11_ == nullptr) return;
+    device11_->lock(nullptr);
+    device11_->vulkan().idle();
+    device11_->unlock();
+}
+
 void D3dBackend::end_batch()
 {
     AV_SCOPE("D3dBackend::end_batch");

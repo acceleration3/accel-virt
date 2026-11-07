@@ -49,6 +49,7 @@ public:
     void               defer_pool_reset(uint64_t pool, uint64_t device, uint64_t mark);
     uint64_t           mark_of(uint64_t owner, uint64_t device) const;
     void               end_batch();
+    void               drain();
 
     bool holding(uint64_t owner, uint64_t handle) const;
     bool tracked(uint64_t handle) const;

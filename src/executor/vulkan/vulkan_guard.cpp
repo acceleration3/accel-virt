@@ -72,6 +72,12 @@ void VulkanGuard::begin_frame(bool recording)
     owner_device_ = 0u;
 }
 
+void VulkanGuard::drain()
+{
+    AV_SCOPE("VulkanGuard::drain");
+    devices_.for_each([this](uint64_t device, VulkanLifetimes *&) { static_cast<void>(progress_.wait_idle(device)); });
+}
+
 void VulkanGuard::end_batch()
 {
     AV_SCOPE("VulkanGuard::end_batch");

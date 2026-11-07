@@ -166,10 +166,20 @@ bool OpenGlBackend::granted_fixed_function()
     return (static_cast<uint32_t>(mask) & gl_context_core_profile_bit) == 0u;
 }
 
+void OpenGlBackend::drain()
+{
+    AV_SCOPE("OpenGlBackend::drain");
+    if (gl_.glFinish == nullptr || !context_.make_current()) return;
+    gl_.glFinish();
+    static_cast<void>(progress_.settle());
+    slices_.reclaim();
+}
+
 void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
     if (context_.make_current()) {
+        if (gl_.glFinish != nullptr) gl_.glFinish();
         pack_.release();
         pack_.abandon_all();
         buffers_.give_back();

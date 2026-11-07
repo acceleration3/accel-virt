@@ -41,6 +41,9 @@ public:
     void set_losable(bool losable);
     void lose_elsewhere();
     void end_batch() override;
+    void drain() override;
+    std::uint32_t drains() const;
+    std::uint32_t abandoned_before_drain() const;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     void bind_signal(void (*signal)(void *context), void *context) override;
@@ -91,6 +94,8 @@ private:
     std::uint32_t released_objects_;
     std::uint64_t last_released_detail_ = 0u;
     std::uint32_t shut_downs_ = 0u;
+    std::uint32_t drains_ = 0u;
+    std::uint32_t abandoned_before_drain_ = 0u;
     std::uint32_t abandoned_before_shut_down_ = 0u;
     std::uint32_t released_before_shut_down_ = 0u;
     int           descriptor_;

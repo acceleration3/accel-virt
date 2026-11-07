@@ -63,6 +63,7 @@ public:
     bool lost() const override;
     [[nodiscard]] bool lose_device() override;
     void end_batch() override;
+    void drain() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     void bind_signal(void (*signal)(void *context), void *context) override;

@@ -58,6 +58,7 @@ public:
     bool lost() const override;
     [[nodiscard]] bool lose_device() override;
     void end_batch() override;
+    void drain() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle) override;

@@ -911,3 +911,16 @@ TEST(vulkan_guard, a_pool_destroyed_while_its_reset_waits_is_destroyed_once_and_
   CHECK_EQ(rig.destroyer.count, 1u);
   CHECK(rig.destroyer.kinds[0] == VulkanDestroyKind::descriptor_pool);
   CHECK(rig.guard.invariants_hold()); }
+
+TEST(vulkan_guard, draining_waits_for_every_device_s_work_and_leaves_the_objects_alone)
+{ Rig rig;
+  CHECK(rig.record(cb, Named{HandleKind::buffer, buffer}, Named{HandleKind::device, 0u}, device));
+  CHECK(rig.record(other_cb, Named{HandleKind::image, image}, Named{HandleKind::device, 0u}, other_device));
+  CHECK_EQ(rig.submit(cb, device), 1u);
+  CHECK_EQ(rig.submit(other_cb, other_device), 2u);
+  rig.guard.drain();
+  CHECK_EQ(rig.progress.waits, 2u);
+  CHECK_EQ(rig.progress.reached(device), 2u);
+  CHECK_EQ(rig.progress.reached(other_device), 2u);
+  CHECK(rig.guard.holding(cb, buffer));
+  CHECK_EQ(rig.destroyer.count, 0u); }

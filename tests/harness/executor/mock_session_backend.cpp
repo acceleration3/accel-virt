@@ -72,6 +72,16 @@ void MockSessionBackend::lose_elsewhere() { lost_ = true; }
 
 void MockSessionBackend::end_batch() {}
 
+void MockSessionBackend::drain()
+{
+    drains_++;
+    abandoned_before_drain_ = abandoned_ + unbound_;
+}
+
+std::uint32_t MockSessionBackend::drains() const { return drains_; }
+
+std::uint32_t MockSessionBackend::abandoned_before_drain() const { return abandoned_before_drain_; }
+
 bool MockSessionBackend::poll() { return false; }
 
 void MockSessionBackend::bind_signal(void (*signal)(void *context), void *context)
