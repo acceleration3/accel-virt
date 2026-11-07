@@ -109,6 +109,7 @@ namespace av {
 struct OpenClBackendProbe {
     static void borrow_queue(OpenClBackend &backend, void *queue) { backend.queue_ = queue; }
     static void submit(OpenClBackend &backend) { backend.ran_++; }
+    static void lose(OpenClBackend &backend) { backend.lost_ = true; }
     static void keep(OpenClBackend &backend, clproto::HandleKind kind, void *object)
     {
         CHECK_STATUS(backend.hold(kind, object), Status::ok);
@@ -228,3 +229,15 @@ TEST(opencl_backend_drain, three_hundred_user_events_are_all_tracked_and_all_fai
       CHECK(events[at].was_set);
       CHECK_EQ(events[at].retains, 1);
   } }
+
+TEST(opencl_backend_drain, a_lost_backend_with_a_queue_that_never_finishes_reports_the_drain_unfinished)
+{ forget_marked();
+  marker_status = CL_RUNNING;
+  OpenClBackend backend(executor_log.opencl());
+  OpenClBackendProbe::borrow_queue(backend, fake_queue(0x1000u));
+  OpenClBackendProbe::lose(backend);
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 20u * 1000u * 1000u);
+  CHECK(backend.lost());
+  CHECK(!backend.drain(budget));
+  OpenClBackendProbe::borrow_queue(backend, nullptr); }

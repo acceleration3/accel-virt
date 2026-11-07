@@ -13,6 +13,8 @@
 namespace av {
 struct D3dBackendProbe {
     static void use(D3dBackend &backend, D3d11HostDevice *device) { backend.device11_ = device; }
+    static void lose(D3dBackend &backend) { backend.lost_ = true; }
+    static bool drain_queue(D3dBackend &backend, av::TeardownBudget &budget) { return backend.drain_queue(budget); }
 };
 }
 
@@ -69,3 +71,11 @@ TEST(d3d_backend_drain, a_session_that_never_made_a_direct3d11_device_neither_ta
   CHECK(finished);
   CHECK(drainer.drained.load());
   D3dBackendProbe::use(backend, nullptr); }
+
+TEST(d3d_backend_drain, a_lost_backend_is_never_reported_drained_by_its_queue)
+{ D3dBackend backend(executor_log);
+  D3d11HostDevice device(executor_log.d3d11());
+  D3dBackendProbe::use(backend, &device);
+  D3dBackendProbe::lose(backend);
+  av::GenerousBudget budget;
+  CHECK(!D3dBackendProbe::drain_queue(backend, budget.budget())); }
