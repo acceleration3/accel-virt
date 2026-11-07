@@ -109,6 +109,7 @@ private:
     uint64_t    ran_;
     uint64_t    submitted_;
     uint64_t    fenced_at_;
+    uint64_t    drained_at_;
     void       *drain_fence_;
     bool        current_;
     bool        poll_failure_logged_;

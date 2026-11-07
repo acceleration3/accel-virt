@@ -166,9 +166,11 @@ void D3d12Session::shut_down()
         if (made != nullptr) made->Release();
     }
     compiles_.bind(nullptr);
+    const bool settled = drain_marked_ && drain_commands_ == commands_ && progress_.marked() == drain_mark_ &&
+                         progress_.reached() >= drain_mark_;
     drain_marked_ = false;
     retained_.clear();
-    const bool drained = drain();
+    const bool drained = settled || drain();
     if (drained) {
         descriptors_.release_all();
         holds_.release_all();
