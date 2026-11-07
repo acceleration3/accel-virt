@@ -519,3 +519,30 @@ TEST(d3d12_session_execution, a_queue_whose_host_cannot_calibrate_answers_no_clo
   CHECK(!scene.session().on_GetClockOrigin12(target, ticks, frequency));
   CHECK(!scene.session().on_GetClockOrigin12(queue_a + 100u, ticks, frequency));
   CHECK_EQ(frequency, 0u); }
+
+TEST(d3d12_session_execution, committed_textures_made_and_destroyed_with_nothing_submitted_leave_nothing_held)
+{ Scene scene;
+  av::FakeResource made;
+  made.desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  scene.device.committed = &made;
+  ResourceDesc desc = {};
+  desc.width = 256u;
+  desc.height = 256u;
+  desc.dimension = 3u;
+  desc.depth_or_array = 1u;
+  desc.mip_levels = 1u;
+  desc.format = 28u;
+  desc.sample_count = 1u;
+  const std::uint32_t before = scene.rig.objects().count();
+  for (std::uint32_t round = 0u; round < 300u; round++) {
+      const std::uint32_t id = 100u + round % 7u;
+      std::uint32_t answer = 1u;
+      CHECK(av_d3d12_CreateCommittedResource12(scene.rig, id, HeapProperties{1u, 0u, 0u, 0u}, 0u, desc, 0u, ClearValue{}, 0u, &answer));
+      CHECK_EQ(answer, 0u);
+      CHECK_EQ(scene.rig.objects().count(), before + 1u);
+      CHECK_EQ(made.references(), 2u);
+      CHECK(scene.session().on_Destroy12(id));
+      CHECK_EQ(made.references(), 1u);
+      CHECK_EQ(scene.rig.objects().count(), before);
+  }
+  CHECK(scene.session().invariants_hold()); }
