@@ -83,6 +83,39 @@ void follow_create_textures(void *user, GLenum target, GLsizei count, GLuint *te
     static_cast<GlTextureSlices *>(user)->on_textures_created(target, count, textures);
 }
 
+void follow_generate_textures(void *user, GLsizei count, GLuint *textures)
+{
+    AV_SCOPE("follow_generate_textures");
+    static_cast<GlTextureSlices *>(user)->on_textures_generated(count, textures);
+}
+
+void follow_bind_multi_texture(void *user, GLenum, GLenum target, GLuint texture)
+{
+    AV_SCOPE("follow_bind_multi_texture");
+    static_cast<GlTextureSlices *>(user)->on_texture_bound(target, texture);
+}
+
+void follow_texture_image_1d(void *user, GLuint texture, GLenum target, GLint, GLint, GLsizei, GLint, GLenum, GLenum,
+                             const void *)
+{
+    AV_SCOPE("follow_texture_image_1d");
+    static_cast<GlTextureSlices *>(user)->on_texture_imaged(texture, target);
+}
+
+void follow_texture_image_2d(void *user, GLuint texture, GLenum target, GLint, GLint, GLsizei, GLsizei, GLint, GLenum,
+                             GLenum, const void *)
+{
+    AV_SCOPE("follow_texture_image_2d");
+    static_cast<GlTextureSlices *>(user)->on_texture_imaged(texture, target);
+}
+
+void follow_texture_image_3d(void *user, GLuint texture, GLenum target, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint,
+                             GLenum, GLenum, const void *)
+{
+    AV_SCOPE("follow_texture_image_3d");
+    static_cast<GlTextureSlices *>(user)->on_texture_imaged(texture, target);
+}
+
 void follow_bind_texture(void *user, GLenum target, GLuint texture)
 {
     AV_SCOPE("follow_bind_texture");
@@ -117,7 +150,12 @@ void GlTextureSlices::install()
     AV_SCOPE("GlTextureSlices::install");
     gl_.av_texture_user = this;
     gl_.av_after_glCreateTextures = follow_create_textures;
+    gl_.av_after_glGenTextures = follow_generate_textures;
     gl_.av_after_glBindTexture = follow_bind_texture;
+    gl_.av_after_glBindMultiTextureEXT = follow_bind_multi_texture;
+    gl_.av_after_glTextureImage1DEXT = follow_texture_image_1d;
+    gl_.av_after_glTextureImage2DEXT = follow_texture_image_2d;
+    gl_.av_after_glTextureImage3DEXT = follow_texture_image_3d;
     gl_.av_hook_glTexStorageMem1DEXT = hook_tex_storage_mem_1d;
     gl_.av_hook_glTexStorageMem2DEXT = hook_tex_storage_mem_2d;
     gl_.av_hook_glTexStorageMem2DMultisampleEXT = hook_tex_storage_mem_2d_multisample;
@@ -266,7 +304,21 @@ void GlTextureSlices::on_textures_created(GLenum target, GLsizei count, const GL
 {
     AV_SCOPE("GlTextureSlices::on_textures_created");
     if (!GlTextureShape(target, 0u, 1, 1, 1, 1, 1).tracked()) return;
+    on_textures_generated(count, textures);
     for (GLsizei at = 0; textures != nullptr && at < count; at++) static_cast<void>(targets_.note(textures[at], target));
+}
+
+void GlTextureSlices::on_textures_generated(GLsizei count, const GLuint *textures)
+{
+    AV_SCOPE("GlTextureSlices::on_textures_generated");
+    for (GLsizei at = 0; textures != nullptr && at < count; at++) targets_.forget(textures[at]);
+}
+
+void GlTextureSlices::on_texture_imaged(GLuint texture, GLenum target)
+{
+    AV_SCOPE("GlTextureSlices::on_texture_imaged");
+    constexpr GLenum first_face = 0x8515u, last_face = 0x851Au, cube_map = 0x8513u;
+    on_texture_bound(target >= first_face && target <= last_face ? cube_map : target, texture);
 }
 
 void GlTextureSlices::on_texture_bound(GLenum target, GLuint texture)
@@ -320,12 +372,12 @@ GlTextureShape GlTextureSlices::shape_of(uint32_t texture, Entry entry, GLenum f
         candidates = three_d_multisample_targets;
         count = sizeof three_d_multisample_targets / sizeof three_d_multisample_targets[0];
     }
-    GlTextureShape widest(candidates[0], format, levels, samples, width, height, depth);
+    GlTextureShape least(candidates[0], format, levels, samples, width, height, depth);
     for (uint32_t at = 1u; at < count; at++) {
         const GlTextureShape other(candidates[at], format, levels, samples, width, height, depth);
-        if (other.least_bytes() > widest.least_bytes()) widest = other;
+        if (other.least_bytes() < least.least_bytes()) least = other;
     }
-    return widest;
+    return least;
 }
 
 uint32_t GlTextureSlices::vet(uint32_t texture, const GlTextureShape &shape, uint32_t memory, uint64_t offset)

@@ -328,17 +328,17 @@ TEST(opengl_dispatch, a_count_sized_output_gets_room_for_the_count_the_driver_wr
   CHECK_EQ(session.answered(), 0u);
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK(send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(static_cast<std::uint32_t>(-1)).room(4u)));
-  CHECK_EQ(session.answered(), 1u + 4u);
+  CHECK_EQ(session.answered(), 1u);
   CHECK_EQ(session.gl().errors(), 1u);
   CHECK_EQ(session.gl().last_error(), invalid_value);
   CHECK(!send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(1u << 28).room(4u)));
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-TEST(opengl_dispatch, a_negative_count_generates_nothing_and_answers_the_room_it_was_given)
+TEST(opengl_dispatch, a_negative_count_generates_nothing_and_answers_no_bytes)
 { GlSession session;
   CHECK(send(session, av::glproto::kCmd_glGenTextures, Frame().varint(static_cast<std::uint32_t>(-1)).room(4u)));
-  CHECK_EQ(session.answered(), 1u + 4u);
+  CHECK_EQ(session.answered(), 1u);
   CHECK_EQ(session.gl().errors(), 1u);
   CHECK_EQ(session.gl().last_error(), invalid_value);
   CHECK_EQ(session.gl().calls(), 0u);
@@ -652,3 +652,16 @@ TEST(opengl_dispatch, only_the_arrays_a_draw_is_checked_for_may_be_enabled)
   CHECK(send(session, av::glproto::kCmd_glEnableClientState, Frame().varint(texture_coord_array)));
   CHECK(send(session, av::glproto::kCmd_glDisableClientState, Frame().varint(weight_array)));
   CHECK_EQ(session.gl().calls(), 2u); }
+
+TEST(opengl_dispatch, a_refused_output_answers_zero_bytes_whatever_room_the_guest_claims)
+{ GlSession session;
+  const std::uint64_t huge = std::uint64_t{1} << 30;
+  CHECK(send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(static_cast<std::uint32_t>(-1)).room(huge)));
+  CHECK_EQ(session.answered(), 1u);
+  CHECK_EQ(session.gl().errors(), 1u);
+  CHECK_EQ(session.gl().last_error(), invalid_value);
+  CHECK_EQ(session.gl().calls(), 0u);
+  CHECK(send(session, av::glproto::kCmd_glGenTextures, Frame().varint(static_cast<std::uint32_t>(-1)).room(huge)));
+  CHECK_EQ(session.answered(), 1u);
+  CHECK_EQ(session.gl().errors(), 2u);
+  CHECK_EQ(session.gl().strays(), 0u); }

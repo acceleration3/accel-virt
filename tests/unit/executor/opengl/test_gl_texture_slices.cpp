@@ -249,21 +249,69 @@ TEST(gl_texture_slices, a_named_texture_is_bounded_by_the_target_it_was_made_wit
   CHECK_EQ(stored, 1u);
   CHECK_EQ(rig.word.count(1u), 1u); }
 
-TEST(gl_texture_slices, a_named_texture_whose_target_is_unknown_is_bounded_by_the_widest_target_the_entry_admits)
+TEST(gl_texture_slices, a_named_texture_whose_target_is_unknown_is_bounded_by_the_least_target_the_entry_admits)
 { Rig rig;
   CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
   CHECK(!rig.slices.on_texture_storage_mem_2d(5u, 1, rgba8, 32, 32, 7u, 0u));
+  CHECK_EQ(stored, 1u);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(5u, 1, rgba8, 64, 64, 7u, 0u));
+  CHECK_EQ(stored, 2u);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(5u, 1, rgba8, 64, 65, 7u, 0u));
+  CHECK_EQ(stored, 2u);
+  CHECK(!rig.slices.on_texture_storage_mem_3d(6u, 1, rgba8, 16, 16, 16, 7u, 0u));
+  CHECK_EQ(stored, 3u);
+  CHECK(!rig.slices.on_texture_storage_mem_3d(7u, 1, rgba8, 16, 16, 32, 7u, 0u));
+  CHECK_EQ(stored, 3u);
+  CHECK(!rig.slices.on_texture_storage_mem_3d_multisample(8u, 2, rgba8, 16, 16, 16, 1u, 7u, 0u));
+  CHECK_EQ(stored, 3u);
+  CHECK_EQ(rig.word.count(1u), 3u); }
+
+TEST(gl_texture_slices, a_texture_bound_through_the_direct_state_access_extension_is_known_by_that_target)
+{ Rig rig;
+  rig.slices.install();
+  CHECK(rig.gl.av_after_glBindMultiTextureEXT != nullptr);
+  CHECK(rig.gl.av_after_glTextureImage1DEXT != nullptr);
+  CHECK(rig.gl.av_after_glTextureImage2DEXT != nullptr);
+  CHECK(rig.gl.av_after_glTextureImage3DEXT != nullptr);
+  CHECK(rig.gl.av_after_glGenTextures != nullptr);
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
+  rig.gl.av_after_glBindMultiTextureEXT(&rig.slices, 0x84C1u, texture_cube_map, 12u);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(12u, 1, rgba8, 32, 32, 7u, 0u));
   CHECK_EQ(stored, 0u);
   CHECK_EQ(rig.word.count(1u), 1u);
-  CHECK(!rig.slices.on_texture_storage_mem_2d(5u, 1, rgba8, 16, 16, 7u, 0u));
+  rig.gl.av_after_glBindMultiTextureEXT(&rig.slices, 0x84C1u, texture_2d, 13u);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(13u, 1, rgba8, 32, 32, 7u, 0u));
+  CHECK_EQ(stored, 1u); }
+
+TEST(gl_texture_slices, a_texture_imaged_through_the_direct_state_access_extension_is_known_by_its_target_and_a_cube_face_by_the_cube_map)
+{ Rig rig;
+  rig.slices.install();
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
+  rig.gl.av_after_glTextureImage2DEXT(&rig.slices, 14u, 0x8516u, 0, 0x8058, 32, 32, 0, 0x1908u, 0x1401u, nullptr);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(14u, 1, rgba8, 32, 32, 7u, 0u));
+  CHECK_EQ(stored, 0u);
+  rig.gl.av_after_glTextureImage3DEXT(&rig.slices, 15u, texture_3d, 0, 0x8058, 16, 16, 16, 0, 0x1908u, 0x1401u, nullptr);
+  CHECK(!rig.slices.on_texture_storage_mem_3d(15u, 1, rgba8, 16, 16, 16, 7u, 0u));
   CHECK_EQ(stored, 1u);
-  CHECK(!rig.slices.on_texture_storage_mem_3d(6u, 1, rgba8, 16, 16, 16, 7u, 0u));
+  rig.gl.av_after_glTextureImage1DEXT(&rig.slices, 16u, 0x0DE0u, 0, 0x8058, 64, 0, 0x1908u, 0x1401u, nullptr);
+  CHECK(!rig.slices.on_texture_storage_mem_1d(16u, 1, rgba8, 4096, 7u, 0u));
   CHECK_EQ(stored, 2u);
-  CHECK(!rig.slices.on_texture_storage_mem_3d(7u, 1, rgba8, 16, 16, 32, 7u, 0u));
-  CHECK_EQ(stored, 2u);
-  CHECK(!rig.slices.on_texture_storage_mem_3d_multisample(8u, 2, rgba8, 16, 16, 16, 1u, 7u, 0u));
-  CHECK_EQ(stored, 2u);
-  CHECK_EQ(rig.word.count(1u), 3u); }
+  CHECK_EQ(rig.word.count(1u), 1u); }
+
+TEST(gl_texture_slices, a_generated_name_forgets_the_target_an_earlier_texture_of_that_name_had)
+{ Rig rig;
+  CHECK_EQ(rig.memories.add(7u, 0x4000u), av::Status::ok);
+  const GLuint reused = 3u;
+  rig.slices.on_texture_bound(texture_cube_map, reused);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(reused, 1, rgba8, 32, 32, 7u, 0u));
+  CHECK_EQ(stored, 0u);
+  rig.slices.on_textures_generated(1, &reused);
+  rig.slices.on_texture_bound(texture_2d, reused);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(reused, 1, rgba8, 32, 32, 7u, 0u));
+  CHECK_EQ(stored, 1u);
+  rig.slices.on_textures_created(texture_cube_map, 1, &reused);
+  CHECK(!rig.slices.on_texture_storage_mem_2d(reused, 1, rgba8, 32, 32, 7u, 0u));
+  CHECK_EQ(stored, 1u); }
 
 TEST(gl_texture_slices, a_texture_is_known_by_the_target_it_was_created_or_first_bound_with_until_it_is_deleted)
 { Rig rig;

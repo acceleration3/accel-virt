@@ -1480,7 +1480,12 @@ struct RealGl {
     bool (*av_hook_glDeleteTextures)(void*, GLsizei, const GLuint*) = nullptr;
     bool (*av_hook_glTextureView)(void*, GLuint, GLenum, GLuint, GLenum, GLuint, GLuint, GLuint, GLuint) = nullptr;
     void (*av_after_glCreateTextures)(void*, GLenum, GLsizei, GLuint*) = nullptr;
+    void (*av_after_glGenTextures)(void*, GLsizei, GLuint*) = nullptr;
     void (*av_after_glBindTexture)(void*, GLenum, GLuint) = nullptr;
+    void (*av_after_glBindMultiTextureEXT)(void*, GLenum, GLenum, GLuint) = nullptr;
+    void (*av_after_glTextureImage1DEXT)(void*, GLuint, GLenum, GLint, GLint, GLsizei, GLint, GLenum, GLenum, const void*) = nullptr;
+    void (*av_after_glTextureImage2DEXT)(void*, GLuint, GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*) = nullptr;
+    void (*av_after_glTextureImage3DEXT)(void*, GLuint, GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*) = nullptr;
 };
 
 // Fills the table. `load` is the platform's resolver:

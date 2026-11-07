@@ -621,7 +621,8 @@ TEXTURE_HOOKED = (
 
 HOST_HOOKED = BUFFER_HOOKED + TEXTURE_HOOKED
 
-TEXTURE_FOLLOWED = ("glCreateTextures", "glBindTexture")
+TEXTURE_FOLLOWED = ("glCreateTextures", "glGenTextures", "glBindTexture", "glBindMultiTextureEXT", "glTextureImage1DEXT",
+                    "glTextureImage2DEXT", "glTextureImage3DEXT")
 
 
 def _hook_user(name: str) -> str:
@@ -1326,20 +1327,9 @@ def _refuse_lambda(cmd: Command) -> list[str]:
     for p in cmd.params:
         n = p.name
         if p.role is Role.PIXELS_OUT:
-            out += [f"        if ({n} != nullptr && !{n}_is_offset && !{n}_via_blob) {{",
-                    f"            av_reply.write_varint(static_cast<uint64_t>({n}_bytes));",
-                    f"            if ({n}_bytes != 0) av_reply.write({n}, {n}_bytes);",
-                    "        }"]
+            out += [f"        if ({n} != nullptr && !{n}_is_offset && !{n}_via_blob) av_reply.write_varint(0);"]
         elif p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
-            out += [f"        if ({n}_answered) {{",
-                    f"            av_reply.write_varint(static_cast<uint64_t>({n}_bytes));",
-                    "            static const uint8_t av_zeros[64] = {};",
-                    f"            for (size_t av_left = {n}_bytes; av_left != 0;) {{",
-                    "                const size_t av_n = av_left < sizeof av_zeros ? av_left : sizeof av_zeros;",
-                    "                av_reply.write(av_zeros, av_n);",
-                    "                av_left -= av_n;",
-                    "            }",
-                    "        }"]
+            out += [f"        if ({n}_answered) av_reply.write_varint(0);"]
     out += ["        return true;", "    };"]
     return out
 

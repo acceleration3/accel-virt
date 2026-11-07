@@ -46,7 +46,9 @@ public:
                                                GLuint64 offset);
     bool on_delete_textures(GLsizei count, const GLuint *textures);
     void on_textures_created(GLenum target, GLsizei count, const GLuint *textures);
+    void on_textures_generated(GLsizei count, const GLuint *textures);
     void on_texture_bound(GLenum target, GLuint texture);
+    void on_texture_imaged(GLuint texture, GLenum target);
     bool on_texture_view(GLuint texture, GLenum target, GLuint original, GLenum format, GLuint min_level,
                          GLuint levels, GLuint min_layer, GLuint layers);
 
