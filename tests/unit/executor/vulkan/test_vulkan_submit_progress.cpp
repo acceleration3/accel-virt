@@ -3,6 +3,7 @@
 #include "executor/teardown_budget.hpp"
 #include "executor/vulkan/vulkan_submit_progress.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/failing_blocks.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -38,6 +39,31 @@ struct FakeDriver {
 
 FakeDriver driver;
 
+struct FakeTimeline {
+    bool          alive = false;
+    std::uint64_t counter = 0u;
+};
+
+constexpr std::uint32_t most_timelines = 16u;
+
+struct TimelineDriver {
+    FakeTimeline  timelines[most_timelines] = {};
+    std::uint32_t made = 0u;
+    std::uint32_t destroyed = 0u;
+    std::uint32_t reads = 0u;
+    std::uint32_t waits = 0u;
+    std::uint64_t last_wait_ns = 0u;
+    bool          create_fails = false;
+    bool          lose = false;
+};
+
+TimelineDriver timeline_driver;
+
+FakeTimeline &timeline_of(VkSemaphore semaphore)
+{
+    return timeline_driver.timelines[reinterpret_cast<std::uintptr_t>(semaphore) - 1u];
+}
+
 std::uint32_t index_of(VkFence fence)
 {
     return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(fence)) - 1u;
@@ -58,7 +84,22 @@ constexpr std::uint64_t other_device = 0x2000u;
 constexpr std::uint64_t queue = 0x3000u;
 
 struct Rig {
-    Rig() { driver = FakeDriver{}; }
+    Rig()
+    {
+        driver = FakeDriver{};
+        timeline_driver = TimelineDriver{};
+    }
+
+    std::uint64_t stamped(std::uint64_t on = device, std::uint64_t on_queue = queue)
+    {
+        const std::uint64_t mark = progress.reserve(on);
+        VkSemaphore         semaphore = VK_NULL_HANDLE;
+        std::uint64_t       value = 0u;
+        if (mark == 0u || !progress.timeline(on, on_queue, semaphore, value)) return 0u;
+        progress.commit_timeline(mark, on_queue, value);
+        return mark;
+    }
+    void reach(std::uint32_t index, std::uint64_t counter) { timeline_driver.timelines[index].counter = counter; }
 
     std::uint64_t submit(std::uint64_t on = device)
     {
@@ -79,7 +120,8 @@ struct Rig {
         for (std::uint32_t index = 0u; index < driver.made; index++) driver.fences[index].signalled = true;
     }
 
-    av::VulkanSubmitProgress progress;
+    av::FailingBlocks        blocks;
+    av::VulkanSubmitProgress progress{blocks};
 };
 
 }
@@ -123,6 +165,39 @@ VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice, uint32_t, const VkFence
     const FakeFence &state = driver.fences[index_of(fences[0])];
     if (state.lost) return VK_ERROR_DEVICE_LOST;
     return state.signalled ? VK_SUCCESS : VK_TIMEOUT;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateSemaphore(VkDevice, const VkSemaphoreCreateInfo *, const VkAllocationCallbacks *,
+                                                 VkSemaphore *semaphore)
+{
+    if (timeline_driver.create_fails || timeline_driver.made == most_timelines) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    timeline_driver.timelines[timeline_driver.made] = FakeTimeline{true, 0u};
+    *semaphore = reinterpret_cast<VkSemaphore>(static_cast<std::uintptr_t>(timeline_driver.made++) + 1u);
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroySemaphore(VkDevice, VkSemaphore semaphore, const VkAllocationCallbacks *)
+{
+    timeline_of(semaphore).alive = false;
+    timeline_driver.destroyed++;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValue(VkDevice, VkSemaphore semaphore, uint64_t *value)
+{
+    timeline_driver.reads++;
+    if (timeline_driver.lose) return VK_ERROR_DEVICE_LOST;
+    *value = timeline_of(semaphore).counter;
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphores(VkDevice, const VkSemaphoreWaitInfo *info, uint64_t timeout)
+{
+    timeline_driver.waits++;
+    timeline_driver.last_wait_ns = timeout;
+    if (timeline_driver.lose) return VK_ERROR_DEVICE_LOST;
+    for (uint32_t at = 0u; at < info->semaphoreCount; at++)
+        if (timeline_of(info->pSemaphores[at]).counter < info->pValues[at]) return VK_TIMEOUT;
+    return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice)
@@ -431,3 +506,120 @@ TEST(vulkan_submit_progress, a_drain_never_blocks_on_a_submission_that_could_not
   av::TeardownBudget budget(clock, 300u * 1000u * 1000u);
   CHECK(!rig.progress.drain(device, budget));
   CHECK_EQ(driver.idles, 0u); }
+
+TEST(vulkan_timeline_progress, a_device_without_timelines_keeps_the_fenced_path)
+{ Rig rig;
+  VkSemaphore   semaphore = VK_NULL_HANDLE;
+  std::uint64_t value = 0u;
+  CHECK(!rig.progress.timelined(device));
+  CHECK(!rig.progress.timeline(device, queue, semaphore, value));
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(driver.submits, 1u); }
+
+TEST(vulkan_timeline_progress, submissions_cost_no_fence_and_no_extra_submit_and_pass_in_queue_order)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  CHECK(rig.progress.timelined(device));
+  CHECK_EQ(rig.stamped(), 1u);
+  CHECK_EQ(rig.stamped(), 2u);
+  CHECK_EQ(rig.stamped(), 3u);
+  CHECK_EQ(driver.submits, 0u);
+  CHECK_EQ(driver.made, 0u);
+  CHECK_EQ(timeline_driver.made, 1u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  rig.reach(0u, 2u);
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 2u);
+  rig.reach(0u, 3u);
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 3u);
+  CHECK(rig.progress.invariants_hold()); }
+
+TEST(vulkan_timeline_progress, there_is_no_cap_on_the_submissions_in_flight)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  for (std::uint64_t at = 1u; at <= 1000u; at++) CHECK_EQ(rig.stamped(), at);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  rig.reach(0u, 1000u);
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 1000u); }
+
+TEST(vulkan_timeline_progress, the_oldest_unfinished_queue_holds_the_device_back_and_each_poll_reads_each_queue_once)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  CHECK_EQ(rig.stamped(device, queue), 1u);
+  CHECK_EQ(rig.stamped(device, queue + 8u), 2u);
+  CHECK_EQ(rig.stamped(device, queue + 8u), 3u);
+  rig.reach(1u, 2u);
+  rig.progress.begin_poll();
+  timeline_driver.reads = 0u;
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  CHECK_EQ(timeline_driver.reads, 2u);
+  rig.reach(0u, 1u);
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 3u); }
+
+TEST(vulkan_timeline_progress, a_reserved_but_uncommitted_mark_holds_the_device_back_until_it_is_cancelled)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  const std::uint64_t parked = rig.progress.reserve(device);
+  CHECK_EQ(rig.stamped(), 2u);
+  rig.reach(0u, 1u);
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), parked - 1u);
+  CHECK(!rig.progress.wait_idle(device));
+  rig.progress.cancel(parked);
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 2u); }
+
+TEST(vulkan_timeline_progress, waiting_for_marks_waits_on_the_queue_value_of_the_newest_named_mark)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  CHECK_EQ(rig.stamped(), 1u);
+  CHECK_EQ(rig.stamped(), 2u);
+  CHECK_EQ(rig.stamped(), 3u);
+  const std::uint64_t marks[] = {1u, 2u};
+  CHECK(!rig.progress.wait_marks(device, marks, 2u));
+  CHECK_EQ(timeline_driver.waits, 1u);
+  rig.reach(0u, 2u);
+  CHECK(rig.progress.wait_marks(device, marks, 2u));
+  rig.progress.begin_poll();
+  CHECK_EQ(rig.progress.reached(device), 2u); }
+
+TEST(vulkan_timeline_progress, a_drain_waits_no_longer_than_its_budget_and_idle_work_is_drained)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  CHECK_EQ(rig.stamped(), 1u);
+  av::MonotonicClock clock;
+  av::TeardownBudget budget(clock, 300u * 1000u * 1000u);
+  CHECK(!rig.progress.drain(device, budget));
+  CHECK(timeline_driver.last_wait_ns <= 300u * 1000u * 1000u);
+  rig.reach(0u, 1u);
+  av::TeardownBudget again(clock, 300u * 1000u * 1000u);
+  CHECK(rig.progress.drain(device, again)); }
+
+TEST(vulkan_timeline_progress, a_lost_device_is_reported_and_a_failed_timeline_is_refused_not_faked)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  CHECK_EQ(rig.stamped(), 1u);
+  timeline_driver.lose = true;
+  rig.progress.begin_poll();
+  static_cast<void>(rig.progress.reached(device));
+  CHECK(rig.progress.lost());
+  Rig fresh;
+  CHECK(fresh.progress.enable_timelines(device_of(device)));
+  timeline_driver.create_fails = true;
+  CHECK_EQ(fresh.stamped(), 0u);
+  fresh.progress.cancel(1u);
+  CHECK_EQ(fresh.progress.reached(device), 1u); }
+
+TEST(vulkan_timeline_progress, forgetting_a_device_destroys_its_idle_timelines_and_drops_its_marks)
+{ Rig rig;
+  CHECK(rig.progress.enable_timelines(device_of(device)));
+  CHECK_EQ(rig.stamped(), 1u);
+  rig.reach(0u, 1u);
+  rig.progress.forget(device_of(device));
+  CHECK_EQ(timeline_driver.destroyed, 1u);
+  CHECK(!rig.progress.timelined(device));
+  CHECK(rig.progress.invariants_hold()); }

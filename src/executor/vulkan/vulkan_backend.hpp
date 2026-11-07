@@ -8,6 +8,7 @@
 #include "executor/monotonic_clock.hpp"
 #include "executor/vulkan/spirv_validator.hpp"
 #include "executor/vulkan/vram_budget.hpp"
+#include "executor/vulkan/vulkan_fence_targets.hpp"
 #include "executor/vulkan/vulkan_fence_watch.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_host_waits.hpp"
@@ -23,6 +24,7 @@
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/vulkan/vulkan_set_layouts.hpp"
 #include "executor/vulkan/vulkan_templates.hpp"
+#include "executor/vulkan/vulkan_timeline_submit.hpp"
 #include "executor/shim/physical_device_list.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 #include "proto/wire/wire_reader.hpp"
@@ -267,6 +269,19 @@ private:
 
     enum class Hold : uint8_t { proceed, parked, refused };
 
+    template <typename Submit>
+    struct Stamp {
+        const Submit *sent_;
+        uint32_t      count_;
+        VkSemaphore   semaphore_;
+        uint64_t      value_;
+    };
+
+    template <typename Submit>
+    bool stamp(VkQueue queue, uint64_t device, const Submit *submits, uint32_t count, Stamp<Submit> &out);
+    void note_fence(VkFence fence, VkSemaphore semaphore, uint64_t value);
+    VkResult create_lowered(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *base, VkDevice *pDevice);
+
     bool event_unset(uint64_t device, uint64_t event) override;
     bool replay(uint32_t command, const uint8_t *frame, size_t bytes) override;
     void release_mark(uint64_t mark) override;
@@ -368,6 +383,8 @@ private:
     SpirvValidator       spirv_;
     VramBudget           vram_;
     VulkanSubmitProgress progress_;
+    VulkanTimelineSubmit timeline_submit_;
+    VulkanFenceTargets   fence_targets_;
     mutable VulkanGuard guard_;
     uint64_t parent_;
     uint64_t ran_;

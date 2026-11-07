@@ -290,10 +290,12 @@ void VulkanGuard::cancel(uint64_t mark)
     progress_.cancel(mark);
 }
 
-void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo *submits, uint32_t count)
+void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo *submits, uint32_t count,
+                            uint64_t value)
 {
     AV_SCOPE("VulkanGuard::submitted");
-    progress_.commit(mark, queue);
+    if (value != 0u) progress_.commit_timeline(mark, queue, value);
+    else progress_.commit(mark, queue);
     held(mark, device, submits, count);
 }
 
@@ -307,11 +309,25 @@ void VulkanGuard::held(uint64_t mark, uint64_t device, const VkSubmitInfo *submi
             lifetimes->submitted(number(submits[at].pCommandBuffers[index]), mark);
 }
 
-void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits, uint32_t count)
+void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits, uint32_t count,
+                            uint64_t value)
 {
     AV_SCOPE("VulkanGuard::submitted");
-    progress_.commit(mark, queue);
+    if (value != 0u) progress_.commit_timeline(mark, queue, value);
+    else progress_.commit(mark, queue);
     held(mark, device, submits, count);
+}
+
+bool VulkanGuard::timeline(uint64_t device, uint64_t queue, VkSemaphore &semaphore, uint64_t &value)
+{
+    AV_SCOPE("VulkanGuard::timeline");
+    return progress_.timeline(device, queue, semaphore, value);
+}
+
+bool VulkanGuard::timelined(uint64_t device) const
+{
+    AV_SCOPE("VulkanGuard::timelined");
+    return progress_.timelined(device);
 }
 
 void VulkanGuard::held(uint64_t mark, uint64_t device, const VkSubmitInfo2 *submits, uint32_t count)

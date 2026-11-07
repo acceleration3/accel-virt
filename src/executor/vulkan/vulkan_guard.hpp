@@ -48,9 +48,11 @@ public:
     [[nodiscard]] uint64_t reserve(uint64_t device);
     void                   cancel(uint64_t mark);
     void                   submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo *submits,
-                                     uint32_t count);
+                                     uint32_t count, uint64_t value = 0u);
     void                   submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits,
-                                     uint32_t count);
+                                     uint32_t count, uint64_t value = 0u);
+    bool                   timeline(uint64_t device, uint64_t queue, VkSemaphore &semaphore, uint64_t &value);
+    bool                   timelined(uint64_t device) const;
     void               held(uint64_t mark, uint64_t device, const VkSubmitInfo *submits, uint32_t count);
     void               held(uint64_t mark, uint64_t device, const VkSubmitInfo2 *submits, uint32_t count);
     [[nodiscard]] bool await_reset(uint64_t owner, uint64_t device);

@@ -1,6 +1,8 @@
 #ifndef AV_VULKAN_PROGRESS_HPP
 #define AV_VULKAN_PROGRESS_HPP
 
+#include <vulkan/vulkan.h>
+
 #include <stdint.h>
 
 namespace av {
@@ -19,6 +21,9 @@ public:
     virtual bool     drain(uint64_t device, TeardownBudget &budget) = 0;
     virtual void     begin_poll() = 0;
     virtual bool     lost() const = 0;
+    virtual bool     timeline(uint64_t, uint64_t, VkSemaphore &, uint64_t &) { return false; }
+    virtual bool     timelined(uint64_t) const { return false; }
+    virtual void     commit_timeline(uint64_t mark, uint64_t queue, uint64_t) { commit(mark, queue); }
 
 protected:
     VulkanProgress() = default;

@@ -24,7 +24,13 @@ public:
     void               bind(void (*signal)(void *context), void *context);
     void               unbind();
     bool               bound() const;
-    [[nodiscard]] bool arm(VkDevice device, const VkFence *fences, uint32_t count, VkBool32 wait_all);
+    struct Target {
+        VkSemaphore semaphore_;
+        uint64_t    value_;
+    };
+
+    [[nodiscard]] bool arm(VkDevice device, const VkFence *fences, uint32_t count, VkBool32 wait_all,
+                           const Target *targets = nullptr);
     void               settle();
 
     static constexpr uint32_t idle = 0u;
@@ -38,6 +44,10 @@ public:
         VkFence           fences_[most_fences];
         uint32_t          count_;
         VkBool32          all_;
+        Target            targets_[most_fences];
+        VkSemaphore       cancel_;
+        uint64_t          cancel_at_;
+        bool              targeted_;
         uint32_t          state_;
     };
 
@@ -48,12 +58,25 @@ public:
 
     bool invariants_hold() const;
 
+    void forget(VkDevice device);
+
 private:
+    static constexpr uint32_t most_cancels = 4u;
+
+    struct Cancel {
+        VkDevice    device_;
+        VkSemaphore semaphore_;
+        uint64_t    next_;
+    };
+
+    Cancel  *cancel_for(VkDevice device);
+    void     wait_timelines(Watch &watch);
     uint32_t vacancy();
     bool     stopping() const;
 
     WakeSignal signal_;
     Watch      watches_[most_watches];
+    Cancel     cancels_[most_cancels];
     uint32_t   stopping_;
     uint64_t   raised_;
 };

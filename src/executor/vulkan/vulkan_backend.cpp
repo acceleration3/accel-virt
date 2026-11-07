@@ -1,5 +1,6 @@
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "executor/vulkan/low_priority_queues.hpp"
+#include "executor/vulkan/vulkan_timeline_feature.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
@@ -59,8 +60,8 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
-      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), vram_(blocks), progress_(),
-      guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), vram_(blocks), progress_(blocks),
+      timeline_submit_(blocks), fence_targets_(blocks), guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -413,18 +414,34 @@ VkResult VulkanBackend::create_host_device(VkPhysicalDevice physicalDevice, cons
     return result;
 }
 
+VkResult VulkanBackend::create_lowered(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *base, VkDevice *pDevice)
+{
+    AV_SCOPE("VulkanBackend::create_lowered");
+    LowPriorityQueues lowered;
+    VkDeviceCreateInfo prioritised = *base;
+    VkResult           result = VK_ERROR_INITIALIZATION_FAILED;
+    const bool         lowers = lowered.offered_by(physicalDevice) && lowered.apply(prioritised);
+    if (lowers) result = create_host_device(physicalDevice, &prioritised, lowered.extension(), pDevice);
+    if (!lowers || result != VK_SUCCESS) result = create_host_device(physicalDevice, base, nullptr, pDevice);
+    return result;
+}
+
 VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                           const VkDeviceCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *, VkDevice *pDevice)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDevice");
-    LowPriorityQueues lowered;
-    VkDeviceCreateInfo prioritised = *pCreateInfo;
-    VkResult           result = VK_ERROR_INITIALIZATION_FAILED;
-    const bool         lowers = lowered.offered_by(physicalDevice) && lowered.apply(prioritised);
-    if (lowers) result = create_host_device(physicalDevice, &prioritised, lowered.extension(), pDevice);
-    if (!lowers || result != VK_SUCCESS) result = create_host_device(physicalDevice, pCreateInfo, nullptr, pDevice);
+    VulkanTimelineFeature timeline;
+    VkDeviceCreateInfo    timed = *pCreateInfo;
+    bool                  timelines = timeline.offered_by(physicalDevice) && timeline.apply(timed);
+    VkResult              result = VK_ERROR_INITIALIZATION_FAILED;
+    if (timelines) result = create_lowered(physicalDevice, &timed, pDevice);
+    if (!timelines || result != VK_SUCCESS) {
+        timelines = false;
+        result = create_lowered(physicalDevice, pCreateInfo, pDevice);
+    }
     if (result != VK_SUCCESS) return result;
+    if (timelines && !progress_.enable_timelines(*pDevice)) timelines = false;
     GuestDevice *made = nullptr;
     if (devices_.create(made) != Status::ok) {
         RealVulkanDispatch::on_vkDestroyDevice(*pDevice, nullptr);
@@ -710,10 +727,12 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     fence_watch_.settle();
+    fence_targets_.clear();
     parked_.drop_device(reinterpret_cast<uint64_t>(device));
     const bool idle = guard_.release_all(reinterpret_cast<uint64_t>(device));
     templates_.forget_device(reinterpret_cast<uint64_t>(device));
     layouts_.forget_device(reinterpret_cast<uint64_t>(device));
+    fence_watch_.forget(device);
     progress_.forget(device);
     timing_.forget(device);
     GuestDevice *const ending = device_of(reinterpret_cast<uint64_t>(device));

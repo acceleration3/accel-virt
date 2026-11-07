@@ -119,6 +119,23 @@ VulkanBackend::Hold VulkanBackend::hold_back(VkQueue queue, uint64_t device, uin
     return Hold::parked;
 }
 
+template <typename Submit>
+bool VulkanBackend::stamp(VkQueue queue, uint64_t device, const Submit *submits, uint32_t count, Stamp<Submit> &out)
+{
+    AV_SCOPE("VulkanBackend::stamp");
+    out = Stamp<Submit>{submits, count, VK_NULL_HANDLE, 0u};
+    if (!guard_.timelined(device)) return true;
+    if (!guard_.timeline(device, number(queue), out.semaphore_, out.value_)) return false;
+    out.sent_ = timeline_submit_.append(submits, count, out.semaphore_, out.value_, out.count_);
+    return out.sent_ != nullptr;
+}
+
+void VulkanBackend::note_fence(VkFence fence, VkSemaphore semaphore, uint64_t value)
+{
+    AV_SCOPE("VulkanBackend::note_fence");
+    if (fence != VK_NULL_HANDLE && value != 0u) fence_targets_.note(fence, semaphore, value);
+}
+
 VkResult VulkanBackend::on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                                          VkFence fence)
 {
@@ -132,11 +149,20 @@ VkResult VulkanBackend::on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, co
         guard_.cancel(mark);
         return VK_ERROR_DEVICE_LOST;
     }
-    const VkResult result = timing_.enabled() ? timing_.submit(queue, submitCount, pSubmits, fence)
-                                              : RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence);
+    Stamp<VkSubmitInfo> sent;
+    if (!stamp(queue, device, pSubmits, submitCount, sent)) {
+        guard_.cancel(mark);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    const VkResult result = timing_.enabled() ? timing_.submit(queue, sent.count_, sent.sent_, fence)
+                                              : RealVulkanDispatch::on_vkQueueSubmit(queue, sent.count_, sent.sent_, fence);
     last_submit_ = result;
-    if (result != VK_SUCCESS) guard_.cancel(mark);
-    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
+    if (result != VK_SUCCESS) {
+        guard_.cancel(mark);
+        return result;
+    }
+    guard_.submitted(mark, device, number(queue), pSubmits, submitCount, sent.value_);
+    note_fence(fence, sent.semaphore_, sent.value_);
     return result;
 }
 
@@ -153,10 +179,19 @@ VkResult VulkanBackend::on_vkQueueSubmit2(VkQueue queue, uint32_t submitCount, c
         guard_.cancel(mark);
         return VK_ERROR_DEVICE_LOST;
     }
-    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2(queue, submitCount, pSubmits, fence);
+    Stamp<VkSubmitInfo2> sent;
+    if (!stamp(queue, device, pSubmits, submitCount, sent)) {
+        guard_.cancel(mark);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2(queue, sent.count_, sent.sent_, fence);
     last_submit_ = result;
-    if (result != VK_SUCCESS) guard_.cancel(mark);
-    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
+    if (result != VK_SUCCESS) {
+        guard_.cancel(mark);
+        return result;
+    }
+    guard_.submitted(mark, device, number(queue), pSubmits, submitCount, sent.value_);
+    note_fence(fence, sent.semaphore_, sent.value_);
     return result;
 }
 
@@ -173,10 +208,19 @@ VkResult VulkanBackend::on_vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount
         guard_.cancel(mark);
         return VK_ERROR_DEVICE_LOST;
     }
-    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2KHR(queue, submitCount, pSubmits, fence);
+    Stamp<VkSubmitInfo2> sent;
+    if (!stamp(queue, device, pSubmits, submitCount, sent)) {
+        guard_.cancel(mark);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2KHR(queue, sent.count_, sent.sent_, fence);
     last_submit_ = result;
-    if (result != VK_SUCCESS) guard_.cancel(mark);
-    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
+    if (result != VK_SUCCESS) {
+        guard_.cancel(mark);
+        return result;
+    }
+    guard_.submitted(mark, device, number(queue), pSubmits, submitCount, sent.value_);
+    note_fence(fence, sent.semaphore_, sent.value_);
     return result;
 }
 

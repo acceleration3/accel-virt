@@ -1,7 +1,9 @@
 #ifndef AV_VULKAN_SUBMIT_PROGRESS_HPP
 #define AV_VULKAN_SUBMIT_PROGRESS_HPP
 
+#include "core/platform/block_source.hpp"
 #include "executor/vulkan/vulkan_progress.hpp"
+#include "executor/vulkan/vulkan_queue_timelines.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -11,7 +13,7 @@ namespace av {
 
 class VulkanSubmitProgress final : public VulkanProgress {
 public:
-    VulkanSubmitProgress();
+    explicit VulkanSubmitProgress(BlockSource &blocks);
     VulkanSubmitProgress(const VulkanSubmitProgress &) = delete;
     VulkanSubmitProgress &operator=(const VulkanSubmitProgress &) = delete;
 
@@ -25,7 +27,11 @@ public:
     bool     drain(uint64_t device, TeardownBudget &budget) override;
     void     begin_poll() override;
     bool     lost() const override;
+    bool     timeline(uint64_t device, uint64_t queue, VkSemaphore &semaphore, uint64_t &value) override;
+    bool     timelined(uint64_t device) const override;
+    void     commit_timeline(uint64_t mark, uint64_t queue, uint64_t value) override;
     void     forget(VkDevice device);
+    bool     enable_timelines(VkDevice device);
 
     uint32_t stuck(uint64_t device) const;
 
@@ -68,6 +74,7 @@ private:
     uint64_t cached_reached_;
     bool     cached_;
     bool     stale_;
+    VulkanQueueTimelines timelines_;
     bool     lost_;
 };
 
