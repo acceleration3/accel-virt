@@ -124,7 +124,6 @@ bool VulkanSubmitProgress::fenced(Slot &slot, VkDevice owner)
 uint64_t VulkanSubmitProgress::reserve(uint64_t device)
 {
     AV_SCOPE("VulkanSubmitProgress::reserve");
-    cached_ = false;
     const uint32_t at = vacancy();
     if (at == slots) return 0u;
     Slot &slot = slots_[at];
@@ -145,7 +144,6 @@ uint32_t VulkanSubmitProgress::reserved_for(uint64_t mark) const
 void VulkanSubmitProgress::commit(uint64_t mark, uint64_t queue)
 {
     AV_SCOPE("VulkanSubmitProgress::commit");
-    cached_ = false;
     const uint32_t at = reserved_for(mark);
     if (at == slots) return;
     Slot &slot = slots_[at];

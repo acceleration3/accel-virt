@@ -122,6 +122,20 @@ TEST(d3d12_session_execution, a_list_that_ran_keeps_what_it_copied_into_until_th
   CHECK_EQ(scene.dst.references(), 0u);
   CHECK_EQ(scene.src.references(), 0u); }
 
+TEST(d3d12_session_execution, a_list_that_was_reset_holds_an_object_again_when_it_records_it_again)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK_EQ(scene.dst.references(), 2u);
+  CHECK(scene.session().on_ResetCommandList12(list, allocator, 0u));
+  CHECK_EQ(scene.dst.references(), 1u);
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK_EQ(scene.dst.references(), 2u);
+  CHECK(scene.session().on_Destroy12(target));
+  CHECK_EQ(scene.dst.references(), 1u);
+  CHECK(scene.session().on_ResetCommandList12(list, allocator, 0u));
+  CHECK_EQ(scene.dst.references(), 0u); }
+
 TEST(d3d12_session_execution, a_long_batch_looks_at_the_gpu_again_after_a_fixed_number_of_commands)
 { Scene scene;
   CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));

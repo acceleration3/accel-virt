@@ -125,6 +125,7 @@ public:
     ~Rig() { backend_.shut_down(); }
 
     VulkanBackend &backend() { return backend_; }
+    VulkanBackendProbe &probe() { return probe_; }
 
     void record(std::uint64_t buffer, std::uint64_t named_set)
     { probe_.begin_frame(true);
@@ -549,5 +550,29 @@ TEST(vulkan_backend_pools, destroying_or_resetting_a_fence_a_wake_waits_on_ends_
            static_cast<int>(VK_TIMEOUT));
   rig.backend().on_vkDestroyFence(rig.host_device(), fence, nullptr);
   CHECK(!driver.fences[index_of(fence)].alive);
+  const std::uint32_t settled = driver.waits;
+  timespec began = {};
+  clock_gettime(CLOCK_MONOTONIC, &began);
+  for (;;) {
+      timespec now = {};
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      if ((now.tv_sec - began.tv_sec) * 1000000000L + (now.tv_nsec - began.tv_nsec) > 20000000L) break;
+  }
+  CHECK_EQ(driver.waits, settled);
   CHECK_EQ(__atomic_load_n(&raised_wakes, __ATOMIC_ACQUIRE), 0u);
   rig.backend().bind_signal(nullptr, nullptr); }
+
+TEST(vulkan_backend_pools, a_command_buffer_forgotten_and_made_again_under_another_device_is_guarded_under_that_device)
+{ Rig rig;
+  constexpr std::uint64_t other_device = 0x310u;
+  rig.backend().made_through(physical);
+  rig.backend().made(HandleKind::device, other_device);
+  rig.backend().made_through(0u);
+  rig.record(cb, set);
+  CHECK_EQ(rig.probe().guard().devices(), 1u);
+  rig.backend().ended(cb);
+  rig.backend().made_through(other_device);
+  rig.backend().made(HandleKind::command_buffer, cb);
+  rig.backend().made_through(0u);
+  rig.record(cb, set);
+  CHECK_EQ(rig.probe().guard().devices(), 2u); }

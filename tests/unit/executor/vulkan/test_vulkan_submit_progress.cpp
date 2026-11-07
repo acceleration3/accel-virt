@@ -213,6 +213,28 @@ TEST(vulkan_submit_progress, a_reservation_gives_the_device_a_pending_mark_befor
   rig.progress.cancel(mark);
   CHECK(rig.progress.invariants_hold()); }
 
+TEST(vulkan_submit_progress, progress_read_before_a_wait_is_read_again_after_it)
+{ Rig rig;
+  CHECK_EQ(rig.submit(), 1u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  rig.signal_all();
+  CHECK(rig.progress.wait_idle(device));
+  CHECK_EQ(rig.progress.reached(device), 1u);
+  CHECK_EQ(rig.submit(), 2u);
+  CHECK_EQ(rig.progress.reached(device), 1u);
+  rig.signal_all();
+  const std::uint64_t marks[1] = {2u};
+  CHECK(rig.progress.wait_marks(device, marks, 1u));
+  CHECK_EQ(rig.progress.reached(device), 2u); }
+
+TEST(vulkan_submit_progress, progress_read_for_one_device_is_not_taken_for_another)
+{ Rig rig;
+  CHECK_EQ(rig.submit(device), 1u);
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  CHECK_EQ(rig.progress.reached(other_device), 1u);
+  CHECK_EQ(rig.progress.reached(device), 0u); }
+
 TEST(vulkan_submit_progress, a_submission_whose_fence_cannot_be_queued_holds_its_device_back_until_the_next_poll_queues_it)
 { Rig rig;
   driver.submit_fails = true;
