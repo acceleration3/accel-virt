@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <pthread.h>
 
 namespace av {
 
@@ -43,6 +44,10 @@ public:
     void end_batch() override;
     [[nodiscard]] bool drain(TeardownBudget &budget) override;
     void          set_drains_in_time(bool in_time);
+    void          hold_drains(bool held);
+    void          hold_shut_downs(bool held);
+    bool          inside_shut_down() const;
+    bool          drained_on(pthread_t thread) const;
     std::uint32_t drains() const;
     std::uint32_t finished_drains() const;
     std::uint32_t drains_before_first_release() const;
@@ -103,6 +108,11 @@ private:
     std::uint32_t drains_ = 0u;
     std::uint32_t finished_drains_ = 0u;
     bool          drains_in_time_ = true;
+    bool          drains_held_ = false;
+    bool          shut_downs_held_ = false;
+    bool          inside_shut_down_ = false;
+    pthread_t     drained_on_ = pthread_self();
+    bool          drained_ = false;
     std::uint32_t drains_before_first_release_ = 0u;
     std::uint32_t abandoned_before_drain_ = 0u;
     std::uint32_t abandoned_before_shut_down_ = 0u;

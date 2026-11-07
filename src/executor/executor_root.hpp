@@ -77,6 +77,7 @@ public:
     void                 close_object(ContextSession *session, uint64_t object_id, uint64_t wire_handle);
     uint32_t        live() const;
     uint32_t        wedged() const;
+    uint32_t        closing() const;
     void            retry_wedged();
     void            watch_wedged();
     void            stop_watching();
@@ -95,12 +96,15 @@ private:
                             const OpenGlBackend *share, GlMemoryGroup *group);
     GlMemoryGroup *reserve_group(const ContextSession *share, uint32_t slot);
     void           release_group(uint32_t slot);
-    void           note_wedged();
+    [[nodiscard]] bool note_wedged();
+    void           reap_closing();
+    uint32_t       closing_here() const;
     void           halt_watcher();
     const HostGpu *gpu_of(uint32_t domain) const;
     HostMemorySource *source_of(uint32_t domain) const;
     uint32_t       slot_of(const ContextSession *session) const;
     bool           finish(uint32_t slot, TeardownBudget &budget);
+    void           finish_slot(uint32_t slot, TeardownBudget &budget);
     void           reap_wedged();
     uint32_t       wedged_here() const;
     uint32_t       shared_answer(Status answered) const;
@@ -125,6 +129,7 @@ private:
     uint32_t       gpus_of_[max_sessions];
     bool           wedged_[max_sessions];
     bool           reaping_[max_sessions];
+    bool           closing_[max_sessions];
     mutable PosixLock lock_;
     PosixCondition wake_;
     pthread_t      watcher_;

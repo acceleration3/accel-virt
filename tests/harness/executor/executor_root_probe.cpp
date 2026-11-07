@@ -1,5 +1,7 @@
 #include "harness/executor/executor_root_probe.hpp"
 
+#include <time.h>
+
 namespace av {
 
 ExecutorRootProbe::ExecutorRootProbe(ExecutorRoot &target) : root(target) {}
@@ -28,5 +30,11 @@ uint32_t ExecutorRootProbe::group_refs(uint32_t group) const { return root.group
 void ExecutorRootProbe::hold_lock() { root.lock_.acquire(); }
 
 void ExecutorRootProbe::drop_lock() { root.lock_.release(); }
+
+void ExecutorRootProbe::settle()
+{
+    const timespec nap = {0, 1000000};
+    for (uint32_t looks = 0u; looks < 5000u && root.closing() != 0u; looks++) nanosleep(&nap, nullptr);
+}
 
 }

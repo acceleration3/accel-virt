@@ -23,6 +23,7 @@ struct ExecutorRootProbe {
     uint32_t        group_refs(uint32_t group) const;
     void            hold_lock();
     void            drop_lock();
+    void            settle();
 
     ExecutorRoot &root;
 };

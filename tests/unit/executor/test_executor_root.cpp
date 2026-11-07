@@ -61,6 +61,16 @@ extern "C" const char *__lsan_default_suppressions(void)
 
 namespace {
 
+void close_settled(av::ExecutorRoot &root, av::ContextSession *session)
+{
+    root.close(session);
+    av::ExecutorRootProbe(root).settle();
+}
+
+}
+
+namespace {
+
 constexpr std::uint8_t intel[16] = {0x86, 0x80, 0xa6, 0x46, 0x0c, 0, 0, 0, 0, 0x02, 0, 0, 0, 0, 0, 0};
 constexpr std::uint8_t nvidia[16] = {0x7b, 0x7a, 0xd2, 0xc5, 0x42, 0x19, 0x8c, 0x80,
                                      0xc4, 0xfd, 0xa6, 0x4b, 0x87, 0x75, 0xae, 0xdb};
@@ -195,7 +205,7 @@ TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
   CHECK(session != nullptr);
-  root.close(session);
+  close_settled(root, session);
   root.close_domain(domain);
   CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain) == nullptr);
   const AvContextOptions none = {};
@@ -314,7 +324,7 @@ TEST(executor_root_memory, a_session_on_a_gpu_with_no_source_opens_and_imports_n
   if (session == nullptr) return;
   CHECK_EQ(session->import_blob(1u, 1u), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(session->imports().count(), 0u);
-  root.close(session);
+  close_settled(root, session);
   CHECK(root.invariants_hold()); }
 
 TEST(executor_root, a_host_with_more_gpus_than_it_holds_still_answers)
@@ -366,7 +376,7 @@ TEST(executor_root_open, a_context_on_a_gpu_that_runs_it_gets_a_session)
   CHECK_EQ(opened.root().live(), 1u);
   CHECK_EQ(session->starved(), 0u);
 
-  opened.root().close(session);
+  close_settled(opened.root(), session);
   CHECK(!session->live());
   CHECK_EQ(opened.root().live(), 0u); }
 
@@ -406,7 +416,7 @@ TEST(executor_root_open, a_closed_session_s_slot_comes_back)
           opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
       if (i == 0u) first = session;
   }
-  opened.root().close(first);
+  close_settled(opened.root(), first);
   CHECK_EQ(opened.root().live(), ExecutorRoot::sessions - 1u);
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel) == first); }
 
@@ -414,8 +424,8 @@ TEST(executor_root_open, a_session_it_never_handed_out_is_not_closed)
 { Opened opened;
   QuietLog        quiet;
   ContextSession  stranger(quiet.lines());
-  opened.root().close(&stranger);
-  opened.root().close(nullptr);
+  close_settled(opened.root(), &stranger);
+  close_settled(opened.root(), nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
 TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_root)
@@ -512,7 +522,7 @@ TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
           CHECK_EQ(first != nullptr, runs);
           CHECK_EQ(second != nullptr, runs);
           if (!runs) continue;
-          root.close(first);
+          close_settled(root, first);
           CHECK_EQ(root.live(), 1u);
           CHECK(second->live());
           if (api == AV_EXECUTOR_SUB_API_OPENGL) {
@@ -521,7 +531,7 @@ TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
               CHECK_EQ(second->execute(av::glproto::kCmd_glFinish, nullptr, 0u, reply, sizeof reply, answer),
                        std::uint32_t{AV_EXECUTED});
           }
-          root.close(second);
+          close_settled(root, second);
           CHECK_EQ(root.live(), 0u);
       }
   }
@@ -541,7 +551,7 @@ TEST(executor_root_open, options_or_a_share_for_another_api_get_no_session)
   QuietLog        quiet;
   ContextSession  stranger(quiet.lines());
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, &stranger) == nullptr);
-  opened.root().close(vulkan);
+  close_settled(opened.root(), vulkan);
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
@@ -568,11 +578,11 @@ TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
       CHECK(held.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &impossible, nullptr) == nullptr);
       CHECK_EQ(root.live(), live);
       if (previous != nullptr) CHECK(held.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &core, previous) == nullptr);
-      root.close(second);
-      if (previous != nullptr) root.close(previous);
+      close_settled(root, second);
+      if (previous != nullptr) close_settled(root, previous);
       previous = first;
   }
-  if (previous != nullptr) root.close(previous);
+  if (previous != nullptr) close_settled(root, previous);
   CHECK_EQ(root.live(), 0u);
   host.close(); }
 
@@ -596,7 +606,7 @@ TEST(executor_root_lose_device, only_a_session_with_a_host_device_this_root_made
   CHECK(session != nullptr);
   CHECK_EQ(opened.root().lose_device(session), std::uint32_t{AV_UNKNOWN});
   CHECK_EQ(session->poll(), std::uint32_t{AV_POLL_IDLE});
-  opened.root().close(session);
+  close_settled(opened.root(), session);
   CHECK(opened.root().invariants_hold()); }
 
 TEST(executor_root, the_shared_object_calls_reach_the_domain_as_the_session_that_asked)
@@ -670,7 +680,7 @@ TEST(executor_root, closing_a_session_shuts_down_the_backend_it_ran_after_its_sh
   std::uint64_t made = 0u;
   CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_DONE});
 
-  root.close(reader);
+  close_settled(root, reader);
   CHECK_EQ(reader_backend.shut_downs(), 1u);
   CHECK_EQ(reader_backend.released_before_shut_down(), 1u);
   CHECK(!reader->live());
@@ -678,9 +688,9 @@ TEST(executor_root, closing_a_session_shuts_down_the_backend_it_ran_after_its_sh
   CHECK(maker->live());
   CHECK(root.invariants_hold());
 
-  root.close(reader);
+  close_settled(root, reader);
   CHECK_EQ(reader_backend.shut_downs(), 1u);
-  root.close(maker);
+  close_settled(root, maker);
   CHECK_EQ(maker_backend.shut_downs(), 1u);
   CHECK(root.invariants_hold()); }
 
@@ -737,10 +747,10 @@ TEST(executor_root, a_session_is_drained_before_its_shared_objects_are_released)
   CHECK_EQ(root.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
   std::uint64_t made = 0u;
   CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_DONE});
-  root.close(reader);
+  close_settled(root, reader);
   CHECK_EQ(reader_backend.released_objects(), 1u);
   CHECK(reader_backend.drains_before_first_release() >= 1u);
-  root.close(maker); }
+  close_settled(root, maker); }
 
 TEST(executor_root, a_session_whose_gpu_work_does_not_drain_in_time_keeps_its_shares_and_slot_until_it_does)
 { Opened opened;
@@ -762,7 +772,7 @@ TEST(executor_root, a_session_whose_gpu_work_does_not_drain_in_time_keeps_its_sh
   CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_DONE});
 
   reader_backend.set_drains_in_time(false);
-  root.close(reader);
+  close_settled(root, reader);
   CHECK(reader->live());
   CHECK_EQ(reader_backend.released_objects(), 0u);
   CHECK_EQ(reader_backend.shut_downs(), 0u);
@@ -780,9 +790,9 @@ TEST(executor_root, a_session_whose_gpu_work_does_not_drain_in_time_keeps_its_sh
   CHECK(later == reader);
   CHECK_EQ(reader_backend.released_objects(), 1u);
   CHECK_EQ(reader_backend.shut_downs(), 1u);
-  root.close(later);
-  root.close(other);
-  root.close(maker); }
+  close_settled(root, later);
+  close_settled(root, other);
+  close_settled(root, maker); }
 
 namespace {
 
@@ -892,8 +902,10 @@ void open_one(void *context, std::uint32_t index)
     if (all.opened_gate == nullptr) return;
     pthread_barrier_wait(all.opened_gate);
     pthread_barrier_wait(all.closing_gate);
-    if (all.shared[index] != nullptr) all.root->close(all.shared[index]);
-    if (all.opened[index] != nullptr) all.root->close(all.opened[index]);
+    if (all.shared[index] != nullptr) all.shared[index]->let_go_of_thread();
+    if (all.opened[index] != nullptr) all.opened[index]->let_go_of_thread();
+    if (all.shared[index] != nullptr) close_settled(*all.root, all.shared[index]);
+    if (all.opened[index] != nullptr) close_settled(*all.root, all.opened[index]);
 }
 
 }
@@ -911,7 +923,7 @@ TEST(executor_root_concurrency, contexts_opened_at_once_get_distinct_slots)
           for (std::uint32_t other = 0u; other < index; other++) CHECK(all.opened[index] != all.opened[other]);
       }
       CHECK_EQ(opened.root().live(), threads);
-      for (std::uint32_t index = 0u; index < threads; index++) opened.root().close(all.opened[index]);
+      for (std::uint32_t index = 0u; index < threads; index++) close_settled(opened.root(), all.opened[index]);
       CHECK_EQ(opened.root().live(), 0u);
   } }
 
@@ -950,6 +962,7 @@ TEST(executor_root_concurrency, opengl_contexts_opened_at_once_never_share_a_mem
       }
       pthread_barrier_wait(&closing_gate);
       watcher.join();
+      probe.settle();
       CHECK_EQ(root.live(), 0u);
       for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
       pthread_barrier_destroy(&opened_gate);
@@ -971,7 +984,7 @@ public:
             probe_.shares_at(slot).bind(*opened.apis().shares(0u), domain_, backends_[slot]);
             probe_.remember(slot, AV_EXECUTOR_SUB_API_VULKAN, 0u);
             backends_[slot].set_drains_in_time(false);
-            opened.root().close(&session);
+            close_settled(opened.root(), &session);
         }
     }
 
@@ -994,7 +1007,7 @@ void open_vulkan(void *context, std::uint32_t)
     AvContextOptions options = {};
     options.domain = all.domain;
     ContextSession *const made = all.root->open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr);
-    if (made != nullptr) all.root->close(made);
+    if (made != nullptr) close_settled(*all.root, made);
 }
 
 }
@@ -1037,23 +1050,11 @@ TEST(executor_root_concurrency, closing_a_session_drains_its_backend_once_before
   CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
   probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
   probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
-  root.close(session);
+  close_settled(root, session);
   CHECK_EQ(backend.drains(), 1u);
   CHECK_EQ(backend.shut_downs(), 1u); }
 
 namespace {
-
-struct Closing {
-    ExecutorRoot   *root;
-    ContextSession *session;
-};
-
-void *close_session(void *context)
-{
-    Closing &closing = *static_cast<Closing *>(context);
-    closing.root->close(closing.session);
-    return nullptr;
-}
 
 void nap_for(long milliseconds)
 {
@@ -1076,22 +1077,92 @@ TEST(executor_root_concurrency, a_closing_slot_cannot_be_claimed_until_its_recor
   CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
   probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
   probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  backend.hold_shut_downs(true);
+  root.close(session);
+  for (std::uint32_t looks = 0u; looks < 2000u && !backend.inside_shut_down(); looks++) nap_for(1);
+  CHECK(backend.inside_shut_down());
   probe.hold_lock();
-  Closing closing = {&root, session};
-  pthread_t thread;
-  CHECK_EQ(pthread_create(&thread, nullptr, close_session, &closing), 0);
-  for (std::uint32_t looks = 0u; looks < 2000u && backend.shut_downs() == 0u; looks++) nap_for(1);
-  CHECK_EQ(backend.shut_downs(), 1u);
+  backend.hold_shut_downs(false);
   nap_for(30);
   CHECK_STATUS(probe.session_at(0u).initialize(claimant, other_block, sizeof other_block), Status::invalid_state);
   CHECK(session->live());
   probe.drop_lock();
-  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  probe.settle();
+  CHECK_EQ(backend.shut_downs(), 1u);
   CHECK(!session->live());
   CHECK_EQ(root.live(), 0u);
   CHECK_STATUS(session->initialize(claimant, other_block, sizeof other_block), Status::ok);
   static_cast<void>(session->release(av::GenerousBudget().budget()));
   session->vacate(); }
+
+TEST(executor_root_concurrency, closing_returns_at_once_and_the_drain_runs_on_the_watcher_thread)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  backend.hold_drains(true);
+  root.close(session);
+  CHECK_EQ(root.closing(), 1u);
+  CHECK(session->live());
+  for (std::uint32_t looks = 0u; looks < 2000u && backend.drains() == 0u; looks++) nap_for(1);
+  CHECK_EQ(backend.drains(), 1u);
+  CHECK(!backend.drained_on(pthread_self()));
+  CHECK_EQ(backend.shut_downs(), 0u);
+  backend.hold_drains(false);
+  probe.settle();
+  CHECK_EQ(root.closing(), 0u);
+  CHECK_EQ(backend.shut_downs(), 1u);
+  CHECK(!session->live()); }
+
+TEST(executor_root_concurrency, a_drain_that_never_finishes_leaves_the_slot_wedged_and_closing_is_over)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  backend.set_drains_in_time(false);
+  root.close(session);
+  probe.settle();
+  CHECK_EQ(root.closing(), 0u);
+  CHECK_EQ(root.wedged(), 1u);
+  CHECK(session->live());
+  CHECK_EQ(backend.shut_downs(), 0u);
+  CHECK(backend.let_goes() >= 1u);
+  backend.set_drains_in_time(true);
+  for (std::uint32_t looks = 0u; looks < 100u && root.wedged() != 0u; looks++) nap_for(50);
+  CHECK_EQ(root.wedged(), 0u);
+  CHECK_EQ(backend.shut_downs(), 1u); }
+
+TEST(executor_root_concurrency, a_closed_slot_signals_nothing_to_the_context_that_closed_it)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  std::uint32_t signals = 0u;
+  root.set_signal(session, [](void *count) { ++*static_cast<std::uint32_t *>(count); }, &signals);
+  backend.hold_drains(true);
+  root.close(session);
+  CHECK(!backend.signal());
+  CHECK_EQ(signals, 0u);
+  backend.hold_drains(false);
+  probe.settle(); }
 
 namespace {
 
@@ -1110,6 +1181,7 @@ void *open_then_close(void *context)
     ContextSession *const made = job.root->open(AV_EXECUTOR_SUB_API_OPENGL, options, nullptr);
     job.session.store(made);
     while (made != nullptr && !job.go.load()) nap_for(1);
+    if (made != nullptr) made->let_go_of_thread();
     if (made != nullptr) job.root->close(made);
     return nullptr;
 }
@@ -1150,13 +1222,14 @@ TEST(executor_root_concurrency, a_closing_opengl_slot_drops_its_group_before_the
   CHECK_EQ(probe.group_refs(group), 1u);
   probe.drop_lock();
   CHECK_EQ(pthread_join(thread, nullptr), 0);
+  probe.settle();
   CHECK_EQ(probe.group_refs(group), 0u);
   CHECK_EQ(root.live(), 0u);
   ContextSession *const again = held.open(AV_EXECUTOR_SUB_API_OPENGL, software.uuid());
   CHECK(again != nullptr);
   if (again != nullptr) {
       CHECK_EQ(probe.group_refs(probe.group_of(*again)), 1u);
-      root.close(again);
+      close_settled(root, again);
   }
   CHECK(root.invariants_hold()); }
 
@@ -1182,8 +1255,10 @@ void churn_one(void *context, std::uint32_t)
         }
         ContextSession *const second = churn.root->open(AV_EXECUTOR_SUB_API_OPENGL, options, first);
         if (second == nullptr || churn.probe->group_of(*first) != churn.probe->group_of(*second)) churn.broken++;
-        if (second != nullptr) churn.root->close(second);
-        churn.root->close(first);
+        if (second != nullptr) second->let_go_of_thread();
+        first->let_go_of_thread();
+        if (second != nullptr) close_settled(*churn.root, second);
+        close_settled(*churn.root, first);
     }
 }
 
@@ -1205,6 +1280,7 @@ TEST(executor_root_concurrency, opengl_slots_closing_and_reopening_at_once_keep_
   Churn churn = {&root, &probe, held.domain_of(software.uuid()), {0u}};
   Spread(6u, churn_one, &churn).run();
   CHECK_EQ(churn.broken.load(), 0u);
+  probe.settle();
   CHECK_EQ(root.live(), 0u);
   for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
   CHECK(root.invariants_hold()); }
@@ -1243,7 +1319,7 @@ TEST(executor_root_concurrency, a_closed_session_does_not_let_go_of_the_thread)
   CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
   probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
   probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
-  root.close(session);
+  close_settled(root, session);
   CHECK_EQ(backend.shut_downs(), 1u);
   CHECK_EQ(backend.let_goes(), 0u); }
 

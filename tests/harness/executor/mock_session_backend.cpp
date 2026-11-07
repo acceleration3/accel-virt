@@ -75,10 +75,20 @@ void MockSessionBackend::end_batch() {}
 bool MockSessionBackend::drain(TeardownBudget &)
 {
     __atomic_fetch_add(&drains_, 1u, __ATOMIC_RELAXED);
+    drained_on_ = pthread_self();
+    __atomic_store_n(&drained_, true, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&drains_held_, __ATOMIC_ACQUIRE)) usleep(200);
     abandoned_before_drain_ = abandoned_ + unbound_;
     const bool in_time = __atomic_load_n(&drains_in_time_, __ATOMIC_RELAXED);
     if (in_time) __atomic_fetch_add(&finished_drains_, 1u, __ATOMIC_RELAXED);
     return in_time;
+}
+
+void MockSessionBackend::hold_drains(bool held) { __atomic_store_n(&drains_held_, held, __ATOMIC_RELEASE); }
+
+bool MockSessionBackend::drained_on(pthread_t thread) const
+{
+    return __atomic_load_n(&drained_, __ATOMIC_ACQUIRE) && pthread_equal(drained_on_, thread) != 0;
 }
 
 void MockSessionBackend::set_drains_in_time(bool in_time) { __atomic_store_n(&drains_in_time_, in_time, __ATOMIC_RELAXED); }
@@ -145,8 +155,14 @@ void MockSessionBackend::retire_arena(const SourceMemory &)
 std::uint32_t MockSessionBackend::unbound() const { return unbound_; }
 std::uint32_t MockSessionBackend::unbound_when_retired() const { return unbound_when_retired_; }
 
+void MockSessionBackend::hold_shut_downs(bool held) { __atomic_store_n(&shut_downs_held_, held, __ATOMIC_RELEASE); }
+
+bool MockSessionBackend::inside_shut_down() const { return __atomic_load_n(&inside_shut_down_, __ATOMIC_ACQUIRE); }
+
 void MockSessionBackend::shut_down()
 {
+    __atomic_store_n(&inside_shut_down_, true, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&shut_downs_held_, __ATOMIC_ACQUIRE)) usleep(200);
     __atomic_fetch_add(&shut_downs_, 1u, __ATOMIC_RELAXED);
     abandoned_before_shut_down_ = abandoned_;
     released_before_shut_down_ = released_objects_;
