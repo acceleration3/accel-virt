@@ -1,5 +1,6 @@
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "executor/vulkan/low_priority_queues.hpp"
+#include "executor/vulkan/vulkan_robust_access.hpp"
 #include "executor/vulkan/vulkan_timeline_feature.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/host_memory_source.hpp"
@@ -431,6 +432,10 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                           const VkAllocationCallbacks *, VkDevice *pDevice)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDevice");
+    VulkanRobustAccess    robust;
+    VkDeviceCreateInfo    guarded = *pCreateInfo;
+    static_cast<void>(robust.apply(physicalDevice, guarded));
+    pCreateInfo = &guarded;
     VulkanTimelineFeature timeline;
     VkDeviceCreateInfo    timed = *pCreateInfo;
     bool                  timelines = timeline.offered_by(physicalDevice) && timeline.apply(timed);
