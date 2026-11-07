@@ -1,6 +1,7 @@
 #include "bench_timer.hpp"
 #include "executor/d3d/d3d12_descriptor_holds.hpp"
 #include "executor/d3d/d3d12_object_holds.hpp"
+#include "executor/host_object_registry.hpp"
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_progress.hpp"
@@ -259,6 +260,38 @@ void d3d12_destroy_heap(const BenchTimer &timer)
     holds.release_all();
 }
 
+void registry_children(const BenchTimer &timer)
+{
+    enum class Kind : std::uint32_t { pool = 1u, set = 2u, other = 3u };
+    constexpr std::uint32_t children = 50000u;
+    constexpr std::uint32_t others = 200000u;
+    av::MallocBlocks        platform;
+    av::HostObjectRegistry<std::uint64_t, Kind, std::uint64_t> registry(platform);
+    if (registry.make_room(children + others + 1u) != av::Status::ok) die(__LINE__);
+    if (registry.remember(1u, Kind::pool, 0u, 0u) != av::Status::ok) die(__LINE__);
+    for (std::uint32_t at = 0u; at < children + others; at++)
+        if (registry.remember(100u + at, at % 5u == 0u ? Kind::set : Kind::other, at % 5u == 0u ? 1u : 0u, 0u) != av::Status::ok)
+            die(__LINE__);
+    const std::uint32_t pooled = (children + others + 4u) / 5u;
+    std::uint64_t       seen = 0u;
+    const double walk_ns = timer.nanoseconds_per_operation(pooled * 3u, [&] {
+        for (std::uint32_t pass = 0u; pass < 3u; pass++)
+            registry.for_each_child(1u, [&seen](std::uint64_t child) { seen += child; });
+    });
+    timer.report("registry child walk (pool of 50k among 250k handles)", pooled * 3u, walk_ns);
+    const double forget_ns = timer.nanoseconds_per_operation_after(
+        pooled,
+        [&] {
+            for (std::uint32_t at = 0u; at < children + others; at += 5u)
+                if (!registry.holds(100u + at) &&
+                    registry.remember(100u + at, Kind::set, 1u, 0u) != av::Status::ok)
+                    die(__LINE__);
+        },
+        [&] { registry.forget_children(1u); });
+    timer.report("registry forget_children (pool of 50k among 250k)", pooled, forget_ns);
+    if (seen == 0u) die(__LINE__);
+}
+
 void d3d12_retain(const BenchTimer &timer)
 {
     constexpr std::uint64_t list = 11u;
@@ -297,5 +330,6 @@ int main(int argc, char **argv)
     if (only[0] != '\0' && std::strcmp(only, "d3d12large") == 0) d3d12_holds(timer, 1048576u);
     if (wanted("destroy")) d3d12_destroy_heap(timer);
     if (wanted("retain")) d3d12_retain(timer);
+    if (wanted("registry")) registry_children(timer);
     return 0;
 }

@@ -80,7 +80,7 @@ public:
         Table *table = nullptr;
         if (!table_of(owner, table)) return Status::ok;
         for (uint32_t slot = table->slots_.next_live(0u); slot != KeyedSlots<uint64_t, Slot>::no_slot;
-             slot = table->slots_.next_live(0u)) {
+             slot = table->slots_.next_live(slot + 1u)) {
             Slot         named = *table->slots_.at(slot);
             const Status let = let_go(named, table->mark_);
             if (let != Status::ok) {
@@ -101,17 +101,24 @@ public:
         AV_SCOPE("DescriptorTables::drain_all");
         for (uint32_t at = tables_.next_live(0u); at != KeyedSlots<uint64_t, Table *>::no_slot;
              at = tables_.next_live(0u)) {
-            Table *const   table = *tables_.at(at);
-            const uint32_t slot = table->slots_.next_live(0u);
-            if (slot == KeyedSlots<uint64_t, Slot>::no_slot) {
-                static_cast<void>(tables_.erase(tables_.key_at(at)));
-                static_cast<void>(pool_.destroy(table));
-                continue;
+            const uint64_t owner = tables_.key_at(at);
+            uint32_t       cursor = 0u;
+            for (;;) {
+                Table *const *const found = tables_.find(owner);
+                if (found == nullptr) break;
+                Table *const   table = *found;
+                const uint32_t slot = table->slots_.next_live(cursor);
+                if (slot == KeyedSlots<uint64_t, Slot>::no_slot) {
+                    static_cast<void>(tables_.erase(owner));
+                    static_cast<void>(pool_.destroy(table));
+                    break;
+                }
+                Slot named = *table->slots_.at(slot);
+                table->slots_.erase_slot(slot);
+                total_--;
+                cursor = slot + 1u;
+                visit(named);
             }
-            Slot named = *table->slots_.at(slot);
-            table->slots_.erase_slot(slot);
-            total_--;
-            visit(named);
         }
     }
 

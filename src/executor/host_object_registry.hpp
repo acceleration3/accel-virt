@@ -18,6 +18,9 @@ class HostObjectRegistry {
         Detail   detail_;
         uint32_t parent_;
         uint32_t children_;
+        uint32_t first_child_;
+        uint32_t next_sibling_;
+        uint32_t previous_sibling_;
         uint32_t references_;
         Kind     kind_;
     };
@@ -63,6 +66,9 @@ public:
 
 private:
     void forget_slot(uint32_t slot);
+    void forget_subtree(uint32_t slot);
+    void link_child(uint32_t slot, uint32_t parent);
+    void unlink_child(uint32_t slot);
     void sweep_orphans();
     uint32_t times_of(uint32_t references) const;
 
@@ -92,9 +98,10 @@ Status HostObjectRegistry<Key, Kind, Detail>::remember(Key key, Kind kind, Key p
     if (key == Key(0)) return Status::invalid_parameter;
     const uint32_t parent_slot = parent != Key(0) ? entries_.slot_of(parent) : no_slot;
     uint32_t       slot = no_slot;
-    const Status   inserted = entries_.insert(key, Entry{detail, parent_slot, 0u, 1u, kind}, slot);
+    const Status   inserted =
+        entries_.insert(key, Entry{detail, parent_slot, 0u, no_slot, no_slot, no_slot, 1u, kind}, slot);
     if (inserted != Status::ok) return inserted;
-    if (parent_slot != no_slot) entries_.at(parent_slot)->children_++;
+    if (parent_slot != no_slot) link_child(slot, parent_slot);
     return Status::ok;
 }
 
@@ -120,8 +127,11 @@ void HostObjectRegistry<Key, Kind, Detail>::for_each_child(Key parent, Visit vis
     AV_SCOPE("HostObjectRegistry::for_each_child");
     const uint32_t at = parent != Key(0) ? entries_.slot_of(parent) : no_slot;
     if (at == no_slot) return;
-    for (uint32_t slot = entries_.next_live(0u); slot != no_slot; slot = entries_.next_live(slot + 1u))
-        if (entries_.at(slot)->parent_ == at) visit(entries_.key_at(slot));
+    uint32_t next = no_slot;
+    for (uint32_t slot = entries_.at(at)->first_child_; slot != no_slot; slot = next) {
+        next = entries_.at(slot)->next_sibling_;
+        visit(entries_.key_at(slot));
+    }
 }
 
 template <typename Key, typename Kind, typename Detail>
@@ -176,9 +186,7 @@ bool HostObjectRegistry<Key, Kind, Detail>::release(Key key, Kind kind)
     Entry *const   entry = entries_.at(slot);
     if (entry == nullptr || entry->kind_ != kind || entry->references_ == saturated) return false;
     if (--entry->references_ != 0u) return false;
-    const bool had_children = entry->children_ != 0u;
-    forget_slot(slot);
-    if (had_children) sweep_orphans();
+    forget_subtree(slot);
     return true;
 }
 
@@ -188,9 +196,7 @@ void HostObjectRegistry<Key, Kind, Detail>::forget(Key key)
     AV_SCOPE("HostObjectRegistry::forget");
     const uint32_t slot = key != Key(0) ? entries_.slot_of(key) : no_slot;
     if (slot == no_slot) return;
-    const bool had_children = entries_.at(slot)->children_ != 0u;
-    forget_slot(slot);
-    if (had_children) sweep_orphans();
+    forget_subtree(slot);
 }
 
 template <typename Key, typename Kind, typename Detail>
@@ -198,16 +204,8 @@ void HostObjectRegistry<Key, Kind, Detail>::forget_children(Key key)
 {
     AV_SCOPE("HostObjectRegistry::forget_children");
     const uint32_t slot = key != Key(0) ? entries_.slot_of(key) : no_slot;
-    if (slot == no_slot || entries_.at(slot)->children_ == 0u) return;
-    bool grandchildren = false;
-    for (uint32_t child = entries_.next_live(0u); child != no_slot && entries_.at(slot)->children_ != 0u;
-         child = entries_.next_live(child + 1u)) {
-        const Entry &made = *entries_.at(child);
-        if (made.parent_ != slot) continue;
-        grandchildren = grandchildren || made.children_ != 0u;
-        forget_slot(child);
-    }
-    if (grandchildren) sweep_orphans();
+    if (slot == no_slot) return;
+    while (entries_.at(slot)->first_child_ != no_slot) forget_subtree(entries_.at(slot)->first_child_);
 }
 
 template <typename Key, typename Kind, typename Detail>
@@ -304,9 +302,42 @@ template <typename Key, typename Kind, typename Detail>
 void HostObjectRegistry<Key, Kind, Detail>::forget_slot(uint32_t slot)
 {
     AV_SCOPE("HostObjectRegistry::forget_slot");
-    const uint32_t parent = entries_.at(slot)->parent_;
-    if (parent != no_slot && entries_.at(parent) != nullptr) entries_.at(parent)->children_--;
+    unlink_child(slot);
     entries_.erase_slot(slot);
+}
+
+template <typename Key, typename Kind, typename Detail>
+void HostObjectRegistry<Key, Kind, Detail>::forget_subtree(uint32_t slot)
+{
+    AV_SCOPE("HostObjectRegistry::forget_subtree");
+    while (entries_.at(slot)->first_child_ != no_slot) forget_subtree(entries_.at(slot)->first_child_);
+    forget_slot(slot);
+}
+
+template <typename Key, typename Kind, typename Detail>
+void HostObjectRegistry<Key, Kind, Detail>::link_child(uint32_t slot, uint32_t parent)
+{
+    AV_SCOPE("HostObjectRegistry::link_child");
+    Entry &child = *entries_.at(slot);
+    Entry &owner = *entries_.at(parent);
+    child.previous_sibling_ = no_slot;
+    child.next_sibling_ = owner.first_child_;
+    if (owner.first_child_ != no_slot) entries_.at(owner.first_child_)->previous_sibling_ = slot;
+    owner.first_child_ = slot;
+    owner.children_++;
+}
+
+template <typename Key, typename Kind, typename Detail>
+void HostObjectRegistry<Key, Kind, Detail>::unlink_child(uint32_t slot)
+{
+    AV_SCOPE("HostObjectRegistry::unlink_child");
+    const Entry &child = *entries_.at(slot);
+    if (child.next_sibling_ != no_slot) entries_.at(child.next_sibling_)->previous_sibling_ = child.previous_sibling_;
+    if (child.previous_sibling_ != no_slot) entries_.at(child.previous_sibling_)->next_sibling_ = child.next_sibling_;
+    if (child.parent_ == no_slot || entries_.at(child.parent_) == nullptr) return;
+    Entry &owner = *entries_.at(child.parent_);
+    if (child.previous_sibling_ == no_slot) owner.first_child_ = child.next_sibling_;
+    owner.children_--;
 }
 
 template <typename Key, typename Kind, typename Detail>
@@ -343,6 +374,15 @@ bool HostObjectRegistry<Key, Kind, Detail>::invariants_hold() const
         const Entry &held = *entries_.at(slot);
         if (entries_.key_at(slot) == Key(0) || held.references_ == 0u) return false;
         claimed += held.children_;
+        uint32_t listed = 0u;
+        uint32_t before = no_slot;
+        for (uint32_t child = held.first_child_; child != no_slot; child = entries_.at(child)->next_sibling_) {
+            const Entry *const made = entries_.at(child);
+            if (made == nullptr || made->parent_ != slot || made->previous_sibling_ != before || ++listed > held.children_)
+                return false;
+            before = child;
+        }
+        if (listed != held.children_) return false;
         if (held.parent_ == no_slot) continue;
         if (held.parent_ == slot || entries_.at(held.parent_) == nullptr) return false;
         made_through++;

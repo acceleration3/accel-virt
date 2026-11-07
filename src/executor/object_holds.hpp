@@ -125,6 +125,7 @@ public:
     void release_all()
     {
         AV_SCOPE("ObjectHolds::release_all");
+        uint32_t from = 0u;
         for (;;) {
             if (retired_.size() != 0u) {
                 Object *const due = retired_.at(retired_.size() - 1u).object_;
@@ -132,14 +133,20 @@ public:
                 due->Release();
                 continue;
             }
-            const uint32_t slot = lists_.next_live(0u);
-            if (slot == KeyedSlots<uint64_t, Hold *>::no_slot) break;
+            const uint32_t slot = lists_.next_live(from);
+            if (slot == KeyedSlots<uint64_t, Hold *>::no_slot) {
+                if (from == 0u) break;
+                from = 0u;
+                continue;
+            }
             Hold *const kept = *lists_.at(slot);
             if (kept->size() == 0u) {
                 static_cast<void>(lists_.erase(lists_.key_at(slot)));
                 static_cast<void>(pool_.destroy(kept));
+                from = slot + 1u;
                 continue;
             }
+            from = slot;
             const typename Hold::Held held = kept->at(kept->size() - 1u);
             kept->pop();
             unpin(held.pin_, 0u);

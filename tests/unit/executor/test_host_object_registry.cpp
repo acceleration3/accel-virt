@@ -151,6 +151,58 @@ TEST(host_object_registry, forgetting_the_children_leaves_the_parent)
   registry.forget_children(0x99u);
   CHECK_EQ(registry.count(), 1u); }
 
+TEST(host_object_registry, children_are_walked_through_their_parent_alone_after_others_come_and_go)
+{ MockPlatform platform;
+  Registry     registry(platform);
+  CHECK(registry.remember(0x10u, Kind::context, 0u, Detail{}) == Status::ok);
+  CHECK(registry.remember(0x11u, Kind::context, 0u, Detail{}) == Status::ok);
+  for (std::uint64_t key = 0x100u; key < 0x140u; key++)
+      CHECK(registry.remember(key, Kind::mem, key % 2u == 0u ? 0x10u : 0x11u, Detail{}) == Status::ok);
+  for (std::uint64_t key = 0x100u; key < 0x140u; key += 4u) CHECK(registry.release(key, Kind::mem));
+  CHECK(registry.remember(0x200u, Kind::mem, 0x10u, Detail{}) == Status::ok);
+  std::uint64_t seen = 0u;
+  std::uint32_t walked = 0u;
+  registry.for_each_child(0x10u, [&](std::uint64_t key) {
+      CHECK_EQ(registry.parent_of(key), 0x10u);
+      seen += key;
+      walked++;
+  });
+  std::uint64_t wanted = 0x200u;
+  std::uint32_t expected = 1u;
+  for (std::uint64_t key = 0x100u; key < 0x140u; key += 2u)
+      if (key % 4u != 0u) {
+          wanted += key;
+          expected++;
+      }
+  CHECK_EQ(walked, expected);
+  CHECK_EQ(seen, wanted);
+  CHECK(registry.invariants_hold()); }
+
+TEST(host_object_registry, forgetting_a_parent_takes_its_whole_subtree_and_nothing_else)
+{ MockPlatform platform;
+  Registry     registry(platform);
+  CHECK(registry.remember(1u, Kind::context, 0u, Detail{}) == Status::ok);
+  CHECK(registry.remember(2u, Kind::queue, 1u, Detail{}) == Status::ok);
+  CHECK(registry.remember(3u, Kind::mem, 2u, Detail{}) == Status::ok);
+  CHECK(registry.remember(4u, Kind::mem, 2u, Detail{}) == Status::ok);
+  CHECK(registry.remember(5u, Kind::queue, 1u, Detail{}) == Status::ok);
+  CHECK(registry.remember(6u, Kind::context, 0u, Detail{}) == Status::ok);
+  CHECK(registry.remember(7u, Kind::mem, 6u, Detail{}) == Status::ok);
+  registry.forget(2u);
+  CHECK(!registry.holds(2u));
+  CHECK(!registry.holds(3u));
+  CHECK(!registry.holds(4u));
+  CHECK(registry.holds(5u));
+  CHECK(registry.holds(7u));
+  CHECK_EQ(registry.count(), 4u);
+  std::uint32_t kept = 0u;
+  registry.for_each_child(1u, [&](std::uint64_t key) {
+      CHECK_EQ(key, 5u);
+      kept++;
+  });
+  CHECK_EQ(kept, 1u);
+  CHECK(registry.invariants_hold()); }
+
 TEST(host_object_registry, a_parent_that_is_not_held_makes_an_object_with_none)
 { MockPlatform platform;
   Registry     registry(platform);
