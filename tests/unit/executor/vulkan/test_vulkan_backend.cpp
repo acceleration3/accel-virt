@@ -649,6 +649,30 @@ TEST(vulkan_backend, a_signal_changes_nothing_it_waits_on)
   CHECK_EQ(marked, 0u);
   CHECK_EQ(reached, 0u); }
 
+TEST(vulkan_backend, the_guest_s_device_local_heap_is_capped_by_the_reserve_the_source_holds)
+{ av::MockPlatform       platform;
+  av::MockMemoryExporter exporter;
+  av::HostMemorySource   source(exporter, platform);
+  constexpr std::uint64_t card = std::uint64_t{16} << 30u;
+  const std::uint32_t     heap = exporter.add_heap(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, card);
+  exporter.add_type(av::MockMemoryExporter::device_local, true, heap);
+  source.reserve_vram(6144u);
+  av::HostGpu   gpu;
+  Rig rig;
+  VulkanBackend backend(rig.lines);
+  backend.initialize(gpu, &source, rig.imports);
+  VkPhysicalDeviceMemoryProperties guest = {};
+  backend.on_vkGetPhysicalDeviceMemoryProperties(VK_NULL_HANDLE, &guest);
+  bool seen = false;
+  for (std::uint32_t index = 0u; index < guest.memoryHeapCount; index++) {
+      if ((guest.memoryHeaps[index].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0u) continue;
+      seen = true;
+      CHECK_EQ(guest.memoryHeaps[index].size, av::VramPolicy(6144u).cap_for(card));
+      CHECK(guest.memoryHeaps[index].size != av::VramPolicy().cap_for(card));
+  }
+  CHECK(seen);
+  backend.shut_down(); }
+
 TEST(vulkan_backend, the_guest_s_types_are_the_source_s_learnt_once_per_context)
 { av::MockPlatform       platform;
   av::MockMemoryExporter exporter;
