@@ -26,7 +26,7 @@ public:
     const CapsetInfo &info() const;
 
 private:
-    uint64_t   host_ram_budget();
+    uint64_t   host_total();
 
     Host      &host_;
     CapsetInfo info_;

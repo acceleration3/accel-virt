@@ -19,7 +19,7 @@ MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, st
       batches_(host, executor_, imports_, staging_, fences, recorder_, 1u)
 {
     static_cast<void>(library_.accept(&ops_.table()));
-    static_cast<void>(library_.open_domain(no_uuid, 0u, 0u));
+    static_cast<void>(library_.open_domain(no_uuid, 0u, 0u, 0u));
     executor_.configure(SubApi::vulkan, no_uuid, GlContextOptions());
     static_cast<void>(staging_.allocate(std::uint64_t{1} << order, 0u));
     batches_.prepare(BlobWindow());

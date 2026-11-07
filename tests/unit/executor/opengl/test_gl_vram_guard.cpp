@@ -1,6 +1,7 @@
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_vram_guard.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "executor/vram_ledger.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/failing_blocks.hpp"
@@ -312,4 +313,19 @@ TEST(gl_vram_guard_host_ram, a_failed_record_of_the_card_side_leaves_the_host_si
   CHECK(!fixture.rig.run(kVram_glBufferData, {array_buffer, 2000 * mib, 0, static_read}));
   CHECK_EQ(fixture.host.used(), 100 * mib);
   CHECK_EQ(fixture.rig.guard().host_held(), 100 * mib);
+  CHECK(fixture.rig.guard().invariants_hold()); }
+
+TEST(gl_vram_guard_host_ram, a_readback_buffer_the_host_cannot_spare_is_out_of_memory_and_a_drawing_buffer_is_not)
+{ HostRig fixture;
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 100 * mib;
+  fixture.host.watch(&gauge);
+  fixture.host.floor(90 * mib);
+  bind(array_buffer_binding, 3);
+  CHECK(!fixture.rig.run(kVram_glBufferData, {array_buffer, 50 * mib, 0, static_read}));
+  CHECK_EQ(fixture.rig.word().count(out_of_memory_kind), 1u);
+  CHECK_EQ(fixture.host.used(), 0u);
+  bind(array_buffer_binding, 4);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 50 * mib, 0, stream_draw}));
+  CHECK_EQ(fixture.host.used(), 0u);
   CHECK(fixture.rig.guard().invariants_hold()); }

@@ -69,7 +69,7 @@ SharedObjectRig::SharedObjectRig(bool second_executor)
     : host_(), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_),
       first_(host_, library_, shares_, 1u), second_(host_, library_, shares_, 2u)
 {
-    if (library_.accept(&ops_.table()) != Status::ok || library_.open_domain(no_uuid, 0u, 0u) != Status::ok ||
+    if (library_.accept(&ops_.table()) != Status::ok || library_.open_domain(no_uuid, 0u, 0u, 0u) != Status::ok ||
         first_.start(true) != Status::ok || second_.start(second_executor) != Status::ok)
         std::abort();
 }

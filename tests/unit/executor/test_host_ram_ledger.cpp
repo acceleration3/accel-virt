@@ -1,11 +1,13 @@
 #include "executor/host_ram_ledger.hpp"
 #include "executor/vram_account.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 #include <thread>
 #include <vector>
 
+using av::FakeMemoryGauge;
 using av::HostRamLedger;
 using av::VramAccount;
 
@@ -78,3 +80,119 @@ TEST(host_ram_ledger, racing_takes_never_pass_the_budget)
   for (const std::uint64_t one : granted) total += one;
   CHECK_EQ(total, 1000u);
   CHECK_EQ(ledger.used(), 1000u); }
+
+TEST(host_ram_ledger_floor, a_take_that_would_leave_the_host_below_its_floor_is_refused_and_allowed_again_once_memory_recovers)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 10 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  CHECK(ledger.take(5 * gib));
+  CHECK(!ledger.take(2 * gib));
+  CHECK_EQ(ledger.used(), 5 * gib);
+  CHECK_EQ(ledger.refusals(), 1u);
+  CHECK_EQ(ledger.tight_refusals(), 1u);
+  gauge.set(3 * gib, HostRamLedger::refresh_ms);
+  CHECK(!ledger.take(1u));
+  gauge.set(9 * gib, HostRamLedger::refresh_ms);
+  CHECK(ledger.take(2 * gib));
+  CHECK_EQ(ledger.used(), 7 * gib); }
+
+TEST(host_ram_ledger_floor, the_host_is_read_at_most_once_per_refresh_interval_however_many_takes_come)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 100 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(gib);
+  for (std::uint32_t at = 0u; at < 1000u; at++) CHECK(ledger.take(1u));
+  CHECK_EQ(gauge.reads, 1u);
+  gauge.now += HostRamLedger::refresh_ms - 1u;
+  CHECK(ledger.take(1u));
+  CHECK_EQ(gauge.reads, 1u);
+  gauge.now += 1u;
+  CHECK(ledger.take(1u));
+  CHECK_EQ(gauge.reads, 2u); }
+
+TEST(host_ram_ledger_floor, takes_between_two_reads_count_against_what_the_last_read_found)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 6 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  CHECK(ledger.take(gib));
+  CHECK(ledger.take(gib));
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(gauge.reads, 1u); }
+
+TEST(host_ram_ledger_floor, a_take_the_budget_refuses_returns_its_headroom)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 6 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  ledger.budget(gib);
+  CHECK(!ledger.take(2 * gib));
+  CHECK_EQ(ledger.tight_refusals(), 0u);
+  CHECK(ledger.take(gib));
+  CHECK_EQ(ledger.available(), 5 * gib); }
+
+TEST(host_ram_ledger_floor, no_floor_no_gauge_or_an_unreadable_host_never_refuses)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 0u;
+  ledger.watch(&gauge);
+  CHECK(ledger.take(gib));
+  CHECK_EQ(gauge.reads, 0u);
+  ledger.floor(4 * gib);
+  gauge.readable = false;
+  CHECK(ledger.take(gib));
+  gauge.readable = true;
+  gauge.now += HostRamLedger::refresh_ms;
+  CHECK(!ledger.take(gib));
+  ledger.watch(nullptr);
+  CHECK(ledger.take(gib));
+  ledger.floor(0u);
+  CHECK(ledger.take(gib)); }
+
+TEST(host_ram_ledger_floor, going_tight_asks_the_host_to_give_memory_back_once_per_episode)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 10 * gib;
+  ledger.watch(&gauge);
+  ledger.floor(4 * gib);
+  CHECK(ledger.take(1u));
+  CHECK_EQ(gauge.relieved, 0u);
+  gauge.set(2 * gib, HostRamLedger::refresh_ms);
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(gauge.relieved, 1u);
+  gauge.set(2 * gib, HostRamLedger::refresh_ms);
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(gauge.relieved, 1u);
+  gauge.set(10 * gib, HostRamLedger::refresh_ms);
+  CHECK(ledger.take(1u));
+  gauge.set(2 * gib, HostRamLedger::refresh_ms);
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(gauge.relieved, 1u);
+  gauge.set(10 * gib, HostRamLedger::refresh_ms);
+  CHECK(ledger.take(1u));
+  gauge.set(2 * gib, HostRamLedger::relieve_ms);
+  CHECK(!ledger.take(1u));
+  CHECK_EQ(gauge.relieved, 2u); }
+
+TEST(host_ram_ledger_floor, racing_takes_never_pass_what_the_host_has_above_its_floor)
+{ HostRamLedger ledger;
+  FakeMemoryGauge gauge;
+  gauge.free_bytes = 1500u;
+  ledger.watch(&gauge);
+  ledger.floor(500u);
+  std::vector<std::thread> threads;
+  std::uint64_t            granted[8] = {};
+  for (std::uint32_t id = 0u; id < 8u; id++)
+    threads.emplace_back([&ledger, &granted, id] {
+      for (std::uint32_t at = 0u; at < 500u; at++)
+        if (ledger.take(1u)) granted[id]++;
+    });
+  for (std::thread &thread : threads) thread.join();
+  std::uint64_t total = 0u;
+  for (const std::uint64_t one : granted) total += one;
+  CHECK_EQ(total, 1000u); }

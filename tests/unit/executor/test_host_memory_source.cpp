@@ -3,6 +3,7 @@
 #include "executor/exported_memory.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "executor/memory_exporter.hpp"
 #include "executor/source_memory.hpp"
 #include "harness/executor/host_memory_source_probe.hpp"
@@ -896,3 +897,27 @@ TEST(host_memory_source_host_ram, memory_that_cannot_be_shared_gives_its_reserva
   }
   CHECK_EQ(rig.ledger.used(), 0u);
   CHECK_EQ(rig.exporter.live(), 0u); }
+
+TEST(host_memory_source_host_ram, system_memory_is_refused_while_the_host_is_below_its_floor_before_the_exporter_is_asked_and_allowed_when_it_recovers)
+{ HostRamRig rig;
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 5u * page;
+  rig.ledger.watch(&gauge);
+  rig.ledger.floor(4u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, page), Status::ok);
+  const std::uint32_t asked = rig.exporter.attempts();
+  CHECK_STATUS(rig.allocate(2u, readback, 4u * page), Status::no_memory);
+  CHECK_EQ(rig.exporter.attempts(), asked);
+  gauge.set(64u * page, av::HostRamLedger::refresh_ms);
+  CHECK_STATUS(rig.allocate(3u, readback, 4u * page), Status::ok);
+  rig.source.free_domain(domain); }
+
+TEST(host_memory_source_host_ram, memory_on_the_card_is_not_refused_for_host_ram_while_the_host_is_tight)
+{ HostRamRig rig;
+  rig.add_bar();
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 0u;
+  rig.ledger.watch(&gauge);
+  rig.ledger.floor(4u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, page), Status::no_memory);
+  rig.source.free_domain(domain); }

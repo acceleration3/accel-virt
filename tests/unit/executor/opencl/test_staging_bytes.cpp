@@ -1,4 +1,5 @@
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "executor/opencl/staging_bytes.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -86,3 +87,18 @@ TEST(staging_bytes_host_ram, an_unbound_staging_is_not_limited_and_releasing_not
   staging.release();
   CHECK(staging.reserve(1u << 20));
   staging.release(); }
+
+TEST(staging_bytes_host_ram, a_reserve_the_host_cannot_spare_fails_and_keeps_what_was_held)
+{ av::HostRamLedger ledger;
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 5u * 4096u;
+  ledger.watch(&gauge);
+  ledger.floor(4u * 4096u);
+  StagingBytes staging;
+  staging.bind(&ledger);
+  CHECK(staging.reserve(4096u));
+  std::uint8_t *const held = staging.bytes();
+  CHECK(!staging.reserve(3u * 4096u));
+  CHECK(staging.bytes() == held);
+  CHECK_EQ(staging.held(), 4096u);
+  CHECK(ledger.tight_refusals() != 0u); }

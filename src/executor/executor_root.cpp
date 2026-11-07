@@ -114,14 +114,18 @@ uint32_t ExecutorRoot::sub_apis() const
     return apis_ != nullptr ? gpus_.sub_apis() : 0u;
 }
 
-uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib, uint64_t host_ram_bytes)
+uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib, uint64_t host_ram_bytes,
+                                   uint64_t host_ram_floor_bytes)
 {
     AV_SCOPE("ExecutorRoot::open_domain");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return 0u;
     HostMemorySource *const source = apis_->memory_source(gpu->index());
     HostRamLedger *const host_ram = apis_->host_ram_ledger();
-    if (host_ram != nullptr) host_ram->budget(host_ram_bytes);
+    if (host_ram != nullptr) {
+        host_ram->budget(host_ram_bytes);
+        host_ram->floor(host_ram_floor_bytes);
+    }
     if (source != nullptr) {
         source->reserve_vram(vram_reserve_mib);
         source->use_host_ram(host_ram);
@@ -718,6 +722,8 @@ void ExecutorRoot::report(StateWriter &writer)
         writer.number("host_ram_cap_bytes", host_ram->cap());
         writer.number("host_ram_used_bytes", host_ram->used());
         writer.number("host_ram_refusals", host_ram->refusals());
+        writer.number("host_ram_floor_bytes", host_ram->floor());
+        writer.number("host_ram_tight_refusals", host_ram->tight_refusals());
     }
     gpus_.report(writer);
     domains_.report(writer);

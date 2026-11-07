@@ -59,7 +59,7 @@ Status RecordingReplay::run(RecordingReader &reader, const RecordingFilter &filt
     const Status opened = reader.open();
     if (opened != Status::ok) return Status::malformed;
     if (!gpu_chosen_) use_gpu(reader.header().uuid());
-    static_cast<void>(library_.open_domain(gpu_.raw(), 0u, 0u));
+    static_cast<void>(library_.open_domain(gpu_.raw(), 0u, 0u, 0u));
     RecordHeader   record;
     const uint8_t *payload = nullptr;
     for (;;) {

@@ -8,7 +8,7 @@ namespace av {
 
 CapsetInfo::CapsetInfo()
     : version_(0u, 0u), sub_apis_(0u), max_contexts_(0u), min_ring_order_(0u),
-      max_ring_order_(0u), vram_reserve_mib_(0u), features_(0u), gpu_()
+      max_ring_order_(0u), vram_reserve_mib_(0u), host_ram_floor_(0u), features_(0u), gpu_()
       {
           AV_SCOPE("CapsetInfo::CapsetInfo");
       }
@@ -17,7 +17,7 @@ CapsetInfo::CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32
                        uint8_t min_ring_order, uint8_t max_ring_order, uint64_t features,
                        const GpuIdentity &gpu)
     : version_(version), sub_apis_(sub_apis), max_contexts_(max_contexts),
-      min_ring_order_(min_ring_order), max_ring_order_(max_ring_order), vram_reserve_mib_(0u), features_(features),
+      min_ring_order_(min_ring_order), max_ring_order_(max_ring_order), vram_reserve_mib_(0u), host_ram_floor_(0u), features_(features),
       gpu_(gpu)
       {
           AV_SCOPE("CapsetInfo::CapsetInfo");
@@ -61,6 +61,18 @@ uint32_t CapsetInfo::vram_reserve_mib() const
 {
     AV_SCOPE("CapsetInfo::vram_reserve_mib");
     return vram_reserve_mib_;
+}
+
+uint64_t CapsetInfo::host_ram_floor() const
+{
+    AV_SCOPE("CapsetInfo::host_ram_floor");
+    return host_ram_floor_;
+}
+
+void CapsetInfo::floor_host_ram(uint64_t bytes)
+{
+    AV_SCOPE("CapsetInfo::floor_host_ram");
+    host_ram_floor_ = bytes;
 }
 
 void CapsetInfo::reserve_vram(uint32_t mib)

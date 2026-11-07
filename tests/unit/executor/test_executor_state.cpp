@@ -47,7 +47,7 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
   reporter.report(writer);
   const char *const expected =
       "executor/0 sessions=512 live=1 gpus=2 overflowed=false host_ram_cap_bytes=18446744073709551615 "
-      "host_ram_used_bytes=0 host_ram_refusals=0\n"
+      "host_ram_used_bytes=0 host_ram_refusals=0 host_ram_floor_bytes=0 host_ram_tight_refusals=0\n"
       "executor/0/gpu/0 uuid=8680A6460C0000000002000000000000 sub_apis=0x0000000000000005\n"
       "executor/0/gpu/1 uuid=7B7AD2C542198C80C4FDA64B8775AEDB sub_apis=0x0000000000000001\n"
       "executor/0/domain/1 gpu=0\n"
@@ -71,13 +71,13 @@ TEST(executor_root_report, says_the_vms_host_ram_budget_what_is_in_use_and_how_o
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 1000u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 1000u, 0u);
   CHECK(apis.host_ram().take(600u));
   CHECK(!apis.host_ram().take(600u));
   char bytes[1024];
   StateWriter writer(bytes, sizeof bytes);
   root.report(writer);
-  CHECK(std::strstr(writer.dump(), "host_ram_cap_bytes=1000 host_ram_used_bytes=600 host_ram_refusals=1") != nullptr);
+  CHECK(std::strstr(writer.dump(), "host_ram_cap_bytes=1000 host_ram_used_bytes=600 host_ram_refusals=1 host_ram_floor_bytes=0 host_ram_tight_refusals=0") != nullptr);
   root.close_domain(domain); }
 
 TEST(executor_root_report, names_the_api_of_every_kind_of_session)

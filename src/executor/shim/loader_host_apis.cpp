@@ -13,9 +13,10 @@ namespace av {
 LoaderHostApis::LoaderHostApis(ExecutorLog &log)
     : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
       gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{},
-      shares_{}, ledgers_{}, host_ram_(), vram_gate_(*this, heap_), count_(0u), opened_(false)
+      shares_{}, ledgers_{}, gauge_(), host_ram_(), vram_gate_(*this, heap_), count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
+    host_ram_.watch(&gauge_);
     for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, log.shares()));
     for (ObjectStorage<D3d11HostDevice> &device : d3d11_devices_) static_cast<void>(device.construct(log.d3d11()));
     for (ObjectStorage<D3d12HostDevice> &device : d3d12_devices_) static_cast<void>(device.construct(log.d3d12()));

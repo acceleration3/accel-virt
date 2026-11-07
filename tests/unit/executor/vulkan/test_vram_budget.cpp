@@ -1,5 +1,6 @@
 #include "core/log/driver_log.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "executor/vram_account.hpp"
 #include "executor/vram_ledger.hpp"
 #include "executor/vulkan/vram_budget.hpp"
@@ -530,3 +531,21 @@ TEST(vulkan_host_ram_cap, shutting_down_gives_the_held_host_ram_back_and_the_gue
   CHECK_EQ(budget.heapBudget[1], 5 * gib);
   rig.backend().shut_down();
   CHECK_EQ(host.used(), std::uint64_t{0}); }
+
+TEST(vram_budget, a_system_heap_allocation_is_refused_while_the_host_is_below_its_floor_and_the_device_local_heap_is_not)
+{ av::FailingBlocks blocks;
+  VramLedger ledger;
+  HostRamLedger host;
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 5 * gib;
+  ledger.learn(8 * gib);
+  host.watch(&gauge);
+  host.floor(4 * gib);
+  VramBudget budget(blocks);
+  budget.bind(&ledger, &host);
+  budget.learn(guest_view());
+  CHECK(budget.admit(0u, 2 * gib));
+  CHECK(!budget.admit(1u, 2 * gib));
+  CHECK_EQ(host.used(), std::uint64_t{0});
+  gauge.set(20 * gib, HostRamLedger::refresh_ms);
+  CHECK(budget.admit(1u, 2 * gib)); }

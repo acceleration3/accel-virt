@@ -1,5 +1,6 @@
 #include "executor/budgeted_heap.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
@@ -84,3 +85,19 @@ TEST(budgeted_heap, rebinding_to_another_ledger_returns_what_the_old_one_lent)
   heap.release(block);
   CHECK_EQ(new_ledger.used(), 0u);
   CHECK_EQ(heap.limit(), 100u * mib); }
+
+TEST(budgeted_heap, a_block_the_host_cannot_spare_is_refused_and_comes_again_when_memory_recovers)
+{ HostRamLedger ledger;
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 5u * mib;
+  ledger.watch(&gauge);
+  ledger.floor(4u * mib);
+  BudgetedHeap heap;
+  heap.bind(&ledger, 100u * mib);
+  CHECK(heap.allocate(2u * mib, Pool::paged) == nullptr);
+  CHECK_EQ(heap.refusals(), 1u);
+  CHECK_EQ(heap.held(), 0u);
+  gauge.set(64u * mib, HostRamLedger::refresh_ms);
+  void *const block = heap.allocate(2u * mib, Pool::paged);
+  CHECK(block != nullptr);
+  heap.release(block); }

@@ -111,7 +111,7 @@ public:
         static_cast<void>(blobs_.initialize());
         static_cast<void>(shares_.initialize());
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(capset().gpu().uuid(), 0u, 0u));
+        static_cast<void>(library_.open_domain(capset().gpu().uuid(), 0u, 0u, 0u));
         host_.add_guest_ram(ram, 0x2000u);
         GpuRequestBuilder entries(0u);
         entries.u64(ram).u32(0x2000u).u32(0u);

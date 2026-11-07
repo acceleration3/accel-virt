@@ -41,3 +41,17 @@ TEST(host_ram_policy, an_explicit_reserve_replaces_the_auto_one_and_is_never_bel
   CHECK_EQ(HostRamPolicy(16384u).budget_for(30 * gib, 9 * gib), 5 * gib);
   CHECK_EQ(HostRamPolicy(2048u).reserve_mib(), 2048u);
   CHECK_EQ(HostRamPolicy().reserve_mib(), 0u); }
+
+TEST(host_ram_policy, the_auto_floor_is_the_reserve_but_never_more_than_half_of_what_the_guest_leaves_nor_less_than_one_gibibyte)
+{ const HostRamPolicy policy;
+  CHECK_EQ(policy.floor_for(30 * gib, 8 * gib), 7 * gib + gib / 2u);
+  CHECK_EQ(policy.floor_for(30 * gib, 16 * gib), 7 * gib);
+  CHECK_EQ(policy.floor_for(30 * gib, 28 * gib), gib);
+  CHECK_EQ(policy.floor_for(8 * gib, 100 * gib), gib);
+  CHECK_EQ(policy.floor_for(64 * gib, 8 * gib), 16 * gib);
+  CHECK_EQ(policy.floor_for(0u, 4 * gib), 0u); }
+
+TEST(host_ram_policy, an_explicit_floor_is_what_was_asked_not_clamped_by_the_guest)
+{ CHECK_EQ(HostRamPolicy(2048u).floor_for(30 * gib, 28 * gib), 2 * gib);
+  CHECK_EQ(HostRamPolicy(16384u).floor_for(30 * gib, 16 * gib), 16 * gib);
+  CHECK_EQ(HostRamPolicy(1u).floor_for(30 * gib, 1 * gib), gib); }

@@ -10,6 +10,7 @@
 #include "executor/imported_blob.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/executor/mock_memory_exporter.hpp"
@@ -666,3 +667,19 @@ TEST(context_session_host_ram, an_answer_the_session_limit_cannot_hold_is_refuse
   static_cast<void>(session.execute(MockSessionBackend::long_answer_id, payload, sizeof payload, reply, sizeof reply, answer));
   CHECK_EQ(ledger.used(), 0u);
   CHECK(session.invariants_hold()); }
+
+TEST(context_session_host_ram, a_decode_that_overflows_its_block_is_refused_while_the_host_is_below_its_floor)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  av::HostRamLedger ledger;
+  av::FakeMemoryGauge gauge;
+  gauge.free_bytes = 128u << 20;
+  ledger.watch(&gauge);
+  ledger.floor(1024u << 20);
+  session.use_host_ram(&ledger, 256u << 20);
+  std::size_t answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::roomy_id, payload, sizeof payload, nullptr, 0u, answer),
+           std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(session.starved(), 1u);
+  CHECK(ledger.tight_refusals() != 0u);
+  CHECK_EQ(ledger.used(), 0u); }

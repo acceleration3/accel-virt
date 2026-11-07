@@ -25,24 +25,25 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
     host_.require_main_loop("DeviceCapset::describe");
     if (sub_apis == 0u) return;
     const GpuIdentity gpu = host_.gpu_identity(gpu_index);
+    const uint64_t total = host_total();
     const uint32_t type = gpu.device_type() > GpuIdentity::cpu ? GpuIdentity::other_gpu : gpu.device_type();
     info_ = CapsetInfo(ProtocolVersion(ProtocolVersion::current_major, ProtocolVersion::current_minor),
                        sub_apis, DeviceContextTable::max_contexts,
                        RingHeader::lowest_order, RingHeader::highest_order, features,
                        GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), VramPolicy(vram_reserve_mib_).cap_for(gpu.local_memory()),
-                                   host_ram_budget(), AdapterName(gpu.name()).text()));
+                                   HostRamPolicy(host_ram_reserve_mib_).budget_for(total, host_.guest_memory_bytes()), AdapterName(gpu.name()).text()));
     info_.reserve_vram(vram_reserve_mib_);
+    info_.floor_host_ram(HostRamPolicy(host_ram_reserve_mib_).floor_for(total, host_.guest_memory_bytes()));
     described_ = true;
 }
 
-uint64_t DeviceCapset::host_ram_budget()
+uint64_t DeviceCapset::host_total()
 {
-    AV_SCOPE("DeviceCapset::host_ram_budget");
+    AV_SCOPE("DeviceCapset::host_total");
     char   text[256] = {};
     size_t length = 0u;
     if (host_.read_file("/proc/meminfo", text, sizeof text, length) != Status::ok) return 0u;
-    return HostRamPolicy(host_ram_reserve_mib_).budget_for(MemInfoText(text, length).total_bytes(),
-                                                          host_.guest_memory_bytes());
+    return MemInfoText(text, length).total_bytes();
 }
 
 void DeviceCapset::reserve_host_ram(uint32_t mib)

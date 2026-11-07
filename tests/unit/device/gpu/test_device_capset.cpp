@@ -211,3 +211,20 @@ TEST(device_capset_host_ram, a_guest_as_large_as_the_host_still_leaves_the_least
   DeviceCapset capset(host);
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK_EQ(capset.info().gpu().shared_memory(), 1ull << 30); }
+
+TEST(device_capset_host_ram, the_executor_is_told_the_floor_host_memory_may_not_fall_below)
+{ MockHost host;
+  host.add_gpu(first);
+  meminfo(host, "MemTotal:       31457280 kB\n");
+  host.set_guest_memory_bytes(16ull << 30);
+  DeviceCapset capset(host);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK_EQ(capset.info().host_ram_floor(), 7ull << 30);
+  MockHost asked;
+  asked.add_gpu(first);
+  meminfo(asked, "MemTotal:       31457280 kB\n");
+  asked.set_guest_memory_bytes(16ull << 30);
+  DeviceCapset explicit_floor(asked);
+  explicit_floor.reserve_host_ram(2048u);
+  explicit_floor.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(asked));
+  CHECK_EQ(explicit_floor.info().host_ram_floor(), 2ull << 30); }

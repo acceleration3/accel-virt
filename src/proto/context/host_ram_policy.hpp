@@ -18,6 +18,7 @@ public:
 
     uint32_t reserve_mib() const;
     uint64_t reserve_for(uint64_t host_total) const;
+    uint64_t floor_for(uint64_t host_total, uint64_t guest_ram) const;
     uint64_t budget_for(uint64_t host_total, uint64_t guest_ram) const;
 
 private:

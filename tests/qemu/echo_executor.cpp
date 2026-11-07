@@ -327,7 +327,7 @@ std::uint64_t imported_handle(void *, AvExecutor *handle, std::uint64_t blob_id)
 
 void set_signal(void *, AvExecutor *, void (*)(void *), void *) {}
 
-std::uint32_t open_domain(void *, const std::uint8_t *, std::uint32_t, std::uint64_t) { return __atomic_add_fetch(&domains, 1u, __ATOMIC_ACQ_REL); }
+std::uint32_t open_domain(void *, const std::uint8_t *, std::uint32_t, std::uint64_t, std::uint64_t) { return __atomic_add_fetch(&domains, 1u, __ATOMIC_ACQ_REL); }
 void          close_domain(void *, std::uint32_t) {}
 
 void          end_batch(void *, AvExecutor *) {}

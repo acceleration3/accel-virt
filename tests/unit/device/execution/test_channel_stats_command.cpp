@@ -47,7 +47,7 @@ public:
         seen = Seen();
         ops_.editable().channel_stats = record;
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(uuid, 0u, 0u));
+        static_cast<void>(library_.open_domain(uuid, 0u, 0u, 0u));
         static_cast<void>(shares_.initialize());
         executor_.configure(av::SubApi::d3d, uuid, av::GlContextOptions());
     }

@@ -6,8 +6,8 @@ namespace av {
 
 namespace {
 
-constexpr char key[] = "MemTotal:";
-constexpr size_t key_length = sizeof key - 1u;
+constexpr char total_key[] = "MemTotal:";
+constexpr char available_key[] = "MemAvailable:";
 
 }
 
@@ -19,6 +19,18 @@ MemInfoText::MemInfoText(const char *text, size_t length) : text_(text), length_
 uint64_t MemInfoText::total_bytes() const
 {
     AV_SCOPE("MemInfoText::total_bytes");
+    return field(total_key, sizeof total_key - 1u);
+}
+
+uint64_t MemInfoText::available_bytes() const
+{
+    AV_SCOPE("MemInfoText::available_bytes");
+    return field(available_key, sizeof available_key - 1u);
+}
+
+uint64_t MemInfoText::field(const char *key, size_t key_length) const
+{
+    AV_SCOPE("MemInfoText::field");
     size_t at = 0u;
     while (at < length_) {
         const bool found = length_ - at >= key_length && __builtin_memcmp(text_ + at, key, key_length) == 0;

@@ -36,6 +36,8 @@ public:
     void                   announce(uint64_t feature);
     uint32_t               vram_reserve_mib() const;
     void                   reserve_vram(uint32_t mib);
+    uint64_t               host_ram_floor() const;
+    void                   floor_host_ram(uint64_t bytes);
     bool                   accepts_ring_order(uint8_t order) const;
     bool                   has_feature(uint64_t feature) const;
 
@@ -57,6 +59,7 @@ private:
     uint8_t         min_ring_order_;
     uint8_t         max_ring_order_;
     uint32_t        vram_reserve_mib_;
+    uint64_t        host_ram_floor_;
     uint64_t        features_;
     GpuIdentity     gpu_;
 };

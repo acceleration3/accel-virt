@@ -2,6 +2,7 @@
 #include "executor/executor_log.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "harness/executor/fake_memory_gauge.hpp"
 #include "executor/vram_ledger.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -332,3 +333,18 @@ TEST(opencl_backend_host_ram, shared_virtual_memory_is_host_ram_and_is_refused_p
   CHECK(rig.backend().on_clSVMAlloc(nullptr, 0u, 8 * gib, 0u) != nullptr);
   rig.backend().shut_down();
   CHECK_EQ(host.used(), 0u); }
+
+TEST(opencl_backend_host_ram, a_host_resident_buffer_the_host_cannot_spare_is_out_of_host_memory_and_never_reaches_the_driver)
+{ av::HostRamLedger host;
+  av::FakeMemoryGauge gauge;
+  Rig rig;
+  gauge.free_bytes = 5 * gib;
+  host.watch(&gauge);
+  host.floor(4 * gib);
+  rig.backend().use_vram(&rig.ledger(), &host);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.buffer(2 * gib, CL_MEM_ALLOC_HOST_PTR, error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(fake.creates, 0u);
+  gauge.set(20 * gib, av::HostRamLedger::refresh_ms);
+  CHECK(rig.buffer(2 * gib, CL_MEM_ALLOC_HOST_PTR, error) != nullptr); }

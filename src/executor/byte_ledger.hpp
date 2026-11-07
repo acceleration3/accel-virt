@@ -11,7 +11,7 @@ public:
     ByteLedger(const ByteLedger &) = delete;
     ByteLedger &operator=(const ByteLedger &) = delete;
 
-    [[nodiscard]] bool take(uint64_t bytes);
+    [[nodiscard]] virtual bool take(uint64_t bytes);
     void               give(uint64_t bytes);
 
     uint64_t cap() const;
@@ -23,6 +23,7 @@ protected:
     ~ByteLedger() = default;
 
     void set_cap(uint64_t cap);
+    void refuse();
 
 private:
     uint64_t cap_;

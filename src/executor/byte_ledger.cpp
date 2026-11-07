@@ -15,6 +15,12 @@ void ByteLedger::set_cap(uint64_t cap)
     __atomic_store_n(&cap_, cap, __ATOMIC_RELEASE);
 }
 
+void ByteLedger::refuse()
+{
+    AV_SCOPE("ByteLedger::refuse");
+    __atomic_fetch_add(&refusals_, 1u, __ATOMIC_RELAXED);
+}
+
 bool ByteLedger::take(uint64_t bytes)
 {
     AV_SCOPE("ByteLedger::take");

@@ -109,6 +109,18 @@ TEST(local_context_plane, starting_opens_the_domain_with_the_host_ram_the_capset
   CHECK_STATUS(fixture.plane().start(other_gpu, capset), Status::ok);
   CHECK_EQ(fixture.ops().last_host_ram_bytes(), 13ull << 30); }
 
+TEST(local_context_plane, starting_hands_the_executor_the_host_ram_floor_the_capset_carries)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  const std::uint8_t other_gpu[16] = {1u};
+  av::CapsetInfo capset(av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor),
+                        1u, 64u, 12u, 24u, 0u,
+                        av::GpuIdentity(0x1002u, 0x7550u, av::GpuIdentity::discrete_gpu, other_gpu, 1u << 30,
+                                        13ull << 30, "gpu"));
+  capset.floor_host_ram(7ull << 30);
+  CHECK_STATUS(fixture.plane().start(other_gpu, capset), Status::ok);
+  CHECK_EQ(fixture.ops().last_host_ram_floor_bytes(), 7ull << 30); }
+
 TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain)
 { Fixture fixture;
   AvHostMemory memory = {-1, 0u, 0u};
