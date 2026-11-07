@@ -35,14 +35,7 @@ public:
             unpin(pin, 0u);
             return Status::no_memory;
         }
-        bool         fresh = false;
-        const Status added = kept->add(typename Hold::Held{object, pin}, fresh);
-        if (fresh) {
-            object->AddRef();
-            return Status::ok;
-        }
-        unpin(pin, 0u);
-        return added;
+        return place(*kept, object, pin);
     }
 
     void submitted(uint64_t list, uint64_t mark)
@@ -86,19 +79,32 @@ public:
         return defer(Retired{object, mark});
     }
 
-    [[nodiscard]] Status inherit(const Object *holder, Object *object)
+    [[nodiscard]] Status inherit(const Object *holder, Object *object, Pin *pin)
     {
         AV_SCOPE("ObjectHolds::inherit");
         if (object == nullptr) return Status::invalid_parameter;
+        return inherit_from(holder, [&](auto sink) { sink(object, pin); });
+    }
+
+    template <typename Producer>
+    [[nodiscard]] Status inherit_from(const Object *holder, Producer produce)
+    {
+        AV_SCOPE("ObjectHolds::inherit_from");
         Status inherited = Status::ok;
         lists_.for_each([&](uint64_t, Hold *&kept) {
             if (inherited != Status::ok || !kept->holds(holder)) return;
-            bool         fresh = false;
-            const Status added = kept->add(typename Hold::Held{object, nullptr}, fresh);
-            if (fresh) object->AddRef();
-            inherited = added;
+            produce([&](Object *object, Pin *pin) {
+                if (inherited != Status::ok || object == nullptr) return;
+                inherited = place(*kept, object, repinned(pin));
+            });
         });
         return inherited;
+    }
+
+    void let_go_pin(Pin *pin, uint64_t mark)
+    {
+        AV_SCOPE("ObjectHolds::let_go_pin");
+        unpin(pin, mark);
     }
 
     void reap(uint64_t reached)
@@ -115,16 +121,28 @@ public:
     void release_all()
     {
         AV_SCOPE("ObjectHolds::release_all");
-        while (head_ < retired_.size()) {
-            Object *const due = retired_.at(retired_.size() - 1u).object_;
-            retired_.truncate(retired_.size() - 1u);
-            due->Release();
+        for (;;) {
+            if (head_ < retired_.size()) {
+                Object *const due = retired_.at(retired_.size() - 1u).object_;
+                retired_.truncate(retired_.size() - 1u);
+                due->Release();
+                continue;
+            }
+            const uint32_t slot = lists_.next_live(0u);
+            if (slot == KeyedSlots<uint64_t, Hold *>::no_slot) break;
+            Hold *const kept = *lists_.at(slot);
+            if (kept->size() == 0u) {
+                static_cast<void>(lists_.erase(lists_.key_at(slot)));
+                static_cast<void>(pool_.destroy(kept));
+                continue;
+            }
+            const typename Hold::Held held = kept->at(kept->size() - 1u);
+            kept->pop();
+            unpin(held.pin_, 0u);
+            held.object_->Release();
         }
         retired_.clear();
         head_ = 0u;
-        for (uint32_t slot = lists_.next_live(0u); slot != KeyedSlots<uint64_t, Hold *>::no_slot;
-             slot = lists_.next_live(0u))
-            static_cast<void>(release_list(lists_.key_at(slot), ~uint64_t{0}));
         lists_.clear();
         pool_.destroy_all();
     }
@@ -163,6 +181,25 @@ public:
         Hold *const *const found = lists_.find(list);
         if (found == nullptr) return;
         for (uint32_t index = 0u; index < (*found)->size(); index++) visit((*found)->at(index).object_);
+    }
+
+    template <typename Visitor>
+    void for_each_pinned(uint64_t list, Visitor visit) const
+    {
+        AV_SCOPE("ObjectHolds::for_each_pinned");
+        Hold *const *const found = lists_.find(list);
+        if (found == nullptr) return;
+        for (uint32_t index = 0u; index < (*found)->size(); index++)
+            visit((*found)->at(index).object_, (*found)->at(index).pin_);
+    }
+
+    [[nodiscard]] Pin *repinned(Pin *pin)
+    {
+        AV_SCOPE("ObjectHolds::repinned");
+        if constexpr (!__is_same(Pin, void)) {
+            if (pin != nullptr) pin->took_resource();
+        }
+        return pin;
     }
 
     uint32_t lists() const
@@ -216,6 +253,20 @@ private:
         for (uint32_t index = 0u; index < kept; index++) retired_.at(index) = retired_.at(head_ + index);
         retired_.truncate(kept);
         head_ = 0u;
+    }
+
+    Status place(Hold &kept, Object *object, Pin *pin)
+    {
+        AV_SCOPE("ObjectHolds::place");
+        bool         fresh = false;
+        const Status added = kept.add(typename Hold::Held{object, pin}, fresh);
+        if (fresh) {
+            object->AddRef();
+            return Status::ok;
+        }
+        if (added == Status::ok && kept.adopt_pin(object, pin)) return Status::ok;
+        unpin(pin, 0u);
+        return added;
     }
 
     Hold *list_for(uint64_t list)

@@ -325,7 +325,7 @@ bool D3d12Session::retain_slot(uint32_t list, const d3d12proto::DescriptorRef &r
 {
     AV_SCOPE("D3d12Session::retain_slot");
     IUnknown *const resource = descriptors_.resource_at(ref.heap, ref.index);
-    return resource == nullptr || retain(list, resource, nullptr);
+    return resource == nullptr || retain(list, resource, holds_.repinned(descriptors_.pin_at(ref.heap, ref.index)));
 }
 
 bool D3d12Session::retain_address(uint32_t list, uint64_t address)
@@ -350,7 +350,9 @@ bool D3d12Session::noted(const d3d12proto::DescriptorRef &at, uint32_t resource,
     AV_SCOPE("D3d12Session::noted");
     IUnknown *const viewed = resource == 0u ? nullptr : objects_.find(resource, D3dObjectKind::resource12);
     IUnknown *const counted = counter == 0u ? nullptr : objects_.find(counter, D3dObjectKind::resource12);
-    const Status    kept = descriptors_.note(at.heap, at.index, viewed, counted, progress_.marked(),
+    const D3d12DescriptorHolds::View view = {viewed, counted, viewed == nullptr ? nullptr : block_heaps_.pin(resource),
+                                             counted == nullptr ? nullptr : block_heaps_.pin(counter)};
+    const Status    kept = descriptors_.note(at.heap, at.index, view, progress_.marked(),
                                              [this]() { return progress_.reached(); });
     if (kept == Status::ok) return true;
     LogLine(lines_).text("descriptor ").number(at.index).text(" of heap ").number(at.heap)

@@ -1,12 +1,15 @@
+#include "executor/d3d/d3d12_block_heap.hpp"
 #include "executor/d3d/d3d12_descriptor_holds.hpp"
 #include "executor/d3d/d3d12_object_holds.hpp"
 #include "harness/executor/counted_object.hpp"
+#include "harness/executor/slice_store_rig.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 
 using av::CountedObject;
+using av::D3d12BlockHeap;
 using av::D3d12DescriptorHolds;
 using av::D3d12ObjectHolds;
 
@@ -25,7 +28,15 @@ struct Rig {
     av::Status note(std::uint32_t heap, std::uint32_t index, IUnknown *resource, IUnknown *counter,
                     std::uint64_t marked)
     {
-        return descriptors.note(heap, index, resource, counter, marked, [this]() { return reached; });
+        return descriptors.note(heap, index, D3d12DescriptorHolds::View{resource, counter, nullptr, nullptr}, marked,
+                                [this]() { return reached; });
+    }
+    av::Status note_pinned(std::uint32_t heap, std::uint32_t index, IUnknown *resource, D3d12BlockHeap *pin,
+                           std::uint64_t marked)
+    {
+        pin->took_resource();
+        return descriptors.note(heap, index, D3d12DescriptorHolds::View{resource, nullptr, pin, nullptr}, marked,
+                                [this]() { return reached; });
     }
 };
 
@@ -144,13 +155,13 @@ TEST(d3d12_object_holds, a_list_that_holds_a_holder_inherits_what_the_holder_nam
   CountedObject holder, extra, other_list_object;
   CHECK_STATUS(holds.hold(list_a, &holder, nullptr), av::Status::ok);
   CHECK_STATUS(holds.hold(12u, &other_list_object, nullptr), av::Status::ok);
-  CHECK_STATUS(holds.inherit(&holder, &extra), av::Status::ok);
+  CHECK_STATUS(holds.inherit(&holder, &extra, nullptr), av::Status::ok);
   CHECK(holds.holding(list_a, &extra));
   CHECK(!holds.holding(12u, &extra));
   CHECK_EQ(extra.references(), 2u);
-  CHECK_STATUS(holds.inherit(&holder, &extra), av::Status::ok);
+  CHECK_STATUS(holds.inherit(&holder, &extra, nullptr), av::Status::ok);
   CHECK_EQ(extra.references(), 2u);
-  CHECK_STATUS(holds.inherit(&holder, nullptr), av::Status::invalid_parameter);
+  CHECK_STATUS(holds.inherit(&holder, nullptr, nullptr), av::Status::invalid_parameter);
   holds.release_all(); }
 
 TEST(d3d12_descriptor_holds, the_resource_a_slot_names_can_be_asked_for)
@@ -162,3 +173,54 @@ TEST(d3d12_descriptor_holds, the_resource_a_slot_names_can_be_asked_for)
   CHECK(rig.descriptors.resource_at(heap_a, 3u) == nullptr);
   CHECK(rig.descriptors.resource_at(heap_b, 2u) == nullptr);
   rig.descriptors.release_all(); }
+
+TEST(d3d12_descriptor_holds, a_view_of_a_windowed_resource_pins_its_block_until_the_slot_is_overwritten_and_the_gpu_is_past)
+{ av::SliceStoreRig store;
+  D3d12BlockHeap block(*store.store(1u));
+  Rig rig;
+  CountedObject resource, other;
+  CHECK_STATUS(rig.note_pinned(heap_a, 0u, &resource, &block, 0u), av::Status::ok);
+  CHECK(!block.unreferenced());
+  CHECK(rig.descriptors.pin_at(heap_a, 0u) == &block);
+  CHECK(rig.descriptors.pin_at(heap_a, 1u) == nullptr);
+  CHECK_STATUS(rig.note(heap_a, 0u, &other, nullptr, 9u), av::Status::ok);
+  CHECK(block.unreferenced());
+  block.abandon(0u);
+  CHECK(!block.done(8u));
+  CHECK(block.done(9u));
+  CHECK(rig.descriptors.invariants_hold()); }
+
+TEST(d3d12_descriptor_holds, a_failed_note_gives_back_the_pin_it_was_handed)
+{ av::SliceStoreRig store;
+  D3d12BlockHeap block(*store.store(1u));
+  Rig rig;
+  CountedObject resource;
+  rig.platform.fail_allocation_at(1u);
+  CHECK_STATUS(rig.note_pinned(heap_a, 0u, &resource, &block, 0u), av::Status::no_memory);
+  CHECK(block.unreferenced()); }
+
+TEST(d3d12_descriptor_holds, a_copied_descriptor_pins_the_block_on_its_own_and_survives_the_source_being_cleared)
+{ av::SliceStoreRig store;
+  D3d12BlockHeap block(*store.store(1u));
+  Rig rig;
+  CountedObject resource;
+  CHECK_STATUS(rig.note_pinned(heap_a, 0u, &resource, &block, 0u), av::Status::ok);
+  CHECK_STATUS(rig.descriptors.copy(heap_b, 0u, heap_a, 0u, 1u, 0u, [&rig]() { return rig.reached; }), av::Status::ok);
+  CHECK(rig.descriptors.pin_at(heap_b, 0u) == &block);
+  CHECK_STATUS(rig.note(heap_a, 0u, nullptr, nullptr, 0u), av::Status::ok);
+  CHECK(!block.unreferenced());
+  CHECK_STATUS(rig.note(heap_b, 0u, nullptr, nullptr, 0u), av::Status::ok);
+  CHECK(block.unreferenced()); }
+
+TEST(d3d12_descriptor_holds, a_destroyed_heap_hands_a_list_holding_it_the_pins_of_its_windowed_resources)
+{ av::SliceStoreRig store;
+  D3d12BlockHeap block(*store.store(1u));
+  Rig rig;
+  CountedObject heap_object, resource;
+  CHECK_STATUS(rig.objects.hold(list_a, &heap_object, nullptr), av::Status::ok);
+  CHECK_STATUS(rig.note_pinned(heap_a, 0u, &resource, &block, 0u), av::Status::ok);
+  CHECK_STATUS(rig.descriptors.destroy_heap(heap_a, &heap_object, 0u, [&rig]() { return rig.reached; }), av::Status::ok);
+  CHECK(rig.objects.holding(list_a, &resource));
+  CHECK(!block.unreferenced());
+  CHECK_STATUS(rig.objects.release_list(list_a, 0u), av::Status::ok);
+  CHECK(block.unreferenced()); }

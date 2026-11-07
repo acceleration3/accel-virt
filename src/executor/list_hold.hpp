@@ -41,6 +41,19 @@ public:
         return appended;
     }
 
+    bool adopt_pin(const Object *object, Pin *pin)
+    {
+        AV_SCOPE("ListHold::adopt_pin");
+        if (pin == nullptr) return false;
+        for (uint32_t index = 0u; index < held_.size(); index++) {
+            if (held_.at(index).object_ != object) continue;
+            if (held_.at(index).pin_ != nullptr) return false;
+            held_.at(index).pin_ = pin;
+            return true;
+        }
+        return false;
+    }
+
     void submitted(uint64_t mark)
     {
         AV_SCOPE("ListHold::submitted");

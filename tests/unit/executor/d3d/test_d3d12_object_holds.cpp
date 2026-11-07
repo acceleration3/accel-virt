@@ -291,3 +291,63 @@ TEST(d3d12_object_holds, a_long_queue_of_retired_objects_is_reaped_a_run_at_a_ti
   objects[0].AddRef();
   holds.reap(100u);
   CHECK_EQ(holds.retired(), 0u); }
+
+TEST(d3d12_object_holds, a_slot_held_without_a_pin_takes_the_pin_of_a_later_hold_of_the_same_object)
+{ av::SliceStoreRig rig;
+  D3d12BlockHeap block(*rig.store(1u));
+  D3d12ObjectHolds holds(rig.platform());
+  CountedObject target;
+  CHECK_STATUS(holds.hold(list_a, &target, nullptr), av::Status::ok);
+  block.took_resource();
+  CHECK_STATUS(holds.hold(list_a, &target, &block), av::Status::ok);
+  CHECK_EQ(target.references(), 2u);
+  CHECK(!block.unreferenced());
+  CHECK_STATUS(holds.release_list(list_a, 0u), av::Status::ok);
+  CHECK(block.unreferenced());
+  CHECK_EQ(target.references(), 1u); }
+
+TEST(d3d12_object_holds, a_pinned_hold_is_not_replaced_by_a_second_pin)
+{ av::SliceStoreRig rig;
+  D3d12BlockHeap block(*rig.store(1u));
+  D3d12BlockHeap other(*rig.store(2u));
+  D3d12ObjectHolds holds(rig.platform());
+  CountedObject target;
+  block.took_resource();
+  CHECK_STATUS(holds.hold(list_a, &target, &block), av::Status::ok);
+  other.took_resource();
+  CHECK_STATUS(holds.hold(list_a, &target, &other), av::Status::ok);
+  CHECK(other.unreferenced());
+  CHECK(!block.unreferenced());
+  CHECK_STATUS(holds.release_list(list_a, 0u), av::Status::ok);
+  CHECK(block.unreferenced()); }
+
+TEST(d3d12_object_holds, an_inherited_hold_takes_its_own_pin_in_every_list_that_holds_the_holder)
+{ av::SliceStoreRig rig;
+  D3d12BlockHeap block(*rig.store(1u));
+  D3d12ObjectHolds holds(rig.platform());
+  CountedObject holder, inherited;
+  CHECK_STATUS(holds.hold(list_a, &holder, nullptr), av::Status::ok);
+  CHECK_STATUS(holds.hold(list_b, &holder, nullptr), av::Status::ok);
+  block.took_resource();
+  CHECK_STATUS(holds.inherit(&holder, &inherited, &block), av::Status::ok);
+  CHECK_STATUS(holds.release_list(list_a, 0u), av::Status::ok);
+  CHECK(!block.unreferenced());
+  CHECK_STATUS(holds.release_list(list_b, 0u), av::Status::ok);
+  block.let_go_resource(0u);
+  CHECK(block.unreferenced()); }
+
+TEST(d3d12_object_holds, letting_everything_go_finishes_objects_whose_release_defers_more)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  CountedObject first, second;
+  CHECK_STATUS(holds.hold(list_a, &first, nullptr), av::Status::ok);
+  CHECK_STATUS(holds.hold(list_b, &second, nullptr), av::Status::ok);
+  holds.submitted(list_a, 4u);
+  CHECK_STATUS(holds.release_list(list_a, 1u), av::Status::ok);
+  CHECK_EQ(holds.retired(), 1u);
+  holds.release_all();
+  CHECK_EQ(first.references(), 1u);
+  CHECK_EQ(second.references(), 1u);
+  CHECK_EQ(holds.retired(), 0u);
+  CHECK_EQ(holds.lists(), 0u);
+  CHECK(holds.invariants_hold()); }

@@ -97,7 +97,7 @@ bool D3d12Session::on_UpdateTileMappings12(uint32_t queue, uint32_t resource, ui
     if (!follow_queue(queue, on, tiled, in)) return false;
     if (in == nullptr) return true;
     holds_.submitted(resource, progress_.marked());
-    if (holds_.hold(resource, in, nullptr) != Status::ok || holds_.inherit(tiled, in) != Status::ok) return false;
+    if (holds_.hold(resource, in, nullptr) != Status::ok || holds_.inherit(tiled, in, nullptr) != Status::ok) return false;
     return true;
 }
 
@@ -120,8 +120,9 @@ bool D3d12Session::on_CopyTileMappings12(uint32_t queue, uint32_t destination,
     if (!follow_queue(queue, on, to, from)) return false;
     bool mapped = true;
     holds_.submitted(destination, progress_.marked());
-    holds_.for_each_held(source, [&](IUnknown *heap) {
-        mapped = holds_.hold(destination, heap, nullptr) == Status::ok && holds_.inherit(to, heap) == Status::ok && mapped;
+    holds_.for_each_pinned(source, [&](IUnknown *heap, D3d12BlockHeap *pin) {
+        mapped = holds_.hold(destination, heap, holds_.repinned(pin)) == Status::ok &&
+                 holds_.inherit(to, heap, pin) == Status::ok && mapped;
     });
     return mapped;
 }
