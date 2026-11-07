@@ -446,6 +446,12 @@ TEST(vulkan_guard, a_descriptor_set_written_with_an_acceleration_structure_keeps
   CHECK(rig.guard.release(set, device));
   CHECK(rig.destroyer.destroyed(structure)); }
 
+TEST(vulkan_guard, releasing_a_device_the_guard_never_tracked_still_says_whether_it_was_idle)
+{ Rig rig;
+  CHECK(rig.guard.release_all(other_device));
+  rig.progress.timeout = true;
+  CHECK(!rig.guard.release_all(other_device)); }
+
 TEST(vulkan_guard, only_the_handles_a_descriptor_type_reads_are_kept)
 { Rig rig;
   VkDescriptorImageInfo images[1] = {};

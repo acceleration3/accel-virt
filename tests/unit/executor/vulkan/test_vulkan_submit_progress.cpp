@@ -316,6 +316,16 @@ TEST(vulkan_submit_progress, waiting_for_a_device_succeeds_only_when_every_fence
   CHECK(!rig.progress.wait_idle(other_device));
   CHECK_EQ(rig.progress.reached(other_device), 2u); }
 
+TEST(vulkan_submit_progress, a_wait_that_finds_the_device_lost_while_retrying_a_fence_is_not_idle_even_if_the_device_then_answers_idle)
+{ Rig rig;
+  driver.submit_fails = true;
+  CHECK_EQ(rig.submit(), 1u);
+  driver.submit_fails = false;
+  driver.submit_lost = true;
+  CHECK(!rig.progress.wait_idle(device));
+  CHECK(rig.progress.lost());
+  CHECK_EQ(rig.progress.reached(device), 0u); }
+
 TEST(vulkan_submit_progress, a_lost_device_s_work_never_counts_as_done_for_the_waits_the_polls_or_the_drain)
 { Rig rig;
   CHECK_EQ(rig.submit(), 1u);
