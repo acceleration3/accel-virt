@@ -5,6 +5,7 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d9_lanes.hpp"
 #include "executor/d3d/d3d9_flip_shares.hpp"
+#include "executor/d3d/d3d9_refused_queries.hpp"
 #include "executor/d3d/d3d9_slices.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
@@ -32,6 +33,8 @@ class WatchedBlocks;
 class WireArena;
 class WireReader;
 class WireWriter;
+
+struct D3d9SessionProbe;
 
 class D3d9Session final : public d3d9proto::ServerDispatch {
 public:
@@ -120,7 +123,7 @@ public:
     bool on_DrawPrimitive9(uint32_t type, uint32_t start_vertex, uint32_t primitive_count) override;
     bool on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, uint32_t min_index, uint32_t vertex_count,
                                   uint32_t start_index, uint32_t primitive_count) override;
-    bool on_CreateQuery9(uint32_t query, uint32_t type, uint32_t &hresult) override;
+    bool on_CreateQuery9(uint32_t query, uint32_t type) override;
     bool on_IssueQuery9(uint32_t query, uint32_t flags) override;
     bool on_GetQueryData9(uint32_t query, uint32_t flags, uint32_t &hresult, uint8_t *data, uint64_t data_capacity,
                           uint64_t &data_size) override;
@@ -131,6 +134,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d9SessionProbe;
+
     IDirect3DDevice9 *device() const;
     IUnknown *owned(uint32_t id, D3dObjectKind kind) const;
     IDirect3DResource9 *buffer_object(uint32_t id) const;
@@ -160,6 +165,7 @@ private:
     WireArena      *arena_;
     D3d9Lanes       lanes_;
     D3d9Slices      slices_;
+    D3d9RefusedQueries refused_;
     bool            lost_;
 };
 

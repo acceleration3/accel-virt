@@ -351,10 +351,9 @@ params = ["u32 type", "i32 base_vertex", "u32 min_index", "u32 vertex_count", "u
 [[command]]
 name = "CreateQuery9"
 id = 0x2600
-doc = """A query of D3DQUERYTYPE `type`. hresult is the device's answer: D3DERR_NOTAVAILABLE when the host has no such
-query, and the device stays."""
+doc = """A query of D3DQUERYTYPE `type`. No answer: a host with no such query keeps the failure against the id and
+GetQueryData9 answers it as D3DERR_NOTAVAILABLE, and the device stays."""
 params = ["u32 query", "u32 type"]
-reply = ["u32 hresult"]
 
 [[command]]
 name = "IssueQuery9"

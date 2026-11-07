@@ -76,7 +76,7 @@ public:
     virtual bool on_SetClipPlane9(uint32_t index, uint32_t value_count, const float* plane) = 0;
     virtual bool on_DrawPrimitive9(uint32_t type, uint32_t start_vertex, uint32_t primitive_count) = 0;
     virtual bool on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, uint32_t min_index, uint32_t vertex_count, uint32_t start_index, uint32_t primitive_count) = 0;
-    virtual bool on_CreateQuery9(uint32_t query, uint32_t type, uint32_t& hresult) = 0;
+    virtual bool on_CreateQuery9(uint32_t query, uint32_t type) = 0;
     virtual bool on_IssueQuery9(uint32_t query, uint32_t flags) = 0;
     virtual bool on_GetQueryData9(uint32_t query, uint32_t flags, uint32_t& hresult, uint8_t* data, uint64_t data_capacity, uint64_t& data_size) = 0;
     virtual bool on_SetRenderTarget9(uint32_t index, uint32_t surface, uint32_t subresource) = 0;

@@ -567,15 +567,9 @@ HRESULT D3d9Device::create_query(D3DDDIARG_CREATEQUERY *args)
     if (queries_.create(made) != Status::ok) return E_OUTOFMEMORY;
     const bool local = args->QueryType == D3DDDIQUERYTYPE_VCACHE;
     *made = D3d9Query{local ? 0u : next_id(), args->QueryType, query_bytes(args->QueryType), local};
-    uint32_t hresult = S_OK;
-    if (!local && !d3d9proto::av_d3d9_CreateQuery9(wire(), made->id, static_cast<uint32_t>(args->QueryType),
-                                                   &hresult)) {
+    if (!local && !d3d9proto::av_d3d9_CreateQuery9(wire(), made->id, static_cast<uint32_t>(args->QueryType))) {
         static_cast<void>(queries_.destroy(made));
         return lost(__func__);
-    }
-    if (hresult != S_OK) {
-        static_cast<void>(queries_.destroy(made));
-        return static_cast<HRESULT>(hresult);
     }
     args->hQuery = made;
     return S_OK;

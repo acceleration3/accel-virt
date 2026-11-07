@@ -896,10 +896,8 @@ static bool decode_CreateQuery9(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     if (!r.read_pod(query)) return false;
     uint32_t type{};
     if (!r.read_pod(type)) return false;
-    uint32_t hresult{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateQuery9(query, type, hresult)) return false;
-    reply.write_pod(hresult);
+    if (!s.on_CreateQuery9(query, type)) return false;
     return true;
 }
 

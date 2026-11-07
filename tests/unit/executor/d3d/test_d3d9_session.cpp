@@ -25,6 +25,14 @@ using namespace av::d3d9proto;
 
 namespace av {
 
+struct D3d9SessionProbe {
+    static bool refuse(D3d9Session &session, std::uint32_t query, std::uint32_t hresult)
+    {
+        return session.refused_.note(query, hresult);
+    }
+    static std::uint32_t refused(const D3d9Session &session) { return session.refused_.count(); }
+};
+
 struct WatchedBlocksProbe {
     static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
 };
@@ -194,9 +202,7 @@ TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
     CHECK(!session.on_SetClipPlane9(0u, 4u, values));
     CHECK(!session.on_DrawPrimitive9(4u, 0u, 1u));
     CHECK(!session.on_DrawIndexedPrimitive9(4u, 0, 0u, 3u, 0u, 1u));
-    std::uint32_t query_hresult = 0u;
-    CHECK(!session.on_CreateQuery9(1u, 8u, query_hresult));
-    CHECK_EQ(query_hresult, static_cast<std::uint32_t>(D3DERR_INVALIDCALL));
+    CHECK(!session.on_CreateQuery9(1u, 8u));
     CHECK(!session.on_IssueQuery9(nobody, 1u));
     CHECK(!session.on_SetRenderTarget9(0u, nobody, 0u));
     CHECK(!session.on_Clear9(0u, nullptr, 1u, 0u, 1.0f, 0u));
@@ -295,4 +301,55 @@ TEST(d3d9_session_slices, discarding_a_slice_no_lane_holds_changes_nothing)
     bound.bytes_ = sizeof bytes;
     session.discard_slice(bound);
     CHECK(session.invariants_hold());
+}
+
+TEST(d3d9_session_queries, a_query_the_host_refused_to_create_answers_its_failure_when_asked_and_does_not_remove_the_device)
+{
+    FreshSession fresh;
+    D3d9Session &session = fresh.session();
+    CHECK(av::D3d9SessionProbe::refuse(session, 40u, not_available));
+    std::uint32_t hresult = 0u;
+    std::uint8_t  data[16] = {1u};
+    std::uint64_t size = 9u;
+    CHECK(session.on_GetQueryData9(40u, 1u, hresult, data, sizeof data, size));
+    CHECK_EQ(hresult, not_available);
+    CHECK_EQ(size, 0u);
+    CHECK(session.on_GetQueryData9(40u, 1u, hresult, data, sizeof data, size));
+    CHECK_EQ(hresult, not_available);
+    CHECK(session.invariants_hold());
+}
+
+TEST(d3d9_session_queries, issuing_a_refused_query_is_ignored_and_a_bad_issue_flag_still_removes_the_device)
+{
+    FreshSession fresh;
+    D3d9Session &session = fresh.session();
+    CHECK(av::D3d9SessionProbe::refuse(session, 40u, not_available));
+    CHECK(session.on_IssueQuery9(40u, 1u));
+    CHECK(session.on_IssueQuery9(40u, 2u));
+    CHECK(!session.on_IssueQuery9(40u, 7u));
+    CHECK(!session.on_IssueQuery9(41u, 1u));
+}
+
+TEST(d3d9_session_queries, destroying_a_refused_query_forgets_it_and_a_second_destroy_is_refused)
+{
+    FreshSession fresh;
+    D3d9Session &session = fresh.session();
+    CHECK(av::D3d9SessionProbe::refuse(session, 40u, not_available));
+    CHECK(session.on_Destroy9(40u));
+    CHECK_EQ(av::D3d9SessionProbe::refused(session), 0u);
+    CHECK(!session.on_Destroy9(40u));
+    std::uint32_t hresult = 0u;
+    std::uint8_t  data[16] = {};
+    std::uint64_t size = 0u;
+    CHECK(session.on_GetQueryData9(40u, 1u, hresult, data, sizeof data, size));
+    CHECK_EQ(hresult, invalid_call);
+}
+
+TEST(d3d9_session_queries, a_session_that_shuts_down_forgets_the_refused_queries)
+{
+    FreshSession fresh;
+    D3d9Session &session = fresh.session();
+    CHECK(av::D3d9SessionProbe::refuse(session, 40u, not_available));
+    session.shut_down();
+    CHECK_EQ(av::D3d9SessionProbe::refused(session), 0u);
 }

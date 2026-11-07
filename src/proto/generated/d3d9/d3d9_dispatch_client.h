@@ -136,9 +136,9 @@ namespace av::d3d9proto {
 // type is a D3DPRIMITIVETYPE.
 [[nodiscard]] bool av_d3d9_DrawPrimitive9(::av::ClientTransport& t, uint32_t type, uint32_t start_vertex, uint32_t primitive_count);
 [[nodiscard]] bool av_d3d9_DrawIndexedPrimitive9(::av::ClientTransport& t, uint32_t type, int32_t base_vertex, uint32_t min_index, uint32_t vertex_count, uint32_t start_index, uint32_t primitive_count);
-// A query of D3DQUERYTYPE `type`. hresult is the device's answer: D3DERR_NOTAVAILABLE when the host has no such
-// query, and the device stays.
-[[nodiscard]] bool av_d3d9_CreateQuery9(::av::ClientTransport& t, uint32_t query, uint32_t type, uint32_t* hresult);
+// A query of D3DQUERYTYPE `type`. No answer: a host with no such query keeps the failure against the id and
+// GetQueryData9 answers it as D3DERR_NOTAVAILABLE, and the device stays.
+[[nodiscard]] bool av_d3d9_CreateQuery9(::av::ClientTransport& t, uint32_t query, uint32_t type);
 // D3DISSUE_BEGIN (2) or D3DISSUE_END (1).
 [[nodiscard]] bool av_d3d9_IssueQuery9(::av::ClientTransport& t, uint32_t query, uint32_t flags);
 // IDirect3DQuery9::GetData: hresult S_OK with the data, S_FALSE (1) while it is not there yet. flags

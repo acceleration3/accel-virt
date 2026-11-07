@@ -17,7 +17,7 @@ D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, Watch
                          SliceStorages &storages, EventfdWake &wake, DriverLog &lines)
     : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
       devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), lanes_(blocks, wake, lines_), slices_(blocks, storages, lanes_, lines_),
-      lost_(false)
+      refused_(blocks), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -45,6 +45,7 @@ void D3d9Session::shut_down()
     slices_.shut_down();
     flips_.release();
     objects_.remove_kinds(D3dObjectKind::surface9, D3dObjectKind::query9);
+    refused_.clear();
     for (IDirect3DDevice9 *device = devices_.remove_any(); device != nullptr; device = devices_.remove_any())
         device->Release();
     host_ = nullptr;
@@ -154,6 +155,7 @@ bool D3d9Session::on_Destroy9(uint32_t object)
         device->Release();
         return true;
     }
+    if (refused_.forget(object)) return true;
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(object, kind) == nullptr || kind < D3dObjectKind::surface9) return false;
     objects_.remove(object);

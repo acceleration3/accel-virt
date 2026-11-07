@@ -334,24 +334,21 @@ bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, u
                                                               primitive_count));
 }
 
-bool D3d9Session::on_CreateQuery9(uint32_t query, uint32_t type, uint32_t &hresult)
+bool D3d9Session::on_CreateQuery9(uint32_t query, uint32_t type)
 {
     AV_SCOPE("D3d9Session::on_CreateQuery9");
-    hresult = static_cast<uint32_t>(D3DERR_INVALIDCALL);
     if (device() == nullptr) return false;
     IDirect3DQuery9 *made = nullptr;
     const HRESULT created = device()->CreateQuery(static_cast<D3DQUERYTYPE>(type), &made);
-    if (FAILED(created)) {
-        hresult = static_cast<uint32_t>(created);
-        return true;
-    }
-    hresult = S_OK;
+    if (FAILED(created)) return refused_.note(query, static_cast<uint32_t>(created));
     return keep(query, D3dObjectKind::query9, made);
 }
 
 bool D3d9Session::on_IssueQuery9(uint32_t query, uint32_t flags)
 {
     AV_SCOPE("D3d9Session::on_IssueQuery9");
+    uint32_t refused = 0u;
+    if (refused_.answer(query, refused)) return flags == D3DISSUE_BEGIN || flags == D3DISSUE_END;
     auto *const issued = mine<IDirect3DQuery9>(query, D3dObjectKind::query9);
     if (issued == nullptr || (flags != D3DISSUE_BEGIN && flags != D3DISSUE_END)) return false;
     return SUCCEEDED(issued->Issue(flags));
@@ -363,6 +360,7 @@ bool D3d9Session::on_GetQueryData9(uint32_t query, uint32_t flags, uint32_t &hre
     AV_SCOPE("D3d9Session::on_GetQueryData9");
     data_size = 0u;
     hresult = static_cast<uint32_t>(D3DERR_INVALIDCALL);
+    if (refused_.answer(query, hresult)) return true;
     auto *const asked = mine<IDirect3DQuery9>(query, D3dObjectKind::query9);
     if (asked == nullptr) return true;
     const DWORD size = asked->GetDataSize();
