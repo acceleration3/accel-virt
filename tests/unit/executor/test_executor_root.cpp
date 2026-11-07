@@ -1215,10 +1215,13 @@ TEST(executor_root_concurrency, a_failed_close_and_every_failed_reap_let_the_bac
   for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) CHECK(wedged.backend(slot).let_goes() >= 1u);
   std::uint32_t before = 0u;
   for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) before += wedged.backend(slot).let_goes();
-  opened.root().retry_wedged();
-  std::uint32_t after = 0u;
-  for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) after += wedged.backend(slot).let_goes();
-  CHECK(after >= before);
+  std::uint32_t after = before;
+  for (std::uint32_t looks = 0u; looks < 100u && after <= before; looks++) {
+      nap_for(50);
+      after = 0u;
+      for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) after += wedged.backend(slot).let_goes();
+  }
+  CHECK(after > before);
   wedged.finish_in_time();
   for (std::uint32_t looks = 0u; looks < 100u && opened.root().wedged() != 0u; looks++) nap_for(50);
   CHECK_EQ(opened.root().wedged(), 0u);
@@ -1268,3 +1271,17 @@ TEST(executor_root_concurrency, the_watcher_stops_at_exit_and_never_reaps_after_
   wedged.finish_in_time();
   nap_for(700);
   CHECK_EQ(opened.root().wedged(), wedged_slots); }
+
+TEST(executor_root_open, an_opengl_context_that_fails_after_its_group_was_reserved_gives_the_group_back)
+{ MockHostApis apis;
+  apis.add_gpu(absent, AV_EXECUTOR_SUB_API_OPENGL);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  ExecutorRootProbe probe(root);
+  const std::uint32_t domain = held.domain_of(absent);
+  CHECK(domain != 0u);
+  CHECK(held.open(AV_EXECUTOR_SUB_API_OPENGL, absent) == nullptr);
+  for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
+  CHECK_EQ(root.live(), 0u);
+  CHECK(root.invariants_hold()); }
