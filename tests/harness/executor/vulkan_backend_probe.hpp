@@ -25,6 +25,8 @@ struct VulkanBackendProbe {
     const GuestMemoryTypes &types() const;
     void                    show_types(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed);
     bool                    memory_import() const;
+    void                    begin_frame(bool recording);
+    VulkanGuard            &guard();
 
     VulkanBackend &backend;
 };

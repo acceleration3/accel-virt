@@ -44,25 +44,30 @@ private:
     uint64_t key_of(uint32_t index) const;
 
     template <typename Reached>
-    [[nodiscard]] Status let_go(const View &view, uint64_t marked, Reached reached);
+    [[nodiscard]] Status let_go(View &view, uint64_t marked, Reached reached);
 
     D3d12ObjectHolds &holds_;
     Tables            tables_;
 };
 
 template <typename Reached>
-Status D3d12DescriptorHolds::let_go(const View &view, uint64_t marked, Reached reached)
+Status D3d12DescriptorHolds::let_go(View &view, uint64_t marked, Reached reached)
 {
     AV_SCOPE("D3d12DescriptorHolds::let_go");
     Status let = Status::ok;
-    IUnknown *const       named[2] = {view.first_, view.second_};
-    D3d12BlockHeap *const pins[2] = {view.first_pin_, view.second_pin_};
-    for (uint32_t which = 0u; which < 2u; which++) {
-        holds_.let_go_pin(pins[which], marked);
-        if (named[which] == nullptr) continue;
-        const Status retired = holds_.retire(named[which], marked, marked == 0u ? 0u : reached());
-        if (retired != Status::ok) let = retired;
-    }
+    auto   let_one = [&](IUnknown *&object, D3d12BlockHeap *&pin) {
+        if (object == nullptr) return;
+        const Status retired = holds_.retire(object, marked, marked == 0u ? 0u : reached());
+        if (retired != Status::ok) {
+            let = retired;
+            return;
+        }
+        holds_.let_go_pin(pin, marked);
+        object = nullptr;
+        pin = nullptr;
+    };
+    let_one(view.first_, view.first_pin_);
+    let_one(view.second_, view.second_pin_);
     return let;
 }
 
@@ -106,7 +111,7 @@ Status D3d12DescriptorHolds::destroy_heap(uint32_t heap, const IUnknown *object,
             sink(view.second_, view.second_pin_);
         });
     });
-    const Status released = tables_.release(heap, [&](const View &view, uint64_t) { return let_go(view, marked, reached); });
+    const Status released = tables_.release(heap, [&](View &view, uint64_t) { return let_go(view, marked, reached); });
     return gone != Status::ok ? gone : released;
 }
 

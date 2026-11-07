@@ -123,7 +123,8 @@ bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t
     const VulkanObjectKind judged = object_kind(kind);
     const bool named = judged == VulkanObjectKind::other ? knows_handle(wire) : knows_handle(wire, judged);
     if (!named) return false;
-    if (!guard_.reference(kind, wire, handles_.parent_of(wire))) return false;
+    const uint64_t device = kind == vkproto::HandleKind::command_buffer ? owning_device(wire) : 0u;
+    if (!guard_.reference(kind, wire, handles_.parent_of(wire), device)) return false;
     handle = wire;
     return true;
 }
@@ -558,15 +559,20 @@ VkResult VulkanBackend::on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, co
                                          VkFence fence)
 {
     AV_SCOPE("VulkanBackend::on_vkQueueSubmit");
-    if (timing_.enabled()) return submitted(timing_.submit(queue, submitCount, pSubmits, fence), queue, pSubmits, submitCount);
-    return submitted(RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence), queue, pSubmits,
-                     submitCount);
+    const uint64_t device = handles_.parent_of(reinterpret_cast<uint64_t>(queue));
+    const uint64_t mark = guard_.reserve(device);
+    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const VkResult result = timing_.enabled() ? timing_.submit(queue, submitCount, pSubmits, fence)
+                                              : RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence);
+    if (result != VK_SUCCESS) guard_.cancel(mark);
+    else guard_.submitted(mark, device, reinterpret_cast<uint64_t>(queue), pSubmits, submitCount);
+    return result;
 }
 
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
-    guard_.release_all();
+    guard_.release_all(reinterpret_cast<uint64_t>(device));
     progress_.forget(device);
     timing_.forget(device);
     GuestDevice *const ending = device_of(reinterpret_cast<uint64_t>(device));
@@ -587,7 +593,7 @@ void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, cons
         guard_.destroy(VulkanDestroyKind::memory, reinterpret_cast<uint64_t>(device), 0u, handle);
         return;
     }
-    abandon(*imported, handle);
+    guard_.destroy(VulkanDestroyKind::imported_memory, reinterpret_cast<uint64_t>(device), 0u, handle);
     imports_->unname(handle);
 }
 

@@ -18,12 +18,19 @@ public:
     void AddRef();
     void Release();
     void request(VulkanDestroyKind kind, uint64_t device, uint64_t parent);
+    void link(VulkanNode *pool);
+    void unlink();
+    void orphan();
+    VulkanNode *next_child();
 
     uint64_t          handle() const;
     uint64_t          device() const;
     uint64_t          parent() const;
     VulkanDestroyKind kind() const;
     uint32_t          references() const;
+    VulkanNode       *pool() const;
+    VulkanNode       *first_child() const;
+    bool              orphaned() const;
 
     bool invariants_hold() const;
 
@@ -34,6 +41,11 @@ private:
     uint64_t          parent_;
     uint32_t          references_;
     VulkanDestroyKind kind_;
+    bool              orphaned_;
+    VulkanNode       *pool_;
+    VulkanNode       *first_child_;
+    VulkanNode       *next_;
+    VulkanNode       *previous_;
 };
 
 }

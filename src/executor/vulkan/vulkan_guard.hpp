@@ -1,6 +1,8 @@
 #ifndef AV_VULKAN_GUARD_HPP
 #define AV_VULKAN_GUARD_HPP
 
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "executor/vulkan/vulkan_destroy_kind.hpp"
 #include "executor/vulkan/vulkan_lifetimes.hpp"
@@ -23,32 +25,48 @@ public:
     VulkanGuard &operator=(const VulkanGuard &) = delete;
 
     void               begin_frame(bool recording);
-    [[nodiscard]] bool reference(vkproto::HandleKind kind, uint64_t wire, uint64_t parent);
+    [[nodiscard]] bool reference(vkproto::HandleKind kind, uint64_t wire, uint64_t parent, uint64_t device);
     void               reap();
-    void               release_all();
+    void               release_all(uint64_t device);
 
-    [[nodiscard]] bool release(uint64_t owner);
+    [[nodiscard]] bool release(uint64_t owner, uint64_t device);
+    void               orphan_children(uint64_t pool, uint64_t device);
     void               destroy(VulkanDestroyKind kind, uint64_t device, uint64_t parent, uint64_t handle);
     [[nodiscard]] bool depends(uint64_t owner, uint64_t handle, uint64_t device);
     [[nodiscard]] bool written(const VkWriteDescriptorSet *writes, uint32_t count, uint64_t device);
-    [[nodiscard]] bool copied(const VkCopyDescriptorSet *copies, uint32_t count);
-    [[nodiscard]] bool submitted(uint64_t device, uint64_t queue, const VkSubmitInfo *submits, uint32_t count);
-    [[nodiscard]] bool submitted(uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits, uint32_t count);
-    void               await_reset(uint64_t owner);
+    [[nodiscard]] bool bound(uint64_t set, uint32_t binding, uint32_t element, uint64_t first, uint64_t second,
+                             uint64_t device);
+    [[nodiscard]] bool copied(const VkCopyDescriptorSet *copies, uint32_t count, uint64_t device);
+    [[nodiscard]] uint64_t reserve(uint64_t device);
+    void                   cancel(uint64_t mark);
+    void                   submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo *submits,
+                                     uint32_t count);
+    void                   submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits,
+                                     uint32_t count);
+    [[nodiscard]] bool await_reset(uint64_t owner, uint64_t device);
+    [[nodiscard]] bool quiesce(uint64_t device);
 
     bool holding(uint64_t owner, uint64_t handle) const;
     bool tracked(uint64_t handle) const;
+    bool linked(uint64_t handle, uint64_t pool) const;
+    bool described(uint64_t set, uint32_t binding, uint32_t element, uint64_t handle) const;
+    uint32_t devices() const;
 
     bool invariants_hold() const;
 
 private:
     [[nodiscard]] bool hold(uint64_t owner, uint64_t handle, uint64_t device, uint64_t pool);
-    [[nodiscard]] bool mark_all(uint64_t device, uint64_t queue, const uint64_t *buffers, uint32_t count);
+    VulkanLifetimes   *lifetimes_of(uint64_t device) const;
+    VulkanLifetimes   *lifetimes_for(uint64_t device);
 
-    VulkanProgress  &progress_;
-    VulkanLifetimes  lifetimes_;
-    uint64_t         owner_;
-    bool             recording_;
+    BlockSource                       &blocks_;
+    VulkanDestroyer                   &destroyer_;
+    VulkanProgress                    &progress_;
+    ObjectPool<VulkanLifetimes>        pool_;
+    KeyedSlots<uint64_t, VulkanLifetimes *> devices_;
+    uint64_t                           owner_;
+    uint64_t                           owner_device_;
+    bool                               recording_;
 };
 
 }

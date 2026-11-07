@@ -199,7 +199,7 @@ TEST(vulkan_lifetimes, letting_everything_go_finishes_the_destroys_the_guest_ask
 { Rig rig;
   CHECK_STATUS(rig.hold(list, buffer), av::Status::ok);
   CHECK_STATUS(rig.destroy(VulkanDestroyKind::image, image, 4u, 0u), av::Status::ok);
-  rig.lifetimes.release_all();
+  rig.lifetimes.release_all(true);
   CHECK(rig.destroyer.destroyed(image));
   CHECK(!rig.destroyer.destroyed(buffer));
   CHECK_EQ(rig.lifetimes.nodes(), 0u);
@@ -218,3 +218,110 @@ TEST(vulkan_lifetimes, a_set_updated_after_a_command_buffer_that_binds_it_was_su
   CHECK(!rig.destroyer.destroyed(view));
   rig.lifetimes.reap(9u);
   CHECK(rig.destroyer.destroyed(view)); }
+
+TEST(vulkan_lifetimes, letting_everything_go_after_work_that_defers_more_leaves_no_retired_entry_behind)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(view, image), av::Status::ok);
+  CHECK_STATUS(rig.hold(list, view), av::Status::ok);
+  rig.lifetimes.submitted(list, 9u);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::image_view, view, 9u, 0u), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::image, image, 9u, 0u), av::Status::ok);
+  CHECK_EQ(rig.destroyer.count, 0u);
+  rig.lifetimes.release_all(true);
+  CHECK(rig.destroyer.destroyed(view));
+  CHECK(rig.destroyer.destroyed(image));
+  CHECK_EQ(rig.destroyer.count, 2u);
+  CHECK_EQ(rig.lifetimes.retired(), 0u);
+  CHECK_EQ(rig.lifetimes.nodes(), 0u);
+  rig.lifetimes.reap(100u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, letting_everything_go_while_the_gpu_may_still_work_destroys_nothing)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(list, buffer), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::image, image, 4u, 0u), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::buffer, buffer, 4u, 0u), av::Status::ok);
+  rig.lifetimes.release_all(false);
+  CHECK_EQ(rig.destroyer.count, 0u);
+  CHECK_EQ(rig.lifetimes.nodes(), 0u);
+  CHECK_EQ(rig.lifetimes.retired(), 0u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, a_child_orphaned_by_a_pool_reset_is_never_freed_and_lets_go_of_its_pool)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(list, set, pool), av::Status::ok);
+  CHECK(rig.lifetimes.linked(set, pool));
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::descriptor_set, set, 0u, 0u, pool), av::Status::ok);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::descriptor_pool, pool, 0u, 0u), av::Status::ok);
+  CHECK(!rig.destroyer.destroyed(pool));
+  rig.lifetimes.orphan_children(pool);
+  CHECK(!rig.lifetimes.tracked(set));
+  CHECK(rig.destroyer.destroyed(pool));
+  CHECK_STATUS(rig.lifetimes.release(list, 0u), av::Status::ok);
+  CHECK(!rig.destroyer.destroyed(set));
+  CHECK_EQ(rig.destroyer.count, 1u);
+  CHECK_EQ(rig.lifetimes.nodes(), 0u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, an_alive_child_orphaned_by_a_pool_reset_goes_when_its_last_hold_does)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(list, set, pool), av::Status::ok);
+  rig.lifetimes.orphan_children(pool);
+  CHECK(!rig.lifetimes.tracked(set));
+  CHECK_STATUS(rig.hold(other_list, set, pool), av::Status::ok);
+  CHECK(rig.lifetimes.tracked(set));
+  CHECK_STATUS(rig.lifetimes.release(list, 0u), av::Status::ok);
+  CHECK(rig.lifetimes.holding(other_list, set));
+  CHECK_EQ(rig.destroyer.count, 0u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, a_descriptor_slot_holds_one_resource_pair_and_a_rewrite_gives_the_old_pair_up_after_the_set_s_last_run)
+{ Rig rig;
+  using Descriptor = av::VulkanLifetimes::Descriptor;
+  CHECK_STATUS(rig.lifetimes.write(set, Descriptor{2u, 3u}, view, image, device, 0u), av::Status::ok);
+  CHECK_EQ(rig.lifetimes.descriptors(), 1u);
+  CHECK(rig.lifetimes.described(set, Descriptor{2u, 3u}, view));
+  CHECK(rig.lifetimes.described(set, Descriptor{2u, 3u}, image));
+  CHECK(!rig.lifetimes.described(set, Descriptor{3u, 2u}, view));
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::image_view, view, 0u, 0u), av::Status::ok);
+  rig.lifetimes.submitted(set, 5u);
+  CHECK_STATUS(rig.lifetimes.write(set, Descriptor{2u, 3u}, buffer, 0u, device, 1u), av::Status::ok);
+  CHECK_EQ(rig.lifetimes.descriptors(), 1u);
+  CHECK(!rig.destroyer.destroyed(view));
+  rig.lifetimes.reap(5u);
+  CHECK(rig.destroyer.destroyed(view));
+  CHECK_STATUS(rig.lifetimes.write(set, Descriptor{2u, 3u}, 0u, 0u, device, 5u), av::Status::ok);
+  CHECK_EQ(rig.lifetimes.descriptors(), 0u);
+  CHECK(rig.lifetimes.invariants_hold()); }
+
+TEST(vulkan_lifetimes, a_set_s_descriptors_are_marked_by_a_submission_and_given_up_after_it_when_the_set_is_released)
+{ Rig rig;
+  using Descriptor = av::VulkanLifetimes::Descriptor;
+  CHECK_STATUS(rig.lifetimes.write(set, Descriptor{0u, 0u}, view, 0u, device, 0u), av::Status::ok);
+  CHECK_STATUS(rig.hold(view, image), av::Status::ok);
+  CHECK_STATUS(rig.hold(list, set), av::Status::ok);
+  rig.lifetimes.submitted(list, 7u);
+  CHECK_EQ(rig.lifetimes.mark_of(set), 7u);
+  CHECK_EQ(rig.lifetimes.mark_of(view), 7u);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::image_view, view, 7u, 0u), av::Status::ok);
+  CHECK_STATUS(rig.lifetimes.release(set, 0u), av::Status::ok);
+  CHECK_STATUS(rig.lifetimes.release(list, 0u), av::Status::ok);
+  CHECK_EQ(rig.lifetimes.descriptors(), 0u);
+  CHECK(!rig.destroyer.destroyed(view));
+  rig.lifetimes.reap(7u);
+  CHECK(rig.destroyer.destroyed(view)); }
+
+TEST(vulkan_lifetimes, copying_descriptors_slot_by_slot_leaves_the_source_alone_and_clears_the_slots_the_source_lacks)
+{ Rig rig;
+  using Descriptor = av::VulkanLifetimes::Descriptor;
+  CHECK_STATUS(rig.lifetimes.write(set, Descriptor{1u, 0u}, view, 0u, device, 0u), av::Status::ok);
+  CHECK_STATUS(rig.lifetimes.write(other_list, Descriptor{4u, 1u}, buffer, 0u, device, 0u), av::Status::ok);
+  CHECK_STATUS(rig.lifetimes.copy(other_list, Descriptor{4u, 0u}, set, Descriptor{1u, 0u}, 2u, 0u), av::Status::ok);
+  CHECK(rig.lifetimes.described(other_list, Descriptor{4u, 0u}, view));
+  CHECK(!rig.lifetimes.described(other_list, Descriptor{4u, 1u}, buffer));
+  CHECK(rig.lifetimes.described(set, Descriptor{1u, 0u}, view));
+  CHECK_EQ(rig.lifetimes.descriptors(), 2u);
+  rig.platform.fail_allocation_at(1u);
+  CHECK_STATUS(rig.lifetimes.copy(pool, Descriptor{9u, 0u}, set, Descriptor{1u, 0u}, 1u, 0u),
+               av::Status::no_memory);
+  CHECK(rig.lifetimes.invariants_hold()); }

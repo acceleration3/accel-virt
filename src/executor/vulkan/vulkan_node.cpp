@@ -6,7 +6,8 @@
 namespace av {
 
 VulkanNode::VulkanNode(VulkanLifetimes &owner, uint64_t handle, uint64_t device, uint64_t parent)
-    : owner_(owner), handle_(handle), device_(device), parent_(parent), references_(1u), kind_(VulkanDestroyKind::none)
+    : owner_(owner), handle_(handle), device_(device), parent_(parent), references_(1u), kind_(VulkanDestroyKind::none),
+      orphaned_(false), pool_(nullptr), first_child_(nullptr), next_(nullptr), previous_(nullptr)
 {
     AV_SCOPE("VulkanNode::VulkanNode");
 }
@@ -29,6 +30,65 @@ void VulkanNode::request(VulkanDestroyKind kind, uint64_t device, uint64_t paren
     kind_ = kind;
     device_ = device;
     parent_ = parent;
+}
+
+void VulkanNode::link(VulkanNode *pool)
+{
+    AV_SCOPE("VulkanNode::link");
+    pool_ = pool;
+    pool->AddRef();
+    previous_ = nullptr;
+    next_ = pool->first_child_;
+    if (next_ != nullptr) next_->previous_ = this;
+    pool->first_child_ = this;
+}
+
+void VulkanNode::unlink()
+{
+    AV_SCOPE("VulkanNode::unlink");
+    VulkanNode *const pool = pool_;
+    if (pool == nullptr) return;
+    if (previous_ != nullptr) previous_->next_ = next_;
+    else pool->first_child_ = next_;
+    if (next_ != nullptr) next_->previous_ = previous_;
+    pool_ = nullptr;
+    next_ = nullptr;
+    previous_ = nullptr;
+    pool->Release();
+}
+
+void VulkanNode::orphan()
+{
+    AV_SCOPE("VulkanNode::orphan");
+    const bool alive = kind_ == VulkanDestroyKind::none;
+    kind_ = VulkanDestroyKind::none;
+    orphaned_ = true;
+    unlink();
+    if (alive) Release();
+}
+
+VulkanNode *VulkanNode::next_child()
+{
+    AV_SCOPE("VulkanNode::next_child");
+    return next_;
+}
+
+VulkanNode *VulkanNode::pool() const
+{
+    AV_SCOPE("VulkanNode::pool");
+    return pool_;
+}
+
+VulkanNode *VulkanNode::first_child() const
+{
+    AV_SCOPE("VulkanNode::first_child");
+    return first_child_;
+}
+
+bool VulkanNode::orphaned() const
+{
+    AV_SCOPE("VulkanNode::orphaned");
+    return orphaned_;
 }
 
 uint64_t VulkanNode::handle() const
@@ -64,7 +124,9 @@ uint32_t VulkanNode::references() const
 bool VulkanNode::invariants_hold() const
 {
     AV_SCOPE("VulkanNode::invariants_hold");
-    return handle_ != 0u && references_ != 0u;
+    if (handle_ == 0u || references_ == 0u) return false;
+    if (pool_ != nullptr && pool_->references_ == 0u) return false;
+    return next_ == nullptr || (next_->previous_ == this && next_->pool_ == pool_);
 }
 
 }

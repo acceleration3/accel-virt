@@ -32,4 +32,8 @@ void VulkanBackendProbe::show_types(const VkPhysicalDeviceMemoryProperties &host
 
 bool VulkanBackendProbe::memory_import() const { return backend.memory_import_; }
 
+void VulkanBackendProbe::begin_frame(bool recording) { backend.guard_.begin_frame(recording); }
+
+VulkanGuard &VulkanBackendProbe::guard() { return backend.guard_; }
+
 }

@@ -81,9 +81,12 @@ public:
         if (!table_of(owner, table)) return Status::ok;
         for (uint32_t slot = table->slots_.next_live(0u); slot != KeyedSlots<uint64_t, Slot>::no_slot;
              slot = table->slots_.next_live(0u)) {
-            const Slot   named = *table->slots_.at(slot);
+            Slot         named = *table->slots_.at(slot);
             const Status let = let_go(named, table->mark_);
-            if (let != Status::ok) return let;
+            if (let != Status::ok) {
+                *table->slots_.at(slot) = named;
+                return let;
+            }
             table->slots_.erase_slot(slot);
             total_--;
         }
@@ -96,12 +99,20 @@ public:
     void drain_all(Visitor visit)
     {
         AV_SCOPE("DescriptorTables::drain_all");
-        tables_.for_each([&](uint64_t, Table *&table) {
-            table->slots_.for_each([&](uint64_t, Slot &named) { visit(named); });
-        });
-        tables_.clear();
-        pool_.destroy_all();
-        total_ = 0u;
+        for (uint32_t at = tables_.next_live(0u); at != KeyedSlots<uint64_t, Table *>::no_slot;
+             at = tables_.next_live(0u)) {
+            Table *const   table = *tables_.at(at);
+            const uint32_t slot = table->slots_.next_live(0u);
+            if (slot == KeyedSlots<uint64_t, Slot>::no_slot) {
+                static_cast<void>(tables_.erase(tables_.key_at(at)));
+                static_cast<void>(pool_.destroy(table));
+                continue;
+            }
+            Slot named = *table->slots_.at(slot);
+            table->slots_.erase_slot(slot);
+            total_--;
+            visit(named);
+        }
     }
 
     template <typename Visitor>
@@ -164,7 +175,10 @@ public:
 
 private:
     struct Table {
-        explicit Table(BlockSource &blocks) : slots_(blocks, Pool::paged), mark_(0u) {}
+        explicit Table(BlockSource &blocks) : slots_(blocks, Pool::paged), mark_(0u)
+        {
+            AV_SCOPE("DescriptorTables::Table::Table");
+        }
 
         KeyedSlots<uint64_t, Slot> slots_;
         uint64_t                   mark_;

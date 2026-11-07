@@ -23,7 +23,8 @@ enum class VulkanDestroyKind : uint8_t {
     descriptor_set,
     command_pool,
     command_buffer,
-    memory
+    memory,
+    imported_memory
 };
 
 }

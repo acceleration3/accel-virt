@@ -66,6 +66,11 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
     case VulkanDestroyKind::memory:
         RealVulkanDispatch::on_vkFreeMemory(made_by, reinterpret_cast<VkDeviceMemory>(handle), nullptr);
         return;
+    case VulkanDestroyKind::imported_memory: {
+        GuestDevice *const owner = device_of(device);
+        if (owner != nullptr) owner->memory().release(handle);
+        return;
+    }
     case VulkanDestroyKind::descriptor_set: {
         const VkDescriptorSet set = reinterpret_cast<VkDescriptorSet>(handle);
         static_cast<void>(RealVulkanDispatch::on_vkFreeDescriptorSets(
@@ -80,10 +85,18 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
     }
 }
 
-void VulkanBackend::release_children(uint64_t parent)
+void VulkanBackend::release_children(uint64_t parent, uint64_t device)
 {
     AV_SCOPE("VulkanBackend::release_children");
-    handles_.for_each_child(parent, [this](uint64_t child) { static_cast<void>(guard_.release(child)); });
+    handles_.for_each_child(parent, [this, device](uint64_t child) { static_cast<void>(guard_.release(child, device)); });
+}
+
+uint64_t VulkanBackend::owning_device(uint64_t handle) const
+{
+    AV_SCOPE("VulkanBackend::owning_device");
+    for (uint64_t at = handle; at != 0u; at = handles_.parent_of(at))
+        if (handles_.find(at, VulkanObjectKind::device) != nullptr) return at;
+    return 0u;
 }
 
 void VulkanBackend::on_vkDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks *)
@@ -164,14 +177,14 @@ void VulkanBackend::on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool
                                                const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDescriptorPool");
-    release_children(number(descriptorPool));
+    release_children(number(descriptorPool), number(device));
     guard_.destroy(VulkanDestroyKind::descriptor_pool, number(device), 0u, number(descriptorPool));
 }
 
 void VulkanBackend::on_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyCommandPool");
-    release_children(number(commandPool));
+    release_children(number(commandPool), number(device));
     guard_.destroy(VulkanDestroyKind::command_pool, number(device), 0u, number(commandPool));
 }
 
@@ -180,7 +193,7 @@ void VulkanBackend::on_vkFreeCommandBuffers(VkDevice device, VkCommandPool comma
 {
     AV_SCOPE("VulkanBackend::on_vkFreeCommandBuffers");
     for (uint32_t index = 0u; index < commandBufferCount; index++) {
-        static_cast<void>(guard_.release(number(pCommandBuffers[index])));
+        static_cast<void>(guard_.release(number(pCommandBuffers[index]), number(device)));
         guard_.destroy(VulkanDestroyKind::command_buffer, number(device), number(commandPool),
                        number(pCommandBuffers[index]));
     }
@@ -191,7 +204,7 @@ VkResult VulkanBackend::on_vkFreeDescriptorSets(VkDevice device, VkDescriptorPoo
 {
     AV_SCOPE("VulkanBackend::on_vkFreeDescriptorSets");
     for (uint32_t index = 0u; index < descriptorSetCount; index++) {
-        static_cast<void>(guard_.release(number(pDescriptorSets[index])));
+        static_cast<void>(guard_.release(number(pDescriptorSets[index]), number(device)));
         guard_.destroy(VulkanDestroyKind::descriptor_set, number(device), number(descriptorPool),
                        number(pDescriptorSets[index]));
     }
@@ -202,34 +215,42 @@ VkResult VulkanBackend::on_vkResetDescriptorPool(VkDevice device, VkDescriptorPo
                                                  VkDescriptorPoolResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetDescriptorPool");
-    release_children(number(descriptorPool));
-    progress_.wait_idle();
-    return RealVulkanDispatch::on_vkResetDescriptorPool(device, descriptorPool, flags);
+    if (!guard_.quiesce(number(device))) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    release_children(number(descriptorPool), number(device));
+    const VkResult reset = RealVulkanDispatch::on_vkResetDescriptorPool(device, descriptorPool, flags);
+    if (reset == VK_SUCCESS) guard_.orphan_children(number(descriptorPool), number(device));
+    return reset;
 }
 
 VkResult VulkanBackend::on_vkResetCommandPool(VkDevice device, VkCommandPool commandPool,
                                               VkCommandPoolResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetCommandPool");
-    release_children(number(commandPool));
-    progress_.wait_idle();
+    if (!guard_.quiesce(number(device))) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    release_children(number(commandPool), number(device));
     return RealVulkanDispatch::on_vkResetCommandPool(device, commandPool, flags);
 }
 
 VkResult VulkanBackend::on_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo)
 {
     AV_SCOPE("VulkanBackend::on_vkBeginCommandBuffer");
-    guard_.await_reset(number(commandBuffer));
-    if (!guard_.release(number(commandBuffer))) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (!reusable(commandBuffer)) return VK_ERROR_OUT_OF_HOST_MEMORY;
     return RealVulkanDispatch::on_vkBeginCommandBuffer(commandBuffer, pBeginInfo);
 }
 
 VkResult VulkanBackend::on_vkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags)
 {
     AV_SCOPE("VulkanBackend::on_vkResetCommandBuffer");
-    guard_.await_reset(number(commandBuffer));
-    if (!guard_.release(number(commandBuffer))) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (!reusable(commandBuffer)) return VK_ERROR_OUT_OF_HOST_MEMORY;
     return RealVulkanDispatch::on_vkResetCommandBuffer(commandBuffer, flags);
+}
+
+bool VulkanBackend::reusable(VkCommandBuffer commandBuffer)
+{
+    AV_SCOPE("VulkanBackend::reusable");
+    const uint64_t buffer = number(commandBuffer);
+    const uint64_t device = owning_device(buffer);
+    return guard_.await_reset(buffer, device) && guard_.release(buffer, device);
 }
 
 VkResult VulkanBackend::on_vkBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory,
@@ -331,42 +352,36 @@ void VulkanBackend::on_vkUpdateDescriptorSets(VkDevice device, uint32_t descript
 {
     AV_SCOPE("VulkanBackend::on_vkUpdateDescriptorSets");
     const bool held = guard_.written(pDescriptorWrites, descriptorWriteCount, number(device)) &&
-                      guard_.copied(pDescriptorCopies, descriptorCopyCount);
-    if (!held) progress_.wait_idle();
+                      guard_.copied(pDescriptorCopies, descriptorCopyCount, number(device));
+    if (!held && !guard_.quiesce(number(device))) return;
     RealVulkanDispatch::on_vkUpdateDescriptorSets(device, descriptorWriteCount, pDescriptorWrites,
                                                   descriptorCopyCount, pDescriptorCopies);
-}
-
-VkResult VulkanBackend::submitted(VkResult result, VkQueue queue, const VkSubmitInfo *submits, uint32_t count)
-{
-    AV_SCOPE("VulkanBackend::submitted");
-    if (result != VK_SUCCESS) return result;
-    const uint64_t device = handles_.parent_of(number(queue));
-    return guard_.submitted(device, number(queue), submits, count) ? result : VK_ERROR_DEVICE_LOST;
-}
-
-VkResult VulkanBackend::submitted(VkResult result, VkQueue queue, const VkSubmitInfo2 *submits, uint32_t count)
-{
-    AV_SCOPE("VulkanBackend::submitted");
-    if (result != VK_SUCCESS) return result;
-    const uint64_t device = handles_.parent_of(number(queue));
-    return guard_.submitted(device, number(queue), submits, count) ? result : VK_ERROR_DEVICE_LOST;
 }
 
 VkResult VulkanBackend::on_vkQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
                                           VkFence fence)
 {
     AV_SCOPE("VulkanBackend::on_vkQueueSubmit2");
-    return submitted(RealVulkanDispatch::on_vkQueueSubmit2(queue, submitCount, pSubmits, fence), queue, pSubmits,
-                     submitCount);
+    const uint64_t device = handles_.parent_of(number(queue));
+    const uint64_t mark = guard_.reserve(device);
+    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2(queue, submitCount, pSubmits, fence);
+    if (result != VK_SUCCESS) guard_.cancel(mark);
+    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
+    return result;
 }
 
 VkResult VulkanBackend::on_vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits,
                                              VkFence fence)
 {
     AV_SCOPE("VulkanBackend::on_vkQueueSubmit2KHR");
-    return submitted(RealVulkanDispatch::on_vkQueueSubmit2KHR(queue, submitCount, pSubmits, fence), queue,
-                     pSubmits, submitCount);
+    const uint64_t device = handles_.parent_of(number(queue));
+    const uint64_t mark = guard_.reserve(device);
+    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const VkResult result = RealVulkanDispatch::on_vkQueueSubmit2KHR(queue, submitCount, pSubmits, fence);
+    if (result != VK_SUCCESS) guard_.cancel(mark);
+    else guard_.submitted(mark, device, number(queue), pSubmits, submitCount);
+    return result;
 }
 
 }

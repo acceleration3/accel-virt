@@ -197,9 +197,10 @@ private:
     [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
 
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
-    VkResult submitted(VkResult result, VkQueue queue, const VkSubmitInfo *submits, uint32_t count);
-    VkResult submitted(VkResult result, VkQueue queue, const VkSubmitInfo2 *submits, uint32_t count);
-    void     release_children(uint64_t parent);
+    void     release_children(uint64_t parent, uint64_t device);
+    uint64_t owning_device(uint64_t handle) const;
+    bool     reusable(VkCommandBuffer commandBuffer);
+
     void let_go(uint64_t raw, VulkanObjectKind kind);
     [[nodiscard]] bool kept_on(const GuestDevice &device, uint64_t made);
     GuestDevice       *forgot(uint64_t made);

@@ -4,6 +4,7 @@
 #include "core/support/keyed_slots.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "executor/descriptor_tables.hpp"
 #include "executor/object_holds.hpp"
 #include "executor/vulkan/vulkan_destroy_kind.hpp"
 #include "executor/vulkan/vulkan_node.hpp"
@@ -17,39 +18,56 @@ class VulkanDestroyer;
 
 class VulkanLifetimes {
 public:
+    struct Descriptor {
+        uint32_t binding_;
+        uint32_t element_;
+    };
+
     VulkanLifetimes(BlockSource &blocks, VulkanDestroyer &destroyer);
     VulkanLifetimes(const VulkanLifetimes &) = delete;
     VulkanLifetimes &operator=(const VulkanLifetimes &) = delete;
 
     [[nodiscard]] Status hold(uint64_t owner, uint64_t handle, uint64_t device, uint64_t pool);
     [[nodiscard]] Status track(uint64_t handle, uint64_t device);
+    [[nodiscard]] Status write(uint64_t set, const Descriptor &at, uint64_t first, uint64_t second, uint64_t device,
+                               uint64_t reached);
+    [[nodiscard]] Status copy(uint64_t to, const Descriptor &to_at, uint64_t from, const Descriptor &from_at,
+                              uint32_t count, uint64_t reached);
     void                 submitted(uint64_t owner, uint64_t mark);
     [[nodiscard]] Status release(uint64_t owner, uint64_t reached);
+    void                 orphan_children(uint64_t pool);
     [[nodiscard]] Status destroy(VulkanDestroyKind kind, uint64_t device, uint64_t parent, uint64_t handle,
                                  uint64_t marked, uint64_t reached);
-    [[nodiscard]] Status copy(uint64_t to, uint64_t from);
     void                 reap(uint64_t reached);
-    void                 release_all();
+    void                 release_all(bool idle);
     void                 finish(VulkanNode &node);
 
     bool     holding(uint64_t owner, uint64_t handle) const;
     bool     tracked(uint64_t handle) const;
+    bool     linked(uint64_t handle, uint64_t pool) const;
+    bool     described(uint64_t set, const Descriptor &at, uint64_t handle) const;
     uint64_t mark_of(uint64_t owner) const;
     uint32_t nodes() const;
     uint32_t retired() const;
+    uint32_t descriptors() const;
 
     bool invariants_hold() const;
 
 private:
     using Holds = ObjectHolds<VulkanNode, void>;
+    using Tables = DescriptorTables<VulkanNode, void>;
 
     VulkanNode *node_for(uint64_t handle, uint64_t device, uint64_t parent);
+    uint64_t    key_of(const Descriptor &at) const;
+    Status      let_go(Tables::Slot &slot, uint64_t mark, uint64_t reached);
 
-    VulkanDestroyer             &destroyer_;
-    ObjectPool<VulkanNode>       pool_;
+    VulkanDestroyer                   &destroyer_;
+    ObjectPool<VulkanNode>             pool_;
     KeyedSlots<uint64_t, VulkanNode *> nodes_;
-    Holds                        holds_;
-    uint64_t                     reached_;
+    Holds                              holds_;
+    Tables                             tables_;
+    uint64_t                           reached_;
+    bool                               leaking_;
 };
 
 }
