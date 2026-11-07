@@ -10,7 +10,7 @@
 namespace av {
 
 template <typename Interface>
-class CountedChild : public Interface {
+class CountedBase : public Interface {
 public:
     static constexpr std::size_t capacity = 256u;
 
@@ -41,12 +41,6 @@ public:
     }
     HRESULT STDMETHODCALLTYPE SetPrivateDataInterface(REFGUID, const IUnknown *) override { return E_NOTIMPL; }
     HRESULT STDMETHODCALLTYPE SetName(const WCHAR *) override { return E_NOTIMPL; }
-    HRESULT STDMETHODCALLTYPE GetDevice(REFIID, void **device) override
-    {
-        *device = nullptr;
-        return E_NOTIMPL;
-    }
-
     ULONG references() const { return references_; }
 
 private:
@@ -54,6 +48,16 @@ private:
     GUID         guid_ = {};
     std::size_t  size_ = 0u;
     std::uint8_t bytes_[capacity] = {};
+};
+
+template <typename Interface>
+class CountedChild : public CountedBase<Interface> {
+public:
+    HRESULT STDMETHODCALLTYPE GetDevice(REFIID, void **device) override
+    {
+        *device = nullptr;
+        return E_NOTIMPL;
+    }
 };
 
 }

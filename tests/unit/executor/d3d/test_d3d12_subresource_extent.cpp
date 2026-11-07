@@ -90,3 +90,21 @@ TEST(d3d12_subresource_extent, a_buffer_an_unknown_format_or_a_missing_subresour
   D3D12_RESOURCE_DESC single = texture_of(D3D12_RESOURCE_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8_UNORM, 8u, 8u, 1u, 0u);
   CHECK(D3d12SubresourceExtent(single, 0u).known());
   CHECK(!D3d12SubresourceExtent(single, 1u).known()); }
+
+TEST(d3d12_subresource_extent, a_planar_video_texture_has_a_half_size_chroma_plane)
+{ const D3D12_RESOURCE_DESC desc = texture_of(D3D12_RESOURCE_DIMENSION_TEXTURE2D, DXGI_FORMAT_NV12, 17u, 9u, 1u, 1u);
+  const D3d12SubresourceExtent luma(desc, 0u);
+  const D3d12SubresourceExtent chroma(desc, 1u);
+  CHECK(luma.known());
+  CHECK_EQ(luma.plane(), 0u);
+  CHECK(same(luma.whole(), Box{0u, 0u, 0u, 17u, 9u, 1u}));
+  CHECK(chroma.known());
+  CHECK_EQ(chroma.plane(), 1u);
+  CHECK(same(chroma.whole(), Box{0u, 0u, 0u, 9u, 5u, 1u}));
+  CHECK(!D3d12SubresourceExtent(desc, 2u).known()); }
+
+TEST(d3d12_subresource_extent, a_subresource_knows_its_plane)
+{ D3D12_RESOURCE_DESC desc = texture_of(D3D12_RESOURCE_DIMENSION_TEXTURE2D, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, 8u, 8u, 2u, 3u);
+  CHECK_EQ(D3d12SubresourceExtent(desc, 5u).plane(), 0u);
+  CHECK_EQ(D3d12SubresourceExtent(desc, 6u).plane(), 1u);
+  CHECK_EQ(D3d12SubresourceExtent(desc, 11u).plane(), 1u); }

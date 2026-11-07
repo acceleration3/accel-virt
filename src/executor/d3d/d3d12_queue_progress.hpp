@@ -23,6 +23,8 @@ public:
     D3d12QueueProgress(const D3d12QueueProgress &) = delete;
     D3d12QueueProgress &operator=(const D3d12QueueProgress &) = delete;
 
+    [[nodiscard]] bool prepare(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device);
+    [[nodiscard]] bool signal(uint32_t id, ID3D12CommandQueue *queue);
     [[nodiscard]] bool executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device);
     [[nodiscard]] bool after_siblings(uint32_t id, ID3D12CommandQueue *queue) const;
     [[nodiscard]] bool mark_all();

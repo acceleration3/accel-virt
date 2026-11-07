@@ -8,6 +8,8 @@
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/eventfd_wake.hpp"
 #include "executor/import_table.hpp"
+#include "executor/d3d/d3d12_object_holds.hpp"
+#include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/wake_signal.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -20,6 +22,8 @@
 #include <cstdint>
 
 namespace av {
+
+class FakeDevice;
 
 class D3d12SessionLoopback final : public RoomedTransport {
 public:
@@ -36,6 +40,10 @@ public:
     D3dObjectTable &objects();
     ImportTable    &imports();
     uint32_t        refused() const;
+    void            place(FakeDevice &device);
+    D3d12QueryHeaps &queries();
+    D3d12ObjectHolds &holds();
+    void             hurry(uint64_t nanoseconds);
 
     WireWriter      request_writer() override;
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
@@ -55,6 +63,7 @@ private:
     RecordingLog                sink_;
     DriverLog                   lines_;
     ImportTable                 imports_;
+    D3d12HostDevice             host_;
     GuestBytes                  guest_;
     alignas(64) std::uint8_t    guest_memory_[8192];
     ObjectStorage<D3d12Session> storage_;
@@ -65,6 +74,7 @@ private:
     WireArena                   decode_arena_;
     ClientBlobArena             blobs_;
     uint32_t                    refused_;
+    FakeDevice                 *placed_;
 };
 
 }

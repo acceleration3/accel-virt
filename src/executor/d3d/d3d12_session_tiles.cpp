@@ -94,7 +94,11 @@ bool D3d12Session::on_UpdateTileMappings12(uint32_t queue, uint32_t resource, ui
     for (uint32_t index = 0u; index < range_count; index++)
         if (!tile_update_.add_range(ranges[index], heap_tiles)) return false;
     tile_update_.apply(on, tiled, in, flags);
-    return follow_queue(queue, on, tiled, in);
+    if (!follow_queue(queue, on, tiled, in)) return false;
+    if (in == nullptr) return true;
+    holds_.submitted(resource, progress_.marked());
+    if (holds_.hold(resource, in, nullptr) != Status::ok || holds_.inherit(tiled, in) != Status::ok) return false;
+    return true;
 }
 
 bool D3d12Session::on_CopyTileMappings12(uint32_t queue, uint32_t destination,
@@ -113,7 +117,13 @@ bool D3d12Session::on_CopyTileMappings12(uint32_t queue, uint32_t destination,
     const D3D12_TILED_RESOURCE_COORDINATE from_start = host_coordinate(source_start);
     const D3D12_TILE_REGION_SIZE          region = host_size(size);
     on->CopyTileMappings(to, &to_start, from, &from_start, &region, static_cast<D3D12_TILE_MAPPING_FLAGS>(flags));
-    return follow_queue(queue, on, to, from);
+    if (!follow_queue(queue, on, to, from)) return false;
+    bool mapped = true;
+    holds_.submitted(destination, progress_.marked());
+    holds_.for_each_held(source, [&](IUnknown *heap) {
+        mapped = holds_.hold(destination, heap, nullptr) == Status::ok && holds_.inherit(to, heap) == Status::ok && mapped;
+    });
+    return mapped;
 }
 
 bool D3d12Session::on_CopyTiles12(uint32_t id, uint32_t resource, const d3d12proto::TileCoordinate &start,

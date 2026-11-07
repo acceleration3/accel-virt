@@ -152,3 +152,13 @@ TEST(d3d12_object_holds, a_list_that_holds_a_holder_inherits_what_the_holder_nam
   CHECK_EQ(extra.references(), 2u);
   CHECK_STATUS(holds.inherit(&holder, nullptr), av::Status::invalid_parameter);
   holds.release_all(); }
+
+TEST(d3d12_descriptor_holds, the_resource_a_slot_names_can_be_asked_for)
+{ Rig rig;
+  CountedObject resource, counter;
+  CHECK(rig.descriptors.resource_at(heap_a, 2u) == nullptr);
+  CHECK_STATUS(rig.note(heap_a, 2u, &resource, &counter, 0u), av::Status::ok);
+  CHECK(rig.descriptors.resource_at(heap_a, 2u) == &resource);
+  CHECK(rig.descriptors.resource_at(heap_a, 3u) == nullptr);
+  CHECK(rig.descriptors.resource_at(heap_b, 2u) == nullptr);
+  rig.descriptors.release_all(); }

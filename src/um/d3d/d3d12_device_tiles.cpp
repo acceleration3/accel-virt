@@ -32,7 +32,7 @@ HRESULT D3d12Device::reserve_resource(const D3D12DDIARG_CREATERESOURCE_0109 &arg
     }
     const bool made = d3d12proto::av_d3d12_CreateReservedResource12(
         wire(), resource.header.stamp.id(), desc, initial_state(args, heap_default), clear_value(clear), resource.address);
-    return sent(made, "CreateReservedResource12") ? S_OK : E_OUTOFMEMORY;
+    return sent(made, "CreateReservedResource12") ? S_OK : DXGI_ERROR_DEVICE_REMOVED;
 }
 
 const ResourceRecord &D3d12Device::tiling(ResourceRecord &resource)

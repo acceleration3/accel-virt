@@ -58,6 +58,13 @@ bool D3d12DescriptorHolds::holds(uint32_t heap, uint32_t index, const IUnknown *
     return found != nullptr && (found->resource_ == resource || found->counter_ == resource);
 }
 
+IUnknown *D3d12DescriptorHolds::resource_at(uint32_t heap, uint32_t index) const
+{
+    AV_SCOPE("D3d12DescriptorHolds::resource_at");
+    const Slot *const found = slots_.find(key_of(heap, index));
+    return found != nullptr ? found->resource_ : nullptr;
+}
+
 uint32_t D3d12DescriptorHolds::count() const
 {
     AV_SCOPE("D3d12DescriptorHolds::count");

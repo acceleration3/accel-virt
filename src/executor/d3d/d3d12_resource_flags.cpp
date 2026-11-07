@@ -10,9 +10,10 @@ constexpr uint32_t allow_render_target = 0x1u;
 constexpr uint32_t allow_depth_stencil = 0x2u;
 constexpr uint32_t allow_unordered_access = 0x4u;
 constexpr uint32_t deny_shader_resource = 0x8u;
+constexpr uint32_t allow_cross_adapter = 0x10u;
 constexpr uint32_t allow_simultaneous_access = 0x20u;
 constexpr uint32_t whitelist =
-    allow_render_target | allow_depth_stencil | allow_unordered_access | deny_shader_resource | allow_simultaneous_access;
+    allow_render_target | allow_depth_stencil | allow_unordered_access | deny_shader_resource | allow_cross_adapter | allow_simultaneous_access;
 
 }
 

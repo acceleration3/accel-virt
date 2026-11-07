@@ -506,3 +506,45 @@ TEST(d3d12_queue_progress_log_stuck, names_a_drained_queue_as_destroyed)
   CHECK_EQ(log.lines(), 2u);
   CHECK(std::strcmp(log.line(0u), "d3d12: queue 9 progress signalled 2 completed 0") == 0);
   CHECK(std::strcmp(log.line(1u), "d3d12: destroyed queue 5 progress signalled 1 completed 0") == 0); }
+
+TEST(d3d12_queue_progress_prepare, makes_the_queue_s_fence_before_anything_runs_and_signal_marks_after)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct;
+  CHECK(progress.prepare(1u, &direct, &device));
+  CHECK_EQ(device.made, 1u);
+  CHECK(direct.signalled == nullptr);
+  CHECK(progress.marked() == 0u);
+  CHECK(progress.prepare(1u, &direct, &device));
+  CHECK_EQ(device.made, 1u);
+  CHECK(progress.signal(1u, &direct));
+  CHECK(direct.signalled == &device.fences[0]);
+  CHECK(progress.marked() == 1u);
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_prepare, refuses_a_queue_whose_fence_cannot_be_made_and_marks_nothing)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct;
+  device.refuse_fence = true;
+  CHECK(!progress.prepare(1u, &direct, &device));
+  CHECK(!progress.signal(1u, &direct));
+  CHECK(!progress.prepare(1u, nullptr, &device));
+  CHECK(!progress.prepare(1u, &direct, nullptr));
+  CHECK(progress.marked() == 0u);
+  CHECK(!progress.signal(1u, nullptr)); }
+
+TEST(d3d12_queue_progress_prepare, a_queue_that_refuses_the_signal_marks_nothing)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct;
+  CHECK(progress.prepare(1u, &direct, &device));
+  direct.refuse_signal = true;
+  CHECK(!progress.signal(1u, &direct));
+  CHECK(progress.marked() == 0u); }

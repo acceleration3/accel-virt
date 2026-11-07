@@ -27,6 +27,7 @@ class D3dRuntime;
 class WakeSignal;
 class StagedFrame;
 class Vkd3dImageExport;
+struct D3d12HostDeviceProbe;
 
 class D3d12HostDevice final : public RenewableDevice {
 public:
@@ -71,6 +72,8 @@ private:
     D3d12Capabilities  capabilities_;
     D3d12DispatchLimit dispatch_limit_;
     D3d12FramePool     frames_;
+
+    friend struct D3d12HostDeviceProbe;
 };
 
 }

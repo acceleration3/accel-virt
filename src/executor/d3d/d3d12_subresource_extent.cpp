@@ -10,7 +10,8 @@ namespace av {
 
 namespace {
 
-constexpr uint32_t planar_formats[] = {19u, 20u, 44u, 45u};
+constexpr uint32_t planar_formats[] = {19u, 20u, 44u, 45u, 103u, 104u, 105u};
+constexpr uint32_t first_video_format = 103u;
 
 uint32_t planes_of(uint32_t format)
 {
@@ -29,7 +30,7 @@ uint64_t rounded(uint64_t edge, uint32_t block)
 }
 
 D3d12SubresourceExtent::D3d12SubresourceExtent(const D3D12_RESOURCE_DESC &desc, uint32_t subresource)
-    : whole_{}, block_width_(1u), block_height_(1u), known_(false)
+    : whole_{}, block_width_(1u), block_height_(1u), plane_(0u), known_(false)
 {
     AV_SCOPE("D3d12SubresourceExtent::D3d12SubresourceExtent");
     if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER || desc.Dimension == D3D12_RESOURCE_DIMENSION_UNKNOWN) return;
@@ -45,7 +46,14 @@ D3d12SubresourceExtent::D3d12SubresourceExtent(const D3D12_RESOURCE_DESC &desc, 
     if (extent.width() > UINT32_MAX) return;
     block_width_ = layout.element_width();
     block_height_ = layout.element_height();
-    whole_ = d3d12proto::Box{0u, 0u, 0u, static_cast<uint32_t>(extent.width()), extent.height(), extent.depth()};
+    plane_ = subresource / (mips * layers);
+    uint32_t width = static_cast<uint32_t>(extent.width());
+    uint32_t height = extent.height();
+    if (plane_ == 1u && static_cast<uint32_t>(desc.Format) >= first_video_format) {
+        width = (width + 1u) / 2u;
+        height = (height + 1u) / 2u;
+    }
+    whole_ = d3d12proto::Box{0u, 0u, 0u, width, height, extent.depth()};
     known_ = true;
 }
 
@@ -53,6 +61,12 @@ bool D3d12SubresourceExtent::known() const
 {
     AV_SCOPE("D3d12SubresourceExtent::known");
     return known_;
+}
+
+uint32_t D3d12SubresourceExtent::plane() const
+{
+    AV_SCOPE("D3d12SubresourceExtent::plane");
+    return plane_;
 }
 
 const d3d12proto::Box &D3d12SubresourceExtent::whole() const

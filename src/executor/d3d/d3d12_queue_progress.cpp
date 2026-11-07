@@ -39,28 +39,43 @@ void D3d12QueueProgress::release_completed()
     }
 }
 
-bool D3d12QueueProgress::executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device)
+bool D3d12QueueProgress::prepare(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device)
 {
-    AV_SCOPE("D3d12QueueProgress::executed");
+    AV_SCOPE("D3d12QueueProgress::prepare");
     if (queue == nullptr || device == nullptr) return false;
     release_completed();
-    uint32_t index = index_of(id);
-    if (index == queues_.size()) {
-        ID3D12Fence *made = nullptr;
-        if (FAILED(device->CreateFence(0u, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
-                                       reinterpret_cast<void **>(&made))))
-            return false;
-        if (draining_.reserve(queues_.size() + draining_.size() + 1u) != Status::ok ||
-            queues_.append(Queue{id, queue, made, 0u}) != Status::ok) {
-            made->Release();
-            return false;
-        }
+    const uint32_t index = index_of(id);
+    if (index != queues_.size()) {
+        queues_.at(index).queue_ = queue;
+        return true;
     }
+    ID3D12Fence *made = nullptr;
+    if (FAILED(device->CreateFence(0u, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&made))))
+        return false;
+    if (draining_.reserve(queues_.size() + draining_.size() + 1u) != Status::ok ||
+        queues_.append(Queue{id, queue, made, 0u}) != Status::ok) {
+        made->Release();
+        return false;
+    }
+    return true;
+}
+
+bool D3d12QueueProgress::signal(uint32_t id, ID3D12CommandQueue *queue)
+{
+    AV_SCOPE("D3d12QueueProgress::signal");
+    const uint32_t index = index_of(id);
+    if (queue == nullptr || index == queues_.size()) return false;
     Queue &kept = queues_.at(index);
     kept.queue_ = queue;
     if (FAILED(queue->Signal(kept.fence_, marked_ + 1u))) return false;
     kept.signalled_ = ++marked_;
     return wake_.watch(*kept.fence_, marked_);
+}
+
+bool D3d12QueueProgress::executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device)
+{
+    AV_SCOPE("D3d12QueueProgress::executed");
+    return prepare(id, queue, device) && signal(id, queue);
 }
 
 bool D3d12QueueProgress::after_siblings(uint32_t id, ID3D12CommandQueue *queue) const

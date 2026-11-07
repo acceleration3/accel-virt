@@ -10,6 +10,8 @@ struct ID3D12Device;
 
 namespace av {
 
+struct D3d12HostDeviceProbe;
+
 class D3d12Capabilities {
 public:
     D3d12Capabilities();
@@ -25,6 +27,8 @@ private:
 
     d3d12proto::Caps12 caps_;
     FormatCapsRows     formats_;
+
+    friend struct D3d12HostDeviceProbe;
 };
 
 }

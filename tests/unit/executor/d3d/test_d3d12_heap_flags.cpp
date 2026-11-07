@@ -26,6 +26,7 @@ constexpr std::uint32_t manual_write_tracking = 0x2000u;
 
 TEST(d3d12_heap_flags, the_flags_that_only_say_what_a_heap_may_hold_are_kept)
 { CHECK_EQ(D3d12HeapFlags(shared).kept(), shared);
+  CHECK_EQ(D3d12HeapFlags(shared_cross_adapter).kept(), shared_cross_adapter);
   CHECK_EQ(D3d12HeapFlags(deny_buffers | allow_display).kept(), deny_buffers | allow_display);
   CHECK_EQ(D3d12HeapFlags(deny_rt_ds | deny_non_rt_ds).kept(), deny_rt_ds | deny_non_rt_ds);
   CHECK_EQ(D3d12HeapFlags(0u).kept(), 0u); }
@@ -36,17 +37,23 @@ TEST(d3d12_heap_flags, a_guest_cannot_ask_for_a_heap_that_is_not_cleared)
   CHECK_EQ(D3d12HeapFlags(0xFFFFFFFFu).kept() & not_zeroed, 0u); }
 
 TEST(d3d12_heap_flags, every_other_flag_and_every_undefined_bit_is_dropped)
-{ const std::uint32_t dropped[] = {shared_cross_adapter, hardware_protected, write_watch, shader_atomics,
+{ const std::uint32_t dropped[] = {hardware_protected, write_watch, shader_atomics,
                                    not_resident,         not_zeroed,         manual_write_tracking,
                                    0x4000u,              0x80000000u,        0x2u,                  0x10u};
   for (const std::uint32_t flag : dropped) CHECK_EQ(D3d12HeapFlags(flag).kept(), 0u);
-  CHECK_EQ(D3d12HeapFlags(0xFFFFFFFFu).kept(), shared | deny_buffers | allow_display | deny_rt_ds | deny_non_rt_ds); }
+  CHECK_EQ(D3d12HeapFlags(0xFFFFFFFFu).kept(), shared | deny_buffers | allow_display | shared_cross_adapter | deny_rt_ds | deny_non_rt_ds); }
+
+TEST(d3d12_heap_flags, a_protected_heap_is_refused_and_no_other_flag_is)
+{ CHECK(D3d12HeapFlags(hardware_protected).refused());
+  CHECK(D3d12HeapFlags(hardware_protected | shared).refused());
+  CHECK(!D3d12HeapFlags(0xFFFFFFFFu & ~hardware_protected).refused());
+  CHECK(!D3d12HeapFlags(0u).refused()); }
 
 TEST(d3d12_resource_flags, the_flags_that_say_how_a_resource_is_used_are_kept)
-{ CHECK_EQ(D3d12ResourceFlags(0x1u | 0x2u | 0x4u | 0x8u | 0x20u).kept(), 0x1u | 0x2u | 0x4u | 0x8u | 0x20u);
+{ CHECK_EQ(D3d12ResourceFlags(0x1u | 0x2u | 0x4u | 0x8u | 0x10u | 0x20u).kept(), 0x1u | 0x2u | 0x4u | 0x8u | 0x10u | 0x20u);
   CHECK_EQ(D3d12ResourceFlags(0u).kept(), 0u); }
 
-TEST(d3d12_resource_flags, cross_adapter_video_raytracing_and_undefined_bits_are_dropped)
-{ const std::uint32_t dropped[] = {0x10u, 0x40u, 0x80u, 0x100u, 0x200u, 0x80000000u};
+TEST(d3d12_resource_flags, video_raytracing_and_undefined_bits_are_dropped)
+{ const std::uint32_t dropped[] = {0x40u, 0x80u, 0x100u, 0x200u, 0x80000000u};
   for (const std::uint32_t flag : dropped) CHECK_EQ(D3d12ResourceFlags(flag).kept(), 0u);
-  CHECK_EQ(D3d12ResourceFlags(0xFFFFFFFFu).kept(), 0x1u | 0x2u | 0x4u | 0x8u | 0x20u); }
+  CHECK_EQ(D3d12ResourceFlags(0xFFFFFFFFu).kept(), 0x1u | 0x2u | 0x4u | 0x8u | 0x10u | 0x20u); }

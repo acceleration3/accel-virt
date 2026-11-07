@@ -254,3 +254,40 @@ TEST(d3d12_object_holds, an_object_that_cannot_be_listed_is_not_referenced)
   CHECK(holds.invariants_hold());
   CHECK_STATUS(holds.release_list(list_a, 0u), av::Status::ok);
   for (std::uint32_t index = 0u; index < 8u; index++) CHECK_EQ(objects[index].references(), 1u); }
+
+TEST(d3d12_object_holds, retired_objects_leave_in_mark_order_whatever_order_they_came_in)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  CountedObject first, second, third, fourth;
+  CHECK_STATUS(holds.retire(&third, 9u, 0u), av::Status::ok);
+  CHECK_STATUS(holds.retire(&first, 3u, 0u), av::Status::ok);
+  CHECK_STATUS(holds.retire(&fourth, 12u, 0u), av::Status::ok);
+  CHECK_STATUS(holds.retire(&second, 5u, 0u), av::Status::ok);
+  CHECK(holds.invariants_hold());
+  holds.reap(5u);
+  CHECK_EQ(first.references(), 0u);
+  CHECK_EQ(second.references(), 0u);
+  CHECK_EQ(third.references(), 1u);
+  CHECK_EQ(holds.retired(), 2u);
+  holds.reap(8u);
+  CHECK_EQ(third.references(), 1u);
+  holds.reap(12u);
+  CHECK_EQ(third.references(), 0u);
+  CHECK_EQ(fourth.references(), 0u);
+  CHECK_EQ(holds.retired(), 0u);
+  CHECK(holds.invariants_hold()); }
+
+TEST(d3d12_object_holds, a_long_queue_of_retired_objects_is_reaped_a_run_at_a_time)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  CountedObject objects[100];
+  for (std::uint32_t index = 0u; index < 100u; index++)
+      CHECK_STATUS(holds.retire(&objects[index], index + 1u, 0u), av::Status::ok);
+  holds.reap(60u);
+  CHECK_EQ(holds.retired(), 40u);
+  for (std::uint32_t index = 0u; index < 100u; index++) CHECK_EQ(objects[index].references(), index < 60u ? 0u : 1u);
+  CHECK(holds.invariants_hold());
+  CHECK_STATUS(holds.retire(&objects[0], 70u, 0u), av::Status::ok);
+  objects[0].AddRef();
+  holds.reap(100u);
+  CHECK_EQ(holds.retired(), 0u); }

@@ -80,3 +80,15 @@ TEST(d3d12_copy_pair, a_region_copy_needs_textures_of_one_sample_count_and_texel
   CHECK(!D3d12CopyPair(base, multisampled).texels());
   CHECK(!D3d12CopyPair(base, buffer_of(256u)).texels());
   CHECK(!D3d12CopyPair(buffer_of(256u), base).texels()); }
+
+TEST(d3d12_copy_pair, a_compressed_texture_copies_whole_to_the_uncompressed_one_of_its_block_count)
+{ const D3D12_RESOURCE_DESC compressed = texture_of(DXGI_FORMAT_BC1_UNORM, 64u, 32u);
+  const D3D12_RESOURCE_DESC encoded = texture_of(DXGI_FORMAT_R32G32_FLOAT, 16u, 8u);
+  CHECK(whole(encoded, compressed));
+  CHECK(whole(compressed, encoded));
+  CHECK(!whole(texture_of(DXGI_FORMAT_R32G32_FLOAT, 64u, 32u), compressed));
+  CHECK(!whole(texture_of(DXGI_FORMAT_R32G32_FLOAT, 16u, 9u), compressed));
+  CHECK(!whole(texture_of(DXGI_FORMAT_R32G32B32A32_FLOAT, 16u, 8u), compressed));
+  const D3D12_RESOURCE_DESC wide = texture_of(DXGI_FORMAT_BC7_UNORM, 20u, 7u);
+  CHECK(whole(texture_of(DXGI_FORMAT_R32G32B32A32_FLOAT, 5u, 2u), wide));
+  CHECK(D3d12CopyPair(encoded, compressed).texels()); }

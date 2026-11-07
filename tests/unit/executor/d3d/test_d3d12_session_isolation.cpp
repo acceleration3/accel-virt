@@ -119,6 +119,7 @@ public:
         insert(signature, D3dObjectKind::command_signature12, &command_signature);
         insert(arguments, D3dObjectKind::resource12, &argument_buffer);
         insert(counts, D3dObjectKind::resource12, &count_buffer);
+        CHECK_STATUS(rig.queries().remember(queries, 0u, 16u), av::Status::ok);
     }
 
     void insert(std::uint32_t id, D3dObjectKind kind, IUnknown *object)
@@ -223,6 +224,7 @@ const Case cases[] = {
      }, 2u},
     {"ResolveSubresource12",
      [](Scene &scene) {
+         scene.other_rgba.desc.SampleDesc.Count = 4u;
          return scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_rgba);
      }, 2u},
     {"BeginQuery12", [](Scene &scene) { return scene.session().on_BeginQuery12(list, queries, 0u, 0u); }, 1u},
@@ -389,3 +391,98 @@ TEST(d3d12_session_isolation, a_heap_no_guest_could_describe_still_removes_the_d
   std::uint32_t removed = 0u;
   CHECK(av_d3d12_Finish12(scene.rig, &removed));
   CHECK_EQ(removed, driver_internal_error); }
+
+namespace {
+
+CopyLocation plane_of(std::uint32_t resource, std::uint32_t subresource)
+{
+    CopyLocation made = subresource_of(resource);
+    made.subresource = subresource;
+    return made;
+}
+
+}
+
+TEST(d3d12_session_isolation, a_compressed_texture_is_copied_to_and_from_the_uncompressed_one_of_its_block_size)
+{ Scene scene;
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_BC1_UNORM, 16u, 16u);
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R32G32_FLOAT, 4u, 4u);
+  const CopyLocation compressed = subresource_of(texture);
+  const CopyLocation encoded = subresource_of(other_texture);
+  CHECK(scene.session().on_CopyTextureRegion12(list, encoded, 0u, 0u, 0u, compressed, 0u, Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, compressed, 0u, 0u, 0u, encoded, 0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 2u);
+  const Box two_blocks = {0u, 0u, 0u, 8u, 8u, 1u};
+  CHECK(scene.session().on_CopyTextureRegion12(list, encoded, 2u, 2u, 0u, compressed, 1u, two_blocks));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, encoded, 3u, 2u, 0u, compressed, 1u, two_blocks));
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R32G32_FLOAT, 3u, 3u);
+  CHECK(!scene.session().on_CopyTextureRegion12(list, encoded, 0u, 0u, 0u, compressed, 0u, Box{}));
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R32G32B32A32_FLOAT, 4u, 4u);
+  CHECK(!scene.session().on_CopyTextureRegion12(list, encoded, 0u, 0u, 0u, compressed, 0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 3u); }
+
+TEST(d3d12_session_isolation, a_depth_stencil_plane_is_laid_out_in_the_format_of_that_plane_and_no_other)
+{ Scene scene;
+  scene.dst.desc = buffer_desc(8192u);
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_R24G8_TYPELESS, 16u, 16u);
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_D32_FLOAT_S8X24_UINT, 16u, 16u);
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, 46u, 16u, 16u), 0u, 0u, 0u,
+                                               plane_of(texture, 0u), 0u, Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, 60u, 16u, 16u), 0u, 0u, 0u,
+                                               plane_of(texture, 1u), 0u, Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, 60u, 16u, 16u), 0u, 0u, 0u,
+                                                plane_of(texture, 0u), 0u, Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, 46u, 16u, 16u), 0u, 0u, 0u,
+                                                plane_of(texture, 1u), 0u, Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, 39u, 16u, 16u), 0u, 0u, 0u,
+                                               plane_of(other_texture, 0u), 0u, Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, 62u, 16u, 16u), 0u, 0u, 0u,
+                                               plane_of(other_texture, 1u), 0u, Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, 62u, 16u, 16u), 0u, 0u, 0u,
+                                                plane_of(other_texture, 0u), 0u, Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, plane_of(texture, 0u), 0u, 0u, 0u, plane_of(other_texture, 1u),
+                                                0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 4u); }
+
+TEST(d3d12_session_isolation, a_planar_video_texture_is_copied_plane_by_plane)
+{ Scene scene;
+  scene.dst.desc = buffer_desc(8192u);
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_NV12, 16u, 16u);
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_NV12, 16u, 16u);
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r8, 16u, 16u), 0u, 0u, 0u,
+                                               plane_of(texture, 0u), 0u, Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, 49u, 8u, 8u), 0u, 0u, 0u,
+                                               plane_of(texture, 1u), 0u, Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r8, 8u, 8u), 0u, 0u, 0u,
+                                                plane_of(texture, 1u), 0u, Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, plane_of(other_texture, 1u), 0u, 0u, 0u, plane_of(texture, 1u),
+                                               0u, Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, plane_of(other_texture, 0u), 0u, 0u, 0u, plane_of(texture, 1u),
+                                                0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 3u); }
+
+TEST(d3d12_session_isolation, a_query_must_name_a_slot_of_a_heap_of_its_kind)
+{ Scene scene;
+  CHECK(scene.session().on_BeginQuery12(list, queries, 0u, 15u));
+  CHECK(!scene.session().on_BeginQuery12(list, queries, 0u, 16u));
+  CHECK(!scene.session().on_EndQuery12(list, queries, 2u, 0u));
+  CHECK(scene.session().on_EndQuery12(list, queries, 1u, 0u));
+  CHECK(scene.session().on_ResolveQueryData12(list, queries, 0u, 8u, 8u, target, 0u));
+  CHECK(!scene.session().on_ResolveQueryData12(list, queries, 0u, 8u, 9u, target, 0u));
+  CHECK(!scene.session().on_ResolveQueryData12(list, queries, 2u, 0u, 1u, target, 0u));
+  CHECK(!scene.session().on_ResolveQueryData12(list, queries, 0u, 0xFFFFFFFFu, 2u, target, 0u)); }
+
+TEST(d3d12_session_isolation, a_resolve_names_subresources_of_one_size_and_samples_that_resolve)
+{ Scene scene;
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 4u);
+  CHECK(scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_rgba));
+  CHECK(!scene.session().on_ResolveSubresource12(list, texture, 1u, other_texture, 0u, format_rgba));
+  CHECK(!scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 1u, format_rgba));
+  CHECK(!scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_r8));
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 32u, 16u, 4u);
+  CHECK(!scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_rgba));
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 1u);
+  CHECK(!scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_rgba));
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 4u);
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 4u);
+  CHECK(!scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_rgba)); }

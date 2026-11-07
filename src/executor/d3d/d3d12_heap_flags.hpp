@@ -10,6 +10,7 @@ public:
     explicit D3d12HeapFlags(uint32_t guest);
 
     uint32_t kept() const;
+    bool     refused() const;
 
 private:
     uint32_t guest_;

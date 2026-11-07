@@ -20,7 +20,7 @@ public:
     using Hold = ListHold<Object, Pin>;
 
     explicit ObjectHolds(BlockSource &blocks)
-        : pool_(blocks), lists_(blocks, Pool::paged), retired_(blocks, Pool::paged), blocks_(blocks)
+        : pool_(blocks), lists_(blocks, Pool::paged), retired_(blocks, Pool::paged), head_(0u), blocks_(blocks)
     {
         AV_SCOPE("ObjectHolds::ObjectHolds");
     }
@@ -62,7 +62,7 @@ public:
         while (kept->size() != 0u) {
             const typename Hold::Held held = kept->at(kept->size() - 1u);
             if (mark > reached) {
-                const Status deferred = retired_.append(Retired{held.object_, mark});
+                const Status deferred = defer(Retired{held.object_, mark});
                 if (deferred != Status::ok) return deferred;
             } else {
                 held.object_->Release();
@@ -83,7 +83,7 @@ public:
             object->Release();
             return Status::ok;
         }
-        return retired_.append(Retired{object, mark});
+        return defer(Retired{object, mark});
     }
 
     [[nodiscard]] Status inherit(const Object *holder, Object *object)
@@ -104,26 +104,24 @@ public:
     void reap(uint64_t reached)
     {
         AV_SCOPE("ObjectHolds::reap");
-        uint32_t index = 0u;
-        while (index < retired_.size()) {
-            const Retired due = retired_.at(index);
-            if (due.mark_ > reached) {
-                index++;
-                continue;
-            }
-            due.object_->Release();
-            retired_.remove_swap(index);
+        while (head_ < retired_.size() && retired_.at(head_).mark_ <= reached) {
+            Object *const due = retired_.at(head_).object_;
+            head_++;
+            due->Release();
         }
+        compact();
     }
 
     void release_all()
     {
         AV_SCOPE("ObjectHolds::release_all");
-        while (retired_.size() != 0u) {
-            const Retired due = retired_.at(retired_.size() - 1u);
+        while (head_ < retired_.size()) {
+            Object *const due = retired_.at(retired_.size() - 1u).object_;
             retired_.truncate(retired_.size() - 1u);
-            due.object_->Release();
+            due->Release();
         }
+        retired_.clear();
+        head_ = 0u;
         for (uint32_t slot = lists_.next_live(0u); slot != KeyedSlots<uint64_t, Hold *>::no_slot;
              slot = lists_.next_live(0u))
             static_cast<void>(release_list(lists_.key_at(slot), ~uint64_t{0}));
@@ -176,7 +174,7 @@ public:
     uint32_t retired() const
     {
         AV_SCOPE("ObjectHolds::retired");
-        return retired_.size();
+        return retired_.size() - head_;
     }
 
     bool invariants_hold() const
@@ -188,8 +186,11 @@ public:
         lists_.for_each([&sound](uint64_t, Hold *const &kept) {
             sound = sound && kept != nullptr && kept->invariants_hold();
         });
-        for (const Retired &due : retired_)
-            if (due.object_ == nullptr) return false;
+        if (head_ > retired_.size()) return false;
+        for (uint32_t index = head_; index < retired_.size(); index++) {
+            if (retired_.at(index).object_ == nullptr) return false;
+            if (index > head_ && retired_.at(index).mark_ < retired_.at(index - 1u).mark_) return false;
+        }
         return sound;
     }
 
@@ -198,6 +199,24 @@ private:
         Object  *object_;
         uint64_t mark_;
     };
+
+    Status defer(const Retired &entry)
+    {
+        AV_SCOPE("ObjectHolds::defer");
+        uint32_t at = retired_.size();
+        while (at > head_ && retired_.at(at - 1u).mark_ > entry.mark_) at--;
+        return retired_.insert_at(at, entry);
+    }
+
+    void compact()
+    {
+        AV_SCOPE("ObjectHolds::compact");
+        if (head_ == 0u || head_ * 2u < retired_.size()) return;
+        const uint32_t kept = retired_.size() - head_;
+        for (uint32_t index = 0u; index < kept; index++) retired_.at(index) = retired_.at(head_ + index);
+        retired_.truncate(kept);
+        head_ = 0u;
+    }
 
     Hold *list_for(uint64_t list)
     {
@@ -226,6 +245,7 @@ private:
     ObjectPool<Hold>          pool_;
     KeyedSlots<uint64_t, Hold *> lists_;
     GrowableArray<Retired>    retired_;
+    uint32_t                  head_;
     BlockSource              &blocks_;
 };
 

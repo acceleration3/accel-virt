@@ -30,7 +30,8 @@ public:
     [[nodiscard]] Status destroy_heap(uint32_t heap, const IUnknown *object, uint64_t marked, Reached reached);
     void                 release_all();
 
-    bool     holds(uint32_t heap, uint32_t index, const IUnknown *resource) const;
+    bool      holds(uint32_t heap, uint32_t index, const IUnknown *resource) const;
+    IUnknown *resource_at(uint32_t heap, uint32_t index) const;
     uint32_t count() const;
 
     bool invariants_hold() const;

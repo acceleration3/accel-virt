@@ -192,7 +192,7 @@ HRESULT D3d12Device::send_heap(const HeapRecord &heap, uint64_t alignment)
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
                                                  size, alignment, memory, offset, &hresult),
               "CreateHeap12"))
-        return E_OUTOFMEMORY;
+        return DXGI_ERROR_DEVICE_REMOVED;
     return static_cast<HRESULT>(hresult);
 }
 
@@ -245,7 +245,7 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
         made = d3d12proto::av_d3d12_CreatePlacedResource12(wire(), resource.header.stamp.id(), heap.header.stamp.id(), offset, desc,
                                                              state, value, resource.address);
     }
-    if (!sent(made, "CreateResource12")) return E_OUTOFMEMORY;
+    if (!sent(made, "CreateResource12")) return DXGI_ERROR_DEVICE_REMOVED;
     return heap.made == 0u ? static_cast<HRESULT>(hresult) : S_OK;
 }
 

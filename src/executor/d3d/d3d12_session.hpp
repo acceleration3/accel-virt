@@ -4,11 +4,13 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
+#include "executor/d3d/d3d12_allocator_marks.hpp"
 #include "executor/d3d/d3d12_block_heaps.hpp"
 #include "executor/d3d/d3d12_descriptor_holds.hpp"
 #include "executor/d3d/d3d12_object_holds.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
+#include "executor/d3d/d3d12_query_heaps.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
@@ -44,6 +46,7 @@ class EventfdWake;
 class WakeSignal;
 class GuestBytes;
 class ImportTable;
+struct D3d12SessionProbe;
 
 class D3d12Session final : public d3d12proto::ServerDispatch {
 public:
@@ -153,12 +156,18 @@ private:
                                                  const d3d12proto::CopyLocation &source,
                                                  const D3D12_TEXTURE_COPY_LOCATION &to,
                                                  const D3D12_TEXTURE_COPY_LOCATION &from) const;
-    bool                       footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t footprint_format) const;
+    bool                       footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t subresource,
+                                                   uint32_t footprint_format) const;
     bool                       footprint_holds(const d3d12proto::CopyLocation &location,
                                                const d3d12proto::Box &region) const;
     bool                       tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,
                                           const d3d12proto::TileSize &size) const;
-    void                       drain();
+    bool                       drain();
+    bool                       wait_for(uint64_t mark);
+    bool                       retain_slot(uint32_t list, const d3d12proto::DescriptorRef &ref);
+    bool                       resolve_holds(const D3D12_RESOURCE_DESC &to, uint32_t to_subresource,
+                                             const D3D12_RESOURCE_DESC &from, uint32_t from_subresource,
+                                             uint32_t format) const;
     bool                       retain(uint32_t list, IUnknown *object, D3d12BlockHeap *block);
     bool                       retain_object(uint32_t list, uint32_t id, D3dObjectKind kind);
     bool                       retain_resource(uint32_t list, uint32_t resource);
@@ -187,6 +196,8 @@ private:
     D3d12BlockHeaps        block_heaps_;
     D3d12ObjectHolds       holds_;
     D3d12DescriptorHolds   descriptors_;
+    D3d12AllocatorMarks    allocators_;
+    D3d12QueryHeaps        queries_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     D3d12PipelineCompiles  compiles_;
@@ -196,6 +207,9 @@ private:
     DriverLog             &lines_;
     CommandRefusal         refusal_;
     MonotonicClock         clock_;
+    uint64_t               hang_ns_;
+
+    friend struct D3d12SessionProbe;
 };
 
 }

@@ -81,3 +81,62 @@ TEST(list_hold, an_allocation_that_fails_holds_nothing)
   CHECK(!fresh);
   CHECK(!hold.holds(&object));
   CHECK(hold.invariants_hold()); }
+
+TEST(list_hold, a_list_of_many_objects_holds_each_once_and_finds_each)
+{ av::MockPlatform platform;
+  Hold hold(platform);
+  CountedObject objects[200];
+  CountedObject stranger;
+  for (CountedObject &object : objects) {
+      bool fresh = false;
+      CHECK_STATUS(hold.add(held_of(object), fresh), av::Status::ok);
+      CHECK(fresh);
+  }
+  for (CountedObject &object : objects) {
+      bool fresh = true;
+      CHECK_STATUS(hold.add(held_of(object), fresh), av::Status::ok);
+      CHECK(!fresh);
+      CHECK(hold.holds(&object));
+  }
+  CHECK(!hold.holds(&stranger));
+  CHECK_EQ(hold.size(), 200u);
+  CHECK(hold.invariants_hold()); }
+
+TEST(list_hold, popping_leaves_the_objects_still_held_findable_and_the_popped_one_gone)
+{ av::MockPlatform platform;
+  Hold hold(platform);
+  CountedObject objects[40];
+  for (CountedObject &object : objects) {
+      bool fresh = false;
+      CHECK_STATUS(hold.add(held_of(object), fresh), av::Status::ok);
+  }
+  hold.pop();
+  hold.pop();
+  CHECK(!hold.holds(&objects[39]));
+  CHECK(!hold.holds(&objects[38]));
+  CHECK(hold.holds(&objects[37]));
+  CHECK(hold.holds(&objects[0]));
+  bool fresh = false;
+  CHECK_STATUS(hold.add(held_of(objects[39]), fresh), av::Status::ok);
+  CHECK(fresh);
+  CHECK(hold.holds(&objects[39]));
+  CHECK(hold.holds(&objects[5]));
+  CHECK(hold.invariants_hold()); }
+
+TEST(list_hold, an_index_that_cannot_grow_leaves_the_list_findable_by_scan)
+{ av::MockPlatform platform;
+  Hold hold(platform);
+  CountedObject objects[10];
+  for (std::uint32_t index = 0u; index < 8u; index++) {
+      bool fresh = false;
+      CHECK_STATUS(hold.add(held_of(objects[index]), fresh), av::Status::ok);
+  }
+  platform.fail_allocation_at(1u);
+  bool fresh = true;
+  CHECK_STATUS(hold.add(held_of(objects[8]), fresh), av::Status::no_memory);
+  CHECK(!fresh);
+  CHECK(hold.holds(&objects[3]));
+  CHECK(!hold.holds(&objects[8]));
+  CHECK_STATUS(hold.add(held_of(objects[8]), fresh), av::Status::ok);
+  CHECK(hold.holds(&objects[8]));
+  CHECK(hold.holds(&objects[0])); }

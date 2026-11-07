@@ -227,14 +227,14 @@ bool D3d12Session::on_SetRenderTargets12(uint32_t id, uint32_t count, const d3d1
     for (uint32_t index = 0u; index < count; index++) {
         size_t handle = 0u;
         if (!cpu_handle(targets[index], D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) ||
-            !retain_object(id, targets[index].heap, D3dObjectKind::descriptor_heap12))
+            !retain_object(id, targets[index].heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, targets[index]))
             return false;
         made[index].ptr = handle;
     }
     D3D12_CPU_DESCRIPTOR_HANDLE depth_handle = {};
     size_t                      handle = 0u;
     if (has_depth != 0u && (!cpu_handle(depth, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) ||
-                            !retain_object(id, depth.heap, D3dObjectKind::descriptor_heap12)))
+                            !retain_object(id, depth.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, depth)))
         return false;
     depth_handle.ptr = handle;
     recorded->OMSetRenderTargets(count, count == 0u ? nullptr : made, FALSE, has_depth != 0u ? &depth_handle : nullptr);
@@ -267,7 +267,7 @@ bool D3d12Session::on_ClearRenderTargetView12(uint32_t id, const d3d12proto::Des
     ID3D12GraphicsCommandList *const recorded = list(id);
     size_t                           handle = 0u;
     if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) ||
-        !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12))
+        !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, view))
         return false;
     D3D12_RECT made[16] = {};
     for (uint32_t index = 0u; index < rect_count && index < 16u; index++)
@@ -285,7 +285,7 @@ bool D3d12Session::on_ClearDepthStencilView12(uint32_t id, const d3d12proto::Des
     ID3D12GraphicsCommandList *const recorded = list(id);
     size_t                           handle = 0u;
     if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) ||
-        !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12))
+        !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, view))
         return false;
     D3D12_RECT made[16] = {};
     for (uint32_t index = 0u; index < rect_count && index < 16u; index++)
@@ -393,6 +393,10 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
     const D3d12CopyExtent extent(from, has_box != 0u ? &box : nullptr);
     d3d12proto::Box       written = {};
     if (!extent.known() || !extent.written_at(x, y, z, written)) return false;
+    if (destination.type == copy_subresource && source.type == copy_subresource)
+        written = D3d12CopyFormats(static_cast<uint32_t>(to.pResource->GetDesc().Format),
+                                   static_cast<uint32_t>(from.pResource->GetDesc().Format))
+                      .rescaled(written);
     if (!footprint_holds(destination, written) || !footprint_holds(source, extent.read())) return false;
     if (!copy_bounds_hold(destination, to, written) || !copy_bounds_hold(source, from, extent.read())) return false;
     if (!copy_formats_hold(destination, source, to, from)) return false;
@@ -438,20 +442,23 @@ bool D3d12Session::copy_formats_hold(const d3d12proto::CopyLocation &destination
     const D3D12_RESOURCE_DESC to_desc = to.pResource->GetDesc();
     const D3D12_RESOURCE_DESC from_desc = from.pResource->GetDesc();
     if (destination.type == copy_subresource && source.type == copy_subresource)
-        return D3d12CopyPair(to_desc, from_desc).texels();
+        return D3d12CopyPair(to_desc, from_desc).texels() &&
+               D3d12SubresourceExtent(to_desc, destination.subresource).plane() ==
+                   D3d12SubresourceExtent(from_desc, source.subresource).plane();
     if (destination.type == copy_footprint)
         return to_desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && from_desc.SampleDesc.Count == 1u &&
-               footprint_placeable(from_desc, destination.format);
+               footprint_placeable(from_desc, source.subresource, destination.format);
     return from_desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && to_desc.SampleDesc.Count == 1u &&
-           footprint_placeable(to_desc, source.format);
+           footprint_placeable(to_desc, destination.subresource, source.format);
 }
 
-bool D3d12Session::footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t footprint_format) const
+bool D3d12Session::footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t subresource,
+                                       uint32_t footprint_format) const
 {
     AV_SCOPE("D3d12Session::footprint_placeable");
-    const D3d12CopyFormats formats(static_cast<uint32_t>(texture.Format), footprint_format);
-    return texture.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER &&
-           (formats.same_texels() || formats.plane_of_destination());
+    const D3d12SubresourceExtent mip(texture, subresource);
+    return mip.known() && D3d12CopyFormats(static_cast<uint32_t>(texture.Format), footprint_format)
+                              .footprint_of_plane(mip.plane());
 }
 
 bool D3d12Session::footprint_holds(const d3d12proto::CopyLocation &location, const d3d12proto::Box &region) const
@@ -490,9 +497,28 @@ bool D3d12Session::on_ResolveSubresource12(uint32_t id, uint32_t destination, ui
     ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
     ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
     if (recorded == nullptr || to == nullptr || from == nullptr || !DxgiFormatLayout(format).known()) return false;
+    if (!resolve_holds(to->GetDesc(), destination_subresource, from->GetDesc(), source_subresource, format)) {
+        LogLine(lines_).text("ResolveSubresource12 on list ").number(id).text(" between subresources that do not resolve").write();
+        return false;
+    }
     if (!retain_resource(id, destination) || !retain_resource(id, source)) return false;
     recorded->ResolveSubresource(to, destination_subresource, from, source_subresource, static_cast<DXGI_FORMAT>(format));
     return true;
+}
+
+bool D3d12Session::resolve_holds(const D3D12_RESOURCE_DESC &to, uint32_t to_subresource,
+                                 const D3D12_RESOURCE_DESC &from, uint32_t from_subresource, uint32_t format) const
+{
+    AV_SCOPE("D3d12Session::resolve_holds");
+    const D3d12SubresourceExtent resolved(to, to_subresource);
+    const D3d12SubresourceExtent multisampled(from, from_subresource);
+    if (!resolved.known() || !multisampled.known() || to.SampleDesc.Count != 1u || from.SampleDesc.Count < 2u)
+        return false;
+    const d3d12proto::Box &into = resolved.whole();
+    const d3d12proto::Box &out_of = multisampled.whole();
+    if (into.right != out_of.right || into.bottom != out_of.bottom || into.back != out_of.back) return false;
+    return D3d12CopyFormats(format, static_cast<uint32_t>(to.Format)).same_texels() &&
+           D3d12CopyFormats(format, static_cast<uint32_t>(from.Format)).same_texels();
 }
 
 bool D3d12Session::on_BeginQuery12(uint32_t id, uint32_t heap, uint32_t type, uint32_t index)
@@ -500,7 +526,8 @@ bool D3d12Session::on_BeginQuery12(uint32_t id, uint32_t heap, uint32_t type, ui
     AV_SCOPE("D3d12Session::on_BeginQuery12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
-    if (recorded == nullptr || queries == nullptr || type > most_query_type || !retain(id, queries, nullptr))
+    if (recorded == nullptr || queries == nullptr || type > most_query_type || !queries_.admits(heap, type, index, 1u) ||
+        !retain(id, queries, nullptr))
         return false;
     recorded->BeginQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
@@ -511,7 +538,8 @@ bool D3d12Session::on_EndQuery12(uint32_t id, uint32_t heap, uint32_t type, uint
     AV_SCOPE("D3d12Session::on_EndQuery12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
-    if (recorded == nullptr || queries == nullptr || type > most_query_type || !retain(id, queries, nullptr))
+    if (recorded == nullptr || queries == nullptr || type > most_query_type || !queries_.admits(heap, type, index, 1u) ||
+        !retain(id, queries, nullptr))
         return false;
     recorded->EndQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
@@ -525,7 +553,9 @@ bool D3d12Session::on_ResolveQueryData12(uint32_t id, uint32_t heap, uint32_t ty
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
     ID3D12Resource  *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
-    if (recorded == nullptr || queries == nullptr || to == nullptr || type > most_query_type) return false;
+    if (recorded == nullptr || queries == nullptr || to == nullptr || type > most_query_type ||
+        !queries_.admits(heap, type, first, count))
+        return false;
     const D3D12_RESOURCE_DESC desc = to->GetDesc();
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || offset % 8u != 0u || offset > desc.Width ||
         static_cast<uint64_t>(count) * result_bytes[type] > desc.Width - offset)
