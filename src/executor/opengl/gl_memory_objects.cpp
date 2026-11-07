@@ -9,7 +9,7 @@ namespace av {
 
 GlMemoryObjects::GlMemoryObjects(BlockSource &blocks, const SliceProgress &progress)
     : progress_(progress), memories_(blocks, Pool::paged), placements_(blocks, Pool::paged),
-      textures_(blocks, Pool::paged), group_(nullptr)
+      textures_(blocks, Pool::paged), group_(nullptr), own_(nullptr)
 {
     AV_SCOPE("GlMemoryObjects::GlMemoryObjects");
 }
@@ -32,11 +32,15 @@ GlMemoryObjects::Hold::~Hold()
     if (group_ != nullptr) group_->unlock();
 }
 
-bool GlMemoryObjects::join(GlMemoryGroup &group)
+bool GlMemoryObjects::join(GlMemoryGroup &group, GlHostImport *own)
 {
     AV_SCOPE("GlMemoryObjects::join");
     part();
-    if (!group.join(*this)) return false;
+    own_ = own;
+    if (!group.join(*this)) {
+        own_ = nullptr;
+        return false;
+    }
     group_ = &group;
     return true;
 }
@@ -47,6 +51,7 @@ void GlMemoryObjects::part()
     if (group_ == nullptr) return;
     group_->part(*this);
     group_ = nullptr;
+    own_ = nullptr;
 }
 
 GlMemoryObjects *GlMemoryObjects::holder_of(uint32_t name)
@@ -164,10 +169,13 @@ void GlMemoryObjects::reclaim(GlHostImport &import)
     AV_SCOPE("GlMemoryObjects::reclaim");
     Hold hold(group_);
     if (group_ == nullptr) {
-        reclaim_here(import);
+        reclaim_here(import, import);
         return;
     }
-    for (uint32_t index = 0u; index < group_->members(); index++) group_->at(index)->reclaim_here(import);
+    for (uint32_t index = 0u; index < group_->members(); index++) {
+        GlMemoryObjects *const member = group_->at(index);
+        member->reclaim_here(import, member->own_ != nullptr ? *member->own_ : import);
+    }
 }
 
 void GlMemoryObjects::destroy_all(GlHostImport &import)
@@ -187,6 +195,7 @@ bool GlMemoryObjects::holds(uint32_t name)
 Status GlMemoryObjects::add(uint32_t name, uint64_t size)
 {
     AV_SCOPE("GlMemoryObjects::add");
+    Hold hold(group_);
     if (name == 0u || size == 0u || memories_.find(name) != nullptr) return Status::invalid_parameter;
     uint32_t slot = 0u;
     return memories_.insert(name, Memory{size, 0u, 0u, 0u, false}, slot);
@@ -293,14 +302,14 @@ void GlMemoryObjects::retire_here(uint32_t name)
     memory->mark_ = progress_.next();
 }
 
-void GlMemoryObjects::reclaim_here(GlHostImport &import)
+void GlMemoryObjects::reclaim_here(GlHostImport &import, GlHostImport &owner)
 {
     AV_SCOPE("GlMemoryObjects::reclaim_here");
     const uint64_t reached = progress_.reached();
-    memories_.erase_if([&import, reached](uint32_t name, const Memory &memory) {
+    memories_.erase_if([&import, &owner, reached](uint32_t name, const Memory &memory) {
         if (!memory.retired_ || memory.placed_ != 0u || memory.textured_ != 0u ||
             memory.mark_ > reached) return false;
-        import.delete_memory(name);
+        import.delete_memory(name, owner);
         return true;
     });
 }

@@ -159,7 +159,13 @@ bool GlHostImport::import_semaphore(int fd, uint32_t &name)
 void GlHostImport::delete_memory(uint32_t name)
 {
     AV_SCOPE("GlHostImport::delete_memory");
-    if (images_ != nullptr) images_->forget(name);
+    delete_memory(name, *this);
+}
+
+void GlHostImport::delete_memory(uint32_t name, GlHostImport &owner)
+{
+    AV_SCOPE("GlHostImport::delete_memory");
+    if (owner.images_ != nullptr) owner.images_->forget(name);
     if (!memory_ || current() == nullptr) return;
     const GLuint named = name;
     delete_memory_objects_(1, &named);

@@ -2,6 +2,7 @@
 #define AV_GL_DMA_BUF_IMAGES_HPP
 
 #include "core/support/keyed_slots.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "executor/shim/egl_extensions.hpp"
 #include "executor/shim/gl_extensions.hpp"
 
@@ -47,6 +48,7 @@ private:
     void (*target_storage_)(unsigned, void *, const int *);
     EglExtensions                egl_;
     GlExtensions                 gl_;
+    mutable PosixLock            lock_;
     KeyedSlots<uint32_t, Image>  images_;
     void                        *display_;
 };

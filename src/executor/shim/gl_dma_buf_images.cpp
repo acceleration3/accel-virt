@@ -1,5 +1,6 @@
 #include "executor/shim/gl_dma_buf_images.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -35,7 +36,7 @@ uint32_t fourcc_of(uint32_t dxgi)
 
 GlDmaBufImages::GlDmaBufImages(BlockSource &blocks)
     : create_image_(nullptr), destroy_image_(nullptr), target_storage_(nullptr), egl_(), gl_(),
-      images_(blocks, Pool::paged), display_(nullptr)
+      lock_(), images_(blocks, Pool::paged), display_(nullptr)
 {
     AV_SCOPE("GlDmaBufImages::GlDmaBufImages");
 }
@@ -68,6 +69,7 @@ void GlDmaBufImages::configure(GlContext &context)
 void GlDmaBufImages::give_back()
 {
     AV_SCOPE("GlDmaBufImages::give_back");
+    const ThreadLockHold locked(lock_);
     if (display_ != nullptr)
         images_.erase_if([this](uint32_t, const Image &held) {
             destroy_image_(display_, held.image_);
@@ -90,6 +92,7 @@ bool GlDmaBufImages::imports_images() const
 bool GlDmaBufImages::import(uint32_t memory, int fd, const SharedImageShape &shape)
 {
     AV_SCOPE("GlDmaBufImages::import");
+    const ThreadLockHold locked(lock_);
     const uint32_t fourcc = fourcc_of(shape.format());
     if (display_ == nullptr || fd < 0 || memory == 0u || !shape.described() || fourcc == 0u ||
         shape.pitch() < shape.width() * texel_bytes || images_.find(memory) != nullptr)
@@ -117,6 +120,7 @@ bool GlDmaBufImages::import(uint32_t memory, int fd, const SharedImageShape &sha
 bool GlDmaBufImages::covers(uint32_t memory, uint32_t width, uint32_t height, uint32_t internal_format) const
 {
     AV_SCOPE("GlDmaBufImages::covers");
+    const ThreadLockHold locked(lock_);
     const Image *const held = images_.find(memory);
     return held != nullptr && held->width_ == width && held->height_ == height &&
            (held->internal_format_ == internal_format || internal_format == gl_srgb8_alpha8);
@@ -125,6 +129,7 @@ bool GlDmaBufImages::covers(uint32_t memory, uint32_t width, uint32_t height, ui
 bool GlDmaBufImages::bind(uint32_t texture, uint32_t memory)
 {
     AV_SCOPE("GlDmaBufImages::bind");
+    const ThreadLockHold locked(lock_);
     const Image *const held = images_.find(memory);
     if (held == nullptr || display_ == nullptr) return false;
     target_storage_(texture, held->image_, nullptr);
@@ -134,6 +139,7 @@ bool GlDmaBufImages::bind(uint32_t texture, uint32_t memory)
 void GlDmaBufImages::forget(uint32_t memory)
 {
     AV_SCOPE("GlDmaBufImages::forget");
+    const ThreadLockHold locked(lock_);
     Image held{};
     if (!images_.take(memory, held)) return;
     destroy_image_(display_, held.image_);
@@ -142,6 +148,7 @@ void GlDmaBufImages::forget(uint32_t memory)
 uint32_t GlDmaBufImages::count() const
 {
     AV_SCOPE("GlDmaBufImages::count");
+    const ThreadLockHold locked(lock_);
     return images_.count();
 }
 

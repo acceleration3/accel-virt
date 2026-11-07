@@ -28,6 +28,7 @@ public:
     [[nodiscard]] bool import_dedicated_memory(int fd, uint64_t size, uint32_t &name);
     [[nodiscard]] bool import_semaphore(int fd, uint32_t &name);
     void               delete_memory(uint32_t name);
+    void               delete_memory(uint32_t name, GlHostImport &owner);
     void               delete_semaphore(uint32_t name);
 
 private:

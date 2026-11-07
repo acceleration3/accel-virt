@@ -1,6 +1,8 @@
 #include "core/support/status.hpp"
 #include "executor/opengl/gl_memory_group.hpp"
 #include "executor/opengl/gl_memory_objects.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
+#include "executor/shim/gl_dma_buf_images.hpp"
 #include "executor/shim/gl_host_import.hpp"
 #include "executor/slice_progress.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -11,6 +13,26 @@
 #include <pthread.h>
 #include <time.h>
 
+namespace av {
+struct GlDmaBufImagesProbe {
+    static void install(GlDmaBufImages &images, void *(*create)(void *, void *, unsigned, void *, const int *),
+                        unsigned (*destroy)(void *, void *), void (*target)(unsigned, void *, const int *))
+    {
+        images.create_image_ = create;
+        images.destroy_image_ = destroy;
+        images.target_storage_ = target;
+        images.display_ = &images;
+    }
+    static void uninstall(GlDmaBufImages &images)
+    {
+        images.display_ = nullptr;
+        images.images_.clear();
+    }
+};
+}
+
+using av::GlDmaBufImages;
+using av::GlDmaBufImagesProbe;
 using av::GlHostImport;
 using av::GlMemoryGroup;
 using av::GlMemoryObjects;
@@ -375,3 +397,84 @@ TEST(gl_memory_objects, a_group_holds_at_most_its_members_and_a_member_joins_one
   CHECK(memories.join(other));
   CHECK_EQ(one.members(), 0u);
   CHECK_EQ(other.members(), 1u); }
+
+namespace {
+
+int      image_sentinel = 0;
+unsigned images_destroyed = 0u;
+
+void *fake_image_create(void *, void *, unsigned, void *, const int *) { return &image_sentinel; }
+
+unsigned fake_image_destroy(void *, void *)
+{
+    images_destroyed++;
+    return 1u;
+}
+
+void fake_image_target(unsigned, void *, const int *) {}
+
+struct Adding {
+    GlMemoryObjects   *memories;
+    std::atomic<bool>  done;
+};
+
+void *add_one(void *context)
+{
+    Adding &adding = *static_cast<Adding *>(context);
+    static_cast<void>(adding.memories->add(8u, 0x4000u));
+    adding.done.store(true);
+    return nullptr;
+}
+
+}
+
+TEST(gl_memory_objects, adding_a_memory_waits_for_the_group_lock)
+{ MockPlatform platform;
+  ScriptedProgress progress;
+  GlMemoryGroup group;
+  GlMemoryObjects memories(platform, progress);
+  CHECK(memories.join(group));
+  Adding adding = {&memories, false};
+  group.lock();
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, add_one, &adding), 0);
+  const timespec pause = {0, 100 * 1000 * 1000};
+  nanosleep(&pause, nullptr);
+  const bool finished_early = adding.done.load();
+  group.unlock();
+  CHECK_EQ(pthread_join(thread, nullptr), 0);
+  CHECK(!finished_early);
+  CHECK(adding.done.load());
+  CHECK(memories.holds(8u)); }
+
+TEST(gl_memory_objects, a_memory_reclaimed_by_another_session_forgets_its_image_in_the_owner_s_table)
+{ MockPlatform platform;
+  ScriptedProgress progress;
+  GlDmaBufImages maker_images(platform);
+  GlDmaBufImages user_images(platform);
+  GlHostImport   maker_import;
+  GlHostImport   user_import;
+  maker_import.attach(maker_images);
+  user_import.attach(user_images);
+  GlDmaBufImagesProbe::install(maker_images, fake_image_create, fake_image_destroy, fake_image_target);
+  GlDmaBufImagesProbe::install(user_images, fake_image_create, fake_image_destroy, fake_image_target);
+  CHECK(maker_images.import(7u, 3, av::SharedImageShape(16u, 16u, 28u, 64u)));
+  CHECK(user_images.import(7u, 3, av::SharedImageShape(16u, 16u, 28u, 64u)));
+  images_destroyed = 0u;
+  GlMemoryGroup group;
+  GlMemoryObjects maker(platform, progress);
+  GlMemoryObjects user(platform, progress);
+  CHECK(maker.join(group, &maker_import));
+  CHECK(user.join(group, &user_import));
+  CHECK_STATUS(maker.add(7u, 0x4000u), Status::ok);
+  user.retire(7u);
+  progress.reached_ = 5u;
+  user.reclaim(user_import);
+  CHECK(!maker.holds(7u));
+  CHECK_EQ(maker_images.count(), 0u);
+  CHECK_EQ(user_images.count(), 1u);
+  CHECK_EQ(images_destroyed, 1u);
+  user.part();
+  maker.part();
+  GlDmaBufImagesProbe::uninstall(maker_images);
+  GlDmaBufImagesProbe::uninstall(user_images); }

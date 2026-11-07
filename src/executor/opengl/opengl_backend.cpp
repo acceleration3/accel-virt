@@ -146,7 +146,7 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
     if (display == nullptr ||
         !context_.open(*display, GlContextAttributes(options), share != nullptr ? &share->context_ : nullptr))
         return false;
-    if (group != nullptr && !memories_.join(*group)) {
+    if (group != nullptr && !memories_.join(*group, &import_)) {
         context_.close();
         return false;
     }

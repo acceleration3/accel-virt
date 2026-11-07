@@ -15,7 +15,7 @@ void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis)
     count_++;
 }
 
-uint32_t MockHostApis::questions() const { return questions_; }
+uint32_t MockHostApis::questions() const { return __atomic_load_n(&questions_, __ATOMIC_RELAXED); }
 
 void MockHostApis::give_d3d11(uint32_t index) { d3d11_index_ = index; }
 
@@ -31,74 +31,74 @@ void MockHostApis::withhold_memory_source() { memory_withheld_ = true; }
 
 uint32_t MockHostApis::gpu_count()
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return count_;
 }
 
 void MockHostApis::gpu_uuid(uint32_t index, uint8_t *out)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     if (index >= count_ || out == nullptr) return;
     for (uint32_t i = 0u; i < uuid_bytes; i++) out[i] = gpus_[index].uuid[i];
 }
 
 int32_t MockHostApis::render_minor(uint32_t)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return -1;
 }
 
 uint32_t MockHostApis::sub_apis(uint32_t index)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return index < count_ ? gpus_[index].sub_apis : 0u;
 }
 
 const GlDisplay *MockHostApis::gl_display(uint32_t)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return gl_;
 }
 
 const OpenClDevice *MockHostApis::opencl_device(uint32_t)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return nullptr;
 }
 
 D3d11HostDevice *MockHostApis::d3d11_device(uint32_t index)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return index == d3d11_index_ ? &d3d11_ : nullptr;
 }
 
 D3d9HostDevice *MockHostApis::d3d9_device(uint32_t)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return nullptr;
 }
 
 D3d12HostDevice *MockHostApis::d3d12_device(uint32_t)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return nullptr;
 }
 
 SharedSurfaces *MockHostApis::surfaces(uint32_t index)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return index < count_ ? &surfaces_ : nullptr;
 }
 
 HostShares *MockHostApis::shares(uint32_t index)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return index < count_ ? &shares_ : nullptr;
 }
 
 HostMemorySource *MockHostApis::memory_source(uint32_t index)
 {
-    questions_++;
+    __atomic_fetch_add(&questions_, 1u, __ATOMIC_RELAXED);
     return index < count_ && !memory_withheld_ ? &source_ : nullptr;
 }
 

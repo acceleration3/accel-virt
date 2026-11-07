@@ -26,8 +26,8 @@ ContextSession::ContextSession(DriverLog &lines)
 Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes)
 {
     AV_SCOPE("ContextSession::initialize");
-    if (backend_ != nullptr) return Status::invalid_state;
-    backend_ = &backend;
+    if (__atomic_load_n(&backend_, __ATOMIC_ACQUIRE) != nullptr) return Status::invalid_state;
+    __atomic_store_n(&backend_, &backend, __ATOMIC_RELEASE);
     arena_.attach(block, block_bytes);
     starved_ = 0u;
     channel_.reset();
@@ -55,7 +55,6 @@ bool ContextSession::release(TeardownBudget &budget)
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) retire_blob(blob->id());
     parked_count_ = 0u;
     if (backend_ != nullptr) backend_->shut_down();
-    backend_ = nullptr;
     clocks_ = nullptr;
     source_ = nullptr;
     domain_ = 0u;
@@ -64,13 +63,14 @@ bool ContextSession::release(TeardownBudget &budget)
     answer_length_ = 0u;
     faulted_ = false;
     drained_ = false;
+    __atomic_store_n(&backend_, nullptr, __ATOMIC_RELEASE);
     return true;
 }
 
 bool ContextSession::live() const
 {
     AV_SCOPE("ContextSession::live");
-    return backend_ != nullptr;
+    return __atomic_load_n(&backend_, __ATOMIC_ACQUIRE) != nullptr;
 }
 
 void ContextSession::bind_signal(void (*signal)(void *context), void *context)

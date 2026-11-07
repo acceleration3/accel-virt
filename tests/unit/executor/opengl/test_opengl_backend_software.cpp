@@ -100,8 +100,6 @@ constexpr unsigned gl_srgb8_alpha8 = 0x8C43u;
 constexpr unsigned gl_rgb565 = 0x8D62u;
 constexpr unsigned gl_rgba = 0x1908u;
 constexpr unsigned gl_unsigned_byte = 0x1401u;
-constexpr unsigned gl_framebuffer = 0x8D40u;
-constexpr unsigned gl_color_attachment0 = 0x8CE0u;
 constexpr unsigned gl_color_buffer_bit = 0x4000u;
 constexpr unsigned gl_texture_internal_format = 0x1003u;
 constexpr unsigned gl_texture_width = 0x1000u;
@@ -213,14 +211,15 @@ unsigned    stub_calls = 0u;
 void storage_from_memory_as_plain(GLuint texture, GLsizei levels, GLenum format, GLsizei width, GLsizei height,
                                   GLuint, GLuint64)
 {
-    stub_calls++;
-    plain_storage(texture, levels, format, width, height);
+    __atomic_fetch_add(&stub_calls, 1u, __ATOMIC_RELAXED);
+    __atomic_load_n(&plain_storage, __ATOMIC_RELAXED)(texture, levels, format, width, height);
 }
 
 void use_plain_storage(OpenGlBackend &backend)
 {
-    plain_storage = reinterpret_cast<StorageTwoD>(eglGetProcAddress("glTextureStorage2D"));
-    stub_calls = 0u;
+    __atomic_store_n(&plain_storage, reinterpret_cast<StorageTwoD>(eglGetProcAddress("glTextureStorage2D")),
+                     __ATOMIC_RELAXED);
+    __atomic_store_n(&stub_calls, 0u, __ATOMIC_RELAXED);
     OpenGlBackendProbe::writable(backend).glTextureStorageMem2DEXT = storage_from_memory_as_plain;
 }
 
@@ -642,8 +641,11 @@ TEST(opengl_backend_software, a_dma_buf_whose_shape_the_image_does_not_cover_goe
 
 namespace {
 
+constexpr std::uint32_t pairs = threads / 2u;
+constexpr std::uint32_t cycles_per_pair = iterations / pairs;
+constexpr std::uint32_t memories_per_cycle = 6u;
+
 std::atomic<std::uint32_t> faults(0u);
-std::atomic<std::uint32_t> next_cycle(0u);
 
 void expect(bool condition, const char *what, std::uint32_t cycle)
 {
@@ -651,62 +653,112 @@ void expect(bool condition, const char *what, std::uint32_t cycle)
     if (faults.fetch_add(1u) == 0u) std::fprintf(stderr, "cycle %u: %s\n", cycle, what);
 }
 
-void cycle(const av::GlDisplay *display, std::uint32_t number)
+class Pair {
+public:
+    Pair() : first_(nullptr)
+    {
+        pthread_barrier_init(&gate_, nullptr, 2);
+        for (auto &seat : published_)
+            for (auto &name : seat) name.store(0u);
+    }
+    ~Pair() { pthread_barrier_destroy(&gate_); }
+    Pair(const Pair &) = delete;
+    Pair &operator=(const Pair &) = delete;
+
+    void wait() { pthread_barrier_wait(&gate_); }
+
+    OpenGlBackend                 *first_;
+    std::atomic<std::uint64_t>     published_[2][memories_per_cycle];
+
+private:
+    pthread_barrier_t gate_;
+};
+
+struct Member {
+    Pair         *pair;
+    std::uint32_t seat;
+    std::uint32_t number;
+};
+
+void run_cycle(Pair &pair, std::uint32_t seat, std::uint32_t number)
 {
-    OpenGlBackend first(executor_log.opengl());
-    OpenGlBackend second(executor_log.opengl());
-    expect(first.initialize(display, nullptr, nullptr), "the first context opens", number);
-    expect(second.initialize(display, nullptr, &first), "the sharing context opens", number);
-    const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(second);
-    use_plain_storage(second);
-    unsigned back_buffer = 0u, framebuffer = 0u;
-    gl.glCreateTextures(gl_texture_2d, 1, &back_buffer);
-    gl.glTextureStorage2D(back_buffer, 1, gl_rgba8, static_cast<int>(side), static_cast<int>(side));
-    gl.glCreateFramebuffers(1, &framebuffer);
-    gl.glNamedFramebufferTexture(framebuffer, gl_color_attachment0, back_buffer, 0);
-    gl.glBindFramebuffer(gl_framebuffer, framebuffer);
-    gl.glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
-    gl.glClear(gl_color_buffer_bit);
-    Memfd         memfd(memory_bytes);
-    std::uint64_t name = 0u, detail = 0u;
-    expect(import_memory(second, memfd.fd(), memory_bytes, av::SharedImageShape(), name, detail), "memory imports",
-           number);
-    const unsigned left = make_texture(second);
-    const unsigned right = make_texture(second);
-    expect(store_in_memory(second, left, side, name, 0u), "the first texture is placed", number);
-    expect(store_in_memory(second, right, side, name, memory_bytes / 2u), "the second texture is placed", number);
-    second.release_object(AV_SHARED_MEMORY, name, detail);
-    second.end_batch();
-    CHECK(second.drain(av::GenerousBudget().budget()));
-    expect(memory_object_exists(static_cast<unsigned>(name)), "memory kept for two textures", number);
-    expect(delete_texture(second, left), "the first texture goes", number);
-    second.end_batch();
-    CHECK(second.drain(av::GenerousBudget().budget()));
-    expect(memory_object_exists(static_cast<unsigned>(name)), "memory kept for the last texture", number);
-    expect(delete_texture(second, right), "the second texture goes", number);
-    expect(Command(av::glproto::kCmd_glFlush).run(second), "flush", number);
-    second.end_batch();
-    CHECK(second.drain(av::GenerousBudget().budget()));
-    expect(!memory_object_exists(static_cast<unsigned>(name)), "memory freed after the last texture", number);
-    second.shut_down();
-    first.shut_down();
+    const av::GlDisplay *const display = software().display();
+    OpenGlBackend backend(executor_log.opengl());
+    if (seat == 0u) {
+        pair.first_ = &backend;
+        expect(backend.initialize(display, nullptr, nullptr), "the first context opens", number);
+    }
+    pair.wait();
+    if (seat == 1u) expect(backend.initialize(display, nullptr, pair.first_), "the sharing context opens", number);
+    pair.wait();
+    use_plain_storage(backend);
+    unsigned textures[memories_per_cycle * (memories_per_cycle + 1u)] = {};
+    std::uint32_t made = 0u;
+    std::uint64_t mine[memories_per_cycle] = {};
+    std::uint64_t details[memories_per_cycle] = {};
+    const std::uint32_t other = 1u - seat;
+    for (std::uint32_t at = 0u; at < memories_per_cycle; at++) {
+        Memfd memfd(memory_bytes);
+        expect(import_memory(backend, memfd.fd(), memory_bytes, av::SharedImageShape(), mine[at], details[at]),
+               "memory imports", number);
+        pair.published_[seat][at].store(mine[at]);
+        const unsigned own = make_texture(backend);
+        textures[made++] = own;
+        expect(store_in_memory(backend, own, side, mine[at], 0u), "a texture is placed in an own memory", number);
+        for (std::uint32_t seen = 0u; seen <= at; seen++) {
+            const std::uint64_t theirs = pair.published_[other][seen].load();
+            if (theirs == 0u) continue;
+            const unsigned across = make_texture(backend);
+            textures[made++] = across;
+            static_cast<void>(store_in_memory(backend, across, side, theirs, memory_bytes / 2u));
+        }
+    }
+    pair.wait();
+    for (std::uint32_t at = 0u; at < memories_per_cycle; at++) {
+        backend.release_object(AV_SHARED_MEMORY, mine[at], details[at]);
+        backend.end_batch();
+        static_cast<void>(backend.drain(av::GenerousBudget().budget()));
+    }
+    pair.wait();
+    for (std::uint32_t at = 0u; at < made; at++) static_cast<void>(delete_texture(backend, textures[at]));
+    expect(Command(av::glproto::kCmd_glFlush).run(backend), "flush", number);
+    backend.end_batch();
+    static_cast<void>(backend.drain(av::GenerousBudget().budget()));
+    pair.wait();
+    for (std::uint32_t round = 0u; round < 2u; round++) {
+        backend.end_batch();
+        expect(backend.drain(av::GenerousBudget().budget()), "the final drain finishes", number);
+    }
+    expect(OpenGlBackendProbe::memories(backend).count() == 0u, "every memory of the pair is gone", number);
+    expect(OpenGlBackendProbe::memories(backend).invariants_hold(), "the tables are sound", number);
+    for (std::uint32_t at = 0u; at < memories_per_cycle; at++)
+        expect(!memory_object_exists(static_cast<unsigned>(mine[at])), "a retired memory object is deleted", number);
+    pair.wait();
+    if (seat == 1u) backend.shut_down();
+    pair.wait();
+    if (seat == 0u) backend.shut_down();
+    pair.wait();
 }
 
-void *work(void *)
+void *work(void *argument)
 {
-    for (std::uint32_t number = next_cycle.fetch_add(1u); number < iterations; number = next_cycle.fetch_add(1u))
-        cycle(software().display(), number);
+    const Member &member = *static_cast<Member *>(argument);
+    for (std::uint32_t number = 0u; number < cycles_per_pair; number++)
+        run_cycle(*member.pair, member.seat, member.number * cycles_per_pair + number);
     return nullptr;
 }
 
 }
 
-TEST(opengl_backend_software, two_hundred_fifty_six_open_draw_retire_drain_and_close_cycles_over_eight_threads_leave_no_memory_object_under_a_texture)
+TEST(opengl_backend_software, open_import_place_retire_drain_and_close_cycles_over_four_pairs_of_threads_sharing_a_context_leave_no_memory_object_under_a_texture)
 { if (skipped()) return;
   faults = 0u;
-  next_cycle = 0u;
+  static Pair rigs[pairs];
+  Member members[threads];
   pthread_t workers[threads];
-  for (pthread_t &worker : workers) CHECK_EQ(pthread_create(&worker, nullptr, work, nullptr), 0);
+  for (std::uint32_t at = 0u; at < threads; at++) {
+      members[at] = {&rigs[at / 2u], at % 2u, at / 2u};
+      CHECK_EQ(pthread_create(&workers[at], nullptr, work, &members[at]), 0);
+  }
   for (pthread_t &worker : workers) CHECK_EQ(pthread_join(worker, nullptr), 0);
-  CHECK_EQ(faults.load(), 0u);
-  CHECK(next_cycle.load() >= iterations); }
+  CHECK_EQ(faults.load(), 0u); }

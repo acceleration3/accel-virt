@@ -22,7 +22,7 @@ public:
     GlMemoryObjects(const GlMemoryObjects &) = delete;
     GlMemoryObjects &operator=(const GlMemoryObjects &) = delete;
 
-    [[nodiscard]] bool   join(GlMemoryGroup &group);
+    [[nodiscard]] bool   join(GlMemoryGroup &group, GlHostImport *own = nullptr);
     void                 part();
     [[nodiscard]] Status add(uint32_t name, uint64_t size);
     [[nodiscard]] Status admit(uint32_t buffer, uint32_t name, uint64_t offset, uint64_t bytes);
@@ -80,10 +80,11 @@ private:
     [[nodiscard]] Status inherit_texture_here(uint32_t view, uint32_t original);
     void                 leave_texture_here(uint32_t texture);
     void                 retire_here(uint32_t name);
-    void                 reclaim_here(GlHostImport &import);
+    void                 reclaim_here(GlHostImport &import, GlHostImport &owner);
     void                 destroy_here(GlHostImport &import);
 
     GlMemoryGroup *group_;
+    GlHostImport  *own_;
 
     void bump(Memory &memory);
 };
