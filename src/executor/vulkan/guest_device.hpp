@@ -18,10 +18,13 @@ public:
     VkDevice            device() const;
     VulkanDeviceTable  &table();
     VulkanMemoryImport &memory();
+    void                note_invalid_shader_extension(bool enabled);
+    VkResult            shader_refusal() const;
 
 private:
     VulkanDeviceTable  table_;
     VulkanMemoryImport memory_;
+    bool               invalid_shader_extension_;
 };
 
 }

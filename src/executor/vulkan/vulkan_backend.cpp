@@ -34,6 +34,18 @@ constexpr VulkanObjectKind object_kind(vkproto::HandleKind kind)
     }
 }
 
+bool enables(const VkDeviceCreateInfo *create, const char *name)
+{
+    AV_SCOPE("enables");
+    for (uint32_t at = 0u; at < create->enabledExtensionCount; at++) {
+        const char *enabled = create->ppEnabledExtensionNames[at];
+        uint32_t    index = 0u;
+        while (enabled[index] != '\0' && enabled[index] == name[index]) index++;
+        if (enabled[index] == name[index]) return true;
+    }
+    return false;
+}
+
 }
 
 VulkanBackend::VulkanBackend(DriverLog &lines) : VulkanBackend(heap_, lines)
@@ -46,7 +58,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
-      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), progress_(),
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), progress_(),
       guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
@@ -407,6 +419,7 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     const auto instance = reinterpret_cast<VkInstance>(handles_.parent_of(reinterpret_cast<uint64_t>(physicalDevice)));
     if (made->load(instance, physicalDevice, *pDevice)) {
         adopting_ = made;
+        made->note_invalid_shader_extension(enables(pCreateInfo, VK_NV_GLSL_SHADER_EXTENSION_NAME));
         memory_import_ = made->memory().imports();
     } else {
         static_cast<void>(devices_.destroy(made));

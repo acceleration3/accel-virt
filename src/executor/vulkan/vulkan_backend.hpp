@@ -6,6 +6,7 @@
 #include "executor/vulkan/guest_device.hpp"
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/monotonic_clock.hpp"
+#include "executor/vulkan/spirv_validator.hpp"
 #include "executor/vulkan/vulkan_fence_watch.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_host_waits.hpp"
@@ -25,6 +26,7 @@
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 #include "proto/wire/wire_reader.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
@@ -112,6 +114,18 @@ public:
                                     const VkDependencyInfo *pDependencyInfos) override;
     void     on_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount,
                                      const VkCommandBuffer *pCommandBuffers) override;
+    VkResult on_vkCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo,
+                                     const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule) override;
+    VkResult on_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount,
+                                          const VkGraphicsPipelineCreateInfo *pCreateInfos,
+                                          const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines) override;
+    VkResult on_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount,
+                                         const VkComputePipelineCreateInfo *pCreateInfos,
+                                         const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines) override;
+    VkResult on_vkCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation,
+                                               VkPipelineCache pipelineCache, uint32_t createInfoCount,
+                                               const VkRayTracingPipelineCreateInfoKHR *pCreateInfos,
+                                               const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines) override;
     VkResult on_vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo *pCreateInfo,
                                     const VkAllocationCallbacks *pAllocator, VkCommandPool *pCommandPool) override;
 
@@ -307,6 +321,8 @@ private:
     uint32_t                           first_memory_type(uint32_t mask) const;
     uint32_t                           import_type(const SourceMemory &memory, int fd) const;
     VkPhysicalDevice bound_device(VkInstance instance);
+    VkResult         shader_verdict(VkDevice device, const uint32_t *code, size_t bytes);
+    VkResult         stage_verdicts(VkDevice device, const VkPipelineShaderStageCreateInfo *stages, uint32_t count);
 
     static constexpr uint32_t lowest_api_version = 1u << 22;
 
@@ -345,6 +361,7 @@ private:
     VkResult             last_submit_;
     DriverLog           &lines_;
     VulkanFenceWatch     fence_watch_;
+    SpirvValidator       spirv_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;
     uint64_t parent_;

@@ -4,7 +4,7 @@
 
 namespace av {
 
-GuestDevice::GuestDevice() : table_(), memory_(table_)
+GuestDevice::GuestDevice() : table_(), memory_(table_), invalid_shader_extension_(false)
 {
     AV_SCOPE("GuestDevice::GuestDevice");
 }
@@ -31,6 +31,18 @@ VulkanMemoryImport &GuestDevice::memory()
 {
     AV_SCOPE("GuestDevice::memory");
     return memory_;
+}
+
+void GuestDevice::note_invalid_shader_extension(bool enabled)
+{
+    AV_SCOPE("GuestDevice::note_invalid_shader_extension");
+    invalid_shader_extension_ = enabled;
+}
+
+VkResult GuestDevice::shader_refusal() const
+{
+    AV_SCOPE("GuestDevice::shader_refusal");
+    return invalid_shader_extension_ ? VK_ERROR_INVALID_SHADER_NV : VK_ERROR_UNKNOWN;
 }
 
 }
