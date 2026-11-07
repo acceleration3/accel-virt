@@ -45,13 +45,10 @@ public:
     {
         AV_SCOPE("ListHold::adopt_pin");
         if (pin == nullptr) return false;
-        for (uint32_t index = 0u; index < held_.size(); index++) {
-            if (held_.at(index).object_ != object) continue;
-            if (held_.at(index).pin_ != nullptr) return false;
-            held_.at(index).pin_ = pin;
-            return true;
-        }
-        return false;
+        const uint32_t index = position_of(object);
+        if (index == held_.size() || held_.at(index).pin_ != nullptr) return false;
+        held_.at(index).pin_ = pin;
+        return true;
     }
 
     void submitted(uint64_t mark)
@@ -77,18 +74,7 @@ public:
     bool holds(const Object *object) const
     {
         AV_SCOPE("ListHold::holds");
-        if (held_.size() == 0u) return false;
-        if (stale_ || index_.size() == 0u) {
-            for (uint32_t index = 0u; index < held_.size(); index++)
-                if (held_.at(index).object_ == object) return true;
-            return false;
-        }
-        const uint32_t mask = index_.size() - 1u;
-        for (uint32_t probe = hash_of(object) & mask;; probe = (probe + 1u) & mask) {
-            const uint32_t entry = index_.at(probe);
-            if (entry == 0u) return false;
-            if (held_.at(entry - 1u).object_ == object) return true;
-        }
+        return position_of(object) != held_.size();
     }
 
     uint64_t mark() const
@@ -123,6 +109,23 @@ public:
 
 private:
     static constexpr uint32_t first_index = 16u;
+
+    uint32_t position_of(const Object *object) const
+    {
+        AV_SCOPE("ListHold::position_of");
+        if (held_.size() == 0u) return 0u;
+        if (stale_ || index_.size() == 0u) {
+            for (uint32_t index = 0u; index < held_.size(); index++)
+                if (held_.at(index).object_ == object) return index;
+            return held_.size();
+        }
+        const uint32_t mask = index_.size() - 1u;
+        for (uint32_t probe = hash_of(object) & mask;; probe = (probe + 1u) & mask) {
+            const uint32_t entry = index_.at(probe);
+            if (entry == 0u) return held_.size();
+            if (held_.at(entry - 1u).object_ == object) return entry - 1u;
+        }
+    }
 
     uint32_t hash_of(const Object *object) const
     {

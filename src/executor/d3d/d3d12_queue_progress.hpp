@@ -34,6 +34,8 @@ public:
 
     uint64_t marked() const;
     uint64_t reached() const;
+    uint64_t reached_this_poll();
+    void     begin_poll();
 
     bool invariants_hold() const;
 
@@ -52,6 +54,8 @@ private:
     GrowableArray<Queue> queues_;
     GrowableArray<Queue> draining_;
     uint64_t             marked_;
+    uint64_t             polled_;
+    bool                 stale_;
 
     friend struct D3d12QueueProgressProbe;
 };

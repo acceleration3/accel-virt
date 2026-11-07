@@ -11,7 +11,7 @@
 namespace av {
 
 D3d12QueueProgress::D3d12QueueProgress(EventfdWake &wake, BlockSource &blocks)
-    : wake_(wake), queues_(blocks, Pool::paged), draining_(blocks, Pool::paged), marked_(0u)
+    : wake_(wake), queues_(blocks, Pool::paged), draining_(blocks, Pool::paged), marked_(0u), polled_(0u), stale_(true)
 {
     AV_SCOPE("D3d12QueueProgress::D3d12QueueProgress");
 }
@@ -158,6 +158,21 @@ uint64_t D3d12QueueProgress::marked() const
 {
     AV_SCOPE("D3d12QueueProgress::marked");
     return marked_;
+}
+
+void D3d12QueueProgress::begin_poll()
+{
+    AV_SCOPE("D3d12QueueProgress::begin_poll");
+    stale_ = true;
+}
+
+uint64_t D3d12QueueProgress::reached_this_poll()
+{
+    AV_SCOPE("D3d12QueueProgress::reached_this_poll");
+    if (!stale_) return polled_;
+    polled_ = reached();
+    stale_ = false;
+    return polled_;
 }
 
 uint64_t D3d12QueueProgress::reached() const

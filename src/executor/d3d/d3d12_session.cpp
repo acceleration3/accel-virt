@@ -206,7 +206,8 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
 {
     AV_SCOPE("D3d12Session::run");
     block_heaps_.reclaim();
-    if (holds_.retired() != 0u) holds_.reap(progress_.reached());
+    progress_.begin_poll();
+    if (holds_.retired() != 0u) holds_.reap(progress_.reached_this_poll());
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
     if (ran) return true;
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
@@ -358,7 +359,7 @@ bool D3d12Session::noted(const d3d12proto::DescriptorRef &at, uint32_t resource,
     const D3d12DescriptorHolds::View view = {viewed, counted, viewed == nullptr ? nullptr : block_heaps_.pin(resource),
                                              counted == nullptr ? nullptr : block_heaps_.pin(counter)};
     const Status    kept = descriptors_.note(at.heap, at.index, view, progress_.marked(),
-                                             [this]() { return progress_.reached(); });
+                                             [this]() { return progress_.reached_this_poll(); });
     if (kept == Status::ok) return true;
     LogLine(lines_).text("descriptor ").number(at.index).text(" of heap ").number(at.heap)
         .text(" kept nothing alive, status ").number(static_cast<uint32_t>(kept)).write();
@@ -488,7 +489,7 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     if (kind == D3dObjectKind::resource12) release_holds(id);
     if (kind == D3dObjectKind::descriptor_heap12) {
         const Status let = descriptors_.destroy_heap(id, objects_.find(id, kind), progress_.marked(),
-                                                     [this]() { return progress_.reached(); });
+                                                     [this]() { return progress_.reached_this_poll(); });
         if (let != Status::ok) drain();
     }
     retire(objects_.take(id));
@@ -763,7 +764,7 @@ bool D3d12Session::on_CopyDescriptors12(const d3d12proto::DescriptorRef &destina
                                              D3D12_CPU_DESCRIPTOR_HANDLE{from_handle},
                                              static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));
     return descriptors_.copy(destination.heap, destination.index, source.heap, source.index, count, progress_.marked(),
-                             [this]() { return progress_.reached(); }) == Status::ok;
+                             [this]() { return progress_.reached_this_poll(); }) == Status::ok;
 }
 
 bool D3d12Session::on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count,

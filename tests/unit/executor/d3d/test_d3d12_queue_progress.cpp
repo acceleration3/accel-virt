@@ -672,3 +672,19 @@ TEST(d3d12_queue_progress_after_siblings, a_queue_made_to_follow_a_sibling_that_
   CHECK(rig.execute(1u));
   CHECK(queues_run_to_the_end(rig.ledger, 2u));
   CHECK(!queues_run_to_the_end(Ledger{{LedgerOp{0u, 'w', &rig.device.fences[1], 9u}, LedgerOp{1u, 'w', &rig.device.fences[0], 9u}}, 2u}, 2u)); }
+
+TEST(d3d12_queue_progress_reached, is_read_from_the_fences_once_per_poll_however_often_it_is_asked)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct;
+  CHECK(progress.executed(1u, &direct, &device));
+  CHECK(progress.executed(1u, &direct, &device));
+  progress.begin_poll();
+  CHECK(progress.reached_this_poll() == 0u);
+  device.fences[0].completed = 2u;
+  for (std::uint32_t asked = 0u; asked < 20u; asked++) CHECK(progress.reached_this_poll() == 0u);
+  progress.begin_poll();
+  CHECK(progress.reached_this_poll() == 2u);
+  CHECK(progress.reached() == 2u); }

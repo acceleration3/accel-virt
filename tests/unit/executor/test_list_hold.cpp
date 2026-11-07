@@ -4,6 +4,8 @@
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
+#include <ctime>
+#include <vector>
 
 using av::CountedObject;
 using Hold = av::ListHold<CountedObject, void>;
@@ -140,3 +142,46 @@ TEST(list_hold, an_index_that_cannot_grow_leaves_the_list_findable_by_scan)
   CHECK_STATUS(hold.add(held_of(objects[8]), fresh), av::Status::ok);
   CHECK(hold.holds(&objects[8]));
   CHECK(hold.holds(&objects[0])); }
+
+namespace {
+
+double seconds_now()
+{
+    timespec at = {};
+    clock_gettime(CLOCK_MONOTONIC, &at);
+    return static_cast<double>(at.tv_sec) + static_cast<double>(at.tv_nsec) / 1e9;
+}
+
+struct Pinned {
+    int taken = 0;
+};
+
+}
+
+TEST(list_hold, a_pin_is_adopted_by_the_object_that_lacks_one_through_the_index_however_long_the_list)
+{ av::MockPlatform platform;
+  av::ListHold<CountedObject, Pinned> hold(platform);
+  constexpr std::uint32_t many = 200000u;
+  std::vector<CountedObject> objects(many);
+  std::vector<Pinned>        pins(many);
+  bool fresh = false;
+  for (std::uint32_t at = 0u; at < many; at++)
+      CHECK_STATUS(hold.add(av::ListHold<CountedObject, Pinned>::Held{&objects[at], nullptr}, fresh), av::Status::ok);
+  const double started = seconds_now();
+  for (std::uint32_t at = 0u; at < many; at++) CHECK(hold.adopt_pin(&objects[at], &pins[at]));
+  CHECK(seconds_now() - started < 3.0);
+  CHECK(!hold.adopt_pin(&objects[0], &pins[1]));
+  CHECK(hold.at(many - 1u).pin_ == &pins[many - 1u]);
+  CHECK(hold.at(0u).pin_ == &pins[0]); }
+
+TEST(list_hold, a_pin_is_not_adopted_for_an_object_the_list_does_not_hold_or_when_there_is_no_pin)
+{ av::MockPlatform platform;
+  av::ListHold<CountedObject, Pinned> hold(platform);
+  CountedObject held, other;
+  Pinned        pin;
+  bool          fresh = false;
+  CHECK(!hold.adopt_pin(&held, &pin));
+  CHECK_STATUS(hold.add(av::ListHold<CountedObject, Pinned>::Held{&held, nullptr}, fresh), av::Status::ok);
+  CHECK(!hold.adopt_pin(&other, &pin));
+  CHECK(!hold.adopt_pin(&held, nullptr));
+  CHECK(hold.adopt_pin(&held, &pin)); }

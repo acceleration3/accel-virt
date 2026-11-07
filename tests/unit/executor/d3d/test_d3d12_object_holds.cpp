@@ -6,6 +6,8 @@
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
+#include <ctime>
+#include <vector>
 
 using av::CountedObject;
 using av::D3d12BlockHeap;
@@ -372,3 +374,77 @@ TEST(d3d12_object_holds, forgetting_everything_drops_the_lists_and_retired_work_
   CHECK_STATUS(holds.hold(list_a, &other, nullptr), av::Status::ok);
   CHECK_EQ(other.references(), 3u);
   CHECK(holds.invariants_hold()); }
+
+TEST(d3d12_object_holds, work_retired_in_any_order_is_given_up_in_mark_order_as_the_gpu_reaches_it)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  CountedObject objects[6];
+  const std::uint64_t marks[6] = {9u, 3u, 7u, 3u, 12u, 5u};
+  for (std::uint32_t at = 0u; at < 6u; at++) {
+      CHECK_STATUS(holds.hold(100u + at, &objects[at], nullptr), av::Status::ok);
+      holds.submitted(100u + at, marks[at]);
+      CHECK_STATUS(holds.release_list(100u + at, 0u), av::Status::ok);
+      CHECK(holds.invariants_hold());
+  }
+  CHECK_EQ(holds.retired(), 6u);
+  holds.reap(4u);
+  CHECK_EQ(holds.retired(), 4u);
+  CHECK_EQ(objects[1].references(), 1u);
+  CHECK_EQ(objects[3].references(), 1u);
+  CHECK_EQ(objects[5].references(), 2u);
+  holds.reap(8u);
+  CHECK_EQ(objects[5].references(), 1u);
+  CHECK_EQ(objects[2].references(), 1u);
+  CHECK_EQ(objects[0].references(), 2u);
+  holds.reap(12u);
+  CHECK_EQ(holds.retired(), 0u);
+  CHECK_EQ(objects[4].references(), 1u);
+  CHECK(holds.invariants_hold()); }
+
+TEST(d3d12_object_holds, many_releases_in_falling_mark_order_are_retired_without_quadratic_work)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  constexpr std::uint32_t many = 60000u;
+  std::vector<av::CountedObject> objects(many);
+  timespec begun = {};
+  clock_gettime(CLOCK_MONOTONIC, &begun);
+  for (std::uint32_t at = 0u; at < many; at++) {
+      CHECK_STATUS(holds.hold(1000u + at, &objects[at], nullptr), av::Status::ok);
+      holds.submitted(1000u + at, many - at);
+      CHECK_STATUS(holds.release_list(1000u + at, 0u), av::Status::ok);
+  }
+  timespec ended = {};
+  clock_gettime(CLOCK_MONOTONIC, &ended);
+  CHECK(ended.tv_sec - begun.tv_sec < 3);
+  CHECK_EQ(holds.retired(), many);
+  holds.reap(many);
+  CHECK_EQ(holds.retired(), 0u);
+  CHECK_EQ(objects[0].references(), 1u); }
+
+TEST(d3d12_object_holds, inheriting_from_a_holder_asks_the_producer_once_however_many_lists_hold_it)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  CountedObject holder, first, second;
+  for (std::uint32_t list = 0u; list < 4u; list++) CHECK_STATUS(holds.hold(300u + list, &holder, nullptr), av::Status::ok);
+  CHECK_STATUS(holds.hold(400u, &first, nullptr), av::Status::ok);
+  std::uint32_t produced = 0u;
+  CHECK_STATUS(holds.inherit_from(&holder, [&](auto sink) {
+      produced++;
+      sink(&first, nullptr);
+      sink(&second, nullptr);
+  }), av::Status::ok);
+  CHECK_EQ(produced, 1u);
+  for (std::uint32_t list = 0u; list < 4u; list++) {
+      CHECK(holds.holding(300u + list, &first));
+      CHECK(holds.holding(300u + list, &second));
+  }
+  CHECK(!holds.holding(400u, &second));
+  CHECK_EQ(second.references(), 5u);
+  produced = 0u;
+  CHECK_STATUS(holds.inherit_from(&second, [&](auto) { produced++; }), av::Status::ok);
+  CHECK_EQ(produced, 1u);
+  CHECK_STATUS(holds.inherit_from(&first, [&](auto) { produced++; }), av::Status::ok);
+  CHECK_EQ(produced, 2u);
+  CountedObject unheld;
+  CHECK_STATUS(holds.inherit_from(&unheld, [&](auto) { produced++; }), av::Status::ok);
+  CHECK_EQ(produced, 2u); }
