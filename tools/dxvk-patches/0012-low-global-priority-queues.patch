@@ -1,0 +1,63 @@
+diff --git a/src/dxvk/dxvk_adapter.cpp b/src/dxvk/dxvk_adapter.cpp
+index 96dfa5d..9579d0e 100644
+--- a/src/dxvk/dxvk_adapter.cpp
++++ b/src/dxvk/dxvk_adapter.cpp
+@@ -286,9 +286,58 @@ namespace dxvk {
+     deviceInfo.ppEnabledExtensionNames = extensionNames.data();
+     deviceInfo.pEnabledFeatures = &features->features;
+ 
++    uint32_t hostExtensionCount = 0u;
++    vk->vkEnumerateDeviceExtensionProperties(m_handle, nullptr, &hostExtensionCount, nullptr);
++
++    std::vector<VkExtensionProperties> hostExtensions(hostExtensionCount);
++    vk->vkEnumerateDeviceExtensionProperties(m_handle, nullptr, &hostExtensionCount, hostExtensions.data());
++
++    bool lowPriority = false;
++
++    for (const auto& ext : hostExtensions) {
++      lowPriority = lowPriority || !std::strcmp(ext.extensionName, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
++    }
++
++    for (const auto& name : extensionNames) {
++      if (!std::strcmp(name, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME))
++        lowPriority = false;
++    }
++
++    for (const auto& q : queues) {
++      for (auto next = static_cast<const VkBaseInStructure*>(q.pNext); next; next = next->pNext)
++        lowPriority = lowPriority && next->sType != VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO;
++    }
++
++    std::vector<VkDeviceQueueGlobalPriorityCreateInfoKHR> queuePriorityInfos;
++    std::vector<VkDeviceQueueCreateInfo> originalQueues = queues;
++    std::vector<const char*> originalExtensionNames = extensionNames;
++
++    if (lowPriority) {
++      queuePriorityInfos.resize(queues.size());
++
++      for (size_t i = 0u; i < queues.size(); i++) {
++        queuePriorityInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR;
++        queuePriorityInfos[i].pNext = queues[i].pNext;
++        queuePriorityInfos[i].globalPriority = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
++        queues[i].pNext = &queuePriorityInfos[i];
++      }
++
++      extensionNames.push_back(VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
++      deviceInfo.pQueueCreateInfos = queues.data();
++      deviceInfo.enabledExtensionCount = extensionNames.size();
++      deviceInfo.ppEnabledExtensionNames = extensionNames.data();
++    }
++
+     VkDevice device = VK_NULL_HANDLE;
+     VkResult vr = vk->vkCreateDevice(m_handle, &deviceInfo, nullptr, &device);
+ 
++    if (vr && lowPriority) {
++      deviceInfo.pQueueCreateInfos = originalQueues.data();
++      deviceInfo.enabledExtensionCount = originalExtensionNames.size();
++      deviceInfo.ppEnabledExtensionNames = originalExtensionNames.data();
++      vr = vk->vkCreateDevice(m_handle, &deviceInfo, nullptr, &device);
++    }
++
+     if (vr) {
+       Logger::err(str::format("Failed to create Vulkan device: ", vr,
+         safeMode ? "" : ", retrying 'safe mode'."));

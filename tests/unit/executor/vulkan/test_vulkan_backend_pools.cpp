@@ -243,6 +243,11 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(VkInstance, const VkAllocationCallb
 VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice, const VkAllocationCallbacks *)
 { driver.device_destroys++; }
 
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDevice, const char *, uint32_t *count,
+                                                                    VkExtensionProperties *)
+{ *count = 0u;
+  return VK_SUCCESS; }
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *,
                                               VkDevice *out)
 { *out = as_handle<VkDevice>(device);
