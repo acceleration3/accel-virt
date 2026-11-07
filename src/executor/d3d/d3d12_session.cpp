@@ -132,7 +132,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
                            EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
-      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), views_(objects_, addresses_),
+      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), views_(objects_, addresses_),
       pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_()
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -164,6 +164,7 @@ void D3d12Session::shut_down()
     }
     compiles_.bind(nullptr);
     drain();
+    descriptors_.release_all();
     holds_.release_all();
     presentation_.bind(nullptr, nullptr, nullptr);
     progress_.clear();
@@ -330,6 +331,26 @@ void D3d12Session::release_holds(uint32_t list)
     static_cast<void>(holds_.release_list(list, progress_.reached()));
 }
 
+bool D3d12Session::noted(const d3d12proto::DescriptorRef &at, uint32_t resource, uint32_t counter)
+{
+    AV_SCOPE("D3d12Session::noted");
+    IUnknown *const viewed = resource == 0u ? nullptr : objects_.find(resource, D3dObjectKind::resource12);
+    IUnknown *const counted = counter == 0u ? nullptr : objects_.find(counter, D3dObjectKind::resource12);
+    const Status    kept = descriptors_.note(at.heap, at.index, viewed, counted, progress_.marked(),
+                                             [this]() { return progress_.reached(); });
+    if (kept == Status::ok) return true;
+    LogLine(lines_).text("descriptor ").number(at.index).text(" of heap ").number(at.heap)
+        .text(" kept nothing alive, status ").number(static_cast<uint32_t>(kept)).write();
+    return false;
+}
+
+bool D3d12Session::noted_address(const d3d12proto::DescriptorRef &at, uint64_t address)
+{
+    AV_SCOPE("D3d12Session::noted_address");
+    uint64_t offset = 0u;
+    return noted(at, address == 0u ? 0u : addresses_.owner(address, offset), 0u);
+}
+
 void D3d12Session::retire(IUnknown *object)
 {
     AV_SCOPE("D3d12Session::retire");
@@ -432,6 +453,11 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     if (kind == D3dObjectKind::heap12) block_heaps_.release_heap(id);
     if (kind == D3dObjectKind::queue12) progress_.forget(id);
     if (kind == D3dObjectKind::list12) release_holds(id);
+    if (kind == D3dObjectKind::descriptor_heap12) {
+        const Status let = descriptors_.destroy_heap(id, objects_.find(id, kind), progress_.marked(),
+                                                     [this]() { return progress_.reached(); });
+        if (let != Status::ok) drain();
+    }
     retire(objects_.take(id));
     return true;
 }
@@ -637,7 +663,7 @@ bool D3d12Session::on_CreateShaderResourceView12(const d3d12proto::DescriptorRef
     AV_SCOPE("D3d12Session::on_CreateShaderResourceView12");
     size_t handle = 0u;
     return cpu_handle(at, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, handle) &&
-           views_.shader_resource(handle, has_desc != 0u, desc);
+           views_.shader_resource(handle, has_desc != 0u, desc) && noted(at, desc.resource, 0u);
 }
 
 bool D3d12Session::on_CreateUnorderedAccessView12(const d3d12proto::DescriptorRef &at, uint32_t has_desc,
@@ -646,7 +672,7 @@ bool D3d12Session::on_CreateUnorderedAccessView12(const d3d12proto::DescriptorRe
     AV_SCOPE("D3d12Session::on_CreateUnorderedAccessView12");
     size_t handle = 0u;
     return cpu_handle(at, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, handle) &&
-           views_.unordered_access(handle, has_desc != 0u, desc);
+           views_.unordered_access(handle, has_desc != 0u, desc) && noted(at, desc.resource, desc.counter_resource);
 }
 
 bool D3d12Session::on_CreateRenderTargetView12(const d3d12proto::DescriptorRef &at, uint32_t has_desc,
@@ -655,7 +681,7 @@ bool D3d12Session::on_CreateRenderTargetView12(const d3d12proto::DescriptorRef &
     AV_SCOPE("D3d12Session::on_CreateRenderTargetView12");
     size_t handle = 0u;
     return cpu_handle(at, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) &&
-           views_.render_target(handle, has_desc != 0u, desc);
+           views_.render_target(handle, has_desc != 0u, desc) && noted(at, desc.resource, 0u);
 }
 
 bool D3d12Session::on_CreateDepthStencilView12(const d3d12proto::DescriptorRef &at, uint32_t has_desc,
@@ -664,7 +690,7 @@ bool D3d12Session::on_CreateDepthStencilView12(const d3d12proto::DescriptorRef &
     AV_SCOPE("D3d12Session::on_CreateDepthStencilView12");
     size_t handle = 0u;
     return cpu_handle(at, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) &&
-           views_.depth_stencil(handle, has_desc != 0u, desc);
+           views_.depth_stencil(handle, has_desc != 0u, desc) && noted(at, desc.resource, 0u);
 }
 
 bool D3d12Session::on_CreateConstantBufferView12(const d3d12proto::DescriptorRef &at, uint64_t address,
@@ -673,7 +699,7 @@ bool D3d12Session::on_CreateConstantBufferView12(const d3d12proto::DescriptorRef
     AV_SCOPE("D3d12Session::on_CreateConstantBufferView12");
     size_t handle = 0u;
     return cpu_handle(at, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, handle) &&
-           views_.constant_buffer(handle, address, size);
+           views_.constant_buffer(handle, address, size) && noted_address(at, address);
 }
 
 bool D3d12Session::on_CreateSampler12(const d3d12proto::DescriptorRef &at, const d3d12proto::SamplerDesc &desc)
@@ -700,7 +726,8 @@ bool D3d12Session::on_CopyDescriptors12(const d3d12proto::DescriptorRef &destina
     device_->device()->CopyDescriptorsSimple(count, D3D12_CPU_DESCRIPTOR_HANDLE{to_handle},
                                              D3D12_CPU_DESCRIPTOR_HANDLE{from_handle},
                                              static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));
-    return true;
+    return descriptors_.copy(destination.heap, destination.index, source.heap, source.index, count, progress_.marked(),
+                             [this]() { return progress_.reached(); }) == Status::ok;
 }
 
 bool D3d12Session::on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count,
@@ -925,7 +952,7 @@ bool D3d12Session::invariants_hold() const
 {
     AV_SCOPE("D3d12Session::invariants_hold");
     return objects_.invariants_hold() && addresses_.invariants_hold() && compiles_.invariants_hold() &&
-           holds_.invariants_hold() &&
+           holds_.invariants_hold() && descriptors_.invariants_hold() &&
            (device_ != nullptr ||
             objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
 }

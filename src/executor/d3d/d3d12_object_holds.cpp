@@ -90,6 +90,21 @@ Status D3d12ObjectHolds::retire(IUnknown *object, uint64_t mark, uint64_t reache
     return retired_.append(Retired{object, mark});
 }
 
+Status D3d12ObjectHolds::inherit(const IUnknown *holder, IUnknown *object)
+{
+    AV_SCOPE("D3d12ObjectHolds::inherit");
+    if (object == nullptr) return Status::invalid_parameter;
+    Status inherited = Status::ok;
+    lists_.for_each([&](uint32_t, D3d12ListHold *&kept) {
+        if (inherited != Status::ok || !kept->holds(holder)) return;
+        bool         fresh = false;
+        const Status added = kept->add(D3d12ListHold::Held{object, nullptr}, fresh);
+        if (fresh) object->AddRef();
+        inherited = added;
+    });
+    return inherited;
+}
+
 void D3d12ObjectHolds::reap(uint64_t reached)
 {
     AV_SCOPE("D3d12ObjectHolds::reap");

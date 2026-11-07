@@ -26,6 +26,7 @@ public:
     void                 submitted(uint32_t list, uint64_t mark);
     [[nodiscard]] Status release_list(uint32_t list, uint64_t reached);
     [[nodiscard]] Status retire(IUnknown *object, uint64_t mark, uint64_t reached);
+    [[nodiscard]] Status inherit(const IUnknown *holder, IUnknown *object);
     void                 reap(uint64_t reached);
     void                 release_all();
 

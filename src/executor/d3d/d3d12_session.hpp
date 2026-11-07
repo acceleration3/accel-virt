@@ -5,6 +5,7 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "executor/d3d/d3d12_block_heaps.hpp"
+#include "executor/d3d/d3d12_descriptor_holds.hpp"
 #include "executor/d3d/d3d12_object_holds.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
@@ -164,6 +165,8 @@ private:
     bool                       retain_address(uint32_t list, uint64_t address);
     void                       release_holds(uint32_t list);
     void                       retire(IUnknown *object);
+    bool                       noted(const d3d12proto::DescriptorRef &at, uint32_t resource, uint32_t counter);
+    bool                       noted_address(const d3d12proto::DescriptorRef &at, uint64_t address);
     bool                       follow_queue(uint32_t queue, ID3D12CommandQueue *on, IUnknown *first, IUnknown *second);
     ID3D12PipelineState       *pipeline(uint32_t id);
     D3d12PipelineJob          *vacant_job();
@@ -183,6 +186,7 @@ private:
     D3d12QueueProgress     progress_;
     D3d12BlockHeaps        block_heaps_;
     D3d12ObjectHolds       holds_;
+    D3d12DescriptorHolds   descriptors_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     D3d12PipelineCompiles  compiles_;
