@@ -70,6 +70,9 @@ public:
     const av::SharedImageShape &imported_shape() const { return imported_shape_; }
     void               release_object(std::uint32_t kind, std::uint64_t wire_handle, std::uint64_t detail) override;
 
+    void          use_host_ram(ByteLedger *ledger, std::uint64_t limit) override;
+    ByteLedger   *host_ram_ledger() const;
+    std::uint64_t host_ram_limit() const;
     void          shut_down() override;
     std::uint32_t shut_downs() const;
     void          let_go_of_thread() override;
@@ -111,6 +114,8 @@ private:
     bool          drains_held_ = false;
     bool          shut_downs_held_ = false;
     bool          inside_shut_down_ = false;
+    ByteLedger   *host_ram_ledger_ = nullptr;
+    std::uint64_t host_ram_limit_ = 0u;
     pthread_t     drained_on_ = pthread_self();
     bool          drained_ = false;
     std::uint32_t drains_before_first_release_ = 0u;

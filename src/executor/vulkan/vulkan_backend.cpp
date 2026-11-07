@@ -75,10 +75,10 @@ void VulkanBackend::initialize(const HostGpu &gpu, HostMemorySource *source, Imp
     imports_ = &imports;
 }
 
-void VulkanBackend::use_vram(VramLedger *ledger)
+void VulkanBackend::use_vram(ByteLedger *vram, ByteLedger *host)
 {
     AV_SCOPE("VulkanBackend::use_vram");
-    vram_.bind(ledger);
+    vram_.bind(vram, host);
 }
 
 VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
@@ -818,7 +818,8 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
     allocate.memoryTypeIndex = types_.host_type(pAllocateInfo->memoryTypeIndex);
     if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     const uint32_t heap = types_.heap_of(pAllocateInfo->memoryTypeIndex);
-    if (!vram_.admit(heap, pAllocateInfo->allocationSize)) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    if (!vram_.admit(heap, pAllocateInfo->allocationSize))
+        return vram_.system(heap) ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_OUT_OF_DEVICE_MEMORY;
     const VkResult made = RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
     if (made != VK_SUCCESS) {
         vram_.refund(heap, pAllocateInfo->allocationSize);
@@ -1058,6 +1059,12 @@ void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
 void VulkanBackend::let_go_of_thread()
 {
     AV_SCOPE("VulkanBackend::let_go_of_thread");
+}
+
+void VulkanBackend::use_host_ram(ByteLedger *ledger, uint64_t limit)
+{
+    AV_SCOPE("VulkanBackend::use_host_ram");
+    heap_.bind(ledger, limit);
 }
 
 void VulkanBackend::shut_down()

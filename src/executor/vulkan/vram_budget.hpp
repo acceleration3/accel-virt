@@ -12,7 +12,7 @@
 namespace av {
 
 class BlockSource;
-class VramLedger;
+class ByteLedger;
 
 class VramBudget {
 public:
@@ -20,17 +20,19 @@ public:
     VramBudget(const VramBudget &) = delete;
     VramBudget &operator=(const VramBudget &) = delete;
 
-    void     bind(VramLedger *ledger);
+    void     bind(ByteLedger *vram, ByteLedger *host);
     void     learn(const VkPhysicalDeviceMemoryProperties &host);
     void     clamp(VkPhysicalDeviceMemoryProperties &answer) const;
     void     report(VkPhysicalDeviceMemoryBudgetPropertiesEXT &budget) const;
     [[nodiscard]] bool admit(uint32_t heap, uint64_t size);
     void     refund(uint32_t heap, uint64_t size);
+    bool     system(uint32_t heap) const;
     [[nodiscard]] Status commit(uint32_t heap, uint64_t memory, uint64_t size);
     void     release(uint64_t memory);
     void     close();
     uint64_t used(uint32_t heap) const;
     uint64_t held() const;
+    uint64_t host_held() const;
 
     bool invariants_hold() const;
 
@@ -44,6 +46,7 @@ private:
 
     VkPhysicalDeviceMemoryProperties host_;
     VramAccount                      account_;
+    VramAccount                      host_account_;
     uint64_t                         used_[VK_MAX_MEMORY_HEAPS];
     KeyedSlots<uint64_t, Allocation> allocations_;
 };

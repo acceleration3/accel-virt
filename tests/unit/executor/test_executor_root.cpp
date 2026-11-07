@@ -197,9 +197,57 @@ TEST(executor_root, the_vram_reserve_a_domain_opens_with_reaches_that_gpu_s_memo
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(apis.source().vram_policy().reserve_mib(), 0u);
-  const std::uint32_t domain = root.open_domain(intel, 3072u);
+  const std::uint32_t domain = root.open_domain(intel, 3072u, 0u);
   CHECK(domain != 0u);
   CHECK_EQ(apis.source().vram_policy().reserve_mib(), 3072u);
+  root.close_domain(domain); }
+
+TEST(executor_root, the_host_ram_a_domain_opens_with_is_the_vms_budget_and_caps_the_memory_the_source_gives_out)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  apis.exporter().add_heap(0u, 32ull << 30);
+  apis.exporter().add_type(av::MockMemoryExporter::host_visible | av::MockMemoryExporter::host_coherent |
+                               av::MockMemoryExporter::host_cached,
+                           true);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  CHECK_EQ(apis.host_ram().cap(), UINT64_MAX);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 8192u);
+  CHECK(domain != 0u);
+  CHECK_EQ(apis.host_ram().cap(), 8192u);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(root.allocate_memory(domain, 1u, 4096u, 2u, memory), Status::ok);
+  if (memory.fd >= 0) ::close(memory.fd);
+  CHECK_EQ(apis.host_ram().used(), 4096u);
+  CHECK_STATUS(root.allocate_memory(domain, 2u, 8192u, 2u, memory), Status::no_memory);
+  root.free_memory(domain, 1u);
+  CHECK_EQ(apis.host_ram().used(), 0u);
+  root.close_domain(domain); }
+
+TEST(executor_root, a_domain_opened_with_no_host_ram_means_no_budget)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u);
+  CHECK(domain != 0u);
+  CHECK_EQ(apis.host_ram().cap(), UINT64_MAX);
+  root.close_domain(domain); }
+
+TEST(executor_root, a_session_s_own_host_memory_is_limited_when_it_opens)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u);
+  const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
+  ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
+  CHECK(session != nullptr);
+  CHECK_EQ(session->host_limit(), 256ull << 20);
+  close_settled(root, session);
   root.close_domain(domain); }
 
 TEST(executor_root, a_vulkan_session_is_bound_to_its_gpu_s_ledger)
@@ -208,7 +256,7 @@ TEST(executor_root, a_vulkan_session_is_bound_to_its_gpu_s_ledger)
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u);
   const std::uint32_t before = apis.ledger_questions();
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
@@ -222,13 +270,13 @@ TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
-  CHECK_EQ(root.open_domain(intel, 0u), 0u);
+  CHECK_EQ(root.open_domain(intel, 0u, 0u), 0u);
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  CHECK_EQ(root.open_domain(absent, 0u), 0u);
-  CHECK_EQ(root.open_domain(nullptr, 0u), 0u);
-  const std::uint32_t domain = root.open_domain(intel, 0u);
+  CHECK_EQ(root.open_domain(absent, 0u, 0u), 0u);
+  CHECK_EQ(root.open_domain(nullptr, 0u, 0u), 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u);
   CHECK(domain != 0u);
-  CHECK(root.open_domain(intel, 0u) != domain);
+  CHECK(root.open_domain(intel, 0u, 0u) != domain);
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
   CHECK(session != nullptr);

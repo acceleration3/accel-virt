@@ -41,6 +41,7 @@ struct VirtIOGPUAv {
     char *record;
     uint64_t record_limit;
     uint32_t vram_reserve;
+    uint32_t host_ram_reserve;
     char *record_kinds;
     bool record_wrap;
     bool display;

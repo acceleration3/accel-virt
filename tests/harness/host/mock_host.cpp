@@ -1169,6 +1169,12 @@ std::uint32_t MockHost::live_aliases()
     return count;
 }
 
+std::uint64_t MockHost::guest_memory_bytes()
+{
+  StateLock lock(state_);
+  return guest_memory_bytes_;
+}
+
 std::uint64_t MockHost::hostmem_size()
 {
     StateLock lock(state_);
@@ -1322,6 +1328,7 @@ void MockHost::translate_guest_with(GuestTranslator translate, void *context)
 }
 
 void MockHost::set_hostmem_size(std::uint64_t size) { StateLock lock(state_); hostmem_size_ = size; }
+void MockHost::set_guest_memory_bytes(std::uint64_t bytes) { StateLock lock(state_); guest_memory_bytes_ = bytes; }
 
 void MockHost::add_resource(std::uint32_t id)
 {

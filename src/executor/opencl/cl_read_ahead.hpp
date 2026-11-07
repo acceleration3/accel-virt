@@ -10,6 +10,8 @@
 
 namespace av {
 
+class ByteLedger;
+
 class ClReadAhead {
 public:
     static constexpr size_t cache_bytes = 8u << 20;
@@ -21,6 +23,8 @@ public:
     [[nodiscard]] bool read(cl_command_queue queue, cl_mem buffer, size_t offset, size_t size, void *into,
                             cl_int &result);
     void               forget();
+    void use_host_ram(ByteLedger *ledger);
+    void release_staging();
 
 private:
     StagingBytes     bytes_;

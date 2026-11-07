@@ -43,4 +43,17 @@ void ClProgramIl::forget()
     count_ = 0u;
 }
 
+void ClProgramIl::use_host_ram(ByteLedger *ledger)
+{
+    AV_SCOPE("ClProgramIl::use_host_ram");
+    module_.bind(ledger);
+}
+
+void ClProgramIl::release_staging()
+{
+    AV_SCOPE("ClProgramIl::release_staging");
+    forget();
+    module_.release();
+}
+
 }

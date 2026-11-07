@@ -9,11 +9,16 @@
 
 namespace av {
 
+class ByteLedger;
+
 class SpirvArgumentKinds {
 public:
     SpirvArgumentKinds();
     SpirvArgumentKinds(const SpirvArgumentKinds &) = delete;
     SpirvArgumentKinds &operator=(const SpirvArgumentKinds &) = delete;
+
+    void use_host_ram(ByteLedger *ledger);
+    void release_staging();
 
     [[nodiscard]] bool kind(const uint32_t *words, size_t count, const char *kernel, uint32_t index,
                             clproto::KernelArgument &argument);

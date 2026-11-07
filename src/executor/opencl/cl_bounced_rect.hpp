@@ -10,6 +10,8 @@
 
 namespace av {
 
+class ByteLedger;
+
 class ClBouncedRect {
 public:
     ClBouncedRect();
@@ -18,6 +20,8 @@ public:
 
     [[nodiscard]] bool refusal(cl_int answer);
     bool               bounces() const;
+    void use_host_ram(ByteLedger *ledger);
+    void release_staging();
     [[nodiscard]] cl_int read(cl_command_queue queue, cl_mem buffer, const size_t *buffer_origin,
                               const size_t *host_origin, const size_t *region, size_t buffer_row_pitch,
                               size_t buffer_slice_pitch, size_t host_row_pitch, size_t host_slice_pitch, void *ptr,

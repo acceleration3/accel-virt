@@ -2,7 +2,7 @@
 
 #include "executor/opencl/cl_image_bytes.hpp"
 #include "executor/teardown_budget.hpp"
-#include "executor/vram_ledger.hpp"
+#include "executor/byte_ledger.hpp"
 
 #include "core/support/extension_words.hpp"
 #include "core/support/growable_array.hpp"
@@ -90,10 +90,10 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
 
-void OpenClBackend::use_vram(VramLedger *ledger)
+void OpenClBackend::use_vram(ByteLedger *vram, ByteLedger *host)
 {
     AV_SCOPE("OpenClBackend::use_vram");
-    device_memory_.bind(ledger);
+    device_memory_.bind(vram, host);
 }
 
 bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
@@ -628,12 +628,30 @@ void OpenClBackend::let_go_of_thread()
     AV_SCOPE("OpenClBackend::let_go_of_thread");
 }
 
+void OpenClBackend::use_host_ram(ByteLedger *ledger, uint64_t limit)
+{
+    AV_SCOPE("OpenClBackend::use_host_ram");
+    heap_.bind(ledger, limit);
+    binaries_.bind(ledger);
+    il_.use_host_ram(ledger);
+    argument_kinds_.use_host_ram(ledger);
+    read_ahead_.use_host_ram(ledger);
+    bounced_.use_host_ram(ledger);
+    copied_.use_host_ram(ledger);
+}
+
 void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");
     stop_pacing();
     drain_markers_.release_all();
     il_.forget();
+    il_.release_staging();
+    argument_kinds_.release_staging();
+    read_ahead_.release_staging();
+    bounced_.release_staging();
+    copied_.release_staging();
+    binaries_.release();
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t, clproto::HandleKind kind, void *object, uint32_t times) {
                              let_go(kind, object, times);
@@ -763,9 +781,20 @@ void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, s
 {
     AV_SCOPE("OpenClBackend::on_clSVMAlloc");
     if (svm_.make_room() != Status::ok) return nullptr;
+    uint64_t claimed = 0u;
+    if (device_memory_.claim(CL_MEM_ALLOC_HOST_PTR, size, claimed) != CL_SUCCESS) return nullptr;
     void *const allocated = ::clSVMAlloc(context, flags, size, alignment);
-    if (allocated == nullptr) return nullptr;
+    if (allocated == nullptr) {
+        device_memory_.unclaim(claimed);
+        return nullptr;
+    }
     if (svm_.remember(allocated, static_cast<uint64_t>(size), 0u) != Status::ok) { AV_UNTESTABLE("room was made above, and no host allocates no bytes or past the end of the address space");
+        device_memory_.unclaim(claimed);
+        ::clSVMFree(context, allocated);
+        return nullptr;
+    }
+    if (!device_memory_.keep(reinterpret_cast<cl_mem>(allocated), claimed)) {
+        static_cast<void>(svm_.forget(allocated));
         ::clSVMFree(context, allocated);
         return nullptr;
     }
@@ -776,6 +805,7 @@ void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
 {
     AV_SCOPE("OpenClBackend::on_clSVMFree");
     if (!svm_.forget(svm_pointer)) return;
+    device_memory_.forget(reinterpret_cast<cl_mem>(svm_pointer));
     ::clSVMFree(context, svm_pointer);
 }
 

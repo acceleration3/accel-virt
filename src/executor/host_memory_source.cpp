@@ -14,7 +14,7 @@ static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
     : exporter_(exporter), memories_(blocks), aliases_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
-      visible_(0u), vulkan_(), vram_()
+      visible_(0u), vulkan_(), vram_(), host_ram_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -24,6 +24,7 @@ HostMemorySource::~HostMemorySource()
     AV_SCOPE("HostMemorySource::~HostMemorySource");
     memories_.for_each([this](const SourceMemory &memory) { exporter_.free(memory.exported()); });
     memories_.destroy_all();
+    static_cast<void>(host_ram_.close());
 }
 
 void HostMemorySource::learn()
@@ -61,6 +62,14 @@ bool HostMemorySource::vulkan_types(GuestMemoryTypes &answer)
     if (asked_ == 0u) return false;
     answer = vulkan_;
     return true;
+}
+
+bool HostMemorySource::system_type(uint32_t type) const
+{
+    AV_SCOPE("HostMemorySource::system_type");
+    if (type >= host_.memoryTypeCount) return true;
+    const uint32_t heap = host_.memoryTypes[type].heapIndex;
+    return heap >= host_.memoryHeapCount || (host_.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0u;
 }
 
 uint32_t HostMemorySource::first_type(uint32_t among, VkMemoryPropertyFlags wanted, VkMemoryPropertyFlags refused) const
@@ -119,8 +128,17 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     if (count == 0u) return Status::invalid_parameter;
     ExportedMemory exported;
     uint32_t       type = HostMemoryRequest::memory_types;
-    for (uint32_t choice = 0u; choice < count && type == HostMemoryRequest::memory_types; choice++)
-        if (exporter_.allocate(types[choice], size, exported) == Status::ok) type = types[choice];
+    uint64_t       charged = 0u;
+    for (uint32_t choice = 0u; choice < count && type == HostMemoryRequest::memory_types; choice++) {
+        const bool system = system_type(types[choice]);
+        if (system && !host_ram_.take(size)) continue;
+        if (exporter_.allocate(types[choice], size, exported) == Status::ok) {
+            type = types[choice];
+            charged = system ? size : 0u;
+        } else if (system) {
+            host_ram_.give(size);
+        }
+    }
     if (type == HostMemoryRequest::memory_types) return Status::no_memory;
     OwnedFd       shared;
     SourceMemory *made = nullptr;
@@ -130,9 +148,11 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     if (!shared.hold_copy(exported.fd()) ||
         memories_.create(made, domain, key, type, caching, exported) != Status::ok) {
         exporter_.free(exported);
+        host_ram_.give(charged);
         return Status::no_memory;
     }
     made->bind(*this);
+    made->charge(charged);
     memory.fd = shared.take();
     memory.caching = caching;
     memory.size = exported.size();
@@ -195,6 +215,7 @@ void HostMemorySource::let_go(SourceMemory &memory)
     AV_SCOPE("HostMemorySource::let_go");
     if (!memory.release()) return;
     exporter_.free(memory.exported());
+    host_ram_.give(memory.charged());
     static_cast<void>(memories_.destroy(&memory));
 }
 
@@ -279,6 +300,19 @@ void HostMemorySource::reserve_vram(uint32_t mib)
     vram_ = VramPolicy(mib);
 }
 
+void HostMemorySource::use_host_ram(ByteLedger *ledger)
+{
+    AV_SCOPE("HostMemorySource::use_host_ram");
+    const ThreadLockHold held(lock_);
+    if (!host_ram_.bound_to(ledger)) host_ram_.bind(ledger);
+}
+
+uint64_t HostMemorySource::host_ram_held() const
+{
+    AV_SCOPE("HostMemorySource::host_ram_held");
+    return host_ram_.held();
+}
+
 VramPolicy HostMemorySource::vram_policy() const
 {
     AV_SCOPE("HostMemorySource::vram_policy");
@@ -304,6 +338,7 @@ void HostMemorySource::report(StateWriter &writer) const
     uint64_t bytes = 0u;
     memories_.for_each([&bytes](const SourceMemory &memory) { bytes += memory.size(); });
     writer.number("bytes", bytes);
+    writer.number("host_ram_held_bytes", host_ram_.held());
     uint64_t total = 0u;
     for (uint32_t heap = 0u; heap < host_.memoryHeapCount; heap++)
         if ((host_.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u) total += host_.memoryHeaps[heap].size;

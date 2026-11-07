@@ -1,6 +1,6 @@
 #include "executor/opengl/opengl_backend.hpp"
 
-#include "executor/vram_ledger.hpp"
+#include "executor/byte_ledger.hpp"
 
 #include "executor/opengl/gl_memory_group.hpp"
 
@@ -141,10 +141,10 @@ const GlContext &OpenGlBackend::context() const
     return context_;
 }
 
-void OpenGlBackend::use_vram(VramLedger *ledger)
+void OpenGlBackend::use_vram(ByteLedger *vram, ByteLedger *host)
 {
     AV_SCOPE("OpenGlBackend::use_vram");
-    vram_guard_.bind(ledger);
+    vram_guard_.bind(vram, host);
 }
 
 bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions *options, const OpenGlBackend *share,
@@ -225,6 +225,12 @@ bool OpenGlBackend::drain(TeardownBudget &budget)
     static_cast<void>(progress_.settle());
     memories_.reclaim(import_);
     return true;
+}
+
+void OpenGlBackend::use_host_ram(ByteLedger *ledger, uint64_t limit)
+{
+    AV_SCOPE("OpenGlBackend::use_host_ram");
+    heap_.bind(ledger, limit);
 }
 
 void OpenGlBackend::shut_down()

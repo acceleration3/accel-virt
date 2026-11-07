@@ -212,6 +212,8 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
   host.unmap_guest(bounce, length);
   mock.set_hostmem_size(0x4000u);
   CHECK_EQ(host.hostmem_size(), 0x4000u);
+  mock.set_guest_memory_bytes(9ull << 30);
+  CHECK_EQ(host.guest_memory_bytes(), 9ull << 30);
   const std::uint8_t bytes[] = {1, 2, 3};
   av::MockRequest request(bytes, sizeof bytes);
   std::uint8_t read[3] = {};

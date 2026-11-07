@@ -36,7 +36,8 @@ Status LocalContextPlane::initialize()
 Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &capset)
 {
     AV_SCOPE("LocalContextPlane::start");
-    if (library_.domain() == 0u) static_cast<void>(library_.open_domain(gpu_uuid, capset.vram_reserve_mib()));
+    if (library_.domain() == 0u) static_cast<void>(library_.open_domain(gpu_uuid, capset.vram_reserve_mib(),
+                                                                      capset.gpu().shared_memory()));
     return Status::ok;
 }
 

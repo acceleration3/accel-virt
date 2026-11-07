@@ -54,7 +54,7 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   CHECK_EQ(info.gpu().device_id(), 0x744Cu);
   CHECK_EQ(info.gpu().device_type(), GpuIdentity::integrated_gpu);
   CHECK(std::memcmp(info.gpu().uuid(), second, sizeof second) == 0);
-  CHECK_EQ(info.gpu().shared_memory(), 2u << 30);
+  CHECK_EQ(info.gpu().shared_memory(), 0u);
   CHECK(std::strcmp(info.gpu().name(), "radeon") == 0);
   std::uint8_t bytes[CapsetInfo::encoded_size] = {};
   CHECK_STATUS(info.encode(bytes, sizeof bytes), Status::ok);
@@ -108,6 +108,7 @@ TEST(device_capset, describe_is_main_loop_only)
                                  thread),
                Status::ok);
   host.join_thread(thread);
+  CHECK(host.claim(HostViolation::main_loop_required));
   CHECK(host.claim(HostViolation::main_loop_required)); }
 
 TEST(device_capset_resolve_display, the_bit_follows_the_display_and_is_decided_once)
@@ -162,3 +163,51 @@ TEST(device_capset_describe, tells_the_guest_the_capped_local_memory_so_every_bu
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK_EQ(capset.info().gpu().local_memory(), 12ull << 30);
   CHECK_EQ(capset.info().vram_reserve_mib(), 4096u); }
+
+namespace {
+
+void meminfo(MockHost &host, const char *text) { host.add_file("/proc/meminfo", text, std::strlen(text)); }
+
+}
+
+TEST(device_capset_host_ram, the_guest_is_told_the_hosts_memory_less_its_own_ram_and_the_desktop_s_share)
+{ MockHost host;
+  host.add_gpu(GpuIdentity(0x1002u, 0x7550u, GpuIdentity::discrete_gpu, first, 16ull << 30, 0u, "AMD Radeon"));
+  meminfo(host, "MemTotal:       31457280 kB\nMemFree: 1 kB\n");
+  host.set_guest_memory_bytes(9ull << 30);
+  DeviceCapset capset(host);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK_EQ(capset.info().gpu().shared_memory(), (13ull << 30) + (1ull << 29)); }
+
+TEST(device_capset_host_ram, an_explicit_reserve_replaces_the_desktop_s_auto_share)
+{ MockHost host;
+  host.add_gpu(first);
+  meminfo(host, "MemTotal:       31457280 kB\n");
+  host.set_guest_memory_bytes(9ull << 30);
+  DeviceCapset capset(host);
+  capset.reserve_host_ram(2048u);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK_EQ(capset.info().gpu().shared_memory(), 19ull << 30); }
+
+TEST(device_capset_host_ram, a_host_whose_meminfo_cannot_be_read_or_parsed_declares_no_budget)
+{ MockHost without;
+  without.add_gpu(first);
+  without.set_guest_memory_bytes(9ull << 30);
+  DeviceCapset none(without);
+  none.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(without));
+  CHECK_EQ(none.info().gpu().shared_memory(), 0u);
+  MockHost garbled;
+  garbled.add_gpu(first);
+  meminfo(garbled, "nothing useful\n");
+  DeviceCapset broken(garbled);
+  broken.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(garbled));
+  CHECK_EQ(broken.info().gpu().shared_memory(), 0u); }
+
+TEST(device_capset_host_ram, a_guest_as_large_as_the_host_still_leaves_the_least_budget)
+{ MockHost host;
+  host.add_gpu(first);
+  meminfo(host, "MemTotal:       8388608 kB\n");
+  host.set_guest_memory_bytes(7ull << 30);
+  DeviceCapset capset(host);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK_EQ(capset.info().gpu().shared_memory(), 1ull << 30); }

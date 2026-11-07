@@ -12,7 +12,7 @@
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
-#include "executor/shim/host_heap.hpp"
+#include "executor/budgeted_heap.hpp"
 #include "executor/d3d/slice_storages.hpp"
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
@@ -31,6 +31,8 @@ struct D3D11_TEXTURE2D_DESC;
 struct ID3D11Buffer;
 
 namespace av {
+
+class ByteLedger;
 
 class DriverLog;
 class OwnedFd;
@@ -56,6 +58,7 @@ public:
     [[nodiscard]] bool initialize(SessionShares &shares, ImportTable &imports, D3d11HostDevice *device11,
                                   D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
                                   D3d9HostDevice *device9 = nullptr);
+    void use_host_ram(ByteLedger *ledger, uint64_t limit) override;
     void               shut_down() override;
     void               let_go_of_thread() override;
 
@@ -220,7 +223,7 @@ private:
     MonotonicClock          clock_;
     bool                    admitted_;
     bool                    held_;
-    HostHeap                heap_;
+    BudgetedHeap                heap_;
     WatchedBlocks           blocks_;
     struct Remade {
         IUnknown *old_;

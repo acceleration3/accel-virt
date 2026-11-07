@@ -262,4 +262,16 @@ uint32_t CopiedGlSharing::mirrors() const
     return mirrors_.count();
 }
 
+void CopiedGlSharing::use_host_ram(ByteLedger *ledger)
+{
+    AV_SCOPE("CopiedGlSharing::use_host_ram");
+    staging_.bind(ledger);
+}
+
+void CopiedGlSharing::release_staging()
+{
+    AV_SCOPE("CopiedGlSharing::release_staging");
+    staging_.release();
+}
+
 }

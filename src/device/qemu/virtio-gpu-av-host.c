@@ -17,6 +17,7 @@
 #include "system/memory.h"
 #include "system/address-spaces.h"
 #include "system/ramblock.h"
+#include "hw/core/boards.h"
 #include "ui/console.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-bus.h"
@@ -299,6 +300,11 @@ static int av_restore_guest_run(void *opaque, void *run, uint64_t size)
 static void av_release_range(void *opaque, void *base, uint64_t size)
 {
     munmap(base, size);
+}
+
+static uint64_t av_guest_memory_bytes(void *opaque)
+{
+    return current_machine ? current_machine->ram_size : 0;
 }
 
 static uint64_t av_hostmem_size(void *opaque)
@@ -1039,6 +1045,7 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .overlay_guest_run = av_overlay_guest_run,
         .restore_guest_run = av_restore_guest_run,
         .hostmem_size = av_hostmem_size,
+        .guest_memory_bytes = av_guest_memory_bytes,
         .place_in_hostmem = av_place_in_hostmem,
         .remove_from_hostmem = av_remove_from_hostmem,
         .monotonic_nanoseconds = av_monotonic_nanoseconds,

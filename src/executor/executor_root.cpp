@@ -12,6 +12,7 @@
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu.hpp"
 #include "executor/host_memory_source.hpp"
+#include "executor/host_ram_ledger.hpp"
 #include "executor/vram_ledger.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
@@ -113,13 +114,18 @@ uint32_t ExecutorRoot::sub_apis() const
     return apis_ != nullptr ? gpus_.sub_apis() : 0u;
 }
 
-uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib)
+uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib, uint64_t host_ram_bytes)
 {
     AV_SCOPE("ExecutorRoot::open_domain");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return 0u;
     HostMemorySource *const source = apis_->memory_source(gpu->index());
-    if (source != nullptr) source->reserve_vram(vram_reserve_mib);
+    HostRamLedger *const host_ram = apis_->host_ram_ledger();
+    if (host_ram != nullptr) host_ram->budget(host_ram_bytes);
+    if (source != nullptr) {
+        source->reserve_vram(vram_reserve_mib);
+        source->use_host_ram(host_ram);
+    }
     VramLedger *const ledger = apis_->vram_ledger(gpu->index());
     if (ledger != nullptr) ledger->reserve_vram(vram_reserve_mib);
     return domains_.open(gpu->index());
@@ -377,14 +383,16 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
                         const OpenGlBackend *share, GlMemoryGroup *group)
 {
     AV_SCOPE("ExecutorRoot::bind");
+    sessions_[slot].object().use_host_ram(apis_->host_ram_ledger(), session_host_bytes);
+    backend_in(slot, sub_api)->use_host_ram(apis_->host_ram_ledger(), session_host_bytes);
     switch (sub_api) {
     case AV_EXECUTOR_SUB_API_OPENCL:
-        opencl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()));
+        opencl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
         return opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
                                                  share, sessions_[slot].object().imports());
     case AV_EXECUTOR_SUB_API_OPENGL:
         if (group == nullptr) return false;
-        opengl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()));
+        opengl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
         return opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group);
     case AV_EXECUTOR_SUB_API_D3D: {
         constexpr uint32_t renew_wait_ms = 2000u;
@@ -395,7 +403,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
                                               apis_->d3d9_device(gpu.index()));
     }
     default:
-        vulkan_[slot].object().use_vram(apis_->vram_ledger(gpu.index()));
+        vulkan_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
         vulkan_[slot].object().initialize(gpu, apis_->memory_source(gpu.index()), sessions_[slot].object().imports());
         return true;
     }
@@ -705,6 +713,12 @@ void ExecutorRoot::report(StateWriter &writer)
     writer.number("live", live());
     writer.number("gpus", gpus_.count());
     writer.flag("overflowed", gpus_.overflowed());
+    HostRamLedger *const host_ram = apis_ != nullptr ? apis_->host_ram_ledger() : nullptr;
+    if (host_ram != nullptr) {
+        writer.number("host_ram_cap_bytes", host_ram->cap());
+        writer.number("host_ram_used_bytes", host_ram->used());
+        writer.number("host_ram_refusals", host_ram->refusals());
+    }
     gpus_.report(writer);
     domains_.report(writer);
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {

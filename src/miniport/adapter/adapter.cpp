@@ -218,6 +218,7 @@ void Adapter::remember_device()
         start_presents();
         host_visible_.offer(capset);
         memory_.offer_local(capset);
+        segment_.offer(capset);
         scanout_.offer(capset);
         overlays_.offer(capset);
         if (host_visible_.offered()) {
@@ -388,6 +389,7 @@ int32_t Adapter::stop_device()
     mappings_.unmap_all();
     identity_.forget();
     memory_.forget_local();
+    segment_.forget();
     withdraw_window();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();

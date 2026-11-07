@@ -8,6 +8,7 @@
 
 namespace av {
 
+class CapsetInfo;
 struct DxgkSegmentDescriptor4Record;
 struct ApertureSegmentProbe;
 
@@ -23,8 +24,11 @@ public:
     ApertureSegment &operator=(const ApertureSegment &) = delete;
 
     [[nodiscard]] Status initialize(int64_t system_memory_bytes);
+    void                 offer(const CapsetInfo &capset);
+    void                 forget();
     void                 describe(DxgkSegmentDescriptor4Record &descriptor) const;
     uint64_t             size() const;
+    uint64_t             commit_limit() const;
 
     bool invariants_hold() const;
 
@@ -33,6 +37,7 @@ private:
 
     Platform &platform_;
     uint64_t  size_;
+    uint64_t  host_budget_;
 
     friend struct ApertureSegmentProbe;
 };

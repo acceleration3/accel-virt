@@ -11,6 +11,7 @@ class D3d9HostDevice;
 class GlDisplay;
 class OpenClDevice;
 class HostMemorySource;
+class HostRamLedger;
 class HostShares;
 class VramLedger;
 class SharedSurfaces;
@@ -34,6 +35,7 @@ public:
     virtual HostShares         *shares(uint32_t index) = 0;
     virtual HostMemorySource   *memory_source(uint32_t index) = 0;
     virtual VramLedger         *vram_ledger(uint32_t index) = 0;
+    virtual HostRamLedger      *host_ram_ledger() = 0;
 
 protected:
     HostApis() = default;

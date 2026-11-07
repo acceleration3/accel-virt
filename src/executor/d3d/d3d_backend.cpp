@@ -144,6 +144,12 @@ void D3dBackend::let_go_of_thread()
     AV_SCOPE("D3dBackend::let_go_of_thread");
 }
 
+void D3dBackend::use_host_ram(ByteLedger *ledger, uint64_t limit)
+{
+    AV_SCOPE("D3dBackend::use_host_ram");
+    heap_.bind(ledger, limit);
+}
+
 void D3dBackend::shut_down()
 {
     AV_SCOPE("D3dBackend::shut_down");

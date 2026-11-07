@@ -119,4 +119,16 @@ bool SpirvArgumentKinds::kind(const uint32_t *words, size_t count, const char *k
     return false;
 }
 
+void SpirvArgumentKinds::use_host_ram(ByteLedger *ledger)
+{
+    AV_SCOPE("SpirvArgumentKinds::use_host_ram");
+    types_.bind(ledger);
+}
+
+void SpirvArgumentKinds::release_staging()
+{
+    AV_SCOPE("SpirvArgumentKinds::release_staging");
+    types_.release();
+}
+
 }

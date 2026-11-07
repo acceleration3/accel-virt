@@ -22,7 +22,7 @@ ImportRig::ImportRig(bool executor)
 {
     plane_.allocate_through(library_);
     host_.set_hostmem_size(64u * page);
-    if (library_.accept(&ops_.table()) != Status::ok || library_.open_domain(no_uuid, 0u) != Status::ok ||
+    if (library_.accept(&ops_.table()) != Status::ok || library_.open_domain(no_uuid, 0u, 0u) != Status::ok ||
         host_blobs_.initialize(plane_) != Status::ok || host_.create_event(start_) != Status::ok ||
         host_.create_event(done_) != Status::ok ||
         host_.start_thread([](void *rig) { static_cast<ImportRig *>(rig)->serve(); }, this, thread_) != Status::ok)

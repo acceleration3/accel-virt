@@ -1,6 +1,9 @@
 #include "miniport/ddi/dxgk_segment_descriptor4_record.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "core/support/status.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
@@ -56,6 +59,48 @@ TEST(aperture_segment_describe, is_guest_system_memory_as_an_aperture)
   CHECK(descriptor.CommitLimit == 8u * gib);
   CHECK(descriptor.CpuTranslatedAddress == 0);
   CHECK_EQ(descriptor.SystemMemoryEndAddress, 0u); }
+
+namespace {
+
+av::CapsetInfo capset_with_budget(std::uint64_t host_ram)
+{
+    static const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {5};
+    return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor),
+                          1u, 64u, 12u, 24u, 0u,
+                          av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, host_ram, "the host's"));
+}
+
+}
+
+TEST(aperture_segment_offer, the_hosts_ram_budget_caps_what_the_guest_may_commit_of_the_aperture_and_not_its_size)
+{ MockPlatform platform; ApertureSegment segment(platform);
+  CHECK_STATUS(segment.initialize(static_cast<std::int64_t>(16u * gib)), Status::ok);
+  segment.offer(capset_with_budget(5u * gib + 123u));
+  DxgkSegmentDescriptor4Record descriptor = {};
+  segment.describe(descriptor);
+  CHECK(descriptor.Size == 16u * gib);
+  CHECK(descriptor.CommitLimit == 5u * gib);
+  CHECK(segment.commit_limit() == 5u * gib);
+  CHECK(segment.invariants_hold()); }
+
+TEST(aperture_segment_offer, a_budget_larger_than_the_aperture_or_none_leaves_the_whole_aperture_committable)
+{ MockPlatform platform; ApertureSegment segment(platform);
+  CHECK_STATUS(segment.initialize(static_cast<std::int64_t>(8u * gib)), Status::ok);
+  segment.offer(capset_with_budget(64u * gib));
+  CHECK(segment.commit_limit() == 8u * gib);
+  segment.offer(capset_with_budget(2u * gib));
+  CHECK(segment.commit_limit() == 2u * gib);
+  segment.offer(capset_with_budget(0u));
+  CHECK(segment.commit_limit() == 8u * gib); }
+
+TEST(aperture_segment_offer, forgetting_the_device_lifts_the_cap)
+{ MockPlatform platform; ApertureSegment segment(platform);
+  CHECK_STATUS(segment.initialize(static_cast<std::int64_t>(8u * gib)), Status::ok);
+  segment.offer(capset_with_budget(2u * gib));
+  segment.forget();
+  DxgkSegmentDescriptor4Record descriptor = {};
+  segment.describe(descriptor);
+  CHECK(descriptor.CommitLimit == 8u * gib); }
 
 TEST(aperture_segment_describe, before_initialize_it_describes_an_empty_segment)
 { MockPlatform platform; ApertureSegment segment(platform);

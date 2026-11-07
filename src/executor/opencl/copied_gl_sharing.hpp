@@ -9,6 +9,8 @@
 
 namespace av {
 
+class ByteLedger;
+
 class GlClTarget;
 class GlLevel;
 class GlObjectBytes;
@@ -34,6 +36,8 @@ public:
                             size_t *value_bytes_ret) override;
     void       forget(cl_mem object) override;
     void       forget_all() override;
+    void use_host_ram(ByteLedger *ledger);
+    void release_staging();
 
     uint32_t mirrors() const;
 

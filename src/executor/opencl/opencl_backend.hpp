@@ -23,7 +23,7 @@
 #include "executor/monotonic_clock.hpp"
 #include "executor/opencl/staging_bytes.hpp"
 #include "executor/session_backend.hpp"
-#include "executor/shim/host_heap.hpp"
+#include "executor/budgeted_heap.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/shim/gl_host_import.hpp"
@@ -46,7 +46,7 @@ class GlDisplay;
 class ImportTable;
 class OpenClDevice;
 class SourceMemory;
-class VramLedger;
+class ByteLedger;
 class TeardownBudget;
 struct OpenClBackendProbe;
 
@@ -55,7 +55,7 @@ public:
     explicit OpenClBackend(DriverLog &lines);
     OpenClBackend(BlockSource &blocks, DriverLog &lines);
 
-    void use_vram(VramLedger *ledger);
+    void use_vram(ByteLedger *vram, ByteLedger *host);
     [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
                                   const ImportTable &imports);
 
@@ -205,6 +205,8 @@ public:
 
     void bind_signal(void (*signal)(void *context), void *context) override;
 
+    void use_host_ram(ByteLedger *ledger, uint64_t limit) override;
+
     void     shut_down() override;
     void     let_go_of_thread() override;
     uint64_t ran() const;
@@ -236,7 +238,7 @@ private:
 
     static constexpr cl_uint max_program_devices = 16u;
 
-    HostHeap            heap_;
+    BudgetedHeap            heap_;
     BlockSource        &blocks_;
     const OpenClDevice *bound_;
     ClBinaryEnvelope    envelope_;

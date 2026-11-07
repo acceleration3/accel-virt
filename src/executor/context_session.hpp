@@ -4,7 +4,7 @@
 #include "core/support/status.hpp"
 #include "executor/channel_stats_latest.hpp"
 #include "executor/import_table.hpp"
-#include "executor/shim/host_heap.hpp"
+#include "executor/budgeted_heap.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/submission/blob_role.hpp"
 #include "proto/wire/spill_block.hpp"
@@ -15,6 +15,7 @@
 
 namespace av {
 
+class ByteLedger;
 class DriverLog;
 class GpuClockHold;
 class HostMemorySource;
@@ -34,6 +35,8 @@ public:
     [[nodiscard]] Status initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes);
     [[nodiscard]] bool   drain(TeardownBudget &budget);
     [[nodiscard]] bool   release(TeardownBudget &budget);
+    void                 use_host_ram(ByteLedger *ledger, uint64_t limit);
+    uint64_t             host_limit() const;
     void                 vacate();
     void                 let_go_of_thread();
     bool                 live() const;
@@ -79,7 +82,7 @@ private:
     GpuClockHold   *clocks_;
     HostMemorySource *source_;
     uint32_t        domain_;
-    HostHeap        heap_;
+    BudgetedHeap        heap_;
     WireArena       arena_;
     SpillBlock      answer_;
     size_t          answer_length_;

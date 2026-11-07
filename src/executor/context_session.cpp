@@ -66,6 +66,18 @@ bool ContextSession::release(TeardownBudget &budget)
     return true;
 }
 
+void ContextSession::use_host_ram(ByteLedger *ledger, uint64_t limit)
+{
+    AV_SCOPE("ContextSession::use_host_ram");
+    heap_.bind(ledger, limit);
+}
+
+uint64_t ContextSession::host_limit() const
+{
+    AV_SCOPE("ContextSession::host_limit");
+    return heap_.limit();
+}
+
 void ContextSession::vacate()
 {
     AV_SCOPE("ContextSession::vacate");

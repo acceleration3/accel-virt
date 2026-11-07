@@ -3,7 +3,7 @@
 namespace av {
 
 MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), ledger_questions_(0u), log_(), lines_(log_, "shares: "), d3d11_(lines_), d3d11_index_(max_gpus), gl_(nullptr), heap_(), surfaces_(heap_),
-      shares_(heap_, lines_), exporter_(), source_(exporter_, heap_), ledger_(),
+      shares_(heap_, lines_), exporter_(), source_(exporter_, heap_), ledger_(), host_ram_(),
       memory_withheld_(false) {}
 
 void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis)
@@ -109,6 +109,10 @@ VramLedger *MockHostApis::vram_ledger(uint32_t index)
 }
 
 VramLedger &MockHostApis::ledger() { return ledger_; }
+
+HostRamLedger *MockHostApis::host_ram_ledger() { return &host_ram_; }
+
+HostRamLedger &MockHostApis::host_ram() { return host_ram_; }
 
 HostMemorySource *MockHostApis::memory_source(uint32_t index)
 {

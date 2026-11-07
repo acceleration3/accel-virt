@@ -22,6 +22,8 @@ public:
     uint32_t              memory_type() const;
     uint32_t              caching() const;
     uint64_t              size() const;
+    uint64_t              charged() const;
+    void                  charge(uint64_t bytes);
     uint8_t              *pointer() const;
     uint8_t              *at(uint64_t offset, uint64_t bytes) const;
     const ExportedMemory &exported() const;
@@ -45,6 +47,7 @@ private:
     bool           attached_;
     uint32_t       references_;
     HostMemorySource *owner_;
+    uint64_t       charged_;
 };
 
 }

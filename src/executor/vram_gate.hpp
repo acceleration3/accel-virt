@@ -11,7 +11,22 @@
 namespace av {
 
 class BlockSource;
+class ByteLedger;
 class HostApis;
+
+class GateAccount {
+public:
+    GateAccount(ByteLedger &vram_ledger, ByteLedger *host_ledger);
+    GateAccount(const GateAccount &) = delete;
+    GateAccount &operator=(const GateAccount &) = delete;
+
+    VramAccount &vram();
+    VramAccount &host();
+
+private:
+    VramAccount vram_;
+    VramAccount host_;
+};
 
 class VramGate {
 public:
@@ -20,10 +35,11 @@ public:
     VramGate &operator=(const VramGate &) = delete;
 
     const AvVramGate &abi() const;
-    VramAccount      *open(const uint8_t *gpu_uuid);
-    void              close(VramAccount *account);
+    GateAccount      *open(const uint8_t *gpu_uuid);
+    void              close(GateAccount *account);
     uint32_t          live() const;
     uint64_t          leaked() const;
+    uint64_t          leaked_host() const;
 
     bool invariants_hold() const;
 
@@ -31,8 +47,9 @@ private:
     HostApis                &apis_;
     AvVramGate               abi_;
     mutable PosixLock        lock_;
-    ObjectPool<VramAccount>  accounts_;
+    ObjectPool<GateAccount>  accounts_;
     uint64_t                 leaked_;
+    uint64_t                 leaked_host_;
 };
 
 }

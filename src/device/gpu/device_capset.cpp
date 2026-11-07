@@ -7,12 +7,14 @@
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/context/host_ram_policy.hpp"
+#include "proto/context/mem_info_text.hpp"
 #include "proto/context/vram_policy.hpp"
 #include "proto/submission/ring_header.hpp"
 
 namespace av {
 
-DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), vram_reserve_mib_(0u), described_(false), display_resolved_(false)
+DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), vram_reserve_mib_(0u), host_ram_reserve_mib_(0u), described_(false), display_resolved_(false)
 {
     AV_SCOPE("DeviceCapset::DeviceCapset");
 }
@@ -28,9 +30,25 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
                        sub_apis, DeviceContextTable::max_contexts,
                        RingHeader::lowest_order, RingHeader::highest_order, features,
                        GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), VramPolicy(vram_reserve_mib_).cap_for(gpu.local_memory()),
-                                   gpu.shared_memory(), AdapterName(gpu.name()).text()));
+                                   host_ram_budget(), AdapterName(gpu.name()).text()));
     info_.reserve_vram(vram_reserve_mib_);
     described_ = true;
+}
+
+uint64_t DeviceCapset::host_ram_budget()
+{
+    AV_SCOPE("DeviceCapset::host_ram_budget");
+    char   text[256] = {};
+    size_t length = 0u;
+    if (host_.read_file("/proc/meminfo", text, sizeof text, length) != Status::ok) return 0u;
+    return HostRamPolicy(host_ram_reserve_mib_).budget_for(MemInfoText(text, length).total_bytes(),
+                                                          host_.guest_memory_bytes());
+}
+
+void DeviceCapset::reserve_host_ram(uint32_t mib)
+{
+    AV_SCOPE("DeviceCapset::reserve_host_ram");
+    host_ram_reserve_mib_ = mib;
 }
 
 void DeviceCapset::reserve_vram(uint32_t mib)

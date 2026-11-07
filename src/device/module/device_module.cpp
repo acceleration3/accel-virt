@@ -9,7 +9,8 @@ namespace av {
 DeviceInstance *DeviceModule::create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
                                      bool base_blobs, const AvRecordingOptions *recording,
                                      const char *renderer, const char *executor_path,
-                                     uint32_t vram_reserve_mib, char *error, size_t error_size)
+                                     uint32_t vram_reserve_mib, uint32_t host_ram_reserve_mib, char *error,
+                                     size_t error_size)
 {
     AV_SCOPE("DeviceModule::create");
     TextBuffer message(error, error_size);
@@ -25,7 +26,7 @@ DeviceInstance *DeviceModule::create(const AvHostOps *ops, const AvExecutorOps *
         if (slot.construct(*ops) != Status::ok) continue;
         slot.object().device().share_lendings(lendings_.object());
         if (slot.object().device().realize(host_gpu, base_blobs, executor, recording, renderer, executor_path,
-                                           vram_reserve_mib, message) == Status::ok)
+                                           vram_reserve_mib, host_ram_reserve_mib, message) == Status::ok)
             return &slot.object();
         slot.destroy();
         release_lendings();

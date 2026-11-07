@@ -74,3 +74,14 @@ TEST(vram_account, a_refused_take_leaves_the_account_and_ledger_as_they_were)
   CHECK(!account.take(gib));
   CHECK_EQ(account.held(), gib);
   CHECK_EQ(ledger.used(), gib); }
+
+TEST(vram_account, it_knows_which_ledger_it_is_bound_to)
+{ VramLedger first;
+  VramLedger second;
+  VramAccount account;
+  CHECK(account.bound_to(nullptr));
+  CHECK(!account.bound_to(&first));
+  account.bind(&first);
+  CHECK(account.bound_to(&first));
+  CHECK(!account.bound_to(&second));
+  CHECK(!account.bound_to(nullptr)); }

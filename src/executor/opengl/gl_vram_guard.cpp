@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_texture_shape.hpp"
-#include "executor/vram_ledger.hpp"
+#include "executor/byte_ledger.hpp"
 
 namespace av {
 
@@ -17,6 +17,9 @@ constexpr uint32_t whole_storage = 0xFFu;
 constexpr uint64_t unknown_texel_bytes = 4u;
 constexpr uint64_t most_names = 1u << 20u;
 constexpr uint32_t cube_binding = 0x8514u;
+constexpr uint32_t pixel_pack_target = 0x88EBu, pixel_unpack_target = 0x88ECu;
+constexpr uint64_t read_usages[] = {0x88E1u, 0x88E5u, 0x88E9u};
+constexpr uint64_t host_storage_flags = 0x1u | 0x2u | 0x40u | 0x80u | 0x200u;
 
 struct BufferRow {
     uint32_t target_;
@@ -48,6 +51,21 @@ bool hook_vram(void *user, uint32_t command, const uint64_t *args)
     return static_cast<GlVramGuard *>(user)->admit(command, args);
 }
 
+bool resident_usage(uint32_t target, uint64_t usage)
+{
+    AV_SCOPE("resident_usage");
+    if (target == pixel_pack_target || target == pixel_unpack_target) return true;
+    for (const uint64_t read : read_usages)
+        if (usage == read) return true;
+    return false;
+}
+
+bool resident_storage(uint32_t target, uint64_t flags)
+{
+    AV_SCOPE("resident_storage");
+    return target == pixel_pack_target || target == pixel_unpack_target || (flags & host_storage_flags) != 0u;
+}
+
 uint32_t u32(uint64_t value)
 {
     AV_SCOPE("u32");
@@ -57,16 +75,17 @@ uint32_t u32(uint64_t value)
 }
 
 GlVramGuard::GlVramGuard(BlockSource &blocks, glproto::RealGl &gl, GlErrorQueue &errors)
-    : gl_(gl), errors_(errors), account_(), sizes_(blocks, Pool::paged)
+    : gl_(gl), errors_(errors), account_(), host_(), sizes_(blocks, Pool::paged)
 {
     AV_SCOPE("GlVramGuard::GlVramGuard");
 }
 
-void GlVramGuard::bind(VramLedger *ledger)
+void GlVramGuard::bind(ByteLedger *vram, ByteLedger *host)
 {
     AV_SCOPE("GlVramGuard::bind");
     sizes_.clear();
-    account_.bind(ledger);
+    account_.bind(vram);
+    host_.bind(host);
 }
 
 void GlVramGuard::install()
@@ -81,6 +100,7 @@ void GlVramGuard::clear()
     AV_SCOPE("GlVramGuard::clear");
     sizes_.clear();
     static_cast<void>(account_.close());
+    static_cast<void>(host_.close());
 }
 
 bool GlVramGuard::refuse()
@@ -99,36 +119,54 @@ uint32_t GlVramGuard::bound(uint32_t binding)
     return name > 0 ? static_cast<uint32_t>(name) : 0u;
 }
 
-bool GlVramGuard::account(Kind kind, uint32_t name, uint32_t slot, uint64_t bytes)
+uint64_t GlVramGuard::row_bytes(Kind kind, uint32_t name, uint32_t slot)
+{
+    AV_SCOPE("GlVramGuard::row_bytes");
+    const uint64_t *const row = sizes_.find(key_of(static_cast<uint64_t>(kind), name, slot));
+    return row != nullptr ? *row : 0u;
+}
+
+bool GlVramGuard::account(VramAccount &against, Kind kind, uint32_t name, uint32_t slot, uint64_t bytes)
 {
     AV_SCOPE("GlVramGuard::account");
     const uint64_t key = key_of(static_cast<uint64_t>(kind), name, slot);
     uint64_t *const row = sizes_.find(key);
     const uint64_t before = row != nullptr ? *row : 0u;
-    if (bytes > before && !account_.take(bytes - before)) return false;
-    if (bytes < before) account_.give(before - bytes);
+    if (row == nullptr && bytes == 0u) return true;
+    if (bytes > before && !against.take(bytes - before)) return false;
+    if (bytes < before) against.give(before - bytes);
     if (row != nullptr) {
         *row = bytes;
         return true;
     }
     uint32_t position = 0u;
     if (sizes_.insert(key, bytes, position) == Status::ok) return true;
-    account_.give(bytes);
+    against.give(bytes);
     return false;
 }
 
-bool GlVramGuard::buffer_named(uint32_t name, uint64_t size)
+bool GlVramGuard::buffer_bytes(uint32_t name, uint64_t size, bool resident)
+{
+    AV_SCOPE("GlVramGuard::buffer_bytes");
+    const uint64_t before = row_bytes(Kind::host_buffer, name, 0u);
+    if (!account(host_, Kind::host_buffer, name, 0u, resident ? size : 0u)) return false;
+    if (account(account_, Kind::buffer, name, 0u, size)) return true;
+    static_cast<void>(account(host_, Kind::host_buffer, name, 0u, before));
+    return false;
+}
+
+bool GlVramGuard::buffer_named(uint32_t name, uint64_t size, bool resident)
 {
     AV_SCOPE("GlVramGuard::buffer_named");
     if (name == 0u || static_cast<int64_t>(size) < 0) return true;
-    return account(Kind::buffer, name, 0u, size) || refuse();
+    return buffer_bytes(name, size, resident) || refuse();
 }
 
-bool GlVramGuard::buffer_target(uint32_t target, uint64_t size)
+bool GlVramGuard::buffer_target(uint32_t target, uint64_t size, bool resident)
 {
     AV_SCOPE("GlVramGuard::buffer_target");
     for (const BufferRow &row : buffer_targets)
-        if (row.target_ == target) return buffer_named(bound(row.binding_), size);
+        if (row.target_ == target) return buffer_named(bound(row.binding_), size, resident);
     return true;
 }
 
@@ -147,7 +185,7 @@ bool GlVramGuard::image(uint32_t target, uint32_t level, uint32_t format, uint64
     if (bytes == UINT64_MAX)
         bytes = saturating_product(saturating_product(saturating_product(width, height), saturating_product(depth, samples)),
                                    unknown_texel_bytes);
-    return account(Kind::texture, name, face ? level + 32u * (target - gl_cube_face_first + 1u) : level, bytes) ||
+    return account(account_, Kind::texture, name, face ? level + 32u * (target - gl_cube_face_first + 1u) : level, bytes) ||
            refuse();
 }
 
@@ -164,7 +202,7 @@ bool GlVramGuard::storage(uint32_t texture, uint32_t target, uint64_t levels, ui
     if (bytes == UINT64_MAX)
         bytes = saturating_product(saturating_product(saturating_product(width, height), saturating_product(depth, samples)),
                                    unknown_texel_bytes);
-    return account(Kind::texture, name, whole_storage, bytes) || refuse();
+    return account(account_, Kind::texture, name, whole_storage, bytes) || refuse();
 }
 
 bool GlVramGuard::compressed(uint32_t target, uint32_t level, int64_t bytes)
@@ -175,7 +213,7 @@ bool GlVramGuard::compressed(uint32_t target, uint32_t level, int64_t bytes)
     if (bytes <= 0 || !shape.tracked() || level >= GlTextureShape::most_levels) return true;
     const uint32_t name = bound(shape.binding());
     if (name == 0u) return true;
-    return account(Kind::texture, name, level, static_cast<uint64_t>(bytes)) || refuse();
+    return account(account_, Kind::texture, name, level, static_cast<uint64_t>(bytes)) || refuse();
 }
 
 bool GlVramGuard::renderbuffer(uint32_t name, uint32_t format, uint64_t width, uint64_t height, uint64_t samples)
@@ -189,7 +227,7 @@ bool GlVramGuard::renderbuffer(uint32_t name, uint32_t format, uint64_t width, u
     uint64_t bytes = shape.least_bytes();
     if (bytes == UINT64_MAX)
         bytes = saturating_product(saturating_product(width, height), saturating_product(samples != 0u ? samples : 1u, unknown_texel_bytes));
-    return account(Kind::renderbuffer, target, 0u, bytes) || refuse();
+    return account(account_, Kind::renderbuffer, target, 0u, bytes) || refuse();
 }
 
 void GlVramGuard::forget(Kind kind, uint64_t count, const uint32_t *names)
@@ -202,6 +240,9 @@ void GlVramGuard::forget(Kind kind, uint64_t count, const uint32_t *names)
             uint64_t freed = 0u;
             if (sizes_.take(key_of(static_cast<uint64_t>(kind), names[at], slot), freed)) account_.give(freed);
         }
+        uint64_t resident = 0u;
+        if (kind == Kind::buffer && sizes_.take(key_of(static_cast<uint64_t>(Kind::host_buffer), names[at], 0u), resident))
+            host_.give(resident);
     }
 }
 
@@ -210,12 +251,12 @@ bool GlVramGuard::admit(uint32_t command, const uint64_t *a)
     AV_SCOPE("GlVramGuard::admit");
     if (!account_.bound()) return true;
     switch (command) {
-    case glproto::kVram_glBufferData:
-    case glproto::kVram_glBufferStorage: return buffer_target(u32(a[0]), a[1]);
+    case glproto::kVram_glBufferData: return buffer_target(u32(a[0]), a[1], resident_usage(u32(a[0]), a[3]));
+    case glproto::kVram_glBufferStorage: return buffer_target(u32(a[0]), a[1], resident_storage(u32(a[0]), a[3]));
     case glproto::kVram_glNamedBufferData:
-    case glproto::kVram_glNamedBufferDataEXT:
+    case glproto::kVram_glNamedBufferDataEXT: return buffer_named(u32(a[0]), a[1], resident_usage(0u, a[3]));
     case glproto::kVram_glNamedBufferStorage:
-    case glproto::kVram_glNamedBufferStorageEXT: return buffer_named(u32(a[0]), a[1]);
+    case glproto::kVram_glNamedBufferStorageEXT: return buffer_named(u32(a[0]), a[1], resident_storage(0u, a[3]));
     case glproto::kVram_glTexImage1D: return image(u32(a[0]), u32(a[1]), u32(a[2]), a[3], 1u, 1u, 1u);
     case glproto::kVram_glTexImage2D: return image(u32(a[0]), u32(a[1]), u32(a[2]), a[3], a[4], 1u, 1u);
     case glproto::kVram_glTexImage3D: return image(u32(a[0]), u32(a[1]), u32(a[2]), a[3], a[4], a[5], 1u);
@@ -260,6 +301,12 @@ uint64_t GlVramGuard::held() const
     return account_.held();
 }
 
+uint64_t GlVramGuard::host_held() const
+{
+    AV_SCOPE("GlVramGuard::host_held");
+    return host_.held();
+}
+
 uint32_t GlVramGuard::objects() const
 {
     AV_SCOPE("GlVramGuard::objects");
@@ -270,8 +317,12 @@ bool GlVramGuard::invariants_hold() const
 {
     AV_SCOPE("GlVramGuard::invariants_hold");
     uint64_t total = 0u;
-    sizes_.for_each([&total](uint64_t, const uint64_t &bytes) { total += bytes; });
-    return total == account_.held() && sizes_.invariants_hold();
+    uint64_t resident = 0u;
+    sizes_.for_each([&total, &resident](uint64_t key, const uint64_t &bytes) {
+        if ((key >> 56u) == static_cast<uint64_t>(Kind::host_buffer)) resident += bytes;
+        else total += bytes;
+    });
+    return total == account_.held() && resident == host_.held() && sizes_.invariants_hold();
 }
 
 }

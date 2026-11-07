@@ -9,7 +9,7 @@ namespace av {
 SourceMemory::SourceMemory(uint32_t domain, uint64_t key, uint32_t memory_type, uint32_t caching,
                            const ExportedMemory &memory)
     : domain_(domain), key_(key), memory_type_(memory_type), caching_(caching), memory_(memory), attached_(true),
-      references_(1u), owner_(nullptr)
+      references_(1u), owner_(nullptr), charged_(0u)
 {
     AV_SCOPE("SourceMemory::SourceMemory");
 }
@@ -48,6 +48,18 @@ uint64_t SourceMemory::size() const
 {
     AV_SCOPE("SourceMemory::size");
     return memory_.size();
+}
+
+uint64_t SourceMemory::charged() const
+{
+    AV_SCOPE("SourceMemory::charged");
+    return charged_;
+}
+
+void SourceMemory::charge(uint64_t bytes)
+{
+    AV_SCOPE("SourceMemory::charge");
+    charged_ = bytes;
 }
 
 uint8_t *SourceMemory::pointer() const

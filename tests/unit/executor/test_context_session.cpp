@@ -9,6 +9,7 @@
 #include "executor/import_table.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/host_memory_source.hpp"
+#include "executor/host_ram_ledger.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/executor/mock_memory_exporter.hpp"
@@ -600,3 +601,68 @@ TEST(context_session_release, a_drain_that_does_not_finish_keeps_every_blob_and_
   CHECK(!drawing.session().live());
   CHECK_EQ(drawing.backend().abandoned(), 2u);
   CHECK_EQ(drawing.exporter().live(), 0u); }
+
+TEST(context_session_host_ram, a_decode_that_overflows_its_block_is_refused_when_the_session_limit_cannot_hold_the_chunk)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  av::HostRamLedger ledger;
+  session.use_host_ram(&ledger, 512u * 1024u);
+  std::size_t answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::roomy_id, payload, sizeof payload, nullptr, 0u, answer),
+           std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(session.starved(), 1u);
+  CHECK_EQ(ledger.used(), 0u);
+  CHECK(session.invariants_hold()); }
+
+TEST(context_session_host_ram, a_decode_that_overflows_its_block_is_refused_when_the_vm_has_no_host_ram_left)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  av::HostRamLedger ledger;
+  ledger.budget(512u * 1024u);
+  session.use_host_ram(&ledger, 256u << 20);
+  std::size_t answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::roomy_id, payload, sizeof payload, nullptr, 0u, answer),
+           std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(session.starved(), 1u);
+  CHECK(ledger.refusals() != 0u);
+  CHECK_EQ(ledger.used(), 0u); }
+
+TEST(context_session_host_ram, an_overflow_chunk_is_charged_while_the_command_runs_and_given_back_after)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  av::HostRamLedger ledger;
+  ledger.budget(8u << 20);
+  session.use_host_ram(&ledger, 256u << 20);
+  std::size_t answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::roomy_id, payload, sizeof payload, nullptr, 0u, answer),
+           std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(session.starved(), 0u);
+  CHECK_EQ(ledger.used(), 0u);
+  CHECK_EQ(ledger.refusals(), 0u); }
+
+TEST(context_session_host_ram, an_answer_held_for_the_guest_to_read_is_charged_until_the_session_lets_it_go)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  bound.backend().set_answer_bytes(64u);
+  av::HostRamLedger ledger;
+  session.use_host_ram(&ledger, 256u << 20);
+  std::uint8_t reply[16] = {};
+  std::size_t  answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::long_answer_id, payload, sizeof payload, reply, sizeof reply, answer),
+           std::uint32_t{AV_EXECUTED});
+  CHECK(ledger.used() >= 64u * 1024u);
+  static_cast<void>(session.release(av::GenerousBudget().budget()));
+  session.vacate();
+  CHECK_EQ(ledger.used(), 0u); }
+
+TEST(context_session_host_ram, an_answer_the_session_limit_cannot_hold_is_refused_and_holds_nothing)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  bound.backend().set_answer_bytes(64u);
+  av::HostRamLedger ledger;
+  session.use_host_ram(&ledger, 32u * 1024u);
+  std::uint8_t reply[16] = {};
+  std::size_t  answer = 0u;
+  static_cast<void>(session.execute(MockSessionBackend::long_answer_id, payload, sizeof payload, reply, sizeof reply, answer));
+  CHECK_EQ(ledger.used(), 0u);
+  CHECK(session.invariants_hold()); }

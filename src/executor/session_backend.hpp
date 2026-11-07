@@ -6,6 +6,7 @@
 namespace av {
 
 class BlobRole;
+class ByteLedger;
 class OwnedFd;
 class SharedImageShape;
 class SourceMemory;
@@ -42,6 +43,7 @@ public:
                                              uint64_t &wire_handle, uint64_t &detail) = 0;
     virtual void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) = 0;
 
+    virtual void use_host_ram(ByteLedger *ledger, uint64_t limit) = 0;
     virtual void shut_down() = 0;
     virtual void let_go_of_thread() = 0;
 

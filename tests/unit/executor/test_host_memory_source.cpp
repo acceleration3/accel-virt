@@ -2,6 +2,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/exported_memory.hpp"
 #include "executor/host_memory_source.hpp"
+#include "executor/host_ram_ledger.hpp"
 #include "executor/memory_exporter.hpp"
 #include "executor/source_memory.hpp"
 #include "harness/executor/host_memory_source_probe.hpp"
@@ -751,3 +752,147 @@ TEST(host_memory_source_alias, sources_aliasing_each_others_memory_are_taken_fro
   CHECK_EQ(first.source.live(), 0u);
   CHECK_EQ(second.source.live(), 0u);
   CHECK(first.source.invariants_hold() && second.source.invariants_hold()); }
+
+namespace {
+
+class HostRamRig {
+public:
+    HostRamRig() : platform(), exporter(), source(exporter, platform), ledger()
+    {
+        const std::uint32_t card = exporter.add_heap(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, 16ull << 30);
+        const std::uint32_t system = exporter.add_heap(0u, 32ull << 30);
+        card_ = card;
+        exporter.add_type(visible | coherent, true, system);
+        exporter.add_type(visible | coherent | cached, true, system);
+        source.use_host_ram(&ledger);
+    }
+
+    Status allocate(std::uint64_t key, HostMemoryRequest request, std::uint64_t size)
+    {
+        AvHostMemory memory = {-1, 0u, 0u};
+        const Status status = source.allocate(domain, key, size, request, memory);
+        if (memory.fd >= 0) ::close(memory.fd);
+        return status;
+    }
+
+    void add_bar() { exporter.add_type(local | visible | coherent, true, card_); }
+
+    MockPlatform       platform;
+    MockMemoryExporter exporter;
+    HostMemorySource   source;
+    av::HostRamLedger  ledger;
+
+private:
+    std::uint32_t card_ = 0u;
+};
+
+}
+
+TEST(host_memory_source_host_ram, a_readback_in_system_memory_past_the_budget_is_refused_before_the_exporter_is_asked)
+{ HostRamRig rig;
+  rig.ledger.budget(3u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, 2u * page), Status::ok);
+  const std::uint32_t asked = rig.exporter.attempts();
+  CHECK_STATUS(rig.allocate(2u, readback, 2u * page), Status::no_memory);
+  CHECK_EQ(rig.exporter.attempts(), asked);
+  CHECK_EQ(rig.ledger.used(), 2u * page);
+  CHECK(rig.ledger.refusals() != 0u);
+  CHECK_STATUS(rig.allocate(3u, readback, page), Status::ok);
+  CHECK_EQ(rig.source.host_ram_held(), 3u * page);
+  rig.source.free_domain(domain); }
+
+TEST(host_memory_source_host_ram, freeing_one_memory_gives_its_bytes_back_and_makes_room)
+{ HostRamRig rig;
+  rig.ledger.budget(2u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, 2u * page), Status::ok);
+  CHECK_STATUS(rig.allocate(2u, readback, page), Status::no_memory);
+  rig.source.free(domain, 1u);
+  CHECK_EQ(rig.ledger.used(), 0u);
+  CHECK_STATUS(rig.allocate(2u, readback, 2u * page), Status::ok);
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.ledger.used(), 0u); }
+
+TEST(host_memory_source_host_ram, closing_a_domain_returns_everything_it_held)
+{ HostRamRig rig;
+  rig.ledger.budget(10u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, 3u * page), Status::ok);
+  CHECK_STATUS(rig.allocate(2u, readback, 4u * page), Status::ok);
+  CHECK_EQ(rig.ledger.used(), 7u * page);
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.ledger.used(), 0u);
+  CHECK_EQ(rig.source.host_ram_held(), 0u); }
+
+TEST(host_memory_source_host_ram, memory_a_session_still_holds_stays_charged_until_it_lets_go)
+{ HostRamRig rig;
+  rig.ledger.budget(10u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, 3u * page), Status::ok);
+  SourceMemory *const lent = rig.source.acquire(domain, 1u);
+  CHECK(lent != nullptr);
+  rig.source.free(domain, 1u);
+  CHECK_EQ(rig.ledger.used(), 3u * page);
+  rig.source.release(*lent);
+  CHECK_EQ(rig.ledger.used(), 0u); }
+
+TEST(host_memory_source_host_ram, an_exporter_that_fails_gives_the_reservation_back)
+{ HostRamRig rig;
+  rig.ledger.budget(10u * page);
+  rig.exporter.fail_allocations(4u);
+  CHECK_STATUS(rig.allocate(1u, readback, page), Status::no_memory);
+  CHECK_EQ(rig.ledger.used(), 0u); }
+
+TEST(host_memory_source_host_ram, memory_in_the_cards_own_heap_is_not_charged_to_host_ram)
+{ HostRamRig rig;
+  rig.add_bar();
+  rig.ledger.budget(page);
+  CHECK_STATUS(rig.allocate(1u, upload, 8u * page), Status::ok);
+  CHECK_EQ(rig.ledger.used(), 0u);
+  rig.source.free_domain(domain); }
+
+TEST(host_memory_source_host_ram, destroying_the_source_returns_what_was_never_freed)
+{ MockPlatform       platform;
+  MockMemoryExporter exporter;
+  av::HostRamLedger  ledger;
+  exporter.add_heap(0u, 32ull << 30);
+  exporter.add_type(visible | coherent | cached, true, 0u);
+  {
+    HostMemorySource source(exporter, platform);
+    source.use_host_ram(&ledger);
+    AvHostMemory memory = {-1, 0u, 0u};
+    CHECK_STATUS(source.allocate(domain, 1u, 5u * page, readback, memory), Status::ok);
+    if (memory.fd >= 0) ::close(memory.fd);
+    CHECK_EQ(ledger.used(), 5u * page);
+  }
+  CHECK_EQ(ledger.used(), 0u); }
+
+TEST(host_memory_source_host_ram, binding_the_same_ledger_again_keeps_the_books_and_the_report_says_what_is_held)
+{ HostRamRig rig;
+  rig.ledger.budget(10u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, 3u * page), Status::ok);
+  rig.source.use_host_ram(&rig.ledger);
+  CHECK_EQ(rig.ledger.used(), 3u * page);
+  char            bytes[1024] = {};
+  av::StateWriter writer(bytes, sizeof bytes);
+  rig.source.report(writer);
+  CHECK(std::strstr(writer.dump(), "host_ram_held_bytes=12288") != nullptr);
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.ledger.used(), 0u); }
+
+TEST(host_memory_source_host_ram, no_room_to_keep_the_memory_gives_its_reservation_back)
+{ HostRamRig rig;
+  rig.ledger.budget(10u * page);
+  CHECK_STATUS(rig.allocate(1u, readback, page), Status::ok);
+  rig.source.free(domain, 1u);
+  rig.platform.fail_allocation_at(1u);
+  CHECK_STATUS(rig.allocate(2u, readback, 3u * page), Status::no_memory);
+  CHECK_EQ(rig.ledger.used(), 0u);
+  CHECK_EQ(rig.exporter.live(), 0u); }
+
+TEST(host_memory_source_host_ram, memory_that_cannot_be_shared_gives_its_reservation_back)
+{ HostRamRig rig;
+  rig.ledger.budget(10u * page);
+  {
+    const DescriptorRoom room;
+    CHECK_STATUS(rig.allocate(1u, readback, 3u * page), Status::no_memory);
+  }
+  CHECK_EQ(rig.ledger.used(), 0u);
+  CHECK_EQ(rig.exporter.live(), 0u); }

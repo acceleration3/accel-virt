@@ -183,7 +183,7 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
     av_device_trace_start(virtio_gpu_av_schedule);
     virtio_gpu_av_host_init(r);
     r->core = av_device_create(&r->host, executor, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
-                                &recording, renderer, r->executor, r->vram_reserve, error, sizeof(error));
+                                &recording, renderer, r->executor, r->vram_reserve, r->host_ram_reserve, error, sizeof(error));
     if (!r->core) {
         error_setg(errp, "%s", error);
         return;
@@ -397,6 +397,7 @@ static const Property virtio_gpu_av_properties[] = {
     DEFINE_PROP_STRING("record", VirtIOGPUAv, record),
     DEFINE_PROP_UINT64("record-limit", VirtIOGPUAv, record_limit, 0),
     DEFINE_PROP_UINT32("vram-reserve", VirtIOGPUAv, vram_reserve, 0),
+    DEFINE_PROP_UINT32("host-ram-reserve", VirtIOGPUAv, host_ram_reserve, 0),
     DEFINE_PROP_STRING("record-kinds", VirtIOGPUAv, record_kinds),
     DEFINE_PROP_BOOL("record-wrap", VirtIOGPUAv, record_wrap, false),
     DEFINE_PROP_BOOL("display", VirtIOGPUAv, display, true),

@@ -59,6 +59,7 @@ public:
     std::uint32_t last_closed_domain();
     std::uint8_t  last_domain_gpu();
     std::uint32_t last_vram_reserve_mib();
+    std::uint64_t last_host_ram_bytes();
     std::uint32_t misuses();
     void          refuse_memory_at(std::uint32_t nth);
     void          withhold_memory_descriptor_at(std::uint32_t nth);
@@ -201,6 +202,7 @@ private:
     std::uint32_t              last_closed_domain_ = 0u;
     std::uint8_t               last_domain_gpu_ = 0u;
     std::uint32_t              last_vram_reserve_mib_ = 0u;
+    std::uint64_t              last_host_ram_bytes_ = 0u;
     std::uint32_t              refuse_share_ = 0u;
     std::uint32_t              refuse_open_ = 0u;
     std::uint32_t              withhold_open_handle_ = 0u;

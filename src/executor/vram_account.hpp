@@ -5,17 +5,18 @@
 
 namespace av {
 
-class VramLedger;
+class ByteLedger;
 
 class VramAccount {
 public:
     VramAccount();
-    explicit VramAccount(VramLedger &ledger);
+    explicit VramAccount(ByteLedger &ledger);
     VramAccount(const VramAccount &) = delete;
     VramAccount &operator=(const VramAccount &) = delete;
 
-    void               bind(VramLedger *ledger);
+    void               bind(ByteLedger *ledger);
     bool               bound() const;
+    bool               bound_to(const ByteLedger *ledger) const;
     [[nodiscard]] bool take(uint64_t bytes);
     void               give(uint64_t bytes);
     uint64_t           close();
@@ -26,7 +27,7 @@ public:
     uint64_t used() const;
 
 private:
-    VramLedger *ledger_;
+    ByteLedger *ledger_;
     uint64_t    held_;
 };
 

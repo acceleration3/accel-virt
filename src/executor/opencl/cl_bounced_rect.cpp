@@ -57,4 +57,16 @@ cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *
     return CL_SUCCESS;
 }
 
+void ClBouncedRect::use_host_ram(ByteLedger *ledger)
+{
+    AV_SCOPE("ClBouncedRect::use_host_ram");
+    staging_.bind(ledger);
+}
+
+void ClBouncedRect::release_staging()
+{
+    AV_SCOPE("ClBouncedRect::release_staging");
+    staging_.release();
+}
+
 }

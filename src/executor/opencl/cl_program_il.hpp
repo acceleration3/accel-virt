@@ -10,6 +10,8 @@
 
 namespace av {
 
+class ByteLedger;
+
 class ClProgramIl {
 public:
     ClProgramIl();
@@ -19,6 +21,8 @@ public:
 
     const uint32_t *words(cl_program program, size_t &count);
     void            forget();
+    void use_host_ram(ByteLedger *ledger);
+    void release_staging();
 
 private:
     StagingBytes module_;

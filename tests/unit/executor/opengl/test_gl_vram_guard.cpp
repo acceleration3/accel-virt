@@ -1,5 +1,6 @@
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_vram_guard.hpp"
+#include "executor/host_ram_ledger.hpp"
 #include "executor/vram_ledger.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/failing_blocks.hpp"
@@ -45,7 +46,7 @@ public:
     { bindings = Bindings{};
       gl_.glGetIntegerv = fake_get_integerv;
       ledger_.learn(2048 * mib);
-      guard_.bind(&ledger_);
+      guard_.bind(&ledger_, nullptr);
       guard_.install(); }
 
     bool run(std::uint32_t command, std::initializer_list<std::uint64_t> args)
@@ -194,7 +195,7 @@ TEST(gl_vram_guard, arguments_the_driver_would_call_invalid_are_passed_through_u
 
 TEST(gl_vram_guard, a_context_with_no_ledger_is_never_refused)
 { Rig rig;
-  rig.guard().bind(nullptr);
+  rig.guard().bind(nullptr, nullptr);
   bind(array_buffer_binding, 3);
   CHECK(rig.run(kVram_glBufferData, {array_buffer, 100000 * mib}));
   CHECK_EQ(rig.guard().objects(), 0u); }
@@ -219,3 +220,96 @@ TEST(gl_vram_guard, clearing_returns_everything_the_context_left_behind)
   rig.guard().clear();
   CHECK_EQ(rig.ledger().used(), 0u);
   CHECK_EQ(rig.guard().objects(), 0u); }
+
+namespace {
+
+constexpr std::uint32_t pixel_pack_buffer = 0x88EBu, pixel_pack_buffer_binding = 0x88EDu;
+constexpr std::uint32_t stream_draw = 0x88E0u, static_read = 0x88E5u;
+constexpr std::uint64_t map_write_bit = 0x2u, persistent_bit = 0x40u, dynamic_storage_bit = 0x100u;
+
+struct HostRig {
+    HostRig() : rig(), host()
+    { host.budget(300 * mib);
+      rig.guard().bind(&rig.ledger(), &host); }
+
+    Rig               rig;
+    av::HostRamLedger host;
+};
+
+}
+
+TEST(gl_vram_guard_host_ram, a_buffer_the_driver_keeps_for_reading_back_also_counts_against_the_vms_host_ram)
+{ HostRig fixture;
+  bind(array_buffer_binding, 3);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 100 * mib, 0, static_read}));
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  CHECK_EQ(fixture.rig.ledger().used(), 100 * mib);
+  CHECK_EQ(fixture.rig.guard().host_held(), 100 * mib);
+  bind(array_buffer_binding, 4);
+  CHECK(!fixture.rig.run(kVram_glBufferData, {array_buffer, 250 * mib, 0, static_read}));
+  CHECK_EQ(fixture.rig.word().count(out_of_memory_kind), 1u);
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  CHECK_EQ(fixture.rig.ledger().used(), 100 * mib);
+  CHECK(fixture.rig.guard().invariants_hold()); }
+
+TEST(gl_vram_guard_host_ram, a_buffer_for_drawing_is_the_cards_and_never_touches_host_ram)
+{ HostRig fixture;
+  bind(array_buffer_binding, 3);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 100 * mib, 0, stream_draw}));
+  CHECK_EQ(fixture.host.used(), 0u);
+  CHECK_EQ(fixture.rig.ledger().used(), 100 * mib); }
+
+TEST(gl_vram_guard_host_ram, pixel_transfer_buffers_and_mappable_storage_count_as_host_ram)
+{ HostRig fixture;
+  bind(pixel_pack_buffer_binding, 5);
+  CHECK(fixture.rig.run(kVram_glBufferData, {pixel_pack_buffer, 40 * mib, 0, stream_draw}));
+  CHECK_EQ(fixture.host.used(), 40 * mib);
+  CHECK(fixture.rig.run(kVram_glNamedBufferStorage, {9, 60 * mib, 0, map_write_bit | persistent_bit}));
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  CHECK(fixture.rig.run(kVram_glNamedBufferStorage, {10, 60 * mib, 0, dynamic_storage_bit}));
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  CHECK(!fixture.rig.run(kVram_glNamedBufferStorage, {11, 250 * mib, 0, map_write_bit}));
+  CHECK_EQ(fixture.rig.ledger().used(), 160 * mib); }
+
+TEST(gl_vram_guard_host_ram, respecifying_a_buffer_follows_its_new_residency_in_both_directions)
+{ HostRig fixture;
+  bind(array_buffer_binding, 3);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 100 * mib, 0, static_read}));
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 50 * mib, 0, static_read}));
+  CHECK_EQ(fixture.host.used(), 50 * mib);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 50 * mib, 0, stream_draw}));
+  CHECK_EQ(fixture.host.used(), 0u);
+  CHECK_EQ(fixture.rig.ledger().used(), 50 * mib);
+  CHECK(fixture.rig.guard().invariants_hold()); }
+
+TEST(gl_vram_guard_host_ram, deleting_the_buffer_gives_its_host_ram_back_and_clearing_returns_the_rest)
+{ HostRig fixture;
+  CHECK(fixture.rig.run(kVram_glNamedBufferData, {7, 100 * mib, 0, static_read}));
+  CHECK(fixture.rig.run(kVram_glNamedBufferData, {8, 100 * mib, 0, static_read}));
+  const std::uint32_t gone[] = {7};
+  CHECK(fixture.rig.run(kVram_glDeleteBuffers, {1, reinterpret_cast<std::uintptr_t>(gone)}));
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  fixture.rig.guard().clear();
+  CHECK_EQ(fixture.host.used(), 0u);
+  CHECK_EQ(fixture.rig.ledger().used(), 0u); }
+
+TEST(gl_vram_guard_host_ram, a_card_refusal_after_the_host_side_took_its_share_gives_that_share_back)
+{ HostRig fixture;
+  bind(array_buffer_binding, 3);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 100 * mib, 0, static_read}));
+  bind(array_buffer_binding, 4);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 800 * mib, 0, stream_draw}));
+  bind(array_buffer_binding, 5);
+  CHECK(!fixture.rig.run(kVram_glBufferData, {array_buffer, 200 * mib, 0, static_read}));
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  CHECK_EQ(fixture.rig.guard().host_held(), 100 * mib);
+  CHECK(fixture.rig.guard().invariants_hold()); }
+
+TEST(gl_vram_guard_host_ram, a_failed_record_of_the_card_side_leaves_the_host_side_as_it_was)
+{ HostRig fixture;
+  bind(array_buffer_binding, 3);
+  CHECK(fixture.rig.run(kVram_glBufferData, {array_buffer, 100 * mib, 0, static_read}));
+  CHECK(!fixture.rig.run(kVram_glBufferData, {array_buffer, 2000 * mib, 0, static_read}));
+  CHECK_EQ(fixture.host.used(), 100 * mib);
+  CHECK_EQ(fixture.rig.guard().host_held(), 100 * mib);
+  CHECK(fixture.rig.guard().invariants_hold()); }

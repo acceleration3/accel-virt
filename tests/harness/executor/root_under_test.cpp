@@ -54,7 +54,7 @@ std::uint32_t RootUnderTest::domain_of(const std::uint8_t *gpu_uuid)
     for (std::uint32_t entry = 0u; entry < max_domains; entry++)
         if (domains_[entry] != 0u && std::memcmp(gpus_[entry], gpu_uuid, sizeof gpus_[entry]) == 0)
             return domains_[entry];
-    const std::uint32_t opened = storage.object().open_domain(gpu_uuid, 0u);
+    const std::uint32_t opened = storage.object().open_domain(gpu_uuid, 0u, 0u);
     for (std::uint32_t entry = 0u; entry < max_domains && opened != 0u; entry++) {
         if (domains_[entry] != 0u) continue;
         std::memcpy(gpus_[entry], gpu_uuid, sizeof gpus_[entry]);

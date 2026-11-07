@@ -64,6 +64,7 @@ public:
     Status   overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset) override;
     Status   restore_guest_run(void *run, std::uint64_t bytes) override;
     void     release_range(void *base, std::uint64_t bytes) override;
+    std::uint64_t guest_memory_bytes() override;
     std::uint64_t hostmem_size() override;
     Status   place_in_hostmem(int fd, std::uint64_t size, std::uint64_t offset) override;
     void     remove_from_hostmem(std::uint64_t offset, std::uint64_t size) override;
@@ -212,6 +213,7 @@ public:
     void          add_bounce_region(std::uint64_t base, std::uint64_t size);
     std::uint8_t *guest_ram(std::uint64_t address);
     void          set_hostmem_size(std::uint64_t size);
+    void          set_guest_memory_bytes(std::uint64_t bytes);
     void          add_resource(std::uint32_t id);
     void          fail_fence_connect_at(std::uint32_t nth);
     bool          fence_interrupts_connected();
@@ -394,6 +396,7 @@ private:
     std::uint32_t   placements_made_;
     Placement       last_placement_;
     std::uint64_t   hostmem_size_;
+    std::uint64_t   guest_memory_bytes_ = 0u;
     std::uint32_t   resources_[max_resources];
     std::uint32_t   resource_count_;
     void           *doorbells_[max_doorbells];

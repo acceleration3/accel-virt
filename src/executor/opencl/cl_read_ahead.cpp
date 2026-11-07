@@ -45,4 +45,17 @@ void ClReadAhead::forget()
     buffer_ = nullptr;
 }
 
+void ClReadAhead::use_host_ram(ByteLedger *ledger)
+{
+    AV_SCOPE("ClReadAhead::use_host_ram");
+    bytes_.bind(ledger);
+}
+
+void ClReadAhead::release_staging()
+{
+    AV_SCOPE("ClReadAhead::release_staging");
+    forget();
+    bytes_.release();
+}
+
 }

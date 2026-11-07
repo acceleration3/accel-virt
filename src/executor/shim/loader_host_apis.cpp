@@ -13,7 +13,7 @@ namespace av {
 LoaderHostApis::LoaderHostApis(ExecutorLog &log)
     : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
       gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{},
-      shares_{}, ledgers_{}, vram_gate_(*this, heap_), count_(0u), opened_(false)
+      shares_{}, ledgers_{}, host_ram_(), vram_gate_(*this, heap_), count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
     for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, log.shares()));
@@ -144,6 +144,12 @@ VramLedger *LoaderHostApis::vram_ledger(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::vram_ledger");
     return index < count_ ? &ledgers_[index] : nullptr;
+}
+
+HostRamLedger *LoaderHostApis::host_ram_ledger()
+{
+    AV_SCOPE("LoaderHostApis::host_ram_ledger");
+    return &host_ram_;
 }
 
 HostMemorySource *LoaderHostApis::memory_source(uint32_t index)

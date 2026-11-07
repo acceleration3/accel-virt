@@ -664,7 +664,7 @@ TEST(vulkan_backend, the_guest_s_device_local_heap_is_capped_by_the_reserve_the_
   av::HostGpu   gpu;
   Rig rig;
   VulkanBackend backend(rig.lines);
-  backend.use_vram(&ledger);
+  backend.use_vram(&ledger, nullptr);
   backend.initialize(gpu, &source, rig.imports);
   VkPhysicalDeviceMemoryProperties guest = {};
   backend.on_vkGetPhysicalDeviceMemoryProperties(VK_NULL_HANDLE, &guest);

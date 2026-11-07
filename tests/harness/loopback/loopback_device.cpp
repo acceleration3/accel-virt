@@ -48,7 +48,7 @@ void LoopbackDevice::realize(const AvExecutorOps &executor, const std::uint8_t *
     const AvRecordingOptions recording = {record, 0u, "all", 0};
     static_cast<void>(
         device_.realize("auto", false, &executor, record != nullptr ? &recording : nullptr, nullptr,
-                        nullptr, 0u, message));
+                        nullptr, 0u, 0u, message));
     device_.status(DriverStatus::driver_ok);
 }
 

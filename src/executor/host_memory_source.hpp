@@ -5,6 +5,7 @@
 #include "core/support/status.hpp"
 #include "device/shim/posix_lock.hpp"
 #include "executor/source_memory.hpp"
+#include "executor/vram_account.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "proto/context/vram_policy.hpp"
 #include "proto/resources/host_memory_request.hpp"
@@ -18,6 +19,7 @@ struct AvHostMemory;
 namespace av {
 
 class BlockSource;
+class ByteLedger;
 class MemoryExporter;
 class StateWriter;
 struct HostMemorySourceProbe;
@@ -42,6 +44,8 @@ public:
     [[nodiscard]] bool   vulkan_types(GuestMemoryTypes &answer);
     uint32_t             live() const;
     void                 reserve_vram(uint32_t mib);
+    void                 use_host_ram(ByteLedger *ledger);
+    uint64_t             host_ram_held() const;
     VramPolicy           vram_policy() const;
 
     void report(StateWriter &writer) const;
@@ -54,6 +58,7 @@ private:
 
     void          learn();
     uint32_t      choices(HostMemoryRequest request, uint32_t (&types)[most_choices]) const;
+    bool          system_type(uint32_t type) const;
     uint32_t      first_type(uint32_t among, VkMemoryPropertyFlags wanted, VkMemoryPropertyFlags refused) const;
     SourceMemory *find(uint32_t domain, uint64_t key);
     SourceMemory *aliased(uint32_t domain, uint64_t key);
@@ -76,6 +81,7 @@ private:
     uint32_t                     visible_;
     GuestMemoryTypes             vulkan_;
     VramPolicy                   vram_;
+    VramAccount                  host_ram_;
 
     friend struct HostMemorySourceProbe;
 };

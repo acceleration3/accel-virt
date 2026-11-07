@@ -1,3 +1,4 @@
+#include "executor/host_ram_ledger.hpp"
 #include "executor/opencl/spirv_argument_kinds.hpp"
 #include "guest/probe/shaders/vector_add_spv.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -156,3 +157,24 @@ TEST(spirv_argument_kinds, a_module_that_is_not_well_formed_answers_nothing)
   short_ones.op(55u, {9u, 6u});
   CHECK(kinds.kind(short_ones.words(), short_ones.count(), "k", 0u, argument));
   CHECK(argument == KernelArgument::data); }
+
+TEST(spirv_argument_kinds_host_ram, the_type_table_is_charged_to_host_ram_until_the_staging_is_released)
+{ av::HostRamLedger ledger;
+  SpirvArgumentKinds kinds;
+  kinds.use_host_ram(&ledger);
+  KernelArgument argument = KernelArgument::unknown;
+  CHECK(kinds.kind(av::vector_add_spv, av::vector_add_spv_words, "vector_add", 0u, argument));
+  CHECK(ledger.used() != 0u);
+  kinds.release_staging();
+  CHECK_EQ(ledger.used(), 0u);
+  CHECK(kinds.kind(av::vector_add_spv, av::vector_add_spv_words, "vector_add", 0u, argument));
+  CHECK(ledger.used() != 0u); }
+
+TEST(spirv_argument_kinds_host_ram, a_module_the_budget_cannot_hold_answers_no_kind_and_holds_nothing)
+{ av::HostRamLedger ledger;
+  ledger.budget(1u);
+  SpirvArgumentKinds kinds;
+  kinds.use_host_ram(&ledger);
+  KernelArgument argument = KernelArgument::unknown;
+  CHECK(!kinds.kind(av::vector_add_spv, av::vector_add_spv_words, "vector_add", 0u, argument));
+  CHECK_EQ(ledger.used(), 0u); }

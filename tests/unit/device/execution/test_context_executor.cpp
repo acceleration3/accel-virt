@@ -50,7 +50,7 @@ public:
           executor_(host_, library_, shares_, 5u), sharing_(host_, library_, shares_, 6u)
     {
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(uuid, 0u));
+        static_cast<void>(library_.open_domain(uuid, 0u, 0u));
         static_cast<void>(shares_.initialize());
     }
 
@@ -161,7 +161,7 @@ TEST(context_executor, an_executor_left_behind_is_released_with_the_context)
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u, 0u), Status::ok);
   {
       ExecutorShares  shares(host, library);
       ContextExecutor executor(host, library, shares, 1u);
@@ -326,7 +326,7 @@ TEST(context_executor_create, an_opengl_executor_that_cannot_be_published_is_giv
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u, 0u), Status::ok);
   ExecutorShares  unlocked(host, library);
   ContextExecutor executor(host, library, unlocked, 3u);
   executor.configure(SubApi::opengl, uuid, GlContextOptions());

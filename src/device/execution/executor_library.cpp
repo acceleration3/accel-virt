@@ -46,12 +46,12 @@ uint32_t ExecutorLibrary::sub_apis() const
     return ops_ != nullptr ? ops_->sub_apis(ops_->opaque) & known_sub_apis : 0u;
 }
 
-Status ExecutorLibrary::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib)
+Status ExecutorLibrary::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib, uint64_t host_ram_bytes)
 {
     AV_SCOPE("ExecutorLibrary::open_domain");
     if (ops_ == nullptr) return Status::ok;
     if (domain_ != 0u) return Status::invalid_state;
-    domain_ = ops_->open_domain(ops_->opaque, gpu_uuid, vram_reserve_mib);
+    domain_ = ops_->open_domain(ops_->opaque, gpu_uuid, vram_reserve_mib, host_ram_bytes);
     return domain_ != 0u ? Status::ok : Status::not_found;
 }
 

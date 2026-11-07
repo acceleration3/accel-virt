@@ -1,7 +1,7 @@
 #include "executor/vram_account.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/vram_ledger.hpp"
+#include "executor/byte_ledger.hpp"
 
 namespace av {
 
@@ -10,12 +10,12 @@ VramAccount::VramAccount() : ledger_(nullptr), held_(0u)
     AV_SCOPE("VramAccount::VramAccount");
 }
 
-VramAccount::VramAccount(VramLedger &ledger) : ledger_(&ledger), held_(0u)
+VramAccount::VramAccount(ByteLedger &ledger) : ledger_(&ledger), held_(0u)
 {
     AV_SCOPE("VramAccount::VramAccount");
 }
 
-void VramAccount::bind(VramLedger *ledger)
+void VramAccount::bind(ByteLedger *ledger)
 {
     AV_SCOPE("VramAccount::bind");
     static_cast<void>(close());
@@ -26,6 +26,12 @@ bool VramAccount::bound() const
 {
     AV_SCOPE("VramAccount::bound");
     return ledger_ != nullptr;
+}
+
+bool VramAccount::bound_to(const ByteLedger *ledger) const
+{
+    AV_SCOPE("VramAccount::bound_to");
+    return ledger_ == ledger;
 }
 
 bool VramAccount::take(uint64_t bytes)

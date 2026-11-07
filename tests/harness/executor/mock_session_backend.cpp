@@ -159,6 +159,16 @@ void MockSessionBackend::hold_shut_downs(bool held) { __atomic_store_n(&shut_dow
 
 bool MockSessionBackend::inside_shut_down() const { return __atomic_load_n(&inside_shut_down_, __ATOMIC_ACQUIRE); }
 
+void MockSessionBackend::use_host_ram(ByteLedger *ledger, std::uint64_t limit)
+{
+    host_ram_ledger_ = ledger;
+    host_ram_limit_ = limit;
+}
+
+ByteLedger *MockSessionBackend::host_ram_ledger() const { return host_ram_ledger_; }
+
+std::uint64_t MockSessionBackend::host_ram_limit() const { return host_ram_limit_; }
+
 void MockSessionBackend::shut_down()
 {
     __atomic_store_n(&inside_shut_down_, true, __ATOMIC_RELEASE);

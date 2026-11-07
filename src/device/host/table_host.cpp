@@ -247,6 +247,12 @@ void TableHost::release_range(void *base, uint64_t bytes)
     ops_.release_range(ops_.opaque, base, bytes);
 }
 
+uint64_t TableHost::guest_memory_bytes()
+{
+    AV_SCOPE("TableHost::guest_memory_bytes");
+    return ops_.guest_memory_bytes != nullptr ? ops_.guest_memory_bytes(ops_.opaque) : 0u;
+}
+
 uint64_t TableHost::hostmem_size()
 {
     AV_SCOPE("TableHost::hostmem_size");

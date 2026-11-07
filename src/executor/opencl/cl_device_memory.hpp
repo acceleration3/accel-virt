@@ -11,7 +11,7 @@
 namespace av {
 
 class BlockSource;
-class VramLedger;
+class ByteLedger;
 
 class ClDeviceMemory {
 public:
@@ -19,7 +19,9 @@ public:
     ClDeviceMemory(const ClDeviceMemory &) = delete;
     ClDeviceMemory &operator=(const ClDeviceMemory &) = delete;
 
-    void bind(VramLedger *ledger);
+    static constexpr uint64_t host_bit = 1ull << 63;
+
+    void bind(ByteLedger *vram, ByteLedger *host);
 
     [[nodiscard]] cl_int claim(cl_mem_flags flags, uint64_t bytes, uint64_t &claimed);
     [[nodiscard]] bool   keep(cl_mem memory, uint64_t claimed);
@@ -28,6 +30,7 @@ public:
     void                 clear();
 
     uint64_t held() const;
+    uint64_t host_held() const;
     uint64_t cap() const;
     uint64_t free_bytes() const;
     uint32_t objects() const;
@@ -36,6 +39,7 @@ public:
 
 private:
     VramAccount                   account_;
+    VramAccount                   host_;
     KeyedSlots<uint64_t, uint64_t> sizes_;
 };
 

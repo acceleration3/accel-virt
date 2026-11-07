@@ -141,11 +141,11 @@ TEST(virtio_gpu_av_realize, binds_once_and_contexts_follow)
   TextBuffer message(bytes, sizeof bytes);
   CHECK(!device.realized());
   CHECK_STATUS(device.create_context(1u, "test"), Status::invalid_state);
-  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
   CHECK_EQ(device.gpu_index(), 1u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::invalid_state);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::invalid_state);
   CHECK_STATUS(device.create_context(1u, "test"), Status::invalid_state);
   device.status(DriverStatus::driver_ok);
   CHECK_STATUS(device.create_context(1u, "test"), Status::ok);
@@ -176,7 +176,7 @@ TEST(virtio_gpu_av_realize, pci_identity_is_the_bound_gpus_and_nothing_before_re
   CHECK(!device.pci_identity(identity));
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   CHECK(device.pci_identity(identity));
   CHECK_EQ(identity.vendor_id, 0x1002u);
   CHECK_EQ(identity.device_id, 0x13C0u);
@@ -188,7 +188,7 @@ TEST(virtio_gpu_av_realize, a_binding_failure_leaves_it_unrealized)
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::not_found);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::not_found);
   CHECK(!device.realized());
   CHECK(device.invariants_hold()); }
 
@@ -198,7 +198,7 @@ TEST(virtio_gpu_av_realize, blob_on_is_refused_because_the_device_answers_blob_r
   VirtioGpuAv device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", true, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::invalid_parameter);
+  CHECK_STATUS(device.realize("auto", true, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::invalid_parameter);
   CHECK(std::strcmp(message.text(), "virtio-gpu-av: blob=on is not supported; the device answers blob requests itself") == 0);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
@@ -211,7 +211,7 @@ TEST(virtio_gpu_av_control, answers_blob_requests_and_reset_releases_every_blob)
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(0x1000u).u64(0x100000u).u32(0x1000u).u32(0u);
   MockRequest request(create.bytes(), create.size());
@@ -237,7 +237,7 @@ TEST(virtio_gpu_av_control, a_host_blob_is_the_librarys_memory_where_the_guest_m
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK_STATUS(device.create_context(5u, "test"), Status::ok);
   constexpr std::uint32_t host_blob = 0x01000000u;
@@ -295,7 +295,7 @@ TEST(virtio_gpu_av_realize, without_an_executor_there_is_no_capset_and_no_contex
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK(device.realized());
   CHECK_EQ(device.capsets(), 0u);
@@ -319,7 +319,7 @@ TEST(virtio_gpu_av_realize, an_executor_table_this_abi_does_not_accept_is_refuse
   VirtioGpuAv device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message), Status::invalid_parameter);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::invalid_parameter);
   CHECK(std::strstr(message.text(), "not this ABI version") != nullptr);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
@@ -333,7 +333,7 @@ TEST(virtio_gpu_av_control, a_reset_releases_every_shared_object_on_the_bound_gp
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, &executor.table(), nullptr, nullptr,
-                              nullptr, 0u, message),
+                              nullptr, 0u, 0u, message),
                Status::ok);
   CHECK_EQ(executor.shared_releases(), 0u);
   device.reset();
@@ -369,13 +369,35 @@ TEST(virtio_gpu_av_realize, the_vram_reserve_is_carried_in_the_capset_the_guest_
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 3072u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 3072u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   GpuRequestBuilder capset(0x0109u);
   capset.u32(av::CapsetInfo::capset_id).u32(av::DeviceCapset::capset_version);
   MockRequest read(capset.bytes(), capset.size());
   CHECK(device.control(&read, 0x0109u));
   CHECK_EQ(read.response_u32(24u + 18u), 3072u); }
+
+TEST(virtio_gpu_av_realize, the_host_ram_reserve_sizes_the_budget_the_capset_declares_and_the_executor_receives)
+{ MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x10000u);
+  const char meminfo[] = "MemTotal:       31457280 kB\n";
+  host.add_file("/proc/meminfo", meminfo, sizeof meminfo - 1u);
+  host.set_guest_memory_bytes(9ull << 30);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuAv device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 4096u, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
+  GpuRequestBuilder capset(0x0109u);
+  capset.u32(av::CapsetInfo::capset_id).u32(av::DeviceCapset::capset_version);
+  MockRequest read(capset.bytes(), capset.size());
+  CHECK(device.control(&read, 0x0109u));
+  const std::uint64_t budget = (17ull << 30);
+  CHECK_EQ(read.response_u32(24u + 72u), static_cast<std::uint32_t>(budget));
+  CHECK_EQ(read.response_u32(24u + 76u), static_cast<std::uint32_t>(budget >> 32u));
+  CHECK_EQ(executor.last_host_ram_bytes(), budget); }
 
 TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts_before_their_blobs)
 { MockHost host;
@@ -385,7 +407,7 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK_EQ(device.capsets(), 1u);
   GpuRequestBuilder info(0x0108u);
@@ -439,7 +461,7 @@ TEST(virtio_gpu_av_status, the_fence_interrupts_follow_the_drivers_status_byte)
   CHECK(!host.fence_interrupts_connected());
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(0x0Bu);
   CHECK(!host.fence_interrupts_connected());
   device.status(0x0Fu);
@@ -472,11 +494,11 @@ TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_fence_interrupts_is_refus
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(1u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for fence interrupts") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, again), Status::ok);
   CHECK_EQ(host.logged(), 1u); }
 
 TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_the_blob_table_is_refused)
@@ -486,11 +508,11 @@ TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_the_blob_table_is_refused
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(2u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the blob table") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, again), Status::ok);
   CHECK(device.invariants_hold());
   device.reset(); }
 
@@ -501,11 +523,11 @@ TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_the_host_blob_table_is_re
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(3u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the host blob table") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, again), Status::ok);
   CHECK(device.invariants_hold());
   device.reset(); }
 
@@ -516,11 +538,11 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_shared_executors_refuses_th
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(5u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the contexts' ordering, pulse and executors") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, again), Status::ok);
   CHECK(device.realized());
   device.reset(); }
 
@@ -531,7 +553,7 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_the_stress_probe_still_real
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(7u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
   device.reset(); }
@@ -546,7 +568,7 @@ TEST(virtio_gpu_av, lifecycle_is_main_loop_only)
                        auto *const d = static_cast<VirtioGpuAv *>(context);
                        char bytes[8];
                        TextBuffer message(bytes, sizeof bytes);
-                       static_cast<void>(d->realize("x", false, nullptr, nullptr, nullptr, nullptr, 0u, message));
+                       static_cast<void>(d->realize("x", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message));
                        d->reset();
                        static_cast<void>(d->create_context(1u, "test"));
                        static_cast<void>(d->destroy_context(1u));
@@ -572,7 +594,7 @@ TEST(virtio_gpu_av_invariants, a_broken_context_table_is_detected)
   VirtioGpuAv broken(host);
   char bytes[64];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(broken.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(broken.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   av::VirtioGpuAvProbe::duplicate_context(broken, 4u);
   CHECK(!broken.invariants_hold());
   broken.reset(); }
@@ -599,7 +621,7 @@ TEST(virtio_gpu_av_invariants, fence_interrupts_connected_without_driver_ok_are_
   VirtioGpuAv device(host);
   char bytes[64];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK(device.invariants_hold());
   device.status(0x0Bu);
@@ -628,7 +650,7 @@ TEST(virtio_gpu_av_realize, offers_host_visible_memory_with_a_window_and_no_reti
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &library.table(), nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &library.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   const std::uint32_t features = features_of(device);
   CHECK((features & static_cast<std::uint32_t>(av::CapsetInfo::feature_host_visible_memory)) != 0u);
@@ -638,7 +660,7 @@ TEST(virtio_gpu_av_realize, offers_host_visible_memory_with_a_window_and_no_reti
   windowless.add_gpu(first);
   VirtioGpuAv without(windowless);
   TextBuffer other(bytes, sizeof bytes);
-  CHECK_STATUS(without.realize("auto", false, &library.table(), nullptr, nullptr, nullptr, 0u, other), Status::ok);
+  CHECK_STATUS(without.realize("auto", false, &library.table(), nullptr, nullptr, nullptr, 0u, 0u, other), Status::ok);
   without.status(DriverStatus::driver_ok);
   CHECK_EQ(features_of(without) & static_cast<std::uint32_t>(av::CapsetInfo::feature_host_visible_memory), 0u); }
 
@@ -649,7 +671,7 @@ TEST(virtio_gpu_av_realize, a_device_with_no_record_property_records_nothing)
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   const AvRecordingOptions off = {nullptr, 0u, nullptr, 0};
-  CHECK_STATUS(device.realize("auto", false, nullptr, &off, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, &off, nullptr, nullptr, 0u, 0u, message), Status::ok);
   CHECK(device.realized());
   CHECK_EQ(host.recording_length("run.av"), 0u);
   CHECK_EQ(host.live_recordings(), 0u); }
@@ -661,7 +683,7 @@ TEST(virtio_gpu_av_realize, record_kinds_that_name_nothing_fail_the_realize_with
   char bytes[160];
   TextBuffer message(bytes, sizeof bytes);
   const AvRecordingOptions nonsense = {"run.av", 0u, "batch,nonsense", 0};
-  CHECK_STATUS(device.realize("auto", false, nullptr, &nonsense, nullptr, nullptr, 0u, message), Status::invalid_parameter);
+  CHECK_STATUS(device.realize("auto", false, nullptr, &nonsense, nullptr, nullptr, 0u, 0u, message), Status::invalid_parameter);
   CHECK(std::strstr(message.text(), "record-kinds") != nullptr);
   CHECK_EQ(host.live_recordings(), 0u);
   CHECK(device.invariants_hold()); }
@@ -675,7 +697,7 @@ TEST(virtio_gpu_av_realize, opens_the_recording_its_properties_asked_for)
   char bytes[160];
   TextBuffer message(bytes, sizeof bytes);
   const AvRecordingOptions on = {"run.av", 1u << 20, "all", 1};
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), &on, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), &on, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
 
   av::RecordedFile header_only(host, "run.av");
@@ -728,7 +750,7 @@ TEST(virtio_gpu_av_realize, record_wrap_decides_what_the_ceiling_does)
       const std::uint64_t ceiling =
           av::RecordingHeader::encoded_size + av::RecordHeader::encoded_size + av::ContextSetup::encoded_size;
       const AvRecordingOptions options = {"run.av", ceiling, "setup", c.wrap};
-      CHECK_STATUS(device.realize("auto", false, &executor.table(), &options, nullptr, nullptr, 0u, message), Status::ok);
+      CHECK_STATUS(device.realize("auto", false, &executor.table(), &options, nullptr, nullptr, 0u, 0u, message), Status::ok);
       device.status(DriverStatus::driver_ok);
       make_the_ring(host, device);
       bind_and_destroy(device, 7u);
@@ -757,7 +779,7 @@ TEST(virtio_gpu_av_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_withou
   VirtioGpuAv        device(host);
   char                bytes[96];
   TextBuffer          message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
 
   const auto send = [&device, &host](const GpuRequestBuilder &builder) {
       std::uint32_t type = 0u;
@@ -832,7 +854,7 @@ TEST(virtio_gpu_av_scanout, a_host_whose_display_has_no_head_refuses_every_scano
   VirtioGpuAv device(host);
   char         bytes[96];
   TextBuffer   message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(4096u);
   create.u64(0x40000000u).u32(4096u).u32(0u);
@@ -865,7 +887,7 @@ TEST(virtio_gpu_av_renderer_lost, with_the_contexts_in_process_nothing_happens)
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK_STATUS(device.create_context(1u, "test"), Status::ok);
   device.renderer_lost();
@@ -896,7 +918,7 @@ public:
     TextBuffer               &message() { return message_; }
     Status realize(const char *renderer, const char *executor_path, const AvExecutorOps *executor = nullptr)
     {
-        return device_.realize("auto", false, executor, nullptr, renderer, executor_path, 0u, message_);
+        return device_.realize("auto", false, executor, nullptr, renderer, executor_path, 0u, 0u, message_);
     }
 
 private:
@@ -977,7 +999,7 @@ TEST(virtio_gpu_av_modes, told_modes_are_answered_and_a_bad_text_changes_nothing
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   std::uint32_t width = 0u;
   std::uint32_t height = 0u;
   CHECK_EQ(device.offer_modes("", &width, &height), 1);
@@ -997,7 +1019,7 @@ TEST(virtio_gpu_av_modes, told_modes_are_answered_and_a_bad_text_changes_nothing
   MockHost bare;
   bare.add_gpu(first);
   VirtioGpuAv headless(bare);
-  CHECK_STATUS(headless.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(headless.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   CHECK_EQ(headless.offer_modes(nullptr, nullptr, nullptr), 0);
   std::uint32_t none = 7u;
   CHECK_STATUS(headless.set_modes("", none, none), Status::not_found);
@@ -1010,7 +1032,7 @@ TEST(virtio_gpu_av_modes, the_refresh_is_in_the_mode_list_and_survives_a_change_
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   CHECK_EQ(device.offer_modes("1920x1080", nullptr, nullptr), 1);
   const auto listed = [&]() {
       GpuRequestBuilder asked(av::DisplayModeSet::request_type);
@@ -1057,7 +1079,7 @@ struct ClockedDevice {
         executor.editable().export_image = export_key_51;
         char       bytes[96];
         TextBuffer message(bytes, sizeof bytes);
-        static_cast<void>(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message));
+        static_cast<void>(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message));
     }
     ~ClockedDevice() { device.reset(); }
 
@@ -1109,19 +1131,19 @@ TEST(virtio_gpu_av_display_clock, a_host_with_no_lock_for_the_clock_is_not_reali
       VirtioGpuAv counted(host);
       char       bytes[96];
       TextBuffer message(bytes, sizeof bytes);
-      CHECK_STATUS(counted.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+      CHECK_STATUS(counted.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
       mutexes = host.live_mutexes();
   }
   VirtioGpuAv device(host);
   host.fail_mutex_at(mutexes - 1u);
   char       bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "display clock") != nullptr);
   VirtioGpuAv engineless(host);
   host.fail_mutex_at(mutexes);
   TextBuffer other(bytes, sizeof bytes);
-  CHECK_STATUS(engineless.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, other), Status::no_memory);
+  CHECK_STATUS(engineless.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, other), Status::no_memory);
   CHECK(std::strstr(other.text(), "present engine") != nullptr); }
 
 TEST(virtio_gpu_av_present_engine, the_engine_is_offered_takes_presents_and_stops_at_a_reset)
@@ -1168,7 +1190,7 @@ TEST(virtio_gpu_av_export, serves_the_bound_gpu_s_surfaces_and_revokes_them_at_a
                          4u, -1);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   av::FakeExportConsumer stranger;
   CHECK(!device.export_accepted(stranger.device_end(), false));
   stranger.refused();
@@ -1250,7 +1272,7 @@ TEST(virtio_gpu_av_realize, a_host_that_runs_out_of_mutexes_or_events_at_any_poi
           VirtioGpuAv device(host);
           char        bytes[160];
           TextBuffer  message(bytes, sizeof bytes);
-          const Status realized = device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message);
+          const Status realized = device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message);
           if (realized == Status::ok) {
               CHECK(device.realized());
               device.reset();
@@ -1281,7 +1303,7 @@ TEST(virtio_gpu_av_control, a_present_copy_request_is_answered_by_the_device)
   VirtioGpuAv device(host);
   char        bytes[64];
   TextBuffer  message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   GpuRequestBuilder copy(0x02F2u);
   MockRequest       mock(copy.bytes(), copy.size());
   CHECK(device.control(&mock, 0x02F2u));
@@ -1295,7 +1317,7 @@ TEST(virtio_gpu_av_control, a_window_stats_page_request_is_answered_by_the_devic
   VirtioGpuAv device(host);
   char        bytes[64];
   TextBuffer  message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   GpuRequestBuilder page(0x02F9u);
   page.u64(0x401000u);
   MockRequest mock(page.bytes(), page.size());
@@ -1311,7 +1333,7 @@ TEST(virtio_gpu_av_invariants, a_host_blob_a_present_engine_or_an_export_connect
   VirtioGpuAv blobs(host);
   char        bytes[64];
   TextBuffer  message(bytes, sizeof bytes);
-  CHECK_STATUS(blobs.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, message), Status::ok);
+  CHECK_STATUS(blobs.realize("auto", false, nullptr, nullptr, nullptr, nullptr, 0u, 0u, message), Status::ok);
   av::VirtioGpuAvProbe::place_host_blob(blobs, av::HostBlobId::first);
   CHECK(!blobs.invariants_hold());
   blobs.reset();

@@ -81,3 +81,11 @@ TEST(source_memory, memory_with_no_descriptor_shares_none)
   av::OwnedFd owned;
   CHECK(!memory.share(owned));
   CHECK(!owned.held()); }
+
+TEST(source_memory, remembers_the_host_ram_it_was_charged_so_freeing_gives_back_exactly_that)
+{ SourceMemory memory(3u, 0x55u, 7u, AV_MEMORY_WRITE_COMBINED, ExportedMemory(0x1000u, -1, mapping, sizeof mapping));
+  CHECK_EQ(memory.charged(), 0u);
+  memory.charge(8192u);
+  CHECK_EQ(memory.charged(), 8192u);
+  memory.charge(0u);
+  CHECK_EQ(memory.charged(), 0u); }

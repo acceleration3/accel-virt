@@ -20,7 +20,7 @@
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/host_object_registry.hpp"
 #include "executor/session_backend.hpp"
-#include "executor/shim/host_heap.hpp"
+#include "executor/budgeted_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/vulkan/vulkan_set_layouts.hpp"
 #include "executor/vulkan/vulkan_templates.hpp"
@@ -33,6 +33,8 @@
 #include <stdint.h>
 
 namespace av {
+
+class ByteLedger;
 
 class DriverLog;
 class OwnedFd;
@@ -50,7 +52,7 @@ public:
     explicit VulkanBackend(DriverLog &lines);
     VulkanBackend(BlockSource &blocks, DriverLog &lines);
 
-    void use_vram(VramLedger *ledger);
+    void use_vram(ByteLedger *vram, ByteLedger *host);
     void initialize(const HostGpu &gpu, HostMemorySource *source, ImportTable &imports);
 
     bool knows(uint32_t command_id) const override;
@@ -253,6 +255,8 @@ public:
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
+    void use_host_ram(ByteLedger *ledger, uint64_t limit) override;
+
     void     shut_down() override;
     void     let_go_of_thread() override;
 
@@ -331,7 +335,7 @@ private:
 
     static constexpr uint64_t guest_semaphore = 1u;
 
-    HostHeap          heap_;
+    BudgetedHeap          heap_;
     BlockSource      &blocks_;
     bool backs_with_source(VkDevice device, const void *next, VkStructureType external,
                            VkExternalMemoryHandleTypeFlags types) const;

@@ -1,4 +1,5 @@
 #include "core/log/driver_log.hpp"
+#include "executor/host_ram_ledger.hpp"
 #include "executor/vram_account.hpp"
 #include "executor/vram_ledger.hpp"
 #include "executor/vulkan/vram_budget.hpp"
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::HostRamLedger;
 using av::VramAccount;
 using av::VramBudget;
 using av::VramLedger;
@@ -52,7 +54,7 @@ public:
     { driver = MemoryDriver{};
       host_vram = 8 * gib;
       ledger_.learn(8 * gib);
-      backend_.use_vram(&ledger_); }
+      backend_.use_vram(&ledger_, nullptr); }
     ~Rig() { backend_.shut_down(); }
 
     av::VulkanBackend &backend() { return backend_; }
@@ -66,6 +68,12 @@ public:
     { VkPhysicalDeviceMemoryProperties answer = {};
       backend_.on_vkGetPhysicalDeviceMemoryProperties(physical(), &answer);
       return answer; }
+
+    std::uint32_t host_visible_type()
+    { const VkPhysicalDeviceMemoryProperties known = properties();
+      for (std::uint32_t type = 0u; type < known.memoryTypeCount; type++)
+          if ((known.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u) return type;
+      return 0u; }
 
     std::uint32_t device_local_type()
     { const VkPhysicalDeviceMemoryProperties known = properties();
@@ -121,7 +129,7 @@ TEST(vram_budget, a_commit_that_cannot_be_recorded_leaves_the_books_as_they_were
   VramLedger ledger;
   ledger.learn(8 * gib);
   VramBudget budget(blocks);
-  budget.bind(&ledger);
+  budget.bind(&ledger, nullptr);
   budget.learn(guest_view());
   CHECK(budget.admit(0u, gib));
   CHECK(budget.commit(0u, 0x10u, gib) == av::Status::ok);
@@ -145,7 +153,7 @@ TEST(vram_budget, only_device_local_heaps_are_capped)
   VramLedger ledger;
   ledger.learn(8 * gib);
   VramBudget budget(blocks);
-  budget.bind(&ledger);
+  budget.bind(&ledger, nullptr);
   budget.learn(guest_view());
   VkPhysicalDeviceMemoryProperties answer = guest_view();
   budget.clamp(answer);
@@ -162,7 +170,7 @@ TEST(vram_budget, the_budget_report_follows_commits_and_releases)
   VramLedger ledger;
   ledger.learn(8 * gib);
   VramBudget budget(blocks);
-  budget.bind(&ledger);
+  budget.bind(&ledger, nullptr);
   budget.learn(guest_view());
   CHECK(budget.admit(0u, 2 * gib));
   CHECK(budget.commit(0u, 0x10u, 2 * gib) == av::Status::ok);
@@ -185,7 +193,7 @@ TEST(vram_budget, the_cap_and_usage_are_the_ledgers_so_other_apis_show_in_the_re
   VramAccount other(ledger);
   CHECK(other.take(3 * gib));
   VramBudget budget(blocks);
-  budget.bind(&ledger);
+  budget.bind(&ledger, nullptr);
   budget.learn(guest_view());
   VkPhysicalDeviceMemoryBudgetPropertiesEXT report = {};
   budget.report(report);
@@ -204,7 +212,7 @@ TEST(vram_budget, closing_returns_everything_the_backend_held)
   VramLedger ledger;
   ledger.learn(8 * gib);
   VramBudget budget(blocks);
-  budget.bind(&ledger);
+  budget.bind(&ledger, nullptr);
   budget.learn(guest_view());
   CHECK(budget.admit(0u, 2 * gib));
   CHECK(budget.commit(0u, 0x10u, 2 * gib) == av::Status::ok);
@@ -324,7 +332,7 @@ TEST(vram_budget, memory_in_a_heap_that_is_not_capped_never_touches_the_ledger)
   VramLedger ledger;
   ledger.learn(8 * gib);
   VramBudget budget(blocks);
-  budget.bind(&ledger);
+  budget.bind(&ledger, nullptr);
   budget.learn(guest_view());
   CHECK(budget.admit(0u, gib));
   CHECK(budget.commit(0u, 0x10u, gib) == av::Status::ok);
@@ -388,3 +396,137 @@ TEST(vulkan_vram_cap, a_backend_killed_after_any_of_its_memory_calls_gives_back_
       CHECK_EQ(rig.ledger().used(), std::uint64_t{0});
       CHECK_EQ(driver.frees, released);
   } }
+
+TEST(vram_budget, memory_in_a_system_heap_is_taken_from_the_vms_host_ram_ledger_and_given_back_on_release)
+{ av::FailingBlocks blocks;
+  VramLedger ledger;
+  HostRamLedger host;
+  ledger.learn(8 * gib);
+  host.budget(10 * gib);
+  VramBudget budget(blocks);
+  budget.bind(&ledger, &host);
+  budget.learn(guest_view());
+  CHECK(budget.system(1u));
+  CHECK(!budget.system(0u));
+  CHECK(budget.admit(1u, 6 * gib));
+  CHECK(budget.commit(1u, 0x20u, 6 * gib) == av::Status::ok);
+  CHECK(!budget.admit(1u, 5 * gib));
+  CHECK_EQ(host.used(), 6 * gib);
+  CHECK_EQ(ledger.used(), std::uint64_t{0});
+  CHECK_EQ(budget.host_held(), 6 * gib);
+  budget.release(0x20u);
+  CHECK_EQ(host.used(), std::uint64_t{0});
+  CHECK(budget.admit(1u, 10 * gib));
+  CHECK(budget.invariants_hold()); }
+
+TEST(vram_budget, a_refused_system_allocation_is_refunded_and_the_device_local_heap_does_not_touch_the_host_ledger)
+{ av::FailingBlocks blocks;
+  VramLedger ledger;
+  HostRamLedger host;
+  ledger.learn(8 * gib);
+  host.budget(4 * gib);
+  VramBudget budget(blocks);
+  budget.bind(&ledger, &host);
+  budget.learn(guest_view());
+  CHECK(budget.admit(0u, 2 * gib));
+  CHECK_EQ(host.used(), std::uint64_t{0});
+  CHECK(budget.admit(1u, 3 * gib));
+  budget.refund(1u, 3 * gib);
+  CHECK_EQ(host.used(), std::uint64_t{0});
+  budget.refund(0u, 2 * gib);
+  CHECK_EQ(ledger.used(), std::uint64_t{0}); }
+
+TEST(vram_budget, the_guest_is_told_the_host_ram_budget_for_system_heaps_and_what_the_vm_has_used)
+{ av::FailingBlocks blocks;
+  VramLedger ledger;
+  HostRamLedger host;
+  ledger.learn(8 * gib);
+  host.budget(12 * gib);
+  VramAccount other(host);
+  CHECK(other.take(3 * gib));
+  VramBudget budget(blocks);
+  budget.bind(&ledger, &host);
+  budget.learn(guest_view());
+  VkPhysicalDeviceMemoryProperties answer = guest_view();
+  budget.clamp(answer);
+  CHECK_EQ(answer.memoryHeaps[0].size, 7 * gib);
+  CHECK_EQ(answer.memoryHeaps[1].size, 12 * gib);
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT report = {};
+  budget.report(report);
+  CHECK_EQ(report.heapBudget[1], 12 * gib);
+  CHECK_EQ(report.heapUsage[1], 3 * gib);
+  CHECK_EQ(report.heapBudget[0], 7 * gib);
+  host.budget(2 * gib);
+  budget.report(report);
+  CHECK_EQ(report.heapBudget[1], 3 * gib); }
+
+TEST(vram_budget, closing_returns_the_host_ram_the_backend_held)
+{ av::FailingBlocks blocks;
+  VramLedger ledger;
+  HostRamLedger host;
+  ledger.learn(8 * gib);
+  VramBudget budget(blocks);
+  budget.bind(&ledger, &host);
+  budget.learn(guest_view());
+  CHECK(budget.admit(1u, 2 * gib));
+  CHECK(budget.commit(1u, 0x10u, 2 * gib) == av::Status::ok);
+  budget.close();
+  CHECK_EQ(host.used(), std::uint64_t{0});
+  CHECK_EQ(budget.host_held(), std::uint64_t{0}); }
+
+TEST(vulkan_host_ram_cap, a_host_visible_allocation_past_the_budget_is_out_of_host_memory_and_never_reaches_the_driver)
+{ HostRamLedger host;
+  Rig rig;
+  host.budget(5 * gib);
+  rig.backend().use_vram(&rig.ledger(), &host);
+  static_cast<void>(rig.properties());
+  VkDeviceMemory made = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.host_visible_type(), 3 * gib, made)), static_cast<int>(VK_SUCCESS));
+  VkDeviceMemory refused = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.host_visible_type(), 3 * gib, refused)),
+           static_cast<int>(VK_ERROR_OUT_OF_HOST_MEMORY));
+  CHECK_EQ(driver.allocations, 1u);
+  CHECK_EQ(host.used(), 3 * gib);
+  CHECK_EQ(host.refusals(), 1u);
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.host_visible_type(), 2 * gib, refused)), static_cast<int>(VK_SUCCESS)); }
+
+TEST(vulkan_host_ram_cap, the_device_local_refusal_stays_out_of_device_memory_with_a_host_budget_in_force)
+{ HostRamLedger host;
+  Rig rig;
+  host.budget(5 * gib);
+  rig.backend().use_vram(&rig.ledger(), &host);
+  static_cast<void>(rig.properties());
+  VkDeviceMemory refused = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.device_local_type(), 8 * gib, refused)),
+           static_cast<int>(VK_ERROR_OUT_OF_DEVICE_MEMORY));
+  CHECK_EQ(host.used(), std::uint64_t{0}); }
+
+TEST(vulkan_host_ram_cap, an_allocation_the_driver_refuses_gives_the_host_ram_back)
+{ HostRamLedger host;
+  Rig rig;
+  host.budget(5 * gib);
+  rig.backend().use_vram(&rig.ledger(), &host);
+  static_cast<void>(rig.properties());
+  driver.allocate_result = VK_ERROR_OUT_OF_HOST_MEMORY;
+  VkDeviceMemory made = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.host_visible_type(), gib, made)), static_cast<int>(VK_ERROR_OUT_OF_HOST_MEMORY));
+  CHECK_EQ(host.used(), std::uint64_t{0}); }
+
+TEST(vulkan_host_ram_cap, shutting_down_gives_the_held_host_ram_back_and_the_guest_sees_the_heap_shrink)
+{ HostRamLedger host;
+  Rig rig;
+  host.budget(5 * gib);
+  rig.backend().use_vram(&rig.ledger(), &host);
+  CHECK_EQ(rig.properties().memoryHeaps[1].size, 5 * gib);
+  VkDeviceMemory made = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.host_visible_type(), 2 * gib, made)), static_cast<int>(VK_SUCCESS));
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
+  budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+  VkPhysicalDeviceMemoryProperties2 query = {};
+  query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+  query.pNext = &budget;
+  rig.backend().on_vkGetPhysicalDeviceMemoryProperties2(rig.physical(), &query);
+  CHECK_EQ(budget.heapUsage[1], 2 * gib);
+  CHECK_EQ(budget.heapBudget[1], 5 * gib);
+  rig.backend().shut_down();
+  CHECK_EQ(host.used(), std::uint64_t{0}); }

@@ -39,6 +39,7 @@ public:
     static constexpr uint32_t sessions = 512u;
     static constexpr uint32_t warm_sessions = 64u;
     static constexpr uint32_t teardown_workers = 4u;
+    static constexpr uint64_t session_host_bytes = 256ull << 20;
     static constexpr uint64_t teardown_nanoseconds = 1000000000u;
     static constexpr uint64_t retry_wedged_nanoseconds = 250000000u;
     static constexpr uint64_t lost_leak_nanoseconds = 5000000000u;
@@ -52,7 +53,7 @@ public:
     [[nodiscard]] Status initialize(HostApis &apis);
 
     uint32_t sub_apis() const;
-    uint32_t open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib);
+    uint32_t open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib, uint64_t host_ram_bytes);
     void     close_domain(uint32_t domain);
     [[nodiscard]] Status allocate_memory(uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
                                          AvHostMemory &memory);

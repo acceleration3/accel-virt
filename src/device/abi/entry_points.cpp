@@ -29,8 +29,9 @@ void av_device_trace_start(AvMainLoopScheduler schedule)
 __attribute__((visibility("default")))
 AvDevice *av_device_create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
                              int base_blobs, const AvRecordingOptions *recording, const char *renderer,
-                             const char *executor_path, uint32_t vram_reserve_mib, char *error, size_t error_size)
-{ return reinterpret_cast<AvDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, renderer, executor_path, vram_reserve_mib, error, error_size)); }
+                             const char *executor_path, uint32_t vram_reserve_mib, uint32_t host_ram_reserve_mib,
+                             char *error, size_t error_size)
+{ return reinterpret_cast<AvDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, renderer, executor_path, vram_reserve_mib, host_ram_reserve_mib, error, error_size)); }
 
 __attribute__((visibility("default")))
 int av_device_control(AvDevice *device, void *request, uint32_t type)

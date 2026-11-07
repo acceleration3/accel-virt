@@ -26,7 +26,7 @@ public:
     explicit Opened(std::uint32_t sub_apis) : ops(sub_apis)
     {
         CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-        CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+        CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
     }
 
     MockExecutorOps ops;
@@ -34,6 +34,14 @@ public:
 };
 
 }
+
+TEST(executor_library, the_host_ram_budget_goes_to_the_executor_with_the_domain)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 13ull << 30), Status::ok);
+  CHECK_EQ(ops.last_host_ram_bytes(), 13ull << 30);
+  library.close_domain(); }
 
 TEST(executor_library_accept, a_whole_table_of_this_abi_is_available)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
@@ -50,7 +58,7 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
   CHECK_STATUS(library.accept(nullptr), Status::ok);
   CHECK(!library.available());
   CHECK_EQ(library.sub_apis(), 0u);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   CHECK_EQ(library.domain(), 0u);
   CHECK(library.create(SubApi::vulkan, AvContextOptions{}, nullptr) == nullptr);
   library.close_domain(); }
@@ -59,7 +67,7 @@ TEST(executor_library, the_vram_reserve_goes_to_the_executor_with_the_domain)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(some_gpu, 2048u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 2048u, 0u), Status::ok);
   CHECK_EQ(ops.last_vram_reserve_mib(), 2048u);
   library.close_domain(); }
 
@@ -116,10 +124,10 @@ TEST(executor_library_domain, is_opened_on_the_device_s_gpu_once_and_closed_once
   CHECK_EQ(library.domain(), 0u);
   library.close_domain();
   CHECK_EQ(ops.domains_closed(), 0u);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   CHECK(library.domain() != 0u);
   CHECK_EQ(ops.last_domain_gpu(), 0x42u);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::invalid_state);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::invalid_state);
   CHECK_EQ(ops.domains_opened(), 1u);
   const std::uint32_t opened = library.domain();
   library.close_domain();
@@ -134,7 +142,7 @@ TEST(executor_library_domain, a_gpu_the_library_has_not_got_opens_none)
   ops.refuse_domain_at(1u);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::not_found);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::not_found);
   CHECK_EQ(library.domain(), 0u);
   CHECK(library.create(SubApi::vulkan, AvContextOptions{}, nullptr) == nullptr);
   CHECK_EQ(ops.option_creates(), 0u); }
@@ -294,7 +302,7 @@ TEST(executor_library_release_shared, tells_the_library_in_the_device_s_domain_o
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   library.release_shared(0x2Au);
   CHECK_EQ(ops.shared_releases(), 0u);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   library.release_shared(0x2Au);
   library.release_shared(0u);
   CHECK_EQ(ops.shared_releases(), 2u);
@@ -311,7 +319,7 @@ TEST(executor_library_images, are_asked_in_the_device_s_domain_and_nothing_witho
   CHECK(!library.export_image(9u, image));
   CHECK(!library.read_image(9u, pixels, 8u, 2u, 2u));
   CHECK_EQ(ops.last_domain(), 0u);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   CHECK(!library.export_image(9u, image));
   CHECK_EQ(ops.last_domain(), library.domain());
   CHECK(!library.read_image(9u, pixels, 8u, 2u, 2u));
@@ -343,7 +351,7 @@ TEST(executor_library_frames, are_mapped_and_unmapped_in_the_device_s_domain)
   CHECK(!library.map_frame(SurfacePoint(0x51u, 3u), 0u, view));
   library.unmap_frame(SurfacePoint(0x51u, 3u));
   CHECK_EQ(ops.frame_unmaps(), 0u);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   CHECK(library.map_frame(SurfacePoint(0x51u, 3u), 0u, view));
   CHECK(view.pixels == pixels);
   CHECK_EQ(ops.last_domain(), library.domain());
@@ -365,7 +373,7 @@ TEST(executor_library_surfaces, are_exported_and_synced_in_the_device_s_domain)
   CHECK(!library.sync_surface(0x51u, 0u, writes, fd));
   CHECK_EQ(writes, 0u);
   CHECK_EQ(fd, -1);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   CHECK(library.export_surface(0x51u, 0u, image));
   CHECK_EQ(image.fd, 5);
   CHECK_EQ(image.width, 64u);
@@ -394,7 +402,7 @@ TEST(executor_library_composes, only_a_library_whose_table_composes_planes_does)
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   AvScanoutPlane plane = {};
   AvExportedImage image = {};
   CHECK(!library.composes());
@@ -433,7 +441,7 @@ TEST(executor_library_alias_memory, needs_both_domains_and_a_library_that_aliase
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   AvHostMemory memory = {-1, 0u, 0u};
   CHECK_STATUS(library.alias_memory(1u, 5u, 2u, memory), Status::no_memory);
-  CHECK_STATUS(library.open_domain(some_gpu, 0u), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u), Status::ok);
   CHECK_STATUS(library.alias_memory(1u, 0u, 2u, memory), Status::no_memory);
   CHECK_STATUS(library.alias_memory(1u, 5u, 2u, memory), Status::no_memory);
   CHECK_EQ(memory.fd, -1);

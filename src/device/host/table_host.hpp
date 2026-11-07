@@ -41,6 +41,7 @@ public:
     void     release_range(void *base, uint64_t bytes) override;
     Status   overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset) override;
     Status   restore_guest_run(void *run, uint64_t bytes) override;
+    uint64_t guest_memory_bytes() override;
     uint64_t hostmem_size() override;
     Status   place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;
     void     remove_from_hostmem(uint64_t offset, uint64_t size) override;

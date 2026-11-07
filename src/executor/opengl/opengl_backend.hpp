@@ -8,7 +8,7 @@
 #include "executor/published_slots.hpp"
 #include "proto/submission/gl_error_word.hpp"
 #include "executor/session_backend.hpp"
-#include "executor/shim/host_heap.hpp"
+#include "executor/budgeted_heap.hpp"
 #include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/gl_buffer_slices.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
@@ -35,17 +35,18 @@ class SharedImageShape;
 class GlDisplay;
 class GlMemoryGroup;
 class SourceMemory;
-class VramLedger;
+class ByteLedger;
 
 class OpenGlBackend final : public SessionBackend {
 public:
     explicit OpenGlBackend(DriverLog &lines);
     OpenGlBackend(BlockSource &blocks, DriverLog &lines);
 
-    void               use_vram(VramLedger *ledger);
+    void               use_vram(ByteLedger *vram, ByteLedger *host);
     [[nodiscard]] bool initialize(const GlDisplay *display, const AvContextOptions *options,
                                   const OpenGlBackend *share, GlMemoryGroup *group = nullptr);
     const GlContext   &context() const;
+    void use_host_ram(ByteLedger *ledger, uint64_t limit) override;
     void               shut_down() override;
     void               let_go_of_thread() override;
 
@@ -89,7 +90,7 @@ private:
     bool granted_fixed_function();
     void publish_errors();
 
-    HostHeap    heap_;
+    BudgetedHeap    heap_;
     GlContext   context_;
     glproto::RealGl gl_;
     GlHostImport    import_;

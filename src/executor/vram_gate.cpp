@@ -3,11 +3,31 @@
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/host_apis.hpp"
+#include "executor/byte_ledger.hpp"
+#include "executor/host_ram_ledger.hpp"
 #include "executor/vram_ledger.hpp"
 
 #include <string.h>
 
 namespace av {
+
+GateAccount::GateAccount(ByteLedger &vram_ledger, ByteLedger *host_ledger) : vram_(vram_ledger), host_()
+{
+    AV_SCOPE("GateAccount::GateAccount");
+    host_.bind(host_ledger);
+}
+
+VramAccount &GateAccount::vram()
+{
+    AV_SCOPE("GateAccount::vram");
+    return vram_;
+}
+
+VramAccount &GateAccount::host()
+{
+    AV_SCOPE("GateAccount::host");
+    return host_;
+}
 
 namespace {
 
@@ -22,36 +42,48 @@ void *gate_open(void *self, const uint8_t *gpu_uuid)
 void gate_close(void *self, void *account)
 {
     AV_SCOPE("gate_close");
-    static_cast<VramGate *>(self)->close(static_cast<VramAccount *>(account));
+    static_cast<VramGate *>(self)->close(static_cast<GateAccount *>(account));
 }
 
 int gate_take(void *account, uint64_t bytes)
 {
     AV_SCOPE("gate_take");
-    return account == nullptr || static_cast<VramAccount *>(account)->take(bytes) ? 1 : 0;
+    return account == nullptr || static_cast<GateAccount *>(account)->vram().take(bytes) ? 1 : 0;
 }
 
 void gate_give(void *account, uint64_t bytes)
 {
     AV_SCOPE("gate_give");
-    if (account != nullptr) static_cast<VramAccount *>(account)->give(bytes);
+    if (account != nullptr) static_cast<GateAccount *>(account)->vram().give(bytes);
 }
 
 uint64_t gate_free_bytes(void *account)
 {
     AV_SCOPE("gate_free_bytes");
-    return account != nullptr ? static_cast<VramAccount *>(account)->free_bytes() : UINT64_MAX;
+    return account != nullptr ? static_cast<GateAccount *>(account)->vram().free_bytes() : UINT64_MAX;
 }
 
 uint64_t gate_cap(void *account)
 {
     AV_SCOPE("gate_cap");
-    return account != nullptr ? static_cast<VramAccount *>(account)->cap() : UINT64_MAX;
+    return account != nullptr ? static_cast<GateAccount *>(account)->vram().cap() : UINT64_MAX;
+}
+
+int gate_take_host(void *account, uint64_t bytes)
+{
+    AV_SCOPE("gate_take_host");
+    return account == nullptr || static_cast<GateAccount *>(account)->host().take(bytes) ? 1 : 0;
+}
+
+void gate_give_host(void *account, uint64_t bytes)
+{
+    AV_SCOPE("gate_give_host");
+    if (account != nullptr) static_cast<GateAccount *>(account)->host().give(bytes);
 }
 
 }
 
-VramGate::VramGate(HostApis &apis, BlockSource &blocks) : apis_(apis), abi_{}, lock_(), accounts_(blocks), leaked_(0u)
+VramGate::VramGate(HostApis &apis, BlockSource &blocks) : apis_(apis), abi_{}, lock_(), accounts_(blocks), leaked_(0u), leaked_host_(0u)
 {
     AV_SCOPE("VramGate::VramGate");
     abi_.size = sizeof(AvVramGate);
@@ -62,6 +94,8 @@ VramGate::VramGate(HostApis &apis, BlockSource &blocks) : apis_(apis), abi_{}, l
     abi_.free_bytes = gate_free_bytes;
     abi_.cap = gate_cap;
     abi_.close = gate_close;
+    abi_.take_host = gate_take_host;
+    abi_.give_host = gate_give_host;
 }
 
 const AvVramGate &VramGate::abi() const
@@ -70,7 +104,7 @@ const AvVramGate &VramGate::abi() const
     return abi_;
 }
 
-VramAccount *VramGate::open(const uint8_t *gpu_uuid)
+GateAccount *VramGate::open(const uint8_t *gpu_uuid)
 {
     AV_SCOPE("VramGate::open");
     if (gpu_uuid == nullptr) return nullptr;
@@ -82,17 +116,18 @@ VramAccount *VramGate::open(const uint8_t *gpu_uuid)
     }
     if (ledger == nullptr) return nullptr;
     const ThreadLockHold held(lock_);
-    VramAccount *account = nullptr;
-    return accounts_.create(account, *ledger) == Status::ok ? account : nullptr;
+    GateAccount *account = nullptr;
+    return accounts_.create(account, *ledger, apis_.host_ram_ledger()) == Status::ok ? account : nullptr;
 }
 
-void VramGate::close(VramAccount *account)
+void VramGate::close(GateAccount *account)
 {
     AV_SCOPE("VramGate::close");
     if (account == nullptr) return;
     const ThreadLockHold held(lock_);
     if (accounts_.find(account) == nullptr) return;
-    leaked_ += account->close();
+    leaked_ += account->vram().close();
+    leaked_host_ += account->host().close();
     static_cast<void>(accounts_.destroy(account));
 }
 
@@ -108,6 +143,13 @@ uint64_t VramGate::leaked() const
     AV_SCOPE("VramGate::leaked");
     const ThreadLockHold held(lock_);
     return leaked_;
+}
+
+uint64_t VramGate::leaked_host() const
+{
+    AV_SCOPE("VramGate::leaked_host");
+    const ThreadLockHold held(lock_);
+    return leaked_host_;
 }
 
 bool VramGate::invariants_hold() const
