@@ -444,3 +444,50 @@ TEST(d3d12_session_execution, a_session_removed_on_a_shared_device_leaves_its_pe
   CHECK(!peer.session().lost());
   CHECK_EQ(peer.first_queue.executions, 1u);
   CHECK_EQ(peer.first_queue.signals, 1u); }
+
+namespace {
+
+constexpr std::uint32_t kill_steps = 12u;
+constexpr std::uint32_t kill_points = 20u;
+
+bool step(Scene &scene, std::uint32_t index, bool &target_destroyed)
+{
+    switch (index) {
+    case 0u: return scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u);
+    case 1u: return scene.execute(queue_a, list);
+    case 2u: return scene.session().on_ResetCommandList12(list, allocator, 0u);
+    case 3u: return scene.session().on_CopyBufferRegion12(other_list, source, 0u, target, 0u, 64u);
+    case 4u: return scene.execute(queue_b, other_list);
+    case 5u: return scene.session().on_CopyBufferRegion12(list, target, 64u, source, 64u, 64u);
+    case 6u: return scene.execute(queue_a, list);
+    case 7u:
+        target_destroyed = true;
+        return scene.session().on_Destroy12(target);
+    case 8u: return scene.session().on_ResetCommandList12(other_list, allocator, 0u);
+    case 9u: return scene.session().on_ResetCommandList12(list, allocator, 0u);
+    case 10u: return scene.execute(queue_b, other_list);
+    default: return scene.execute(queue_a, list);
+    }
+}
+
+}
+
+TEST(d3d12_session_execution, a_session_killed_after_any_command_releases_everything_it_held)
+{ std::uint32_t seed = 0x2545F491u;
+  for (std::uint32_t point = 0u; point < kill_points; point++) {
+      seed = seed * 1664525u + 1013904223u;
+      const std::uint32_t killed_after = (seed >> 16u) % (kill_steps + 1u);
+      Scene scene;
+      CHECK_EQ(scene.dst.references(), 1u);
+      bool target_destroyed = false;
+      for (std::uint32_t index = 0u; index < killed_after; index++) static_cast<void>(step(scene, index, target_destroyed));
+      for (av::FakeFence &fence : scene.device.fences) fence.completed = ~std::uint64_t{0};
+      scene.session().shut_down();
+      CHECK_EQ(scene.src.references(), 0u);
+      CHECK_EQ(scene.dst.references(), 0u);
+      CHECK_EQ(scene.alloc.references(), 0u);
+      CHECK_EQ(scene.commands.references(), 0u);
+      CHECK_EQ(scene.more_commands.references(), 0u);
+      CHECK_EQ(scene.first_queue.references(), 0u);
+      CHECK_EQ(scene.second_queue.references(), 0u);
+  } }
