@@ -85,7 +85,6 @@ void VulkanGuard::end_batch()
 {
     AV_SCOPE("VulkanGuard::end_batch");
     progress_.begin_poll();
-    reap();
 }
 
 bool VulkanGuard::hold(uint64_t owner, uint64_t handle, uint64_t device, uint64_t pool)
