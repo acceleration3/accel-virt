@@ -56,6 +56,7 @@ class Command:
     sync_mode: str = "sync"
     success_codes: tuple[str, ...] = ()
     error_codes: tuple[str, ...] = ()
+    queues: tuple[str, ...] = ()
 
 
 @dataclass

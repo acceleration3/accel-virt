@@ -213,6 +213,7 @@ void VulkanBackend::on_vkDestroyCommandPool(VkDevice device, VkCommandPool comma
     AV_SCOPE("VulkanBackend::on_vkDestroyCommandPool");
     release_children(number(commandPool), number(device));
     guard_.orphan_children(number(commandPool), number(device));
+    families_.forget(number(commandPool));
     guard_.destroy(VulkanDestroyKind::command_pool, number(device), 0u, number(commandPool));
 }
 

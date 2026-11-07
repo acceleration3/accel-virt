@@ -7,6 +7,7 @@
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
+#include "executor/vulkan/vulkan_queue_families.hpp"
 #include "executor/vulkan/vulkan_submit_progress.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/host_object_registry.hpp"
@@ -30,6 +31,7 @@ class HostGpu;
 class HostMemorySource;
 class ImportTable;
 class SourceMemory;
+class WireReader;
 
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend, private VulkanDestroyer {
 public:
@@ -88,6 +90,8 @@ public:
                                  VkQueue *pQueue) override;
     VkResult on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                               VkFence fence) override;
+    VkResult on_vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo *pCreateInfo,
+                                    const VkAllocationCallbacks *pAllocator, VkCommandPool *pCommandPool) override;
 
     void on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                 VkPhysicalDeviceMemoryProperties *pMemoryProperties) override;
@@ -224,11 +228,14 @@ private:
 
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
     static constexpr uint32_t max_child_marks = 128u;
+    static constexpr uint32_t max_queue_families = 64u;
 
     void     release_children(uint64_t parent, uint64_t device);
     bool     children_marks(uint64_t parent, uint64_t device, uint64_t *marks, uint32_t &count);
     uint64_t owning_device(uint64_t handle) const;
     bool     reusable(VkCommandBuffer commandBuffer);
+    bool     queue_admits(uint32_t command_id, const WireReader &payload) const;
+    bool     family_flags(VkDevice device, uint32_t family, uint32_t &flags);
     bool     template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device);
     bool     resolved(const VulkanTemplates::Reference &reference, uint64_t &handle) const;
     void let_go(uint64_t raw, VulkanObjectKind kind);
@@ -274,11 +281,13 @@ private:
     VulkanSubmitTiming timing_;
     VulkanTemplates      templates_;
     VulkanSetLayouts     layouts_;
+    VulkanQueueFamilies  families_;
     DriverLog           &lines_;
     VulkanSubmitProgress progress_;
     mutable VulkanGuard guard_;
     uint64_t parent_;
     uint64_t ran_;
+    bool     lost_;
 };
 
 }

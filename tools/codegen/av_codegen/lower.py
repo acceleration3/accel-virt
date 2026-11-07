@@ -431,6 +431,7 @@ def _lower_command(cmd_el: ET.Element, cmd_name: str,
         sync_mode=sync_mode,
         success_codes=parse.parse_codes(cmd_el.get("successcodes")),
         error_codes=parse.parse_codes(cmd_el.get("errorcodes")),
+        queues=parse.parse_codes(cmd_el.get("queues")),
     )
 
 

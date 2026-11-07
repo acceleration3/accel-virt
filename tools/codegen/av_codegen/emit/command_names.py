@@ -20,6 +20,17 @@ AV_INTERNAL_CMDS: tuple[tuple[int, str], ...] = (
 )
 
 
+QUEUE_FLAG_BITS: dict[str, int] = {
+    "graphics": 0x1,
+    "compute": 0x2,
+    "transfer": 0x4,
+    "sparse_binding": 0x8,
+    "decode": 0x20,
+    "encode": 0x40,
+    "opticalflow": 0x100,
+}
+
+
 def emit(reg: Registry, out_dir: Path) -> None:
     cmds = sorted(reg.commands.values(), key=lambda c: c.cmd_id)
 
@@ -35,6 +46,9 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "[[nodiscard]] const char* cmd_id_to_string(uint32_t cmd_id) noexcept;",
         "// Whether the profile carries `cmd_id`: what a session decodes at all.",
         "[[nodiscard]] bool knows_command(uint32_t cmd_id) noexcept;",
+        "// The VkQueueFlags a command may be recorded or submitted for, as the",
+        "// registry's queues attribute names them; zero when it names none.",
+        "[[nodiscard]] uint32_t command_queues(uint32_t cmd_id) noexcept;",
         "",
         "}  // namespace av::vkproto",
         "",
@@ -67,6 +81,18 @@ def emit(reg: Registry, out_dir: Path) -> None:
         source.append(f"        case 0x{cmd.cmd_id:08X}u:")
     source.append("            return true;")
     source.append("        default: return false;")
+    source.append("    }")
+    source.append("}")
+    source.append("")
+    source.append("uint32_t command_queues(uint32_t cmd_id) noexcept {")
+    source.append("    switch (cmd_id) {")
+    for cmd in cmds:
+        mask = 0
+        for queue in cmd.queues:
+            mask |= QUEUE_FLAG_BITS[queue]
+        if mask:
+            source.append(f"        case 0x{cmd.cmd_id:08X}u: return 0x{mask:X}u;")
+    source.append("        default: return 0u;")
     source.append("    }")
     source.append("}")
     source.append("")
