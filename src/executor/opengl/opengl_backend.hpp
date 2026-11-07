@@ -32,6 +32,7 @@ class OwnedFd;
 class SharedImageShape;
 
 class GlDisplay;
+class GlMemoryGroup;
 class SourceMemory;
 
 class OpenGlBackend final : public SessionBackend {
@@ -40,7 +41,7 @@ public:
     OpenGlBackend(BlockSource &blocks, DriverLog &lines);
 
     [[nodiscard]] bool initialize(const GlDisplay *display, const AvContextOptions *options,
-                                  const OpenGlBackend *share);
+                                  const OpenGlBackend *share, GlMemoryGroup *group = nullptr);
     const GlContext   &context() const;
     void               shut_down() override;
 

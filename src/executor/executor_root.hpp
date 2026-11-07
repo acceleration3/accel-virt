@@ -12,6 +12,7 @@
 #include "executor/host_gpu_set.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/opencl/opencl_backend.hpp"
+#include "executor/opengl/gl_memory_group.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
@@ -82,7 +83,8 @@ private:
 
     SessionBackend *backend_in(uint32_t slot, uint32_t sub_api);
     [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions &options,
-                            const OpenGlBackend *share);
+                            const OpenGlBackend *share, GlMemoryGroup *group);
+    GlMemoryGroup *group_for(const ContextSession *share);
     const HostGpu *gpu_of(uint32_t domain) const;
     HostMemorySource *source_of(uint32_t domain) const;
     uint32_t       slot_of(const ContextSession *session) const;
@@ -97,6 +99,8 @@ private:
     HostGpuSet      gpus_;
     ExecutorDomains domains_;
     GpuClockHold   clocks_[HostGpuSet::max_gpus];
+    GlMemoryGroup  memory_groups_[max_sessions];
+    uint32_t       group_of_[max_sessions];
     ObjectStorage<ContextSession> sessions_[max_sessions];
     ObjectStorage<VulkanBackend>  vulkan_[max_sessions];
     ObjectStorage<OpenClBackend>  opencl_[max_sessions];

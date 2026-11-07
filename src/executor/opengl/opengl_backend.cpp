@@ -1,5 +1,7 @@
 #include "executor/opengl/opengl_backend.hpp"
 
+#include "executor/opengl/gl_memory_group.hpp"
+
 #include "executor/teardown_budget.hpp"
 
 #include "executor/sharing/shared_image_shape.hpp"
@@ -137,12 +139,17 @@ const GlContext &OpenGlBackend::context() const
     return context_;
 }
 
-bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions *options, const OpenGlBackend *share)
+bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions *options, const OpenGlBackend *share,
+                               GlMemoryGroup *group)
 {
     AV_SCOPE("OpenGlBackend::initialize");
     if (display == nullptr ||
         !context_.open(*display, GlContextAttributes(options), share != nullptr ? &share->context_ : nullptr))
         return false;
+    if (group != nullptr && !memories_.join(*group)) {
+        context_.close();
+        return false;
+    }
     resolved_ = static_cast<uint32_t>(load_real_gl(gl_, resolve_through, &context_));
     install_hooks();
     gl_.av_fixed_function = granted_fixed_function();
@@ -209,6 +216,7 @@ void OpenGlBackend::shut_down()
         pack_.abandon_all();
         buffers_.give_back();
         memories_.destroy_all(import_);
+        memories_.part();
         import_.give_back();
         progress_.release();
         void *fence = nullptr;

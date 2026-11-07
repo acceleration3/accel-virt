@@ -25,7 +25,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][ContextSession::arena_
 }
 
 ExecutorRoot::ExecutorRoot(ExecutorLog &log)
-    : gpus_(), domains_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
+    : gpus_(), domains_(), memory_groups_{}, group_of_{}, sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
       wedged_{}, clock_(), apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
@@ -205,7 +205,8 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
         if (sessions_[slot].object().initialize(backend, decode_blocks[slot], ContextSession::arena_bytes) != Status::ok)
             continue;
         shares_[slot].bind(*apis_->shares(gpu->index()), options.domain, backend);
-        if (!bind(slot, sub_api, *gpu, options, shared)) {
+        GlMemoryGroup *const group = sub_api == AV_EXECUTOR_SUB_API_OPENGL ? group_for(share) : nullptr;
+        if (!bind(slot, sub_api, *gpu, options, shared, group)) {
             shares_[slot].end();
             TeardownBudget budget(clock_, teardown_nanoseconds);
             wedged_[slot] = !sessions_[slot].object().release(budget);
@@ -246,8 +247,18 @@ const OpenGlBackend *ExecutorRoot::sharing(const ContextSession *share, const Ho
     return nullptr;
 }
 
+GlMemoryGroup *ExecutorRoot::group_for(const ContextSession *share)
+{
+    AV_SCOPE("ExecutorRoot::group_for");
+    const uint32_t sharer = share != nullptr ? slot_of(share) : max_sessions;
+    if (sharer != max_sessions) return &memory_groups_[group_of_[sharer]];
+    for (uint32_t group = 0u; group < max_sessions; group++)
+        if (memory_groups_[group].members() == 0u) return &memory_groups_[group];
+    return nullptr;
+}
+
 bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions &options,
-                        const OpenGlBackend *share)
+                        const OpenGlBackend *share, GlMemoryGroup *group)
 {
     AV_SCOPE("ExecutorRoot::bind");
     switch (sub_api) {
@@ -255,7 +266,10 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
         return opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
                                                  share, sessions_[slot].object().imports());
     case AV_EXECUTOR_SUB_API_OPENGL:
-        return opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share);
+        if (group == nullptr) return false;
+        if (!opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group)) return false;
+        group_of_[slot] = static_cast<uint32_t>(group - memory_groups_);
+        return true;
     case AV_EXECUTOR_SUB_API_D3D: {
         constexpr uint32_t renew_wait_ms = 2000u;
         D3d11HostDevice *const device11 = apis_->d3d11_device(gpu.index());

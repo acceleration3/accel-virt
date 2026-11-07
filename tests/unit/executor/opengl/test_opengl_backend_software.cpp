@@ -1,4 +1,5 @@
 #include "executor/monotonic_clock.hpp"
+#include "executor/opengl/gl_memory_group.hpp"
 #include "executor/teardown_budget.hpp"
 #include "harness/executor/generous_budget.hpp"
 #include "core/log/driver_log.hpp"
@@ -90,6 +91,7 @@ constexpr unsigned gl_device_uuid = 0x9597u;
 constexpr unsigned gl_texture_2d = 0x0DE1u;
 constexpr unsigned gl_rgba8 = 0x8058u;
 constexpr unsigned gl_srgb8_alpha8 = 0x8C43u;
+constexpr unsigned gl_rgb565 = 0x8D62u;
 constexpr unsigned gl_rgba = 0x1908u;
 constexpr unsigned gl_unsigned_byte = 0x1401u;
 constexpr unsigned gl_framebuffer = 0x8D40u;
@@ -608,6 +610,46 @@ TEST(opengl_backend_software, an_importer_keeps_the_pixels_of_a_dma_buf_after_th
   CHECK_EQ(std::memcmp(read, expected, sizeof read), 0);
   backend.shut_down(); }
 
+TEST(opengl_backend_software, a_memory_object_imported_by_one_session_is_stored_into_by_a_session_sharing_its_context)
+{ if (skipped()) return;
+  av::GlMemoryGroup group;
+  OpenGlBackend     maker(executor_log.opengl());
+  OpenGlBackend     user(executor_log.opengl());
+  CHECK(maker.initialize(software().display(), nullptr, nullptr, &group));
+  CHECK(user.initialize(software().display(), nullptr, &maker, &group));
+  use_plain_storage(user);
+  Memfd         memfd(memory_bytes);
+  std::uint64_t name = 0u, detail = 0u;
+  CHECK(import_memory(maker, memfd.fd(), memory_bytes, av::SharedImageShape(), name, detail));
+  const unsigned texture = make_texture(user);
+  CHECK(texture != 0u);
+  CHECK(store_in_memory(user, texture, side, name, 0u));
+  CHECK_EQ(stub_calls, 1u);
+  CHECK_EQ(OpenGlBackendProbe::memories(maker).textured(), 1u);
+  CHECK(OpenGlBackendProbe::memories(user).holds(static_cast<std::uint32_t>(name)));
+  CHECK(delete_texture(user, texture));
+  CHECK_EQ(OpenGlBackendProbe::memories(maker).textured(), 0u);
+  user.shut_down();
+  CHECK(OpenGlBackendProbe::memories(maker).holds(static_cast<std::uint32_t>(name)));
+  maker.shut_down();
+  CHECK_EQ(group.members(), 0u); }
+
+TEST(opengl_backend_software, a_session_that_joined_no_group_cannot_store_into_another_session_s_memory)
+{ if (skipped()) return;
+  OpenGlBackend maker(executor_log.opengl());
+  OpenGlBackend user(executor_log.opengl());
+  CHECK(maker.initialize(software().display(), nullptr, nullptr));
+  CHECK(user.initialize(software().display(), nullptr, &maker));
+  use_plain_storage(user);
+  Memfd         memfd(memory_bytes);
+  std::uint64_t name = 0u, detail = 0u;
+  CHECK(import_memory(maker, memfd.fd(), memory_bytes, av::SharedImageShape(), name, detail));
+  const unsigned texture = make_texture(user);
+  CHECK(store_in_memory(user, texture, side, name, 0u));
+  CHECK_EQ(stub_calls, 0u);
+  user.shut_down();
+  maker.shut_down(); }
+
 TEST(opengl_backend_software, a_row_pitch_shorter_than_a_row_makes_no_image_and_the_memory_is_still_imported)
 { if (skipped()) return;
   Udmabuf buffer(memory_bytes);
@@ -646,6 +688,9 @@ TEST(opengl_backend_software, a_dma_buf_whose_shape_the_image_does_not_cover_goe
   CHECK_EQ(stub_calls, 4u);
   const unsigned srgb = make_texture(backend);
   CHECK(store_in_memory(backend, srgb, side, name, 0u, gl_srgb8_alpha8));
+  CHECK_EQ(stub_calls, 4u);
+  const unsigned packed = make_texture(backend);
+  CHECK(store_in_memory(backend, packed, side, name, 0u, gl_rgb565));
   CHECK_EQ(stub_calls, 5u);
   backend.shut_down(); }
 
