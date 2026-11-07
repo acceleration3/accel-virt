@@ -971,11 +971,9 @@ public:
             backends_[slot].set_drains_in_time(false);
             opened.root().close(&session);
         }
-        for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) drained_before_[slot] = backends_[slot].drains();
     }
 
     MockSessionBackend &backend(std::uint32_t slot) { return backends_[slot]; }
-    std::uint32_t       drained_before(std::uint32_t slot) const { return drained_before_[slot]; }
     void                finish_in_time()
     {
         for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) backends_[slot].set_drains_in_time(true);
@@ -986,7 +984,6 @@ private:
     std::uint32_t      domain_;
     MockSessionBackend backends_[wedged_slots];
     std::uint8_t       blocks_[wedged_slots][4096];
-    std::uint32_t      drained_before_[wedged_slots] = {};
 };
 
 void open_vulkan(void *context, std::uint32_t)
@@ -1010,7 +1007,7 @@ TEST(executor_root_concurrency, a_wedged_slot_reaped_by_contexts_opening_at_once
       Spread(16u, open_vulkan, &all).run();
       for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) {
           CHECK_EQ(wedged.backend(slot).shut_downs(), 1u);
-          CHECK_EQ(wedged.backend(slot).drains(), wedged.drained_before(slot) + 1u);
+          CHECK_EQ(wedged.backend(slot).finished_drains(), 1u);
       }
       CHECK_EQ(opened.root().wedged(), 0u);
       CHECK_EQ(opened.root().live(), 0u);

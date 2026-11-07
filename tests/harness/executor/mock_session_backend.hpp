@@ -44,6 +44,7 @@ public:
     [[nodiscard]] bool drain(TeardownBudget &budget) override;
     void          set_drains_in_time(bool in_time);
     std::uint32_t drains() const;
+    std::uint32_t finished_drains() const;
     std::uint32_t drains_before_first_release() const;
     std::uint32_t abandoned_before_drain() const;
     bool poll() override;
@@ -97,6 +98,7 @@ private:
     std::uint64_t last_released_detail_ = 0u;
     std::uint32_t shut_downs_ = 0u;
     std::uint32_t drains_ = 0u;
+    std::uint32_t finished_drains_ = 0u;
     bool          drains_in_time_ = true;
     std::uint32_t drains_before_first_release_ = 0u;
     std::uint32_t abandoned_before_drain_ = 0u;

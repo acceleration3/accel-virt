@@ -76,10 +76,14 @@ bool MockSessionBackend::drain(TeardownBudget &)
 {
     __atomic_fetch_add(&drains_, 1u, __ATOMIC_RELAXED);
     abandoned_before_drain_ = abandoned_ + unbound_;
-    return __atomic_load_n(&drains_in_time_, __ATOMIC_RELAXED);
+    const bool in_time = __atomic_load_n(&drains_in_time_, __ATOMIC_RELAXED);
+    if (in_time) __atomic_fetch_add(&finished_drains_, 1u, __ATOMIC_RELAXED);
+    return in_time;
 }
 
 void MockSessionBackend::set_drains_in_time(bool in_time) { __atomic_store_n(&drains_in_time_, in_time, __ATOMIC_RELAXED); }
+
+std::uint32_t MockSessionBackend::finished_drains() const { return __atomic_load_n(&finished_drains_, __ATOMIC_RELAXED); }
 
 std::uint32_t MockSessionBackend::drains() const { return __atomic_load_n(&drains_, __ATOMIC_RELAXED); }
 

@@ -644,6 +644,7 @@ namespace {
 constexpr std::uint32_t pairs = threads / 2u;
 constexpr std::uint32_t cycles_per_pair = iterations / pairs;
 constexpr std::uint32_t memories_per_cycle = 6u;
+constexpr std::uint32_t looks_per_import = 400u;
 
 std::atomic<std::uint32_t> faults(0u);
 
@@ -702,6 +703,11 @@ void run_cycle(Pair &pair, std::uint32_t seat, std::uint32_t number)
         expect(import_memory(backend, memfd.fd(), memory_bytes, av::SharedImageShape(), mine[at], details[at]),
                "memory imports", number);
         pair.published_[seat][at].store(mine[at]);
+        for (std::uint32_t look = 0u; look < looks_per_import; look++)
+            for (std::uint32_t seen = 0u; seen <= at; seen++) {
+                const std::uint64_t theirs = pair.published_[other][seen].load();
+                if (theirs != 0u) static_cast<void>(OpenGlBackendProbe::memories(backend).holds(static_cast<std::uint32_t>(theirs)));
+            }
         const unsigned own = make_texture(backend);
         textures[made++] = own;
         expect(store_in_memory(backend, own, side, mine[at], 0u), "a texture is placed in an own memory", number);

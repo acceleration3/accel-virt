@@ -478,3 +478,48 @@ TEST(gl_memory_objects, a_memory_reclaimed_by_another_session_forgets_its_image_
   maker.part();
   GlDmaBufImagesProbe::uninstall(maker_images);
   GlDmaBufImagesProbe::uninstall(user_images); }
+
+namespace {
+
+constexpr std::uint32_t most_names = 3000u;
+
+struct Racing {
+    GlMemoryObjects  *maker;
+    GlMemoryObjects  *user;
+    std::atomic<bool> adding;
+};
+
+void *add_many(void *context)
+{
+    Racing &racing = *static_cast<Racing *>(context);
+    for (std::uint32_t name = 1u; name <= most_names; name++) static_cast<void>(racing.maker->add(name, 0x4000u));
+    racing.adding.store(false);
+    return nullptr;
+}
+
+void *look_for_many(void *context)
+{
+    Racing &racing = *static_cast<Racing *>(context);
+    while (racing.adding.load())
+        for (std::uint32_t name = 1u; name <= 64u; name++) static_cast<void>(racing.user->holds(name));
+    return nullptr;
+}
+
+}
+
+TEST(gl_memory_objects, memories_added_on_one_thread_while_another_member_looks_for_them_leave_every_table_sound)
+{ MockPlatform platform;
+  ScriptedProgress progress;
+  GlMemoryGroup group;
+  GlMemoryObjects maker(platform, progress);
+  GlMemoryObjects user(platform, progress);
+  CHECK(maker.join(group));
+  CHECK(user.join(group));
+  Racing racing = {&maker, &user, true};
+  pthread_t adder, looker;
+  CHECK_EQ(pthread_create(&adder, nullptr, add_many, &racing), 0);
+  CHECK_EQ(pthread_create(&looker, nullptr, look_for_many, &racing), 0);
+  CHECK_EQ(pthread_join(adder, nullptr), 0);
+  CHECK_EQ(pthread_join(looker, nullptr), 0);
+  CHECK_EQ(maker.count(), most_names);
+  CHECK(maker.invariants_hold()); }
