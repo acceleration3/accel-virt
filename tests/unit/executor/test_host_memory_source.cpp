@@ -921,3 +921,59 @@ TEST(host_memory_source_host_ram, memory_on_the_card_is_not_refused_for_host_ram
   rig.ledger.floor(4u * page);
   CHECK_STATUS(rig.allocate(1u, readback, page), Status::no_memory);
   rig.source.free_domain(domain); }
+
+namespace {
+
+std::uint8_t first_byte_of(const AvHostMemory &memory)
+{
+    void *const view = ::mmap(nullptr, page, PROT_READ, MAP_SHARED, memory.fd, 0);
+    if (view == MAP_FAILED) return 0x5Au;
+    const std::uint8_t byte = *static_cast<const std::uint8_t *>(view);
+    ::munmap(view, page);
+    return byte;
+}
+
+}
+
+TEST(host_memory_source_reuse, device_memory_another_domain_freed_is_zeroed_for_the_next_domain)
+{ HostRamRig rig;
+  rig.add_bar();
+  rig.exporter.fill_new(0xABu);
+  AvHostMemory first{-1, 0u, 0u};
+  CHECK_STATUS(rig.source.allocate(1u, 1u, page, upload, first), Status::ok);
+  CHECK_EQ(first_byte_of(first), 0xABu);
+  ::close(first.fd);
+  rig.source.free(1u, 1u);
+  AvHostMemory second{-1, 0u, 0u};
+  CHECK_STATUS(rig.source.allocate(2u, 1u, page, upload, second), Status::ok);
+  CHECK_EQ(first_byte_of(second), 0u);
+  ::close(second.fd);
+  rig.source.free(2u, 1u); }
+
+TEST(host_memory_source_reuse, a_domain_that_only_reuses_its_own_device_memory_pays_no_clear)
+{ HostRamRig rig;
+  rig.add_bar();
+  rig.exporter.fill_new(0xABu);
+  AvHostMemory first{-1, 0u, 0u};
+  CHECK_STATUS(rig.source.allocate(1u, 1u, page, upload, first), Status::ok);
+  CHECK_EQ(first_byte_of(first), 0xABu);
+  ::close(first.fd);
+  rig.source.free(1u, 1u);
+  AvHostMemory again{-1, 0u, 0u};
+  CHECK_STATUS(rig.source.allocate(1u, 2u, page, upload, again), Status::ok);
+  CHECK_EQ(first_byte_of(again), 0xABu);
+  ::close(again.fd);
+  rig.source.free(1u, 2u); }
+
+TEST(host_memory_source_reuse, system_memory_is_never_cleared_because_the_kernel_hands_it_out_zeroed)
+{ HostRamRig rig;
+  rig.exporter.fill_new(0xABu);
+  AvHostMemory first{-1, 0u, 0u};
+  CHECK_STATUS(rig.source.allocate(1u, 1u, page, readback, first), Status::ok);
+  ::close(first.fd);
+  rig.source.free(1u, 1u);
+  AvHostMemory second{-1, 0u, 0u};
+  CHECK_STATUS(rig.source.allocate(2u, 1u, page, readback, second), Status::ok);
+  CHECK_EQ(first_byte_of(second), 0xABu);
+  ::close(second.fd);
+  rig.source.free(2u, 1u); }

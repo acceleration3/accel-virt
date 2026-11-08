@@ -4,6 +4,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "device/shim/posix_lock.hpp"
+#include "executor/memory_reuse.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/vram_account.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
@@ -82,6 +83,7 @@ private:
     GuestMemoryTypes             vulkan_;
     VramPolicy                   vram_;
     VramAccount                  host_ram_;
+    MemoryReuse                  reuse_;
 
     friend struct HostMemorySourceProbe;
 };

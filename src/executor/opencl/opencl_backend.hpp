@@ -2,6 +2,7 @@
 #define AV_OPENCL_BACKEND_HPP
 
 #include "executor/opencl/cl_event_signals.hpp"
+#include "executor/opencl/cl_fresh_bytes.hpp"
 #include "executor/opencl/cl_drain_markers.hpp"
 #include "executor/opencl/cl_queue_wait.hpp"
 #include "executor/opencl/cl_user_events.hpp"
@@ -224,6 +225,8 @@ private:
 
     cl_int answers_type(cl_device_type device_type) const;
     cl_mem kept_mem(cl_mem made, uint64_t claimed, cl_int *errcode_ret);
+    cl_mem zeroed_buffer(cl_context context, cl_mem_flags flags, uint64_t bytes, cl_mem made, cl_int *errcode_ret);
+    cl_mem zeroed_image(cl_context context, cl_mem_flags flags, cl_mem made, cl_int *errcode_ret);
     cl_int capped_device_info(cl_device_id device, cl_device_info param_name, size_t param_value_size,
                               void *param_value, size_t *param_value_size_ret);
 
@@ -272,6 +275,7 @@ private:
     ClBouncedRect    bounced_;
     MonotonicClock   clock_;
     ClQueueWait      queue_wait_;
+    ClFreshBytes     fresh_;
     KernelPacer      pacer_;
     void            *paced_queue_;
     void            *marker_;

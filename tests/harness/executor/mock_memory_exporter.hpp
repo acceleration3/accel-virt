@@ -26,6 +26,7 @@ public:
     void          fail_allocation_at(std::uint32_t nth);
     void          fail_allocations(std::uint32_t count);
     void          round_to(std::uint64_t bytes);
+    void          fill_new(std::uint8_t byte);
     void          claim_types(std::uint32_t count);
     void          hide_on_import(std::uint32_t type);
 
@@ -75,6 +76,7 @@ private:
     std::uint32_t fail_allocation_;
     std::uint32_t failing_;
     std::uint64_t rounding_;
+    std::uint8_t  fill_;
     std::uint32_t claimed_;
     std::uint32_t attempts_;
     std::uint64_t next_handle_;

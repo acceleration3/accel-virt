@@ -24,6 +24,7 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <vector>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
@@ -654,6 +655,36 @@ TEST(opencl_backend_device, on_clReleaseMemObject_of_a_mapped_buffer_forgets_its
   CHECK(backend.svm_for(address(stays), 1u) != nullptr);
   CHECK_EQ(backend.on_clEnqueueUnmapMemObject(queue, kept, stays, 0u, nullptr, nullptr), CL_SUCCESS);
   ::clReleaseMemObject(kept);
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down(); }
+
+TEST(opencl_backend_device, a_buffer_made_without_host_bytes_reads_back_as_zero_whatever_the_driver_recycled)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  constexpr std::size_t bytes = 1u << 20;
+  cl_int                 error = CL_SUCCESS;
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  std::vector<std::uint8_t> dirt(bytes, 0xA5u);
+  for (int round = 0; round < 3; round++) {
+      cl_mem const first = backend.on_clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, bytes,
+                                                     dirt.data(), &error);
+      CHECK(first != nullptr);
+      CHECK_EQ(backend.on_clReleaseMemObject(first), CL_SUCCESS);
+      cl_mem const fresh = backend.on_clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, nullptr, &error);
+      CHECK(fresh != nullptr);
+      std::vector<std::uint8_t> read(bytes, 0xFFu);
+      CHECK_EQ(::clEnqueueReadBuffer(queue, fresh, CL_TRUE, 0u, bytes, read.data(), 0u, nullptr, nullptr), CL_SUCCESS);
+      std::size_t nonzero = 0u;
+      for (const std::uint8_t byte : read) nonzero += byte != 0u ? 1u : 0u;
+      CHECK_EQ(nonzero, 0u);
+      CHECK_EQ(backend.on_clReleaseMemObject(fresh), CL_SUCCESS);
+  }
   ::clReleaseCommandQueue(queue);
   backend.shut_down(); }
 

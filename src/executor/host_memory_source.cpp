@@ -14,7 +14,7 @@ static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
     : exporter_(exporter), memories_(blocks), aliases_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
-      visible_(0u), vulkan_(), vram_(), host_ram_()
+      visible_(0u), vulkan_(), vram_(), host_ram_(), reuse_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -140,6 +140,8 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
         }
     }
     if (type == HostMemoryRequest::memory_types) return Status::no_memory;
+    if (!system_type(type) && reuse_.crosses_domains(type, domain))
+        __builtin_memset(exported.pointer(), 0, static_cast<size_t>(exported.size()));
     OwnedFd       shared;
     SourceMemory *made = nullptr;
     const uint32_t caching = (host_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u
@@ -215,6 +217,7 @@ void HostMemorySource::let_go(SourceMemory &memory)
     AV_SCOPE("HostMemorySource::let_go");
     if (!memory.release()) return;
     exporter_.free(memory.exported());
+    if (!system_type(memory.memory_type())) reuse_.freed(memory.memory_type(), memory.domain());
     host_ram_.give(memory.charged());
     static_cast<void>(memories_.destroy(&memory));
 }

@@ -84,7 +84,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), device_memory_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), queue_wait_(clock_), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), device_memory_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), queue_wait_(clock_), fresh_(queue_wait_), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -479,8 +479,11 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
             if (errcode_ret != nullptr) *errcode_ret = admitted;
             return nullptr;
         }
-        return kept_mem(::clCreateBufferWithProperties(context, properties, flags, size, host_ptr, errcode_ret),
-                        claimed, errcode_ret);
+        return zeroed_buffer(context, flags, size,
+                             kept_mem(::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
+                                                                     errcode_ret),
+                                      claimed, errcode_ret),
+                             errcode_ret);
     }
     const bool          in_arena = backing.memory() == 0u;
     SourceMemory *const store = in_arena                ? arena_.memory_at(backing.offset())
@@ -659,6 +662,7 @@ void OpenClBackend::shut_down()
     svm_.forget_all();
     mapped_.forget_all();
     device_memory_.clear();
+    fresh_.release();
     if (queue_ != nullptr) {
         static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(queue_)));
         queue_ = nullptr;
@@ -793,7 +797,10 @@ void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, s
         ::clSVMFree(context, allocated);
         return nullptr;
     }
-    if (!device_memory_.keep(reinterpret_cast<cl_mem>(allocated), claimed)) {
+    if (!device_memory_.keep(reinterpret_cast<cl_mem>(allocated), claimed) ||
+        (bound_ != nullptr &&
+         !fresh_.zero_svm(context, static_cast<cl_device_id>(bound_->device()), allocated, size))) {
+        device_memory_.forget(reinterpret_cast<cl_mem>(allocated));
         static_cast<void>(svm_.forget(allocated));
         ::clSVMFree(context, allocated);
         return nullptr;
@@ -822,6 +829,29 @@ cl_mem OpenClBackend::kept_mem(cl_mem made, uint64_t claimed, cl_int *errcode_re
     return nullptr;
 }
 
+cl_mem OpenClBackend::zeroed_buffer(cl_context context, cl_mem_flags flags, uint64_t bytes, cl_mem made,
+                                    cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::zeroed_buffer");
+    constexpr cl_mem_flags filled = CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR;
+    if (made == nullptr || bound_ == nullptr || (flags & filled) != 0u) return made;
+    if (fresh_.zero_buffer(context, static_cast<cl_device_id>(bound_->device()), made, bytes)) return made;
+    static_cast<void>(on_clReleaseMemObject(made));
+    if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+    return nullptr;
+}
+
+cl_mem OpenClBackend::zeroed_image(cl_context context, cl_mem_flags flags, cl_mem made, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::zeroed_image");
+    constexpr cl_mem_flags filled = CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR;
+    if (made == nullptr || bound_ == nullptr || (flags & filled) != 0u) return made;
+    if (fresh_.zero_image(context, static_cast<cl_device_id>(bound_->device()), made)) return made;
+    static_cast<void>(on_clReleaseMemObject(made));
+    if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+    return nullptr;
+}
+
 cl_mem OpenClBackend::on_clCreateBuffer(cl_context context, cl_mem_flags flags, size_t size, void *host_ptr,
                                         cl_int *errcode_ret)
 {
@@ -832,8 +862,10 @@ cl_mem OpenClBackend::on_clCreateBuffer(cl_context context, cl_mem_flags flags, 
         if (errcode_ret != nullptr) *errcode_ret = admitted;
         return nullptr;
     }
-    return kept_mem(RealDispatch::on_clCreateBuffer(context, flags, size, host_ptr, errcode_ret), claimed,
-                    errcode_ret);
+    return zeroed_buffer(context, flags, size,
+                         kept_mem(RealDispatch::on_clCreateBuffer(context, flags, size, host_ptr, errcode_ret),
+                                  claimed, errcode_ret),
+                         errcode_ret);
 }
 
 cl_mem OpenClBackend::on_clCreateImage(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
@@ -846,8 +878,11 @@ cl_mem OpenClBackend::on_clCreateImage(cl_context context, cl_mem_flags flags, c
         if (errcode_ret != nullptr) *errcode_ret = admitted;
         return nullptr;
     }
-    return kept_mem(RealDispatch::on_clCreateImage(context, flags, image_format, image_desc, host_ptr, errcode_ret),
-                    claimed, errcode_ret);
+    return zeroed_image(context, flags,
+                        kept_mem(RealDispatch::on_clCreateImage(context, flags, image_format, image_desc, host_ptr,
+                                                                errcode_ret),
+                                 claimed, errcode_ret),
+                        errcode_ret);
 }
 
 cl_mem OpenClBackend::on_clCreateImageWithProperties(cl_context context, const cl_mem_properties *properties,
@@ -862,9 +897,12 @@ cl_mem OpenClBackend::on_clCreateImageWithProperties(cl_context context, const c
         if (errcode_ret != nullptr) *errcode_ret = admitted;
         return nullptr;
     }
-    return kept_mem(RealDispatch::on_clCreateImageWithProperties(context, properties, flags, image_format,
-                                                                 image_desc, host_ptr, errcode_ret),
-                    claimed, errcode_ret);
+    return zeroed_image(context, flags,
+                        kept_mem(RealDispatch::on_clCreateImageWithProperties(context, properties, flags,
+                                                                              image_format, image_desc, host_ptr,
+                                                                              errcode_ret),
+                                 claimed, errcode_ret),
+                        errcode_ret);
 }
 
 cl_mem OpenClBackend::on_clCreateImage2D(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
@@ -882,9 +920,12 @@ cl_mem OpenClBackend::on_clCreateImage2D(cl_context context, cl_mem_flags flags,
         if (errcode_ret != nullptr) *errcode_ret = admitted;
         return nullptr;
     }
-    return kept_mem(RealDispatch::on_clCreateImage2D(context, flags, image_format, image_width, image_height,
-                                                     image_row_pitch, host_ptr, errcode_ret),
-                    claimed, errcode_ret);
+    return zeroed_image(context, flags,
+                        kept_mem(RealDispatch::on_clCreateImage2D(context, flags, image_format, image_width,
+                                                                  image_height, image_row_pitch, host_ptr,
+                                                                  errcode_ret),
+                                 claimed, errcode_ret),
+                        errcode_ret);
 }
 
 cl_mem OpenClBackend::on_clCreateImage3D(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
@@ -904,10 +945,12 @@ cl_mem OpenClBackend::on_clCreateImage3D(cl_context context, cl_mem_flags flags,
         if (errcode_ret != nullptr) *errcode_ret = admitted;
         return nullptr;
     }
-    return kept_mem(RealDispatch::on_clCreateImage3D(context, flags, image_format, image_width, image_height,
-                                                     image_depth, image_row_pitch, image_slice_pitch, host_ptr,
-                                                     errcode_ret),
-                    claimed, errcode_ret);
+    return zeroed_image(context, flags,
+                        kept_mem(RealDispatch::on_clCreateImage3D(context, flags, image_format, image_width,
+                                                                  image_height, image_depth, image_row_pitch,
+                                                                  image_slice_pitch, host_ptr, errcode_ret),
+                                 claimed, errcode_ret),
+                        errcode_ret);
 }
 
 cl_int OpenClBackend::on_clReleaseMemObject(cl_mem memobj)

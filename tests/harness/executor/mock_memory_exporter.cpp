@@ -10,7 +10,7 @@
 namespace av {
 
 MockMemoryExporter::MockMemoryExporter()
-    : types_{}, type_count_(0u), heaps_{}, heap_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), rounding_(0u), claimed_(0u), attempts_(0u),
+    : types_{}, type_count_(0u), heaps_{}, heap_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), rounding_(0u), fill_(0u), claimed_(0u), attempts_(0u),
       next_handle_(0x1000u), made_(0u), freed_(0u), last_type_(max_types), last_size_(0u), misuses_(0u)
 {
 }
@@ -43,6 +43,7 @@ std::uint32_t MockMemoryExporter::add_heap(VkMemoryHeapFlags flags, VkDeviceSize
 void MockMemoryExporter::fail_allocation_at(std::uint32_t nth) { fail_allocation_ = nth; }
 void MockMemoryExporter::fail_allocations(std::uint32_t count) { failing_ = count; }
 void MockMemoryExporter::round_to(std::uint64_t bytes) { rounding_ = bytes; }
+void MockMemoryExporter::fill_new(std::uint8_t byte) { fill_ = byte; }
 void MockMemoryExporter::claim_types(std::uint32_t count) { claimed_ = count; }
 
 void MockMemoryExporter::hide_on_import(std::uint32_t type)
@@ -110,6 +111,7 @@ Status MockMemoryExporter::allocate(std::uint32_t type, std::uint64_t size, Expo
         ::close(fd);
         return Status::no_memory;
     }
+    __builtin_memset(pointer, fill_, static_cast<std::size_t>(made));
     *slot = Allocation{next_handle_++, fd, static_cast<std::uint8_t *>(pointer), made};
     made_++;
     memory = ExportedMemory(slot->handle, fd, slot->pointer, made);
