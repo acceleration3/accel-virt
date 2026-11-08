@@ -28,7 +28,7 @@ VirtioGpuAv::VirtioGpuAv(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
       host_blobs_(host), window_stats_(host), heads_(host, blobs_), display_modes_(host), interrupts_(host),
       clock_(host, interrupts_, &AvDisplayFramesShow, this), planes_(host), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, host_blobs_, interrupts_, recorder_),
-      remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host, clock_)
+      remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host, clock_), shower_(host, &AvDisplayFramesExport, this)
       {
           AV_SCOPE("VirtioGpuAv::VirtioGpuAv");
       }
@@ -143,6 +143,7 @@ void VirtioGpuAv::reset()
     AV_SCOPE("VirtioGpuAv::reset");
     host_.require_main_loop("VirtioGpuAv::reset");
     clock_.detach();
+    shower_.stop();
     window_stats_.release();
     planes_.clear();
     presents_.detach();
@@ -327,11 +328,39 @@ void VirtioGpuAv::show_latched_frames()
     AV_SCOPE("VirtioGpuAv::show_latched_frames");
     host_.require_main_loop("VirtioGpuAv::show_latched_frames");
     clock_.showing();
+    if (contexts_->exports_off_main_loop() && shower_.start() == Status::ok) {
+        shower_.wake();
+        return;
+    }
     for (uint32_t head = 0u; head < DisplayClock::heads; head++) {
         uint64_t         key = 0u;
         AvExportedImage image = {};
         if (!clock_.take_unshown(head, key) || !export_head(head, key, image)) continue;
         static_cast<void>(host_.show_image(head, image));
+    }
+}
+
+void VirtioGpuAv::export_latched_frames()
+{
+    AV_SCOPE("VirtioGpuAv::export_latched_frames");
+    bool exported = false;
+    for (uint32_t head = 0u; head < DisplayClock::heads; head++) {
+        uint64_t         key = 0u;
+        AvExportedImage image = {};
+        if (!clock_.take_unshown(head, key) || !export_head(head, key, image)) continue;
+        shower_.hold(head, image);
+        exported = true;
+    }
+    if (exported) host_.run_on_main_loop(&AvDisplayImagesShow, this);
+}
+
+void VirtioGpuAv::show_exported_images()
+{
+    AV_SCOPE("VirtioGpuAv::show_exported_images");
+    host_.require_main_loop("VirtioGpuAv::show_exported_images");
+    for (uint32_t head = 0u; head < DisplayClock::heads; head++) {
+        AvExportedImage image = {};
+        if (shower_.take(head, image)) static_cast<void>(host_.show_image(head, image));
     }
 }
 

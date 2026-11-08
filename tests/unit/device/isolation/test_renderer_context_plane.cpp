@@ -988,6 +988,10 @@ TEST(renderer_context_plane, owns_no_memory_domain_of_its_own_and_composes_nothi
   CHECK_EQ(fixture.plane().memory_domain(), 0u);
   CHECK(!fixture.plane().composes()); }
 
+TEST(renderer_context_plane, exports_images_only_on_the_main_loop_that_owns_its_link)
+{ Fixture fixture;
+  CHECK(!fixture.plane().exports_off_main_loop()); }
+
 TEST(renderer_context_plane_memory, a_request_the_renderer_could_not_be_asked_is_out_of_memory_and_asks_nothing)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);

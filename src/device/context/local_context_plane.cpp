@@ -157,6 +157,12 @@ bool LocalContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedIm
     return library_.export_image(key, image);
 }
 
+bool LocalContextPlane::exports_off_main_loop() const
+{
+    AV_SCOPE("LocalContextPlane::exports_off_main_loop");
+    return true;
+}
+
 bool LocalContextPlane::composes() const
 {
     AV_SCOPE("LocalContextPlane::composes");

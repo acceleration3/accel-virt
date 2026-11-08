@@ -1114,14 +1114,31 @@ TEST(virtio_gpu_av_display_clock, the_frame_latched_at_a_blank_is_exported_and_s
   rig.host.set_clock(1000u + 16666667u);
   CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
   CHECK_EQ(rig.host.run_main_loop(), 1u);
+  CHECK_EQ(rig.host.images_shown(0u), 0u);
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
   CHECK_EQ(rig.host.images_shown(0u), 1u);
   CHECK_EQ(rig.host.last_image(0u).fd, 12);
   CHECK_EQ(rig.host.last_image(0u).width, 640u);
   CHECK_EQ(rig.host.images_shown(1u), 0u);
   rig.device.show_latched_frames();
+  rig.device.show_exported_images();
   CHECK_EQ(rig.host.images_shown(0u), 1u);
   rig.device.reset();
   CHECK(!rig.device.post_frame(0u, 7u, 0x51u));
+  CHECK(rig.device.invariants_hold()); }
+
+TEST(virtio_gpu_av_display_clock, a_latched_frame_is_exported_on_the_main_loop_when_no_thread_can_export_it)
+{ ClockedDevice rig;
+  CHECK_EQ(rig.register_page(0x401000u), 0x1100u);
+  CHECK(rig.device.post_frame(0u, 5u, 0x51u));
+  rig.host.fail_thread_start_at(1u);
+  rig.host.set_clock(1000u + 16666667u);
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
+  CHECK_EQ(rig.host.images_shown(0u), 1u);
+  rig.device.show_exported_images();
+  CHECK_EQ(rig.host.images_shown(0u), 1u);
   CHECK(rig.device.invariants_hold()); }
 
 TEST(virtio_gpu_av_display_clock, a_host_with_no_lock_for_the_clock_is_not_realized)

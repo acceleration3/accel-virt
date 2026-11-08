@@ -59,6 +59,7 @@ public:
     void          interrupts_changed(bool connected) override { connected_ = connected; changes_++; }
     void          renderer_lost() override { losses_++; }
     bool export_image(const std::uint8_t *, std::uint64_t, AvExportedImage &) override { return false; }
+    bool exports_off_main_loop() const override { return false; }
     RecordingContextPlane() = default;
     RecordingContextPlane(const RecordingContextPlane &) = delete;
     RecordingContextPlane &operator=(const RecordingContextPlane &) = delete;

@@ -326,6 +326,10 @@ TEST(local_context_plane, names_the_domain_its_library_opened_and_composes_as_th
   };
   CHECK(fixture.plane().composes()); }
 
+TEST(local_context_plane, exports_images_from_any_thread)
+{ Fixture fixture;
+  CHECK(fixture.plane().exports_off_main_loop()); }
+
 TEST(local_context_plane, copies_surfaces_through_its_library_once_it_has_a_domain)
 { Fixture fixture;
   CHECK(!fixture.plane().copies_surfaces());

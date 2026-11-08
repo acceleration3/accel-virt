@@ -46,6 +46,7 @@ public:
     virtual void renderer_lost() = 0;
 
     virtual bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) = 0;
+    virtual bool exports_off_main_loop() const = 0;
     virtual bool composes() const = 0;
     virtual bool compose_planes(const uint8_t *gpu_uuid, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
                                 uint32_t height, AvExportedImage &image) = 0;

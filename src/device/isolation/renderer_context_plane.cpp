@@ -442,6 +442,12 @@ bool RendererContextPlane::composes() const
     return false;
 }
 
+bool RendererContextPlane::exports_off_main_loop() const
+{
+    AV_SCOPE("RendererContextPlane::exports_off_main_loop");
+    return false;
+}
+
 bool RendererContextPlane::compose_planes(const uint8_t *, const AvScanoutPlane *, uint32_t, uint32_t, uint32_t,
                                           AvExportedImage &)
 {
