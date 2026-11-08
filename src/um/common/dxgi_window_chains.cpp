@@ -322,9 +322,13 @@ bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, 
         described.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         described.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
         HWND const window = static_cast<HWND>(chain.window);
-        if (FAILED(device.factory->CreateSwapChainForHwnd(device.device.get(), window, &described, nullptr, nullptr,
-                                                          chain.chain.receive()))) {
-            refuse("DXGI made no flip chain on the window");
+        const HRESULT created = device.factory->CreateSwapChainForHwnd(device.device.get(), window, &described, nullptr,
+                                                                       nullptr, chain.chain.receive());
+        if (FAILED(created)) {
+            LogLine(lines_)
+                .text("no DXGI chain for a window: DXGI made no flip chain, answering ")
+                .hex(static_cast<uint32_t>(created), 8u)
+                .write();
             return false;
         }
         static_cast<void>(device.factory->MakeWindowAssociation(window, DXGI_MWA_NO_WINDOW_CHANGES));
