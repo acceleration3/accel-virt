@@ -17,6 +17,7 @@
 #include "proto/renderer/interrupt_lines_message.hpp"
 #include "proto/renderer/region_message.hpp"
 #include "proto/renderer/shared_released_message.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
@@ -512,6 +513,29 @@ bool RendererContextPlane::map_frame(const uint8_t *, const SurfacePoint &, uint
 void RendererContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &)
 {
     AV_SCOPE("RendererContextPlane::unmap_frame");
+}
+
+bool RendererContextPlane::copies_surfaces() const
+{
+    AV_SCOPE("RendererContextPlane::copies_surfaces");
+    return false;
+}
+
+bool RendererContextPlane::copy_surface(const uint8_t *, const SurfacePair &, const AvCopyRegion *, uint32_t, uint32_t)
+{
+    AV_SCOPE("RendererContextPlane::copy_surface");
+    return false;
+}
+
+bool RendererContextPlane::map_surface(const uint8_t *, uint64_t, uint32_t, AvFrameView &)
+{
+    AV_SCOPE("RendererContextPlane::map_surface");
+    return false;
+}
+
+void RendererContextPlane::unmap_surface(const uint8_t *, uint64_t)
+{
+    AV_SCOPE("RendererContextPlane::unmap_surface");
 }
 
 bool RendererContextPlane::exports_surfaces() const

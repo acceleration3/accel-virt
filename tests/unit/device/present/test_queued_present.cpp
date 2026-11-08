@@ -6,6 +6,7 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/host/present_scene.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -190,3 +191,74 @@ TEST(queued_present, a_ticket_held_with_nothing_mapped_breaks_the_invariant)
   CHECK(!present.invariants_hold());
   QueuedPresentProbe::adopt(present, QueuedPresentRequest());
   CHECK(present.invariants_hold()); }
+
+TEST(queued_present, a_surface_copy_maps_nothing_and_moves_by_asking_the_plane_to_copy_between_the_keys)
+{ MockHost                  host;
+  PresentScene              scene(host);
+  av::RecordingContextPlane plane;
+  constexpr std::uint8_t    gpu[av::PresentFrames::uuid_bytes] = {9};
+  const av::PresentFrames   snapshots(plane, gpu);
+  QueuedPresent             present(host);
+  CHECK_STATUS(accept(host, present, scene.surfaces(3u, 0x71u, 0x72u, 2u), snapshots), Status::not_supported);
+  plane.copy_through(false);
+  CHECK_STATUS(accept(host, present, scene.surfaces(3u, 0x71u, 0x72u, 2u), snapshots), Status::ok);
+  CHECK_EQ(present.ticket(), 3u);
+  CHECK_EQ(host.live_guest_mappings(), 0u);
+  CHECK(present.invariants_hold());
+  CHECK_STATUS(present.move(snapshots), Status::ok);
+  CHECK(plane.copied() == av::SurfacePair(0x71u, 0x72u));
+  CHECK_EQ(plane.copied_regions(), 2u);
+  CHECK_EQ(plane.copy_wait_ms(), av::PresentFrames::copy_wait_ms);
+  CHECK_EQ(plane.copy_first().width, 16u);
+  CHECK_EQ(plane.copy_first().height, 2u);
+  present.release();
+  CHECK_EQ(present.ticket(), 0u);
+  CHECK(present.invariants_hold()); }
+
+TEST(queued_present, a_surface_copy_the_plane_refuses_fails_that_present_and_holds_nothing_afterwards)
+{ MockHost                  host;
+  PresentScene              scene(host);
+  av::RecordingContextPlane plane;
+  constexpr std::uint8_t    gpu[av::PresentFrames::uuid_bytes] = {9};
+  const av::PresentFrames   snapshots(plane, gpu);
+  plane.copy_through(true);
+  QueuedPresent present(host);
+  CHECK_STATUS(accept(host, present, scene.surfaces(4u, 0x71u, 0x72u), snapshots), Status::ok);
+  CHECK_STATUS(present.move(snapshots), Status::not_found);
+  CHECK_EQ(plane.copies_asked(), 1u);
+  present.release();
+  CHECK_EQ(host.live_guest_mappings(), 0u);
+  CHECK(present.invariants_hold());
+  QueuedPresent blind(host);
+  CHECK_STATUS(accept(host, blind, scene.surfaces(5u, 0x71u, 0x72u)), Status::not_supported);
+  CHECK(blind.invariants_hold()); }
+
+TEST(queued_present, a_texture_source_maps_its_destination_and_moves_out_of_the_current_host_texture)
+{ MockHost                  host;
+  PresentScene              scene(host);
+  av::RecordingContextPlane plane;
+  constexpr std::uint8_t    gpu[av::PresentFrames::uuid_bytes] = {9};
+  const av::PresentFrames   snapshots(plane, gpu);
+  static std::uint32_t      pixels[PresentScene::width];
+  for (std::uint32_t x = 0u; x < PresentScene::width; x++) pixels[x] = 0x00FF0000u | x;
+  plane.serve_texture(0x81u, AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
+                                         PresentScene::width, 1u, 0u});
+  QueuedPresent blind(host);
+  av::RecordingContextPlane none_plane;
+  const av::PresentFrames   none_snapshots(none_plane, gpu);
+  CHECK_STATUS(accept(host, blind, scene.texture(3u, 0x81u), none_snapshots), Status::not_supported);
+  QueuedPresent present(host);
+  CHECK_STATUS(accept(host, present, scene.texture(4u, 0x81u), snapshots), Status::ok);
+  CHECK_EQ(host.live_guest_mappings(), 1u);
+  CHECK(present.invariants_hold());
+  CHECK_STATUS(present.move(snapshots), Status::ok);
+  CHECK_EQ(scene.destination_pixel(3u, 0u), 0x00FF0003u);
+  CHECK(!plane.texture_mapped());
+  CHECK_EQ(plane.texture_unmaps(), 1u);
+  present.release();
+  QueuedPresent unknown(host);
+  CHECK_STATUS(accept(host, unknown, scene.texture(5u, 0x82u), snapshots), Status::ok);
+  CHECK_STATUS(unknown.move(snapshots), Status::not_found);
+  CHECK_EQ(plane.texture_unmaps(), 1u);
+  unknown.release();
+  CHECK_EQ(host.live_guest_mappings(), 0u); }

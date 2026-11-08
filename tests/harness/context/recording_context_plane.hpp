@@ -3,6 +3,7 @@
 
 #include "device/context/context_plane.hpp"
 #include "device/execution/executor_library.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
@@ -122,6 +123,45 @@ public:
         snapshot_mapped_ = false;
         served_ = true;
     }
+    bool copies_surfaces() const override { return copies_; }
+    bool copy_surface(const std::uint8_t *, const SurfacePair &surfaces, const AvCopyRegion *regions,
+                      std::uint32_t count, std::uint32_t wait_ms) override
+    {
+        copies_asked_++;
+        copied_ = surfaces;
+        copied_regions_ = count;
+        copy_wait_ms_ = wait_ms;
+        copy_first_ = count != 0u && regions != nullptr ? regions[0] : AvCopyRegion{};
+        return copies_ && !copy_refused_ && surfaces.names();
+    }
+    void          copy_through(bool refuse) { copies_ = true; copy_refused_ = refuse; }
+    std::uint32_t copies_asked() const { return copies_asked_; }
+    SurfacePair   copied() const { return copied_; }
+    std::uint32_t copied_regions() const { return copied_regions_; }
+    std::uint32_t copy_wait_ms() const { return copy_wait_ms_; }
+    AvCopyRegion  copy_first() const { return copy_first_; }
+    bool map_surface(const std::uint8_t *, std::uint64_t surface, std::uint32_t, AvFrameView &view) override
+    {
+        textures_asked_++;
+        if (!copies_ || surface == 0u || surface != texture_surface_ || texture_mapped_) return false;
+        texture_mapped_ = true;
+        view = texture_;
+        return true;
+    }
+    void unmap_surface(const std::uint8_t *, std::uint64_t) override
+    {
+        texture_mapped_ = false;
+        texture_unmaps_++;
+    }
+    void serve_texture(std::uint64_t surface, const AvFrameView &view)
+    {
+        texture_surface_ = surface;
+        texture_ = view;
+        copies_ = true;
+    }
+    std::uint32_t textures_asked() const { return textures_asked_; }
+    std::uint32_t texture_unmaps() const { return texture_unmaps_; }
+    bool          texture_mapped() const { return texture_mapped_; }
     bool exports_surfaces() const override { return exports_; }
     bool export_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint32_t flags, AvExportedImage &image) override
     {
@@ -226,6 +266,18 @@ private:
     ExecutorLibrary *library_ = nullptr;
     std::uint32_t   held_context_ = 0u;
     bool            served_ = false;
+    bool            copies_ = false;
+    std::uint64_t   texture_surface_ = 0u;
+    AvFrameView     texture_ = {};
+    bool            texture_mapped_ = false;
+    std::uint32_t   textures_asked_ = 0u;
+    std::uint32_t   texture_unmaps_ = 0u;
+    bool            copy_refused_ = false;
+    std::uint32_t   copies_asked_ = 0u;
+    SurfacePair     copied_;
+    std::uint32_t   copied_regions_ = 0u;
+    std::uint32_t   copy_wait_ms_ = 0u;
+    AvCopyRegion    copy_first_ = {};
     std::uint32_t   unmaps_ = 0u;
     std::uint32_t created_[capacity] = {};
     std::uint32_t created_count_ = 0u;

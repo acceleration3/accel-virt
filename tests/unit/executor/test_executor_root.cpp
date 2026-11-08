@@ -3,6 +3,7 @@
 #include "executor/context_session.hpp"
 #include "executor/executor_log.hpp"
 #include "executor/executor_root.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
@@ -373,6 +374,8 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   int             fd = 5;
   CHECK(!root.export_surface(1u, 7u, 0u, image));
   CHECK(!root.sync_surface(1u, 7u, 0u, writes, fd));
+  const AvCopyRegion copied[1] = {{0u, 0u, 0u, 0u, 2u, 2u}};
+  CHECK(!root.copy_surface(1u, av::SurfacePair(7u, 8u), copied, 1u, 10u));
   CHECK_STATUS(root.initialize(apis), Status::ok);
   const std::uint32_t on_intel = held.domain_of(intel);
   const std::uint32_t on_nvidia = held.domain_of(nvidia);
@@ -393,6 +396,9 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   CHECK(!root.sync_surface(on_intel + 100u, 7u, 0u, writes, fd));
   CHECK(!root.sync_surface(on_nvidia, 7u, 0u, writes, fd));
   CHECK(!root.sync_surface(on_intel, 7u, 0u, writes, fd));
+  CHECK(!root.copy_surface(on_intel + 100u, av::SurfacePair(7u, 8u), copied, 1u, 10u));
+  CHECK(!root.copy_surface(on_nvidia, av::SurfacePair(7u, 8u), copied, 1u, 10u));
+  CHECK(!root.copy_surface(on_intel, av::SurfacePair(7u, 8u), copied, 1u, 10u));
   CHECK_EQ(fd, -1);
   CHECK_EQ(writes, 0u);
   apis.shares(0u)->clear();

@@ -27,6 +27,7 @@
 #include "proto/escape/next_point_record.hpp"
 #include "proto/escape/pages_read_record.hpp"
 #include "miniport/driver/acquired_handle_data.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/escape/present_point_record.hpp"
 #include "miniport/present/present_ticket_record.hpp"
@@ -1540,8 +1541,9 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
             platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
         return 0u;
     }
+    const SurfacePoint image = image_of(request, source, points);
     PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
-                         immediate_mover(), image_of(request, source, points));
+                         immediate_mover(), image, surfaces_of(source, destination, image, filling));
     PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     PresentWrites &writes = destination->allocation().writes();
     writes.opening();
@@ -1563,6 +1565,24 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     }
     present_rows_ += blit.rows();
     return ticket.ticket();
+}
+
+SurfacePair Adapter::surfaces_of(const DeviceAllocation *source, const DeviceAllocation *destination,
+                                 const SurfacePoint &image, bool filling) const
+{
+    AV_SCOPE("Adapter::surfaces_of");
+    if (filling || image.names() || source == nullptr || destination == nullptr) return SurfacePair();
+    if (!presents_.constructed()) return SurfacePair();
+    const uint64_t from = source->allocation().host_key();
+    const uint64_t into = destination->allocation().host_key();
+    if (from == 0u || from == into) return SurfacePair();
+    if (into == 0u)
+        return identity_.offers(CapsetInfo::feature_present_from_surface) ? SurfacePair(from, 0u) : SurfacePair();
+    if (!identity_.offers(CapsetInfo::feature_present_between_surfaces)) return SurfacePair();
+    if (source->allocation().descriptor().layout().red_first() !=
+        destination->allocation().descriptor().layout().red_first())
+        return SurfacePair();
+    return SurfacePair(from, into);
 }
 
 SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source,

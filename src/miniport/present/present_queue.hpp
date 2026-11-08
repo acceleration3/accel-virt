@@ -16,6 +16,7 @@ class PresentRegion;
 class PresentSurface;
 class PresentTicketRecord;
 class QueuedPresentRequest;
+class SurfacePair;
 class SurfacePoint;
 class VirtioGpuDevice;
 struct PresentQueueProbe;
@@ -37,6 +38,11 @@ public:
     [[nodiscard]] Status queue_image(const SurfacePoint &image, const PresentCopyRequest &request,
                                      const PresentSurface &destination, const PresentRegion *regions,
                                      uint64_t &ticket);
+    [[nodiscard]] Status queue_surfaces(const SurfacePair &surfaces, const PresentCopyRequest &request,
+                                        const PresentRegion *regions, uint64_t &ticket);
+    [[nodiscard]] Status queue_texture(uint64_t texture, const PresentCopyRequest &request,
+                                       const PresentSurface &destination, const PresentRegion *regions,
+                                       uint64_t &ticket);
     uint64_t             completed() const;
     bool                 holds(const PresentTicketRecord &record);
     const PresentPageView &progress() const;
@@ -47,11 +53,12 @@ public:
 private:
     friend struct PresentQueueProbe;
 
-    [[nodiscard]] Status enqueue(const SurfacePoint &image, const PresentCopyRequest &request, const PresentSurface *source,
-                                 const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket);
+    [[nodiscard]] Status enqueue(const SurfacePoint &image, const SurfacePair &surfaces,
+                                 const PresentCopyRequest &request, const PresentSurface *source,
+                                 const PresentSurface *destination, const PresentRegion *regions, uint64_t &ticket);
     [[nodiscard]] Status wait_for_payload(uint64_t ticket);
     uint32_t             slot_of(uint64_t ticket) const;
-    [[nodiscard]] Status write_payload(uint32_t slot, const PresentSurface *source, const PresentSurface &destination,
+    [[nodiscard]] Status write_payload(uint32_t slot, const PresentSurface *source, const PresentSurface *destination,
                                        const PresentRegion *regions, uint32_t count, size_t &length);
     [[nodiscard]] Status send(const QueuedPresentRequest &present, uint32_t slot, size_t length);
 

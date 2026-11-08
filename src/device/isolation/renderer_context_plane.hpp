@@ -18,6 +18,7 @@
 
 namespace av {
 
+class SurfacePair;
 class SurfacePoint;
 
 class FenceInterrupts;
@@ -71,6 +72,11 @@ public:
     bool reads_frames() const override;
     bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) override;
     void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) override;
+    bool copies_surfaces() const override;
+    bool copy_surface(const uint8_t *gpu_uuid, const SurfacePair &surfaces, const AvCopyRegion *regions,
+                      uint32_t count, uint32_t wait_ms) override;
+    bool map_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t wait_ms, AvFrameView &view) override;
+    void unmap_surface(const uint8_t *gpu_uuid, uint64_t surface) override;
     bool exports_surfaces() const override;
     bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, AvExportedImage &image) override;
     bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) override;

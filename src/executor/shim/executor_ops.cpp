@@ -9,6 +9,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/reporter_state_source.hpp"
 #include "device/shim/state_socket.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <dlfcn.h>
@@ -263,6 +264,27 @@ uint32_t sync_surface(void *, uint32_t domain, uint64_t surface, uint32_t flags,
                : AV_UNKNOWN;
 }
 
+uint32_t copy_surface(void *, uint32_t domain, uint64_t source, uint64_t destination, const AvCopyRegion *regions,
+                      uint32_t count, uint32_t wait_ms)
+{
+    AV_SCOPE("copy_surface");
+    return regions != nullptr && library.root().copy_surface(domain, av::SurfacePair(source, destination), regions, count, wait_ms)
+               ? AV_EXECUTED
+               : AV_UNKNOWN;
+}
+
+uint32_t map_surface(void *, uint32_t domain, uint64_t surface, uint32_t wait_ms, AvFrameView *view)
+{
+    AV_SCOPE("map_surface");
+    return view != nullptr && library.root().map_surface(domain, surface, wait_ms, *view) ? AV_EXECUTED : AV_UNKNOWN;
+}
+
+void unmap_surface(void *, uint32_t domain, uint64_t surface)
+{
+    AV_SCOPE("unmap_surface");
+    library.root().unmap_surface(domain, surface);
+}
+
 void release_shared(void *, uint32_t domain, uint64_t object_id)
 {
     AV_SCOPE("release_shared");
@@ -335,6 +357,9 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
+                              copy_surface,
+                              map_surface,
+                              unmap_surface,
                               compose_planes,
                               lose_device,
                               answer_part,

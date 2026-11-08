@@ -19,6 +19,7 @@
 #include "executor/sharing/host_shares.hpp"
 #include "executor/teardown_budget.hpp"
 #include "executor/watcher_exit.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
@@ -236,6 +237,31 @@ bool ExecutorRoot::export_surface(uint32_t domain, uint64_t surface, uint32_t fl
     const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
     return device != nullptr && device->export_surface(domain, surface, flags, image);
+}
+
+bool ExecutorRoot::copy_surface(uint32_t domain, const SurfacePair &surfaces, const AvCopyRegion *regions,
+                                uint32_t count, uint32_t wait_ms)
+{
+    AV_SCOPE("ExecutorRoot::copy_surface");
+    const HostGpu *const   gpu = gpu_of(domain);
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->copy_surface(domain, surfaces.source(), surfaces.destination(), regions, count, wait_ms);
+}
+
+bool ExecutorRoot::map_surface(uint32_t domain, uint64_t surface, uint32_t wait_ms, AvFrameView &view)
+{
+    AV_SCOPE("ExecutorRoot::map_surface");
+    const HostGpu *const   gpu = gpu_of(domain);
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->map_surface(domain, surface, wait_ms, view);
+}
+
+void ExecutorRoot::unmap_surface(uint32_t domain, uint64_t surface)
+{
+    AV_SCOPE("ExecutorRoot::unmap_surface");
+    const HostGpu *const   gpu = gpu_of(domain);
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    if (device != nullptr) device->unmap_surface(surface);
 }
 
 bool ExecutorRoot::sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd)

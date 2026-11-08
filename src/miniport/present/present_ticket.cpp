@@ -11,8 +11,9 @@
 namespace av {
 
 PresentTicket::PresentTicket(Platform &platform, LogBudget &budget, PresentQueue *queue, PixelMover &fallback,
-                             const SurfacePoint &image)
-    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), image_(image), ticket_(0u)
+                             const SurfacePoint &image, const SurfacePair &surfaces)
+    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), image_(image), surfaces_(surfaces),
+      ticket_(0u)
 {
     AV_SCOPE("PresentTicket::PresentTicket");
 }
@@ -39,9 +40,14 @@ bool PresentTicket::queued(const PresentCopyRequest &request, const PresentSurfa
     AV_SCOPE("PresentTicket::queued");
     if (queue_ == nullptr) return false;
     uint64_t     ticket = 0u;
+    const bool   between = surfaces_.names() && source != nullptr;
     const bool   imaged = image_.names() && source != nullptr;
-    const Status status = imaged ? queue_->queue_image(image_, request, destination, regions, ticket)
-                                 : queue_->queue(request, source, destination, regions, ticket);
+    const bool   reading = surfaces_.source() != 0u && surfaces_.destination() == 0u && source != nullptr;
+    Status       status = Status::ok;
+    if (reading) status = queue_->queue_texture(surfaces_.source(), request, destination, regions, ticket);
+    else if (between) status = queue_->queue_surfaces(surfaces_, request, regions, ticket);
+    else if (imaged) status = queue_->queue_image(image_, request, destination, regions, ticket);
+    else status = queue_->queue(request, source, destination, regions, ticket);
     if (status == Status::ok) {
         ticket_ = ticket;
         return true;

@@ -91,6 +91,7 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
     if (feasibility_.interrupts().initialize() == Status::ok) interrupts_.report_to(feasibility_.interrupts());
     const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine | CapsetInfo::feature_raises |
                               (contexts_->reads_frames() ? CapsetInfo::feature_present_from_image : 0u) |
+                              (contexts_->copies_surfaces() ? CapsetInfo::feature_present_between_surfaces | CapsetInfo::feature_present_from_surface : 0u) |
                               (contexts_->composes() ? CapsetInfo::feature_scanout_planes : 0u);
     if (isolated) {
         capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, features);

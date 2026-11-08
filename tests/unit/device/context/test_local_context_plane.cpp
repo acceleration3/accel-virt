@@ -6,6 +6,7 @@
 #include "device/memory/host_blob_table.hpp"
 #include "harness/context/guest_blob_maker.hpp"
 #include "device/recording/wire_recorder.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "harness/context/local_context_plane_probe.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -324,3 +325,31 @@ TEST(local_context_plane, names_the_domain_its_library_opened_and_composes_as_th
       return AV_EXECUTED;
   };
   CHECK(fixture.plane().composes()); }
+
+TEST(local_context_plane, copies_surfaces_through_its_library_once_it_has_a_domain)
+{ Fixture fixture;
+  CHECK(!fixture.plane().copies_surfaces());
+  const AvCopyRegion regions[1] = {{0u, 0u, 0u, 0u, 4u, 4u}};
+  CHECK(!fixture.plane().copy_surface(uuid, av::SurfacePair(5u, 6u), regions, 1u, 50u));
+  fixture.ops().serve_copy(5u, 6u, true);
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK(fixture.plane().copies_surfaces());
+  CHECK(!fixture.plane().copy_surface(uuid, av::SurfacePair(5u, 6u), regions, 1u, 50u));
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
+  CHECK(fixture.plane().copy_surface(uuid, av::SurfacePair(5u, 6u), regions, 1u, 50u));
+  CHECK_EQ(fixture.ops().copy_wait(), 50u);
+  CHECK(!fixture.plane().copy_surface(uuid, av::SurfacePair(5u, 7u), regions, 1u, 50u)); }
+
+TEST(local_context_plane, reads_a_surface_texture_through_its_library_once_it_has_a_domain)
+{ Fixture fixture;
+  static std::uint32_t pixels[4];
+  fixture.ops().serve_texture(5u, AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), 16u, 4u, 1u, 0u});
+  AvFrameView view = {};
+  CHECK(!fixture.plane().map_surface(uuid, 5u, 50u, view));
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK(!fixture.plane().map_surface(uuid, 5u, 50u, view));
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
+  CHECK(fixture.plane().map_surface(uuid, 5u, 50u, view));
+  CHECK(!fixture.plane().map_surface(uuid, 6u, 50u, view));
+  fixture.plane().unmap_surface(uuid, 5u);
+  CHECK_EQ(fixture.ops().texture_unmaps(), 1u); }

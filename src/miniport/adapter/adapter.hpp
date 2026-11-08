@@ -64,6 +64,7 @@ class ReleaseRecord;
 class PointView;
 
 class PresentSurface;
+class SurfacePair;
 class SurfacePoint;
 class Rectangle;
 
@@ -260,6 +261,8 @@ private:
     void     mark_present(DxgkargPresentRecord &request, uint64_t ticket);
     [[nodiscard]] Status answer_umd_private(const AdapterInfoQuery &request);
     PixelMover &immediate_mover();
+    SurfacePair  surfaces_of(const DeviceAllocation *source, const DeviceAllocation *destination,
+                             const SurfacePoint &image, bool filling) const;
     SurfacePoint image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source,
                           const PointView &points);
     bool         point_missing(const DxgkargPresentRecord &request, const DeviceAllocation *source,

@@ -7,19 +7,31 @@
 
 namespace av {
 
-QueuedPresentRequest::QueuedPresentRequest() : ticket_(0u), source_(Source::pages), image_(), copy_()
+QueuedPresentRequest::QueuedPresentRequest() : ticket_(0u), source_(Source::pages), image_(), surfaces_(), copy_()
 {
     AV_SCOPE("QueuedPresentRequest::QueuedPresentRequest");
 }
 
 QueuedPresentRequest::QueuedPresentRequest(uint64_t ticket, const PresentCopyRequest &copy)
-    : ticket_(ticket), source_(Source::pages), image_(), copy_(copy)
+    : ticket_(ticket), source_(Source::pages), image_(), surfaces_(), copy_(copy)
 {
     AV_SCOPE("QueuedPresentRequest::QueuedPresentRequest");
 }
 
 QueuedPresentRequest::QueuedPresentRequest(uint64_t ticket, const SurfacePoint &image, const PresentCopyRequest &copy)
-    : ticket_(ticket), source_(Source::image), image_(image), copy_(copy)
+    : ticket_(ticket), source_(Source::image), image_(image), surfaces_(), copy_(copy)
+{
+    AV_SCOPE("QueuedPresentRequest::QueuedPresentRequest");
+}
+
+QueuedPresentRequest::QueuedPresentRequest(uint64_t ticket, const SurfacePair &surfaces, const PresentCopyRequest &copy)
+    : ticket_(ticket), source_(Source::surfaces), image_(surfaces.source(), 0u), surfaces_(surfaces), copy_(copy)
+{
+    AV_SCOPE("QueuedPresentRequest::QueuedPresentRequest");
+}
+
+QueuedPresentRequest::QueuedPresentRequest(uint64_t ticket, uint64_t texture, const PresentCopyRequest &copy)
+    : ticket_(ticket), source_(Source::texture), image_(texture, 0u), surfaces_(), copy_(copy)
 {
     AV_SCOPE("QueuedPresentRequest::QueuedPresentRequest");
 }
@@ -28,7 +40,8 @@ void QueuedPresentRequest::write(WireWriter &writer) const
 {
     AV_SCOPE("QueuedPresentRequest::write");
     writer.write_u32(type);
-    writer.write_zeros(header_size - sizeof(uint32_t));
+    writer.write_u64(surfaces_.destination());
+    writer.write_zeros(reserved_size);
     writer.write_u64(ticket_);
     writer.write_u32(static_cast<uint32_t>(source_));
     writer.write_u32(image_.point());
@@ -46,14 +59,17 @@ void QueuedPresentRequest::write(WireWriter &writer) const
 Status QueuedPresentRequest::decode(WireReader &reader)
 {
     AV_SCOPE("QueuedPresentRequest::decode");
-    uint8_t header[header_size] = {};
-    reader.copy_bytes(header, sizeof header);
+    uint8_t reserved[reserved_size] = {};
+    reader.read_u32();
+    const uint64_t destination = reader.read_u64();
+    reader.copy_bytes(reserved, sizeof reserved);
     QueuedPresentRequest read;
     read.ticket_ = reader.read_u64();
     read.source_ = static_cast<Source>(reader.read_u32());
     const uint32_t point = reader.read_u32();
     const uint64_t surface = reader.read_u64();
     read.image_ = SurfacePoint(surface, point);
+    read.surfaces_ = read.source_ == Source::surfaces ? SurfacePair(surface, destination) : SurfacePair();
     const auto     operation = static_cast<PresentOperation>(reader.read_u32());
     const uint32_t flags = reader.read_u32();
     const uint32_t colour = reader.read_u32();
@@ -64,6 +80,7 @@ Status QueuedPresentRequest::decode(WireReader &reader)
     const uint32_t destination_pitch = reader.read_u32();
     if (reader.status() != Status::ok || (flags & ~PresentCopyRequest::flag_swap_red_blue) != 0u)
         return Status::malformed;
+    if (destination != 0u && read.source_ != Source::surfaces) return Status::malformed;
     read.copy_ = PresentCopyRequest(operation, flags, colour, regions, source_entries, source_pitch,
                                     destination_entries, destination_pitch);
     if (!read.holds()) return Status::malformed;
@@ -76,6 +93,7 @@ bool QueuedPresentRequest::holds() const
     AV_SCOPE("QueuedPresentRequest::holds");
     if (ticket_ == 0u) return false;
     const bool blt = copy_.operation() == PresentOperation::blt;
+    if (source_ == Source::surfaces) return holds_surfaces();
     if (!blt && copy_.operation() != PresentOperation::color_fill) return false;
     if (!blt && copy_.swaps_red_and_blue()) return false;
     if (blt && copy_.colour() != 0u) return false;
@@ -84,10 +102,21 @@ bool QueuedPresentRequest::holds() const
     if (copy_.destination_pitch() == 0u || copy_.destination_pitch() % pixel_bytes != 0u) return false;
     const bool no_source = copy_.source_entries() == 0u && copy_.source_pitch() == 0u;
     if (source_ == Source::image) return blt && image_.names() && no_source;
+    if (source_ == Source::texture) return blt && image_.surface() != 0u && image_.point() == 0u && no_source;
     if (source_ != Source::pages || !(image_ == SurfacePoint())) return false;
     if (!blt) return no_source;
     return copy_.source_entries() != 0u && copy_.source_entries() <= max_entries && copy_.source_pitch() != 0u &&
            copy_.source_pitch() % pixel_bytes == 0u;
+}
+
+bool QueuedPresentRequest::holds_surfaces() const
+{
+    AV_SCOPE("QueuedPresentRequest::holds_surfaces");
+    if (copy_.operation() != PresentOperation::blt || copy_.colour() != 0u || copy_.swaps_red_and_blue()) return false;
+    if (copy_.regions() == 0u || copy_.regions() > max_regions) return false;
+    if (copy_.source_entries() != 0u || copy_.source_pitch() != 0u) return false;
+    if (copy_.destination_entries() != 0u || copy_.destination_pitch() != 0u) return false;
+    return surfaces_.names() && image_ == SurfacePoint(surfaces_.source(), 0u);
 }
 
 uint64_t QueuedPresentRequest::ticket() const
@@ -106,6 +135,12 @@ const SurfacePoint &QueuedPresentRequest::image() const
 {
     AV_SCOPE("QueuedPresentRequest::image");
     return image_;
+}
+
+const SurfacePair &QueuedPresentRequest::surfaces() const
+{
+    AV_SCOPE("QueuedPresentRequest::surfaces");
+    return surfaces_;
 }
 
 const PresentCopyRequest &QueuedPresentRequest::copy() const

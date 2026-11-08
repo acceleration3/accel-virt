@@ -4,6 +4,7 @@
 #include "core/platform/wait_mutex_guard.hpp"
 #include "miniport/present/present_surface.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
 #include "miniport/virtio/virtq_segment.hpp"
@@ -71,7 +72,7 @@ Status PresentQueue::queue(const PresentCopyRequest &request, const PresentSurfa
 {
     AV_SCOPE("PresentQueue::queue");
     platform_.require_irql_at_most(Irql::passive, "PresentQueue::queue");
-    return enqueue(SurfacePoint(), request, source, destination, regions, ticket);
+    return enqueue(SurfacePoint(), SurfacePair(), request, source, &destination, regions, ticket);
 }
 
 Status PresentQueue::queue_image(const SurfacePoint &image, const PresentCopyRequest &request,
@@ -84,11 +85,33 @@ Status PresentQueue::queue_image(const SurfacePoint &image, const PresentCopyReq
                                         request.swaps_red_and_blue() ? PresentCopyRequest::flag_swap_red_blue : 0u,
                                         0u, request.regions(), 0u, 0u, request.destination_entries(),
                                         request.destination_pitch());
-    return enqueue(image, from_image, nullptr, destination, regions, ticket);
+    return enqueue(image, SurfacePair(), from_image, nullptr, &destination, regions, ticket);
 }
 
-Status PresentQueue::enqueue(const SurfacePoint &image, const PresentCopyRequest &request, const PresentSurface *source,
-                             const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket)
+Status PresentQueue::queue_texture(uint64_t texture, const PresentCopyRequest &request,
+                                   const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket)
+{
+    AV_SCOPE("PresentQueue::queue_texture");
+    platform_.require_irql_at_most(Irql::passive, "PresentQueue::queue_texture");
+    const PresentCopyRequest from_texture(PresentOperation::blt,
+                                          request.swaps_red_and_blue() ? PresentCopyRequest::flag_swap_red_blue : 0u,
+                                          0u, request.regions(), 0u, 0u, request.destination_entries(),
+                                          request.destination_pitch());
+    return enqueue(SurfacePoint(), SurfacePair(texture, 0u), from_texture, nullptr, &destination, regions, ticket);
+}
+
+Status PresentQueue::queue_surfaces(const SurfacePair &surfaces, const PresentCopyRequest &request,
+                                    const PresentRegion *regions, uint64_t &ticket)
+{
+    AV_SCOPE("PresentQueue::queue_surfaces");
+    platform_.require_irql_at_most(Irql::passive, "PresentQueue::queue_surfaces");
+    const PresentCopyRequest between(PresentOperation::blt, 0u, 0u, request.regions(), 0u, 0u, 0u, 0u);
+    return enqueue(SurfacePoint(), surfaces, between, nullptr, nullptr, regions, ticket);
+}
+
+Status PresentQueue::enqueue(const SurfacePoint &image, const SurfacePair &surfaces, const PresentCopyRequest &request,
+                             const PresentSurface *source, const PresentSurface *destination,
+                             const PresentRegion *regions, uint64_t &ticket)
 {
     AV_SCOPE("PresentQueue::enqueue");
     ticket = 0u;
@@ -99,8 +122,10 @@ Status PresentQueue::enqueue(const SurfacePoint &image, const PresentCopyRequest
     Status         status = wait_for_payload(next);
     if (status == Status::ok)
         status = write_payload(slot_of(next), source, destination, regions, request.regions(), length);
-    const QueuedPresentRequest present = image.names() ? QueuedPresentRequest(next, image, request)
-                                                       : QueuedPresentRequest(next, request);
+    const QueuedPresentRequest present = surfaces.names() ? QueuedPresentRequest(next, surfaces, request)
+                                         : surfaces.source() != 0u ? QueuedPresentRequest(next, surfaces.source(), request)
+                                         : image.names()           ? QueuedPresentRequest(next, image, request)
+                                                                   : QueuedPresentRequest(next, request);
     if (status == Status::ok) status = send(present, slot_of(next), length);
     if (status != Status::ok) return status;
     platform_.store_atomic(queued_, next);
@@ -125,13 +150,13 @@ Status PresentQueue::wait_for_payload(uint64_t ticket)
     return Status::ok;
 }
 
-Status PresentQueue::write_payload(uint32_t slot, const PresentSurface *source, const PresentSurface &destination,
+Status PresentQueue::write_payload(uint32_t slot, const PresentSurface *source, const PresentSurface *destination,
                                    const PresentRegion *regions, uint32_t count, size_t &length)
 {
     AV_SCOPE("PresentQueue::write_payload");
     WireWriter payload(payloads_[slot], payload_bytes);
     if (source != nullptr) source->write_runs(payload);
-    destination.write_runs(payload);
+    if (destination != nullptr) destination->write_runs(payload);
     for (uint32_t index = 0u; index < count; index++) regions[index].write(payload);
     if (payload.status() != Status::ok) return Status::too_large;
     length = payload.offset();

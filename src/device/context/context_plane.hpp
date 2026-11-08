@@ -10,6 +10,7 @@
 namespace av {
 
 
+class SurfacePair;
 class SurfacePoint;
 
 class CapsetInfo;
@@ -53,6 +54,11 @@ public:
     virtual bool reads_frames() const = 0;
     virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) = 0;
     virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
+    virtual bool copies_surfaces() const = 0;
+    virtual bool copy_surface(const uint8_t *gpu_uuid, const SurfacePair &surfaces, const AvCopyRegion *regions,
+                              uint32_t count, uint32_t wait_ms) = 0;
+    virtual bool map_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t wait_ms, AvFrameView &view) = 0;
+    virtual void unmap_surface(const uint8_t *gpu_uuid, uint64_t surface) = 0;
     virtual bool exports_surfaces() const = 0;
     virtual bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, AvExportedImage &image) = 0;
     virtual bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) = 0;

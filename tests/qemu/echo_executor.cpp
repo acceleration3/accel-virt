@@ -425,6 +425,16 @@ std::uint32_t sync_surface(void *, std::uint32_t, std::uint64_t surface, std::ui
     return AV_EXECUTED;
 }
 
+std::uint32_t copy_surface(void *, std::uint32_t, std::uint64_t, std::uint64_t, const AvCopyRegion *, std::uint32_t,
+                           std::uint32_t)
+{
+    return AV_UNKNOWN;
+}
+
+std::uint32_t map_surface(void *, std::uint32_t, std::uint64_t, std::uint32_t, AvFrameView *) { return AV_UNKNOWN; }
+
+void unmap_surface(void *, std::uint32_t, std::uint64_t) {}
+
 void channel_stats(void *, AvExecutor *, std::uint32_t, const std::uint8_t *, std::size_t) {}
 
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
@@ -455,6 +465,9 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
+                              copy_surface,
+                              map_surface,
+                              unmap_surface,
                               nullptr,
                               lose_executor_device,
                               answer_part,

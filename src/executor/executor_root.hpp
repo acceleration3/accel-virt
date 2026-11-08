@@ -26,6 +26,7 @@
 namespace av {
 
 class ExecutorLog;
+class SurfacePair;
 class SurfacePoint;
 class TeardownBudget;
 
@@ -69,6 +70,10 @@ public:
     bool     map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(uint32_t domain, const SurfacePoint &frame);
     bool     export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image);
+    bool     copy_surface(uint32_t domain, const SurfacePair &surfaces, const AvCopyRegion *regions, uint32_t count,
+                          uint32_t wait_ms);
+    bool     map_surface(uint32_t domain, uint64_t surface, uint32_t wait_ms, AvFrameView &view);
+    void     unmap_surface(uint32_t domain, uint64_t surface);
     bool     sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd);
 
     ContextSession *open(uint32_t sub_api, const AvContextOptions &options, ContextSession *share = nullptr);

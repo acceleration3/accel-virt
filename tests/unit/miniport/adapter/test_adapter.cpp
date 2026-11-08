@@ -362,6 +362,20 @@ public:
                               av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
                                   av::CapsetInfo::feature_present_from_image);
     }
+    void                   offer_present_between_surfaces()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
+                                  av::CapsetInfo::feature_present_from_image |
+                                  av::CapsetInfo::feature_present_between_surfaces);
+    }
+    void                   offer_present_from_surface()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
+                                  av::CapsetInfo::feature_present_from_image |
+                                  av::CapsetInfo::feature_present_from_surface);
+    }
     void                   serve() { answer_display_info(this); }
     const std::uint8_t    *last_queued() const { return queued_; }
     std::uint32_t          queued_presents() const { return queued_count_; }
@@ -3207,6 +3221,125 @@ TEST(adapter_present, a_blt_naming_a_point_on_a_host_surface_is_queued_from_its_
   std::memcpy(&named_point, fixture.last_queued() + 36u, sizeof named_point);
   CHECK_EQ(kind, 0u);
   CHECK_EQ(named_point, 0u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_present, a_blt_from_one_host_surface_to_another_with_no_point_is_queued_between_their_keys)
+{ Fixture fixture;
+  fixture.offer_present_between_surfaces();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)),
+           success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface unshared(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  std::uint32_t kind = 0u, source_entries = 1u, destination_entries = 1u;
+  std::uint64_t from = 0u, into = 0u;
+  std::memcpy(&into, fixture.last_queued() + 4u, sizeof into);
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&from, fixture.last_queued() + 40u, sizeof from);
+  std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
+  std::memcpy(&destination_entries, fixture.last_queued() + 68u, sizeof destination_entries);
+  CHECK_EQ(kind, 2u);
+  CHECK(from != 0u);
+  CHECK(into != 0u);
+  CHECK(from != into);
+  CHECK_EQ(source_entries, 0u);
+  CHECK_EQ(destination_entries, 0u);
+  info[2].hDeviceSpecificAllocation = unshared.open_handle();
+  av::DxgkargPresentRecord pages = present;
+  pages.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &pages)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK_EQ(kind, 0u);
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t point[av::PresentPointRecord::encoded_size] = {};
+  CHECK_STATUS(av::PresentPointRecord(0xABCDu).encode(point, sizeof point), av::Status::ok);
+  av::DxgkargPresentRecord pointed = present;
+  pointed.pDmaBuffer = dma;
+  pointed.pPrivateDriverData = point;
+  pointed.PrivateDriverDataSize = sizeof point;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &pointed)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK(kind != 2u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_present, a_blt_from_a_host_surface_to_a_page_destination_with_no_point_reads_the_host_texture)
+{ Fixture fixture;
+  fixture.offer_present_from_surface();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface pages(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  MappedSurface unshared(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = pages.open_handle();
+  std::uint8_t dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  std::uint32_t kind = 0u, point = 1u, source_entries = 1u, destination_entries = 0u;
+  std::uint64_t key = 0u, into = 1u;
+  std::memcpy(&into, fixture.last_queued() + 4u, sizeof into);
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&point, fixture.last_queued() + 36u, sizeof point);
+  std::memcpy(&key, fixture.last_queued() + 40u, sizeof key);
+  std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
+  std::memcpy(&destination_entries, fixture.last_queued() + 68u, sizeof destination_entries);
+  CHECK_EQ(kind, 3u);
+  CHECK_EQ(point, 0u);
+  CHECK(key != 0u);
+  CHECK_EQ(into, 0u);
+  CHECK_EQ(source_entries, 0u);
+  CHECK(destination_entries != 0u);
+  info[1].hDeviceSpecificAllocation = unshared.open_handle();
+  av::DxgkargPresentRecord shadow = present;
+  shadow.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &shadow)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK_EQ(kind, 0u);
   fixture.stop_presents();
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }

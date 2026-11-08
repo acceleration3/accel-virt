@@ -14,6 +14,7 @@
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/exportable_images.hpp"
 #include "executor/shim/host_image_export.hpp"
+#include "executor/shim/host_surface_copy.hpp"
 #include "executor/shim/plane_composer.hpp"
 #include "executor/shim/slice_importer.hpp"
 
@@ -81,6 +82,10 @@ public:
     [[nodiscard]] bool compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
                                       uint32_t height, AvExportedImage &image);
     [[nodiscard]] bool export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image);
+    [[nodiscard]] bool map_surface(uint32_t domain, uint64_t surface, uint32_t wait_ms, AvFrameView &view);
+    void               unmap_surface(uint64_t surface);
+    [[nodiscard]] bool copy_surface(uint32_t domain, uint64_t source, uint64_t destination, const AvCopyRegion *regions,
+                                    uint32_t count, uint32_t wait_ms);
     [[nodiscard]] bool sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd);
     StagedFrame       *stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                                    uint32_t format);
@@ -122,6 +127,8 @@ private:
     IUnknown          *viewed(uint32_t domain, uint64_t id, IUnknown *found);
     ID3D11Texture2D   *made_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented);
     void               retire_locked();
+    ID3D11Texture2D   *readable_like(ID3D11Texture2D *texture);
+    void               drop_read();
     [[nodiscard]] bool stage(uint32_t domain, uint64_t id, D3D11_TEXTURE2D_DESC &wanted);
     [[nodiscard]] bool drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels, uint32_t stride, uint32_t width,
                              uint32_t height);
@@ -143,8 +150,11 @@ private:
     HostImageExport         exports_;
     PlaneComposer           composer_;
     ExportableImages        images_;
+    HostSurfaceCopy         copies_;
     D3d11FramePool          frames_;
     ID3D11Texture2D        *staging_;
+    ID3D11Texture2D        *read_;
+    bool                    read_mapped_;
     PosixLock               lock_;
     uint32_t                waiting_;
     uint64_t                taken_;

@@ -23,6 +23,8 @@ public:
     static constexpr uint64_t feature_present_from_image = 32u;
     static constexpr uint64_t feature_raises = 64u;
     static constexpr uint64_t feature_scanout_planes = 128u;
+    static constexpr uint64_t feature_present_between_surfaces = 256u;
+    static constexpr uint64_t feature_present_from_surface = 512u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,

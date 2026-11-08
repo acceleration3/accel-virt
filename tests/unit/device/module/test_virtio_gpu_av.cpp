@@ -942,6 +942,7 @@ TEST(virtio_gpu_av_realize, with_a_renderer_the_capset_is_what_the_renderer_offe
   CHECK((features_of(importing.device()) & av::CapsetInfo::feature_host_visible_memory) != 0u);
   CHECK_EQ(features_of(importing.device()) & (2u | 4u), 0u);
   CHECK_EQ(features_of(importing.device()) & av::CapsetInfo::feature_present_from_image, 0u);
+  CHECK_EQ(features_of(importing.device()) & av::CapsetInfo::feature_present_between_surfaces, 0u);
   CHECK((features_of(importing.device()) & av::CapsetInfo::feature_present_engine) != 0u);
   CHECK_EQ(importing.peer().resources().interrupt_lines(), 64u);
   CHECK_STATUS(importing.device().create_context(1u, "test"), Status::ok);
@@ -1150,6 +1151,7 @@ TEST(virtio_gpu_av_present_engine, the_engine_is_offered_takes_presents_and_stop
 { ClockedDevice rig;
   CHECK((features_of(rig.device) & av::CapsetInfo::feature_present_engine) != 0u);
   CHECK((features_of(rig.device) & av::CapsetInfo::feature_present_from_image) != 0u);
+  CHECK((features_of(rig.device) & av::CapsetInfo::feature_present_between_surfaces) != 0u);
   GpuRequestBuilder page(0x02F6u);
   page.u64(0x402000u);
   MockRequest registered(page.bytes(), page.size());

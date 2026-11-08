@@ -10,6 +10,7 @@
 #include "device/renderer/renderer_service.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/loopback_renderer_peer.hpp"
 #include "harness/host/mock_host.hpp"
@@ -1163,3 +1164,17 @@ TEST(renderer_context_plane_start, a_region_the_host_cannot_hand_over_or_the_ren
     CHECK(!dying.plane().alive());
     CHECK_EQ(dying.qemu().renderer_kills(), 1u);
     CHECK_EQ(dying.qemu().live_descriptors(), 0u); } }
+
+TEST(renderer_context_plane, copies_no_surface)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK(!fixture.plane().copies_surfaces());
+  const AvCopyRegion regions[1] = {{0u, 0u, 0u, 0u, 4u, 4u}};
+  CHECK(!fixture.plane().copy_surface(uuid, av::SurfacePair(9u, 10u), regions, 1u, 50u)); }
+
+TEST(renderer_context_plane, reads_no_surface_texture)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  AvFrameView view = {};
+  CHECK(!fixture.plane().map_surface(uuid, 9u, 50u, view));
+  fixture.plane().unmap_surface(uuid, 9u); }
