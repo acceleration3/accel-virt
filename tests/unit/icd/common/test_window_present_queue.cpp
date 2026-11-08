@@ -350,3 +350,23 @@ TEST(window_present_queue, a_slot_is_looked_for_once_without_waiting)
   CHECK(rig.queue.hand(rig.frame(1u)));
   CHECK_EQ(rig.queue.try_slot(rig.owner, 2u, 2u), 2u);
   CHECK_EQ(rig.shown.waits(), 0u); }
+
+TEST(window_present_queue, a_slot_is_reclaimed_from_the_owners_queued_frames_without_waiting)
+{ Rig rig;
+  CHECK(rig.queue.start());
+  CHECK_EQ(rig.queue.reclaim_slot(rig.owner, 3u, 2u), 0u);
+  CHECK(rig.queue.hand(rig.frame(0u)));
+  CHECK(rig.queue.hand(rig.frame(1u)));
+  CHECK_EQ(rig.queue.dropped_frames(), 0u);
+  CHECK_EQ(rig.queue.reclaim_slot(rig.owner, 3u, 2u), 0u);
+  CHECK_EQ(rig.queue.dropped_frames(), 2u);
+  CHECK_EQ(rig.queue.queued(), 0u);
+  CHECK_EQ(rig.shown.waits(), 0u);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, a_slot_nobody_can_give_up_is_a_dropped_frame)
+{ Rig rig;
+  CHECK(rig.queue.start());
+  CHECK_EQ(rig.queue.reclaim_slot(rig.owner, 1u, 0u), 1u);
+  CHECK_EQ(rig.queue.dropped_frames(), 1u);
+  CHECK_EQ(rig.shown.waits(), 0u); }

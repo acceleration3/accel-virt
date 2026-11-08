@@ -47,6 +47,7 @@ class BackBufferPresenter final : public icd::HeldFlusher {
 public:
     static constexpr uint32_t max_edge = 8192u;
     static constexpr uint32_t slot_count = 2u;
+    static constexpr uint32_t no_slot = 0xFFu;
     enum : uint32_t {
         gl_texture_2d = 0x0DE1u, gl_renderbuffer = 0x8D41u,
         gl_depth24_stencil8 = 0x88F0u, gl_depth_component32f = 0x8CACu, gl_color_attachment0 = 0x8CE0u,
@@ -97,6 +98,11 @@ private:
     void                 set_pack(ClientTransport &wire, const ClientArrayState &state, bool plain);
     void                 read_back(ClientTransport &wire);
     bool                 draw_chained(ClientTransport &wire, GlPresentQueue &loop, uint64_t luid);
+    void                 copy_chained(ClientTransport &wire, GlPresentQueue &loop);
+    void                 begin_rotation(ClientTransport &wire, GlPresentQueue &loop);
+    void                 rotate_chained(ClientTransport &wire, GlPresentQueue &loop);
+    uint32_t             sampled_framebuffer() const;
+    uint32_t             source_texture() const;
     bool                 queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentQueue &loop);
     bool                 reserve_room(ClientTransport &wire, GlPresentQueue &loop);
     void                 give_room_back();
@@ -129,6 +135,8 @@ private:
     icd::PresentPacing *pacing_;
     ChainedFrames    chained_;
     bool             chain_refused_;
+    uint32_t         current_;
+    bool             rotation_refused_;
 
     friend struct BackBufferPresenterProbe;
 };

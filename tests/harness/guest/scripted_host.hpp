@@ -86,6 +86,7 @@ public:
     void gl_varint(std::uint64_t value);
     void gl_bytes(const std::uint8_t *bytes, std::uint32_t size);
     void gl_integer(std::int32_t value);
+    void gl_status(std::uint32_t value);
     void gl_resource_property(std::int32_t value);
     void gl_make(const char *renderer, const char *version);
     void gl_make_profile(const char *renderer, const char *version, std::int32_t major, std::int32_t minor,

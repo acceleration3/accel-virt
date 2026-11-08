@@ -47,6 +47,7 @@ public:
     void     refuse();
     uint32_t free_slot(const Source &owner, uint32_t slots, uint32_t reserved);
     uint32_t try_slot(const Source &owner, uint32_t slots, uint32_t reserved);
+    uint32_t reclaim_slot(const Source &owner, uint32_t slots, uint32_t reserved);
     void     keep(HeldFlusher &owner);
     void     forget(HeldFlusher &owner);
     bool     hand(const Frame &frame);
@@ -85,6 +86,7 @@ private:
     uint32_t held_by(const Source &owner) const;
     void     drop_queued(const Source &owner);
     bool     holds(const Source &owner, uint32_t slot) const;
+    uint32_t first_free(const Source &owner, uint32_t slots, uint32_t reserved) const;
     bool     wait_for(const Mark &mark);
     void     show(uint32_t row, const Frame &frame);
     bool     put_on_window(const Frame &frame);
@@ -177,8 +179,30 @@ template <typename Source, typename Readiness>
 uint32_t WindowPresentQueue<Source, Readiness>::try_slot(const Source &owner, uint32_t slots, uint32_t reserved)
 {
     AV_SCOPE("WindowPresentQueue::try_slot");
-    uint32_t slot = 0u;
     const ThreadLockHold held(lock_);
+    return first_free(owner, slots, reserved);
+}
+
+template <typename Source, typename Readiness>
+uint32_t WindowPresentQueue<Source, Readiness>::reclaim_slot(const Source &owner, uint32_t slots, uint32_t reserved)
+{
+    AV_SCOPE("WindowPresentQueue::reclaim_slot");
+    const ThreadLockHold held(lock_);
+    uint32_t slot = first_free(owner, slots, reserved);
+    if (slot == slots) {
+        drop_queued(owner);
+        slot = first_free(owner, slots, reserved);
+    }
+    if (slot == slots) dropped_frames_++;
+    return slot;
+}
+
+template <typename Source, typename Readiness>
+uint32_t WindowPresentQueue<Source, Readiness>::first_free(const Source &owner, uint32_t slots,
+                                                           uint32_t reserved) const
+{
+    AV_SCOPE("WindowPresentQueue::first_free");
+    uint32_t slot = 0u;
     while (slot < slots && (slot == reserved || holds(owner, slot))) slot++;
     return slot;
 }

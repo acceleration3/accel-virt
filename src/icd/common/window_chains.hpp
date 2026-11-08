@@ -12,7 +12,7 @@ enum class SlotLayout : uint32_t {
 
 class WindowChains {
 public:
-    static constexpr uint32_t max_slots = 2u;
+    static constexpr uint32_t max_slots = 3u;
 
     WindowChains(const WindowChains &) = delete;
     WindowChains &operator=(const WindowChains &) = delete;

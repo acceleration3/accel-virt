@@ -68,6 +68,7 @@ struct BackBufferPresenterProbe {
     static std::size_t room_bytes(BackBufferPresenter &presenter) { return presenter.room_.bytes(); }
     static std::uint64_t room_offset(BackBufferPresenter &presenter) { return presenter.room_.offset(); }
     static void set_pending(BackBufferPresenter &presenter, std::uint32_t slot) { presenter.pending_ = slot; }
+    static void set_current(BackBufferPresenter &presenter, std::uint32_t slot) { presenter.current_ = slot; }
     static void drop_room(BackBufferPresenter &presenter) { presenter.room_.close(); }
 };
 
@@ -196,6 +197,22 @@ IntoBlob into_blob(Rig &rig, std::uint32_t index)
     CHECK(reader.read_varint(read.bytes));
     CHECK(reader.read_varint(read.at));
     return read;
+}
+
+std::uint32_t count_of(Rig &rig, std::uint32_t id)
+{
+    const std::uint32_t sent = rig.commands();
+    std::uint32_t       found = 0u;
+    for (std::uint32_t index = 0u; index < sent; index++) found += rig.id(index) == id ? 1u : 0u;
+    return found;
+}
+
+std::uint64_t last_attached(Rig &rig)
+{
+    const std::uint32_t sent = rig.commands();
+    for (std::uint32_t index = sent; index-- > 0u;)
+        if (rig.id(index) == ids::kCmd_glNamedFramebufferTexture) return rig.argument(index, 2u);
+    return 0u;
 }
 
 }
@@ -695,53 +712,6 @@ TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_
   Probe::drop_room(rig.presenter);
   CHECK(!rig.presenter.invariants_hold()); }
 
-TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presented_by_the_thread)
-{ Rig      rig;
-  Presents presents(rig);
-  presents.chains.refuse_opens(false);
-  rig.host().gl_window(1u, 1u);
-  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
-  const std::size_t lendable = rig.wire().blobs().room();
-  rig.host().shared_object(av::SharedObjectAnswer::done, 0x700u);
-  rig.host().shared_object(av::SharedObjectAnswer::done, 0x701u);
-  const std::uint32_t textures[2] = {200u, 201u};
-  rig.host().gl_bytes(reinterpret_cast<const std::uint8_t *>(textures), sizeof textures);
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
-  CHECK_EQ(presents.chains.opens(), 1u);
-  CHECK_EQ(presents.chains.last_luid(), 0x1234u);
-  CHECK_EQ(presents.chains.last_width(), 8u);
-  CHECK_EQ(presents.chains.last_height(), 4u);
-  CHECK_EQ(rig.wire().blobs().room(), lendable);
-  const std::uint32_t sent = rig.commands();
-  CHECK_EQ(rig.id(sent - 2u), ids::kCmd_glCopyImageSubData);
-  CHECK_EQ(rig.argument(sent - 2u, 0u), 101u);
-  CHECK_EQ(rig.argument(sent - 2u, 6u), 200u);
-  CHECK_EQ(rig.id(sent - 1u), ids::kCmd_glFinish);
-  CHECK(rig.presenter.invariants_hold());
-  rig.presenter.hand_over(rig.context.mark());
-  CHECK_EQ(presents.loop.queued(), 1u);
-  CHECK(presents.thread.step());
-  CHECK_EQ(presents.chains.presents(), 1u);
-  CHECK_EQ(presents.chains.last_slot(), 0u);
-  CHECK_EQ(rig.surface.blits(), 0u);
-  std::uint8_t front[8u * 4u * 4u] = {};
-  CHECK(!rig.presenter.read_front(0, 0, 8, 4, 0x80E1u, 0x1401u, front));
-
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
-  CHECK_EQ(rig.argument(rig.commands() - 2u, 6u), 200u);
-  rig.presenter.hand_over(rig.context.mark());
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
-  CHECK_EQ(rig.argument(rig.commands() - 2u, 6u), 201u);
-  rig.presenter.hand_over(rig.context.mark());
-  CHECK(presents.thread.step());
-  CHECK(presents.thread.step());
-  CHECK_EQ(presents.chains.presents(), 3u);
-  CHECK_EQ(presents.chains.last_slot(), 1u);
-  CHECK_EQ(presents.chains.opens(), 1u);
-  rig.presenter.release(&rig.wire());
-  CHECK_EQ(presents.chains.closes(), 1u);
-  CHECK(presents.chains.last_closed() == &rig.window); }
-
 TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_resizes)
 { Rig      rig;
   Presents presents(rig);
@@ -772,20 +742,106 @@ TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_r
 
 namespace {
 
-void chained_rig(Rig &rig, Presents &presents)
+void chained_rig(Rig &rig, Presents &presents, std::uint32_t framebuffer_status = 0x8CD5u)
 {
   presents.chains.refuse_opens(false);
   rig.host().gl_window(1u, 1u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   rig.host().shared_object(av::SharedObjectAnswer::done, 0x700u);
   rig.host().shared_object(av::SharedObjectAnswer::done, 0x701u);
-  const std::uint32_t textures[2] = {200u, 201u};
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x702u);
+  const std::uint32_t textures[3] = {200u, 201u, 202u};
   rig.host().gl_bytes(reinterpret_cast<const std::uint8_t *>(textures), sizeof textures);
+  rig.host().gl_status(framebuffer_status);
 }
 
 }
 
-TEST(back_buffer_presenter, a_chain_with_every_slot_held_drops_the_frame)
+TEST(back_buffer_presenter, with_a_chain_the_first_frame_is_copied_and_later_frames_are_rendered_into_rotating_slots)
+{ Rig      rig;
+  Presents presents(rig);
+  chained_rig(rig, presents);
+  const std::size_t room = rig.wire().blobs().room();
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.chains.opens(), 1u);
+  CHECK_EQ(presents.chains.last_luid(), 0x1234u);
+  CHECK_EQ(presents.chains.last_width(), 8u);
+  CHECK_EQ(presents.chains.last_height(), 4u);
+  CHECK_EQ(rig.wire().blobs().room(), room);
+  CHECK_EQ(count_of(rig, ids::kCmd_glCopyImageSubData), 1u);
+  CHECK_EQ(last_attached(rig), 201u);
+  CHECK_EQ(count_of(rig, ids::kCmd_glCheckNamedFramebufferStatus), 1u);
+  CHECK(rig.presenter.invariants_hold());
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK(presents.thread.step());
+  CHECK_EQ(presents.chains.presents(), 1u);
+  CHECK_EQ(presents.chains.last_slot(), 0u);
+  CHECK_EQ(rig.surface.blits(), 0u);
+  std::uint8_t front[8u * 4u * 4u] = {};
+  CHECK(!rig.presenter.read_front(0, 0, 8, 4, 0x80E1u, 0x1401u, front));
+
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(count_of(rig, ids::kCmd_glCopyImageSubData), 1u);
+  CHECK_EQ(count_of(rig, ids::kCmd_glFinish), 2u);
+  CHECK_EQ(last_attached(rig), 200u);
+  CHECK_EQ(count_of(rig, ids::kCmd_glCheckNamedFramebufferStatus), 1u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK(rig.presenter.invariants_hold());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.loop.dropped_frames(), 0u);
+  CHECK_EQ(last_attached(rig), 202u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(presents.thread.step());
+  CHECK(presents.thread.step());
+  CHECK_EQ(presents.chains.presents(), 3u);
+  CHECK_EQ(presents.chains.last_slot(), 0u);
+  CHECK_EQ(presents.chains.opens(), 1u);
+  rig.presenter.release(&rig.wire());
+  CHECK_EQ(presents.chains.closes(), 1u);
+  CHECK(presents.chains.last_closed() == &rig.window); }
+
+TEST(back_buffer_presenter, a_multisampled_chain_rotates_the_slots_on_the_resolve_framebuffer)
+{ Rig      rig;
+  Presents presents(rig);
+  presents.chains.refuse_opens(false);
+  rig.host().gl_window(2u, 2u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, multisampled_d32_srgb, rig.surface), Status::ok);
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x700u);
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x701u);
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x702u);
+  const std::uint32_t textures[3] = {200u, 201u, 202u};
+  rig.host().gl_bytes(reinterpret_cast<const std::uint8_t *>(textures), sizeof textures);
+  rig.host().gl_status(0x8CD5u);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  const std::uint32_t sent = rig.commands();
+  CHECK_EQ(rig.id(sent - 2u), ids::kCmd_glNamedFramebufferTexture);
+  CHECK_EQ(rig.argument(sent - 2u, 0u), 101u);
+  CHECK_EQ(rig.argument(sent - 2u, 2u), 201u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(last_attached(rig), 202u);
+  CHECK(rig.presenter.invariants_hold()); }
+
+TEST(back_buffer_presenter, a_frame_read_back_after_rotation_is_read_from_the_slot_being_drawn_into)
+{ Rig      rig;
+  Presents presents(rig);
+  chained_rig(rig, presents);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  rig.presenter.hand_over(rig.context.mark());
+  rig.host().gl_bytes(nullptr, 0u);
+  const std::uint32_t read = rig.commands();
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
+  bool found = false;
+  for (std::uint32_t index = read; index < rig.commands(); index++)
+    if (rig.id(index) == ids::kCmd_glGetTextureSubImage) {
+      found = true;
+      CHECK_EQ(rig.argument(index, 0u), 201u);
+    }
+  CHECK(found); }
+
+TEST(back_buffer_presenter, a_swap_with_every_other_image_queued_drops_the_older_frame_instead_of_waiting)
 { Rig      rig;
   Presents presents(rig);
   chained_rig(rig, presents);
@@ -794,13 +850,47 @@ TEST(back_buffer_presenter, a_chain_with_every_slot_held_drops_the_frame)
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
   rig.presenter.hand_over(rig.context.mark());
   CHECK_EQ(presents.loop.queued(), 2u);
+  CHECK_EQ(presents.loop.dropped_frames(), 0u);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.loop.dropped_frames(), 2u);
+  CHECK_EQ(last_attached(rig), 200u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK(rig.presenter.invariants_hold()); }
+
+TEST(back_buffer_presenter, a_host_that_cannot_render_into_the_slots_gets_every_frame_copied)
+{ Rig      rig;
+  Presents presents(rig);
+  chained_rig(rig, presents, 0x8CD6u);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(last_attached(rig), 101u);
+  CHECK_EQ(count_of(rig, ids::kCmd_glCheckNamedFramebufferStatus), 1u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(count_of(rig, ids::kCmd_glCopyImageSubData), 2u);
+  CHECK_EQ(count_of(rig, ids::kCmd_glCheckNamedFramebufferStatus), 1u);
+  CHECK_EQ(last_attached(rig), 101u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(count_of(rig, ids::kCmd_glCopyImageSubData), 3u);
+  CHECK(rig.presenter.invariants_hold()); }
+
+TEST(back_buffer_presenter, with_every_slot_held_and_no_rotation_the_frame_is_dropped)
+{ Rig      rig;
+  Presents presents(rig);
+  chained_rig(rig, presents, 0x8CD6u);
+  for (std::uint32_t frame = 0u; frame < 3u; frame++) {
+    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+    rig.presenter.hand_over(rig.context.mark());
+  }
+  CHECK_EQ(presents.loop.queued(), 3u);
   const std::uint32_t sent = rig.commands();
   CHECK_EQ(presents.loop.dropped_frames(), 0u);
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
   CHECK_EQ(presents.loop.dropped_frames(), 1u);
   CHECK_EQ(rig.commands(), sent);
   rig.presenter.hand_over(rig.context.mark());
-  CHECK_EQ(presents.loop.queued(), 2u);
+  CHECK_EQ(presents.loop.queued(), 3u);
   CHECK(rig.presenter.invariants_hold()); }
 
 TEST(back_buffer_presenter, a_hand_over_without_a_present_thread_hands_nothing)
@@ -818,9 +908,17 @@ TEST(back_buffer_presenter_invariants, fail_for_a_chained_frame_without_a_slot_o
   chained_rig(slot, slots);
   CHECK(slot.presenter.present(slot.wire(), slot.state, &slot.dc, slot.surface, &slots.loop, 0x1234u));
   CHECK(slot.presenter.invariants_hold());
-  Probe::set_pending(slot.presenter, Presenter::slot_count);
+  Probe::set_pending(slot.presenter, Presenter::no_slot);
+  CHECK(!slot.presenter.invariants_hold());
+  Probe::set_pending(slot.presenter, 3u);
   CHECK(!slot.presenter.invariants_hold());
   Probe::set_pending(slot.presenter, 0u);
+  CHECK(slot.presenter.invariants_hold());
+  Probe::set_current(slot.presenter, 0u);
+  CHECK(!slot.presenter.invariants_hold());
+  Probe::set_current(slot.presenter, 3u);
+  CHECK(!slot.presenter.invariants_hold());
+  Probe::set_current(slot.presenter, 1u);
   CHECK(slot.presenter.invariants_hold());
   Probe::close_chain(slot.presenter);
   CHECK(!slot.presenter.invariants_hold());

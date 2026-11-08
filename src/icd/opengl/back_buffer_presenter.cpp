@@ -34,8 +34,8 @@ static_assert(BackBufferPresenter::max_edge * 4u + TransferRoom::command_bytes <
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, DriverLog &log)
     : memory_(memory), lines_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
       framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(),
-      loop_(nullptr), room_(), pending_(slot_count), pending_chained_(false), held_(false), held_mark_(), pacing_(nullptr), chained_(),
-      chain_refused_(false)
+      loop_(nullptr), room_(), pending_(no_slot), pending_chained_(false), held_(false), held_mark_(), pacing_(nullptr), chained_(),
+      chain_refused_(false), current_(no_slot), rotation_refused_(false)
 {
     AV_SCOPE("BackBufferPresenter::BackBufferPresenter");
 }
@@ -61,6 +61,8 @@ Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const P
     settle();
     delete_objects(wire);
     chain_refused_ = false;
+    rotation_refused_ = false;
+    current_ = no_slot;
     window_ = window;
     format_ = format;
     width_ = width;
@@ -138,7 +140,7 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
 void BackBufferPresenter::hand_over(const BatchMark &mark)
 {
     AV_SCOPE("BackBufferPresenter::hand_over");
-    if (pending_ == slot_count || loop_ == nullptr) return;
+    if (pending_ == no_slot || loop_ == nullptr) return;
     static_cast<void>(loop_->hand(take_pending(mark)));
 }
 
@@ -147,7 +149,7 @@ GlFrame BackBufferPresenter::take_pending(const BatchMark &mark)
     AV_SCOPE("BackBufferPresenter::take_pending");
     const GlFrame frame(*this, pending_, pending_chained_ ? nullptr : room_pixels(pending_),
                         GlFrame::Rows::bgra_bottom_up, width_, height_, window_, mark);
-    pending_ = slot_count;
+    pending_ = no_slot;
     pending_chained_ = false;
     return frame;
 }
@@ -155,7 +157,7 @@ GlFrame BackBufferPresenter::take_pending(const BatchMark &mark)
 void BackBufferPresenter::hold_over(const BatchMark &mark, icd::PresentPacing &pacing)
 {
     AV_SCOPE("BackBufferPresenter::hold_over");
-    if (pending_ == slot_count || loop_ == nullptr) return;
+    if (pending_ == no_slot || loop_ == nullptr) return;
     loop_->acquire();
     held_ = true;
     held_mark_ = mark;
@@ -171,7 +173,7 @@ void BackBufferPresenter::drop_held()
     loop_->acquire();
     if (held_) {
         held_ = false;
-        pending_ = slot_count;
+        pending_ = no_slot;
         pending_chained_ = false;
     }
     loop_->release();
@@ -183,7 +185,7 @@ void BackBufferPresenter::show_held_now()
     if (loop_ == nullptr) return;
     GlFrame frame;
     loop_->acquire();
-    const bool holding = held_ && pending_ != slot_count;
+    const bool holding = held_ && pending_ != no_slot;
     held_ = false;
     if (holding) frame = take_pending(held_mark_);
     loop_->release();
@@ -196,7 +198,7 @@ uint32_t BackBufferPresenter::flush_held()
     if (loop_ == nullptr) return 0u;
     GlFrame frame;
     loop_->acquire();
-    const bool     holding = held_ && pending_ != slot_count;
+    const bool     holding = held_ && pending_ != no_slot;
     const bool     admitted = holding && pacing_->admits();
     const uint32_t later = holding && !admitted ? pacing_->next_admit_milliseconds() : 0u;
     if (admitted) {
@@ -236,8 +238,9 @@ void BackBufferPresenter::release(ClientTransport *wire)
     show_held_now();
     settle();
     give_room_back();
-    pending_ = slot_count;
+    pending_ = no_slot;
     pending_chained_ = false;
+    current_ = no_slot;
     chained_.close(wire);
     loop_ = nullptr;
     if (wire != nullptr) delete_objects(*wire);
@@ -268,9 +271,12 @@ void BackBufferPresenter::report(StateWriter &writer, uint32_t index) const
 bool BackBufferPresenter::invariants_hold() const
 {
     AV_SCOPE("BackBufferPresenter::invariants_hold");
-    if (pending_ > slot_count) return false;
-    if (pending_ != slot_count && !room_.held() && !pending_chained_) return false;
-    if (pending_chained_ && (pending_ == slot_count || !chained_.opened())) return false;
+    if (pending_ != no_slot && pending_ >= (pending_chained_ ? ChainedFrames::slot_count : slot_count)) return false;
+    if (pending_ != no_slot && !room_.held() && !pending_chained_) return false;
+    if (pending_chained_ && (pending_ == no_slot || !chained_.opened())) return false;
+    if (current_ != no_slot && (current_ >= ChainedFrames::slot_count || !chained_.opened() ||
+                                (pending_chained_ && pending_ == current_)))
+        return false;
     if (!chained_.invariants_hold()) return false;
     const bool multisampled = format_.samples() != 0u;
     const bool depth_stencil = format_.depth_bits() != 0u;
@@ -375,7 +381,7 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
     const size_t      chunk = wire.room().read_piece(wire);
     icd::RowPieces    pieces(pixels, width_, height_, width_ * bytes_per_pixel, chunk, wire);
     while (pieces.next())
-        glproto::av_glGetTextureSubImage(wire, texture_, 0, static_cast<GLint>(pieces.left()),
+        glproto::av_glGetTextureSubImage(wire, source_texture(), 0, static_cast<GLint>(pieces.left()),
                                           static_cast<GLint>(pieces.top()), 0,
                                           static_cast<GLsizei>(pieces.right() - pieces.left()),
                                           static_cast<GLsizei>(pieces.bottom() - pieces.top()), 1, gl_bgra,
@@ -396,12 +402,64 @@ bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentQueue &lo
             return false;
         }
     }
+    if (current_ != no_slot) {
+        rotate_chained(wire, loop);
+        return true;
+    }
+    copy_chained(wire, loop);
+    if (pending_chained_ && !rotation_refused_) begin_rotation(wire, loop);
+    return true;
+}
+
+void BackBufferPresenter::copy_chained(ClientTransport &wire, GlPresentQueue &loop)
+{
+    AV_SCOPE("BackBufferPresenter::copy_chained");
     const uint32_t slot = loop.free_slot(*this, ChainedFrames::slot_count, pending_);
-    if (slot == ChainedFrames::slot_count) return true;
+    if (slot == ChainedFrames::slot_count) return;
     chained_.draw(wire, texture_, slot);
     pending_ = slot;
     pending_chained_ = true;
-    return true;
+}
+
+void BackBufferPresenter::begin_rotation(ClientTransport &wire, GlPresentQueue &loop)
+{
+    AV_SCOPE("BackBufferPresenter::begin_rotation");
+    const uint32_t next = loop.reclaim_slot(*this, ChainedFrames::slot_count, pending_);
+    if (next == ChainedFrames::slot_count) return;
+    chained_.attach(wire, sampled_framebuffer(), next);
+    if (!chained_.renders_into(wire, sampled_framebuffer())) {
+        glproto::av_glNamedFramebufferTexture(wire, sampled_framebuffer(), gl_color_attachment0,
+                                              texture_, 0);
+        rotation_refused_ = true;
+        lines_.write("the host cannot render into a window's shared frames; each frame is copied into one");
+        return;
+    }
+    current_ = next;
+}
+
+void BackBufferPresenter::rotate_chained(ClientTransport &wire, GlPresentQueue &loop)
+{
+    AV_SCOPE("BackBufferPresenter::rotate_chained");
+    const uint32_t swapped = current_;
+    const uint32_t next = loop.reclaim_slot(*this, ChainedFrames::slot_count, swapped);
+    if (next == ChainedFrames::slot_count) return;
+    chained_.finish(wire);
+    chained_.attach(wire, sampled_framebuffer(), next);
+    pending_ = swapped;
+    pending_chained_ = true;
+    current_ = next;
+}
+
+uint32_t BackBufferPresenter::sampled_framebuffer() const
+{
+    AV_SCOPE("BackBufferPresenter::sampled_framebuffer");
+    return framebuffers_[resolve] != 0u ? framebuffers_[resolve] : framebuffers_[draw];
+}
+
+uint32_t BackBufferPresenter::source_texture() const
+{
+    AV_SCOPE("BackBufferPresenter::source_texture");
+    return current_ != no_slot ? chained_.texture(current_) : texture_;
 }
 
 bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentQueue &loop)
@@ -413,7 +471,7 @@ bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArraySta
     const bool plain = pack_is_plain(state);
     if (!plain) set_pack(wire, state, true);
     const size_t frame = frame_bytes();
-    glproto::av_glGetTextureSubImage_into_blob(wire, texture_, 0, 0, 0, 0, static_cast<GLsizei>(width_),
+    glproto::av_glGetTextureSubImage_into_blob(wire, source_texture(), 0, 0, 0, 0, static_cast<GLsizei>(width_),
                                                 static_cast<GLsizei>(height_), 1, gl_bgra, gl_unsigned_byte,
                                                 static_cast<GLsizei>(frame), room_.offset() + slot * frame);
     if (!plain) set_pack(wire, state, false);

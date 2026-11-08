@@ -69,11 +69,12 @@ public:
     static constexpr std::size_t   slot_bytes = 4096u;
 
     ScriptedGlHost() : RoomedTransport(256u * 1024u, 64u * 1024u), request_{}, reply_{}, commands_{}, async_{}, payloads_{}, sends_(0u), opens_(0u),
-                       names_(first_name), refuse_open_at_(0u), wide_memory_at_(0u), zero_names_(false), arena_(nullptr, 0u), blobs_() {}
+                       names_(first_name), refuse_open_at_(0u), wide_memory_at_(0u), zero_names_(false), status_(ChainedFrames::gl_framebuffer_complete), arena_(nullptr, 0u), blobs_() {}
 
     void refuse_open_at(std::uint32_t nth) { refuse_open_at_ = nth; }
     void wide_memory_at(std::uint32_t nth) { wide_memory_at_ = nth; }
     void zero_names(bool zero) { zero_names_ = zero; }
+    void framebuffer_status(std::uint32_t status) { status_ = status; }
 
     std::uint32_t sends() const { return sends_; }
     std::uint32_t command(std::uint32_t index) const { return commands_[index]; }
@@ -118,6 +119,11 @@ public:
             reply = WireReader(reply_, SharedObjectAnswer::encoded_size);
             return TransportResult::ok;
         }
+        if (command_id == av::glproto::kCmd_glCheckNamedFramebufferStatus) {
+            answer.write_varint(status_);
+            reply = WireReader(reply_, answer.offset());
+            return TransportResult::ok;
+        }
         WireReader asked(payloads_[sends_ - 1u], slot_bytes);
         std::uint64_t target = 0u, n = 0u;
         if (command_id == av::glproto::kCmd_glCreateTextures) static_cast<void>(asked.read_varint(target));
@@ -153,6 +159,7 @@ private:
     std::uint32_t       refuse_open_at_;
     std::uint32_t       wide_memory_at_;
     bool                zero_names_;
+    std::uint32_t       status_;
     av::WireArena       arena_;
     av::ClientBlobArena blobs_;
 };
@@ -197,16 +204,16 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   CHECK_EQ(host.count(av::glproto::kCmd_glTextureParameteri), ChainedFrames::slot_count);
   CHECK(host.last(av::glproto::kCmd_glTextureParameteri) + 1u == host.last(av::glproto::kCmd_glTextureStorageMem2DEXT));
   WireReader tiling(host.payload(host.last(av::glproto::kCmd_glTextureParameteri)), ScriptedGlHost::slot_bytes);
-  CHECK_EQ(varint(tiling), first_name + 1u);
+  CHECK_EQ(varint(tiling), first_name + ChainedFrames::slot_count - 1u);
   CHECK_EQ(varint(tiling), std::uint64_t{ChainedFrames::gl_texture_tiling});
   CHECK_EQ(varint(tiling), std::uint64_t{ChainedFrames::gl_linear_tiling});
   WireReader storage(host.payload(host.last(av::glproto::kCmd_glTextureStorageMem2DEXT)), ScriptedGlHost::slot_bytes);
-  CHECK_EQ(varint(storage), first_name + 1u);
+  CHECK_EQ(varint(storage), first_name + ChainedFrames::slot_count - 1u);
   CHECK_EQ(varint(storage), 1u);
   CHECK_EQ(varint(storage), std::uint64_t{gl_srgb8_alpha8});
   CHECK_EQ(varint(storage), width);
   CHECK_EQ(varint(storage), height);
-  CHECK_EQ(varint(storage), first_memory + 1u);
+  CHECK_EQ(varint(storage), first_memory + ChainedFrames::slot_count - 1u);
   CHECK(frames.invariants_hold()); }
 
 TEST(chained_frames, a_frame_is_copied_whole_and_finished_one_way)
@@ -334,3 +341,43 @@ TEST(chained_frames_invariants, fail_for_an_opened_chain_missing_a_texture_memor
   CHECK(overfull.invariants_hold());
   ChainedFramesProbe::overfill_slots(overfull);
   CHECK(!overfull.invariants_hold()); }
+
+TEST(chained_frames, a_slot_is_attached_to_a_framebuffer_and_a_complete_framebuffer_renders_into_it)
+{ static ScriptedGlHost host;
+  ScriptedWindowChains chains;
+  chains.refuse_opens(false);
+  ChainedFrames frames;
+  int window = 0;
+  CHECK(frames.open(host, chains, &window, luid, width, height, false));
+  CHECK_EQ(frames.texture(1u), first_name + 1u);
+  CHECK_EQ(frames.texture(ChainedFrames::slot_count), 0u);
+  const std::uint32_t before = host.sends();
+  frames.attach(host, 9u, 1u);
+  CHECK_EQ(host.sends(), before + 1u);
+  CHECK_EQ(host.command(before), av::glproto::kCmd_glNamedFramebufferTexture);
+  WireReader attached(host.payload(before), ScriptedGlHost::slot_bytes);
+  CHECK_EQ(varint(attached), 9u);
+  CHECK_EQ(varint(attached), std::uint64_t{ChainedFrames::gl_color_attachment0});
+  CHECK_EQ(varint(attached), first_name + 1u);
+  CHECK_EQ(varint(attached), 0u);
+  frames.attach(host, 9u, ChainedFrames::slot_count);
+  CHECK_EQ(host.sends(), before + 1u);
+  CHECK(frames.renders_into(host, 9u));
+  host.framebuffer_status(0x8CD6u);
+  CHECK(!frames.renders_into(host, 9u));
+  host.framebuffer_status(ChainedFrames::gl_framebuffer_complete); }
+
+TEST(chained_frames, an_unopened_chain_attaches_nothing_and_names_no_texture)
+{ static ScriptedGlHost host;
+  ChainedFrames frames;
+  frames.attach(host, 9u, 0u);
+  CHECK_EQ(host.sends(), 0u);
+  CHECK_EQ(frames.texture(0u), 0u); }
+
+TEST(chained_frames, finish_is_sent_one_way)
+{ static ScriptedGlHost host;
+  ChainedFrames frames;
+  frames.finish(host);
+  CHECK_EQ(host.sends(), 1u);
+  CHECK_EQ(host.command(0u), av::glproto::kCmd_glFinish);
+  CHECK(host.async(0u)); }
