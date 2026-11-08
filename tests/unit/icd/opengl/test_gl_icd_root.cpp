@@ -1250,3 +1250,66 @@ TEST(gl_icd_root, a_create_that_shares_leaves_nothing_behind_wherever_an_allocat
   }
   CHECK(refused != 0u);
   CHECK(made != 0u); }
+
+namespace {
+
+constexpr std::uint64_t one_refresh_ticks = av::MockKmt::ticks_per_second / 60u;
+
+}
+
+TEST(gl_icd_root_swap_buffers, a_swap_the_screen_did_not_show_is_shown_by_the_next_flush_after_a_blank)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+  CHECK_EQ(set(0), 1);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK(rig.root().current()->held_swap() != nullptr);
+  rig.root().flush_current();
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK(rig.root().current()->held_swap() != nullptr);
+  rig.kmt().reads_clock(nullptr, one_refresh_ticks);
+  rig.root().flush_current();
+  CHECK_EQ(rig.surface().blits(), 2u);
+  CHECK(rig.root().current()->held_swap() == nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_icd_root_swap_buffers, a_swap_the_screen_did_not_show_is_shown_when_its_context_is_released)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const context = rig.current_context();
+  CHECK(context != nullptr);
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+  CHECK_EQ(set(0), 1);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  rig.host().gl_bytes(nullptr, 0u);
+  const std::uint64_t handle = rig.opengl32().driver_context(context);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK(rig.root().release_context(handle));
+  CHECK_EQ(rig.surface().blits(), 2u);
+  CHECK(rig.opengl32().make_current(rig.dc(), context)); }
+
+TEST(gl_icd_root_swap_buffers, a_swap_the_next_swap_shows_leaves_nothing_held)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+  CHECK_EQ(set(0), 1);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  rig.kmt().reads_clock(nullptr, one_refresh_ticks);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.surface().blits(), 2u);
+  CHECK(rig.root().current()->held_swap() == nullptr); }

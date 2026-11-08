@@ -1,6 +1,7 @@
 #ifndef AV_SWAPCHAIN_HPP
 #define AV_SWAPCHAIN_HPP
 
+#include "icd/common/held_flusher.hpp"
 #include "icd/common/present_pacing.hpp"
 #include "icd/common/handed_frame.hpp"
 #include "icd/common/once_latch.hpp"
@@ -36,7 +37,7 @@ class WindowPresentQueue;
 using VkPresentQueue = WindowPresentQueue<Swapchain, FenceReady>;
 using VkFrame = HandedFrame<Swapchain, FenceReady::Mark>;
 
-class Swapchain {
+class Swapchain final : public HeldFlusher {
 public:
     Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &entries, VkDevice device,
               uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, DriverLog &log, Connection &connection,
@@ -50,6 +51,7 @@ public:
     VkResult acquire(uint64_t timeout, uint32_t &index);
     VkResult present(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits);
     void     done(const VkFrame &frame, bool drawn);
+    uint32_t flush_held() override;
     void     retire();
     VkDevice device() const;
     uint64_t presented() const;
@@ -60,10 +62,18 @@ public:
 private:
     [[nodiscard]] VkResult judge(const VkSwapchainCreateInfoKHR &info, SurfaceProperties &surface) const;
     void refused(const char *what, uint64_t asked, uint64_t beside) const;
-    enum class Holder : uint8_t { none, application, presents };
+    enum class Holder : uint8_t { none, application, presents, held };
+    static constexpr uint32_t no_image = 0xFFFFFFFFu;
 
     VkResult               make_destination(void *window, VkFormat format, VkExtent2D extent);
     VkResult               hand_over(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits);
+    VkResult               hold(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits);
+    VkResult               send(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits,
+                                uint32_t slot);
+    bool                   admitted();
+    void                   drop_held();
+    bool                   claim_held(uint32_t &index, VkQueue &queue);
+    void                   settle_flush();
     VkResult               present_now(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits);
     VkResult               copy(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits,
                                 uint32_t slot);
@@ -89,6 +99,9 @@ private:
     uint32_t       slot_images_[PresentDevice::slots];
     uint32_t       count_;
     uint32_t       next_;
+    uint32_t       held_index_;
+    VkQueue        held_queue_;
+    bool           flushing_;
     bool           through_chain_;
     bool           retired_;
     uint64_t       presented_;

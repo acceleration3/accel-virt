@@ -72,6 +72,8 @@ public:
     void                 set_owner(uint32_t thread);
     void                *current_dc() const;
     void                 set_current_dc(void *dc);
+    void                *held_swap() const;
+    void                 hold_swap(void *dc);
     int32_t              pixel_format() const;
     const GlContextOptions &options() const;
     uint32_t             share_name() const;
@@ -146,6 +148,7 @@ private:
     State                          state_;
     uint32_t                       owner_;
     void                          *current_dc_;
+    void                          *held_swap_;
     bool                           been_current_;
     uint32_t                       error_;
     uint64_t                       share_target_;

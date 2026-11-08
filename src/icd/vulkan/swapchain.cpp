@@ -27,7 +27,8 @@ Swapchain::Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &
       chained_(entries, device, host_device, chains, connection.transport()),
       lines_(log), pacing_(), luid_(connection.luid()),
       app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
-      holders_{}, slot_images_{}, count_(0u), next_(0u),
+      holders_{}, slot_images_{}, count_(0u), next_(0u), held_index_(no_image), held_queue_(VK_NULL_HANDLE),
+      flushing_(false),
       through_chain_(false), retired_(false), presented_(0u), window_refused_(), chain_refused_()
 {
     AV_SCOPE("Swapchain::Swapchain");
@@ -150,7 +151,7 @@ VkResult Swapchain::acquire(uint64_t timeout, uint32_t &index)
         presents_.acquire();
         for (uint32_t step = 0u; step < count_ && !found; step++) {
             const uint32_t candidate = (next_ + step) % count_;
-            presenting = presenting || holders_[candidate] == Holder::presents;
+            presenting = presenting || holders_[candidate] == Holder::presents || holders_[candidate] == Holder::held;
             if (holders_[candidate] != Holder::none) continue;
             holders_[candidate] = Holder::application;
             next_ = (candidate + 1u) % count_;
@@ -174,10 +175,8 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
         give(index, Holder::none);
         return state;
     }
-    if (!pacing_.admits()) {
-        give(index, Holder::none);
-        return device_.skip(queue, wait_count, waits);
-    }
+    if (!admitted()) return hold(queue, index, wait_count, waits);
+    settle_flush();
     if (through_chain_ && !chained_.opened()) {
         give(index, Holder::none);
         const VkResult skipped = device_.skip(queue, wait_count, waits);
@@ -200,6 +199,13 @@ VkResult Swapchain::hand_over(VkQueue queue, uint32_t index, uint32_t wait_count
         give(index, Holder::none);
         return device_.skip(queue, wait_count, waits);
     }
+    return send(queue, index, wait_count, waits, slot);
+}
+
+VkResult Swapchain::send(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits,
+                         uint32_t slot)
+{
+    AV_SCOPE("Swapchain::send");
     const VkResult copied = copy(queue, index, wait_count, waits, slot);
     if (copied != VK_SUCCESS) {
         give(index, Holder::none);
@@ -213,6 +219,98 @@ VkResult Swapchain::hand_over(VkQueue queue, uint32_t index, uint32_t wait_count
     const VkResult finished = device_.finish(slot);
     give(index, Holder::none);
     return finished;
+}
+
+VkResult Swapchain::hold(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits)
+{
+    AV_SCOPE("Swapchain::hold");
+    const VkResult skipped = device_.skip(queue, wait_count, waits);
+    if (skipped != VK_SUCCESS || retired_ || !presents_.start()) {
+        give(index, Holder::none);
+        return skipped;
+    }
+    presents_.acquire();
+    if (held_index_ != no_image) holders_[held_index_] = Holder::none;
+    holders_[index] = Holder::held;
+    held_index_ = index;
+    held_queue_ = queue;
+    presents_.release();
+    presents_.keep(*this);
+    return VK_SUCCESS;
+}
+
+bool Swapchain::admitted()
+{
+    AV_SCOPE("Swapchain::admitted");
+    presents_.acquire();
+    const bool admits = pacing_.admits();
+    presents_.release();
+    return admits;
+}
+
+void Swapchain::drop_held()
+{
+    AV_SCOPE("Swapchain::drop_held");
+    presents_.acquire();
+    if (held_index_ != no_image) holders_[held_index_] = Holder::none;
+    held_index_ = no_image;
+    presents_.release();
+}
+
+void Swapchain::settle_flush()
+{
+    AV_SCOPE("Swapchain::settle_flush");
+    for (;;) {
+        presents_.acquire();
+        const bool busy = flushing_;
+        if (!busy) {
+            if (held_index_ != no_image) holders_[held_index_] = Holder::none;
+            held_index_ = no_image;
+        }
+        presents_.release();
+        if (!busy) return;
+        presents_.await_shown(acquire_milliseconds);
+    }
+}
+
+bool Swapchain::claim_held(uint32_t &index, VkQueue &queue)
+{
+    AV_SCOPE("Swapchain::claim_held");
+    presents_.acquire();
+    const bool claimed = held_index_ != no_image;
+    if (claimed) {
+        index = held_index_;
+        queue = held_queue_;
+        held_index_ = no_image;
+        flushing_ = true;
+    }
+    presents_.release();
+    return claimed;
+}
+
+uint32_t Swapchain::flush_held()
+{
+    AV_SCOPE("Swapchain::flush_held");
+    presents_.acquire();
+    const bool holding = held_index_ != no_image;
+    presents_.release();
+    if (!holding) return 0u;
+    const uint32_t slots = through_chain_ ? 1u : PresentDevice::slots;
+    const bool open = window_state() == VK_SUCCESS && (!through_chain_ || chained_.opened());
+    const uint32_t slot = open ? presents_.try_slot(*this, slots, slots) : slots;
+    if (open && slot == slots) return pacing_.next_admit_milliseconds();
+    if (open && !admitted()) return pacing_.next_admit_milliseconds();
+    uint32_t index = no_image;
+    VkQueue  queue = VK_NULL_HANDLE;
+    if (!claim_held(index, queue)) return 0u;
+    VkResult shown = VK_ERROR_OUT_OF_DATE_KHR;
+    if (open) shown = send(queue, index, 0u, nullptr, slot);
+    else give(index, Holder::none);
+    presents_.acquire();
+    flushing_ = false;
+    if (shown == VK_SUCCESS) presented_++;
+    presents_.release();
+    return 0u;
 }
 
 VkResult Swapchain::present_now(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits)
@@ -295,6 +393,8 @@ void Swapchain::retire()
 {
     AV_SCOPE("Swapchain::retire");
     retired_ = true;
+    presents_.forget(*this);
+    drop_held();
     presents_.settle(*this);
     chained_.release();
 }
@@ -320,6 +420,8 @@ PresentPacing &Swapchain::pacing()
 void Swapchain::release()
 {
     AV_SCOPE("Swapchain::release");
+    presents_.forget(*this);
+    drop_held();
     presents_.settle(*this);
     if (retired_) chained_.release();
     else chained_.close();
@@ -338,6 +440,7 @@ bool Swapchain::invariants_hold() const
     if (count_ != 0u && through_chain_ && !retired_ && !chained_.opened()) return false;
     for (uint32_t index = count_; index < PresentDevice::max_images; index++)
         if (holders_[index] != Holder::none) return false;
+    if (held_index_ != no_image && (held_index_ >= count_ || holders_[held_index_] != Holder::held)) return false;
     return next_ < (count_ != 0u ? count_ : 1u);
 }
 

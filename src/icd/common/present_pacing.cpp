@@ -48,6 +48,12 @@ bool PresentPacing::admits()
     return pacer_.object().admits();
 }
 
+uint32_t PresentPacing::next_admit_milliseconds() const
+{
+    AV_SCOPE("PresentPacing::next_admit_milliseconds");
+    return pacer_.constructed() ? pacer_.object().next_blank_milliseconds() : 1u;
+}
+
 void PresentPacing::after_present()
 {
     AV_SCOPE("PresentPacing::after_present");

@@ -65,6 +65,13 @@ bool FramePacer::admits_on_schedule(uint64_t now, uint64_t period)
     return true;
 }
 
+uint32_t FramePacer::next_blank_milliseconds() const
+{
+    AV_SCOPE("FramePacer::next_blank_milliseconds");
+    const uint32_t millihz = refresh_millihz_ != 0u ? refresh_millihz_ : DisplayMode::default_refresh_millihz;
+    return (1000000u + millihz - 1u) / millihz;
+}
+
 uint64_t FramePacer::blanks() const
 {
     AV_SCOPE("FramePacer::blanks");

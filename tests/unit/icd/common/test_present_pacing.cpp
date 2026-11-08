@@ -130,3 +130,10 @@ TEST(present_pacing, its_invariants_catch_too_many_blanks_and_a_pacer_that_is_un
   CHECK(pacing.invariants_hold());
   FramePacerProbe::count_a_blank_without_an_adapter(PresentPacingProbe::pacer(pacing));
   CHECK(!pacing.invariants_hold()); }
+
+TEST(present_pacing, the_next_admit_is_a_millisecond_away_until_a_pacer_knows_the_refresh)
+{ PacingRig rig;
+  PresentPacing pacing;
+  CHECK_EQ(pacing.next_admit_milliseconds(), 1u);
+  CHECK_STATUS(rig.bind(pacing), av::Status::ok);
+  CHECK_EQ(pacing.next_admit_milliseconds(), 17u); }

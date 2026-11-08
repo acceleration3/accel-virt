@@ -63,6 +63,22 @@ private:
     bool          last_drawn_ = false;
 };
 
+class Keeper final : public av::icd::HeldFlusher {
+public:
+    std::uint32_t flush_held() override
+    {
+        flushed_++;
+        return later_;
+    }
+
+    void          later(std::uint32_t milliseconds) { later_ = milliseconds; }
+    std::uint32_t flushed() const { return flushed_; }
+
+private:
+    std::uint32_t later_ = 0u;
+    std::uint32_t flushed_ = 0u;
+};
+
 struct Rig {
     av::MockPlatform          platform;
     av::RecordingLog          log;
@@ -264,3 +280,70 @@ TEST(window_present_queue, a_red_first_frame_is_not_shown_when_it_cannot_be_trad
   CHECK(starved.queue.invariants_hold());
   CHECK(starved.queue.show_now(tiny));
   CHECK_EQ(starved.surface.blits(), 1u); }
+
+TEST(window_present_queue, a_kept_owner_is_flushed_by_the_thread_and_forgotten_once_it_holds_nothing)
+{ Rig rig;
+  Keeper keeper;
+  CHECK(rig.queue.start());
+  rig.queue.keep(keeper);
+  rig.queue.keep(keeper);
+  CHECK_EQ(rig.handed.raises(), 2u);
+  CHECK(rig.thread.step());
+  CHECK_EQ(keeper.flushed(), 1u);
+  CHECK_EQ(rig.handed.waits(), 0u);
+  CHECK_EQ(rig.shown.raises(), 1u);
+  CHECK(rig.thread.step());
+  CHECK_EQ(keeper.flushed(), 1u);
+  CHECK_EQ(rig.handed.last_wait(), Queue::idle_milliseconds);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, an_owner_that_still_holds_a_frame_sets_how_long_the_thread_rests)
+{ Rig rig;
+  Keeper first;
+  Keeper second;
+  first.later(17u);
+  second.later(5u);
+  CHECK(rig.queue.start());
+  rig.queue.keep(first);
+  rig.queue.keep(second);
+  CHECK(rig.thread.step());
+  CHECK_EQ(rig.handed.last_wait(), 5u);
+  second.later(0u);
+  CHECK(rig.thread.step());
+  CHECK(rig.thread.step());
+  CHECK_EQ(first.flushed(), 3u);
+  CHECK_EQ(second.flushed(), 2u);
+  CHECK_EQ(rig.handed.last_wait(), 17u);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, a_queued_frame_is_shown_before_any_kept_owner_is_flushed)
+{ Rig rig;
+  Keeper keeper;
+  CHECK(rig.queue.start());
+  CHECK(rig.queue.hand(rig.frame(1u)));
+  rig.queue.keep(keeper);
+  CHECK(rig.thread.step());
+  CHECK_EQ(keeper.flushed(), 0u);
+  CHECK_EQ(rig.surface.blits(), 1u);
+  CHECK(rig.thread.step());
+  CHECK_EQ(keeper.flushed(), 1u); }
+
+TEST(window_present_queue, a_forgotten_owner_is_not_flushed)
+{ Rig rig;
+  Keeper keeper;
+  CHECK(rig.queue.start());
+  rig.queue.keep(keeper);
+  rig.queue.forget(keeper);
+  rig.queue.forget(keeper);
+  CHECK(rig.thread.step());
+  CHECK_EQ(keeper.flushed(), 0u);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, a_slot_is_looked_for_once_without_waiting)
+{ Rig rig;
+  CHECK(rig.queue.start());
+  CHECK(rig.queue.hand(rig.frame(0u)));
+  CHECK_EQ(rig.queue.try_slot(rig.owner, 2u, 2u), 1u);
+  CHECK(rig.queue.hand(rig.frame(1u)));
+  CHECK_EQ(rig.queue.try_slot(rig.owner, 2u, 2u), 2u);
+  CHECK_EQ(rig.shown.waits(), 0u); }

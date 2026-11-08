@@ -10,6 +10,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/frame_wait.hpp"
+#include "icd/common/held_flusher.hpp"
 #include "icd/common/handed_frame.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/common/service_thread.hpp"
@@ -44,6 +45,9 @@ public:
     bool     start();
     void     refuse();
     uint32_t free_slot(const Source &owner, uint32_t slots, uint32_t reserved);
+    uint32_t try_slot(const Source &owner, uint32_t slots, uint32_t reserved);
+    void     keep(HeldFlusher &owner);
+    void     forget(HeldFlusher &owner);
     bool     hand(const Frame &frame);
     void     settle(const Source &owner);
     void     await_shown(uint32_t milliseconds);
@@ -85,6 +89,8 @@ private:
     const uint8_t *as_bgra(const Frame &frame);
     bool     stopping() const;
     void     log_refusal();
+    bool     flush_keepers(uint32_t &rest);
+    uint32_t keeper_of(const HeldFlusher *owner) const;
 
     BlockSource    &memory_;
     ServiceThread  &thread_;
@@ -96,6 +102,8 @@ private:
     WindowChains   &chains_;
     DriverLog      &lines_;
     GrowableArray<Row> rows_;
+    GrowableArray<HeldFlusher *> keepers_;
+    HeldFlusher    *flushing_;
     uint64_t        next_order_;
     uint64_t        shown_frames_;
     uint64_t        dropped_frames_;
@@ -114,7 +122,8 @@ WindowPresentQueue<Source, Readiness>::WindowPresentQueue(BlockSource &memory, S
                                                           Readiness &readiness, WindowSurface &surface,
                                                           WindowChains &chains, DriverLog &log)
     : memory_(memory), thread_(thread), handed_(handed), shown_(shown), lock_(lock), readiness_(readiness),
-      surface_(surface), chains_(chains), lines_(log), rows_(memory, Pool::paged), next_order_(1u),
+      surface_(surface), chains_(chains), lines_(log), rows_(memory, Pool::paged), keepers_(memory, Pool::paged), flushing_(nullptr),
+      next_order_(1u),
       shown_frames_(0u), dropped_frames_(0u), scratch_(nullptr), scratch_bytes_(0u), stopping_(0u), refused_(false),
       refusal_logged_()
 {
@@ -153,17 +162,49 @@ uint32_t WindowPresentQueue<Source, Readiness>::free_slot(const Source &owner, u
 {
     AV_SCOPE("WindowPresentQueue::free_slot");
     for (uint32_t look = 0u; look < slot_looks; look++) {
-        uint32_t slot = 0u;
-        {
-            const ThreadLockHold held(lock_);
-            while (slot < slots && (slot == reserved || holds(owner, slot))) slot++;
-        }
+        const uint32_t slot = try_slot(owner, slots, reserved);
         if (slot != slots) return slot;
         static_cast<void>(shown_.wait(slot_milliseconds));
     }
     const ThreadLockHold held(lock_);
     dropped_frames_++;
     return slots;
+}
+
+template <typename Source, typename Readiness>
+uint32_t WindowPresentQueue<Source, Readiness>::try_slot(const Source &owner, uint32_t slots, uint32_t reserved)
+{
+    AV_SCOPE("WindowPresentQueue::try_slot");
+    uint32_t slot = 0u;
+    const ThreadLockHold held(lock_);
+    while (slot < slots && (slot == reserved || holds(owner, slot))) slot++;
+    return slot;
+}
+
+template <typename Source, typename Readiness>
+void WindowPresentQueue<Source, Readiness>::keep(HeldFlusher &owner)
+{
+    AV_SCOPE("WindowPresentQueue::keep");
+    {
+        const ThreadLockHold held(lock_);
+        if (keeper_of(&owner) == no_row) static_cast<void>(keepers_.append(&owner));
+    }
+    handed_.raise();
+}
+
+template <typename Source, typename Readiness>
+void WindowPresentQueue<Source, Readiness>::forget(HeldFlusher &owner)
+{
+    AV_SCOPE("WindowPresentQueue::forget");
+    for (;;) {
+        {
+            const ThreadLockHold held(lock_);
+            const uint32_t       at = keeper_of(&owner);
+            if (at != no_row) keepers_.remove_swap(at);
+            if (flushing_ != &owner || !thread_.running()) return;
+        }
+        static_cast<void>(shown_.wait(slot_milliseconds));
+    }
 }
 
 template <typename Source, typename Readiness>
@@ -257,8 +298,48 @@ bool WindowPresentQueue<Source, Readiness>::turn()
         return true;
     }
     if (stopping()) return false;
-    static_cast<void>(handed_.wait(idle_milliseconds));
+    uint32_t rest = idle_milliseconds;
+    if (flush_keepers(rest)) return true;
+    static_cast<void>(handed_.wait(rest));
     return true;
+}
+
+template <typename Source, typename Readiness>
+bool WindowPresentQueue<Source, Readiness>::flush_keepers(uint32_t &rest)
+{
+    AV_SCOPE("WindowPresentQueue::flush_keepers");
+    bool flushed = false;
+    for (uint32_t index = 0u;; index++) {
+        HeldFlusher *owner = nullptr;
+        {
+            const ThreadLockHold held(lock_);
+            if (index >= keepers_.size()) return flushed;
+            owner = keepers_.at(index);
+            flushing_ = owner;
+        }
+        const uint32_t later = owner->flush_held();
+        {
+            const ThreadLockHold held(lock_);
+            flushing_ = nullptr;
+            const uint32_t at = keeper_of(owner);
+            if (later == 0u && at != no_row) {
+                keepers_.remove_swap(at);
+                index--;
+                flushed = true;
+            }
+        }
+        shown_.raise();
+        if (later != 0u && later < rest) rest = later;
+    }
+}
+
+template <typename Source, typename Readiness>
+uint32_t WindowPresentQueue<Source, Readiness>::keeper_of(const HeldFlusher *owner) const
+{
+    AV_SCOPE("WindowPresentQueue::keeper_of");
+    for (uint32_t at = 0u; at < keepers_.size(); at++)
+        if (keepers_.at(at) == owner) return at;
+    return no_row;
 }
 
 template <typename Source, typename Readiness>
@@ -309,7 +390,7 @@ bool WindowPresentQueue<Source, Readiness>::invariants_hold() const
         for (uint32_t earlier = 0u; earlier < row && held; earlier++)
             if (rows_.at(earlier).stage_ != Stage::free && rows_.at(earlier).order_ == at.order_) return false;
     }
-    return rows_.invariants_hold() && (scratch_ != nullptr) == (scratch_bytes_ != 0u);
+    return rows_.invariants_hold() && keepers_.invariants_hold() && (scratch_ != nullptr) == (scratch_bytes_ != 0u);
 }
 
 template <typename Source, typename Readiness>

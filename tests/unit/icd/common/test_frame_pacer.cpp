@@ -235,3 +235,16 @@ TEST(frame_pacer, a_pacer_with_no_adapter_that_counted_a_blank_is_unsound)
   CHECK(!pacer.invariants_hold());
   FramePacerProbe::set_blanks(pacer, 0u);
   CHECK(pacer.invariants_hold()); }
+
+TEST(frame_pacer, the_next_blank_is_a_refresh_away_rounded_up_to_a_whole_millisecond)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
+  CHECK_EQ(pacer.next_blank_milliseconds(), 17u);
+  rig.kmt().set_refresh_millihz(240000u);
+  rig.kmt().reads_clock(nullptr, 100u);
+  static_cast<void>(pacer.admits());
+  CHECK_EQ(pacer.next_blank_milliseconds(), 5u);
+  rig.kmt().set_refresh_millihz(1000000u);
+  rig.kmt().reads_clock(nullptr, MockKmt::ticks_per_second);
+  static_cast<void>(pacer.admits());
+  CHECK_EQ(pacer.next_blank_milliseconds(), 1u); }

@@ -770,3 +770,142 @@ TEST(swapchain, its_invariants_refuse_a_pacing_and_a_chained_image_that_are_unso
     CHECK(rig.chain().invariants_hold());
     SwapchainProbe::unsound_chained_image(rig.chain());
     CHECK(!rig.chain().invariants_hold()); } }
+
+namespace {
+
+constexpr std::uint64_t one_refresh = MockKmt::ticks_per_second / 60u;
+
+VkSwapchainCreateInfoKHR immediate_info()
+{ VkSwapchainCreateInfoKHR info = create_info();
+  info.minImageCount = 3u;
+  info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+  return info; }
+
+std::uint32_t present_painted(SwapchainRig &rig, Swapchain &chain, std::uint8_t red, std::uint32_t waits = 0u,
+                              const VkSemaphore *semaphores = nullptr)
+{ std::uint32_t index = 9u;
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  VkImage made[8] = {};
+  std::uint32_t count = 8u;
+  CHECK_EQ(chain.images(count, made), VK_SUCCESS);
+  rig.host().paint(made[index], red, 0u, 0u, 0xFFu);
+  CHECK_EQ(chain.present(rig.host().queue(), index, waits, semaphores), VK_SUCCESS);
+  return index; }
+
+}
+
+TEST(swapchain, the_newest_present_a_pacing_refused_is_held_and_shown_at_the_next_blank)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  present_painted(rig, chain, 0x22u);
+  CHECK_EQ(chain.presented(), 1u);
+  CHECK(chain.invariants_hold());
+  rig.thread().step();
+  CHECK_EQ(rig.windows().blits(), 1u);
+  CHECK_EQ(rig.windows().last_blit_bytes()[0], 0x11u);
+  rig.thread().step();
+  CHECK_EQ(rig.windows().blits(), 1u);
+  CHECK_EQ(chain.presented(), 1u);
+  rig.kmt().reads_clock(nullptr, one_refresh);
+  rig.thread().step();
+  CHECK_EQ(chain.presented(), 2u);
+  rig.thread().step();
+  CHECK_EQ(rig.windows().blits(), 2u);
+  CHECK_EQ(rig.windows().last_blit_bytes()[0], 0x22u);
+  CHECK_EQ(rig.presents().queued(), 0u);
+  CHECK(chain.invariants_hold());
+  CHECK(rig.presents().invariants_hold()); }
+
+TEST(swapchain, a_newer_refused_present_replaces_the_held_one_and_gives_its_image_back)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  const std::uint32_t older = present_painted(rig, chain, 0x22u);
+  const std::uint32_t newer = present_painted(rig, chain, 0x33u);
+  CHECK(older != newer);
+  std::uint32_t free_image = 9u;
+  CHECK_EQ(chain.acquire(0u, free_image), VK_SUCCESS);
+  CHECK_EQ(free_image, older);
+  rig.thread().step();
+  rig.kmt().reads_clock(nullptr, one_refresh);
+  rig.thread().step();
+  rig.thread().step();
+  CHECK_EQ(rig.windows().blits(), 2u);
+  CHECK_EQ(rig.windows().last_blit_bytes()[0], 0x33u);
+  CHECK(chain.invariants_hold()); }
+
+TEST(swapchain, a_refused_present_still_consumes_its_semaphores_on_the_queue)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  const std::uint32_t before = rig.host().submits();
+  const VkSemaphore waits[2] = {reinterpret_cast<VkSemaphore>(0x71u), reinterpret_cast<VkSemaphore>(0x72u)};
+  present_painted(rig, chain, 0x22u, 2u, waits);
+  CHECK_EQ(rig.host().submits(), before + 1u);
+  CHECK_EQ(rig.host().last_wait_count(), 2u);
+  CHECK(chain.invariants_hold()); }
+
+TEST(swapchain, a_present_the_pacing_admits_supersedes_the_held_one)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  present_painted(rig, chain, 0x22u);
+  rig.kmt().reads_clock(nullptr, one_refresh);
+  present_painted(rig, chain, 0x33u);
+  rig.pump();
+  CHECK_EQ(rig.windows().blits(), 2u);
+  CHECK_EQ(rig.windows().last_blit_bytes()[0], 0x33u);
+  CHECK_EQ(chain.presented(), 2u);
+  CHECK(chain.invariants_hold());
+  CHECK(rig.presents().invariants_hold()); }
+
+TEST(swapchain, a_held_present_of_a_window_that_went_is_dropped_and_its_image_freed)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  present_painted(rig, chain, 0x22u);
+  rig.windows().resize(rig.window(), width + 1u, height);
+  rig.thread().step();
+  rig.kmt().reads_clock(nullptr, one_refresh);
+  rig.thread().step();
+  rig.thread().step();
+  CHECK_EQ(rig.windows().blits(), 1u);
+  CHECK_EQ(chain.presented(), 1u);
+  CHECK(chain.invariants_hold()); }
+
+TEST(swapchain, a_swapchain_that_goes_while_a_present_is_held_takes_the_held_image_with_it)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  present_painted(rig, chain, 0x22u);
+  rig.reset_first();
+  rig.kmt().reads_clock(nullptr, one_refresh);
+  rig.pump();
+  CHECK_EQ(rig.windows().blits(), 0u);
+  CHECK(rig.presents().invariants_hold()); }
+
+TEST(swapchain, a_refused_present_without_a_present_thread_is_dropped_as_before)
+{ SwapchainRig rig;
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  present_painted(rig, chain, 0x22u);
+  for (std::uint32_t each = 0u; each < 3u; each++) {
+      std::uint32_t again = 9u;
+      CHECK_EQ(chain.acquire(0u, again), VK_SUCCESS);
+  }
+  CHECK(chain.invariants_hold()); }

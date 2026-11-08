@@ -25,6 +25,7 @@ public:
 
     void     wait();
     bool     admits();
+    uint32_t next_blank_milliseconds() const;
     uint64_t blanks() const;
     uint64_t failures() const;
 

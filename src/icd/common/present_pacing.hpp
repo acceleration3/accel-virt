@@ -28,6 +28,7 @@ public:
     [[nodiscard]] bool ask(int32_t blanks);
     uint32_t           blanks() const;
     bool               admits();
+    uint32_t           next_admit_milliseconds() const;
     void               after_present();
     uint64_t           waited() const;
 
