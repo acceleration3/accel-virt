@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d12_copy_extent.hpp"
 #include "executor/d3d/d3d12_copy_formats.hpp"
+#include "executor/d3d/d3d12_row_copies.hpp"
 #include "executor/d3d/d3d12_copy_pair.hpp"
 #include "executor/d3d/d3d12_subresource_extent.hpp"
 #include "executor/d3d/d3d12_footprint.hpp"
@@ -401,8 +402,47 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
     if (!copy_bounds_hold(destination, to, written) || !copy_bounds_hold(source, from, extent.read())) return false;
     if (!copy_formats_hold(destination, source, to, from)) return false;
     if (!retain_resource(id, destination.resource) || !retain_resource(id, source.resource)) return false;
+    const bool                      into_footprint = destination.type == copy_footprint;
+    const bool                      from_footprint = source.type == copy_footprint;
+    const d3d12proto::CopyLocation &placed = into_footprint ? destination : source;
+    if ((into_footprint || from_footprint) &&
+        D3d12RowCopies(placed.format, placed.height, placed.row_pitch).needed())
+        return copy_by_rows(recorded, destination, x, y, z, source, extent.read());
     const D3D12_BOX made_box = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     recorded->CopyTextureRegion(&to, x, y, z, &from, has_box != 0u ? &made_box : nullptr);
+    return true;
+}
+
+bool D3d12Session::copy_by_rows(ID3D12GraphicsCommandList *recorded, const d3d12proto::CopyLocation &destination,
+                                uint32_t x, uint32_t y, uint32_t z, const d3d12proto::CopyLocation &source,
+                                const d3d12proto::Box &read)
+{
+    AV_SCOPE("D3d12Session::copy_by_rows");
+    const bool                      into_footprint = destination.type == copy_footprint;
+    const d3d12proto::CopyLocation &placed = into_footprint ? destination : source;
+    const D3d12RowCopies            rows(placed.format, placed.height, placed.row_pitch);
+    const uint32_t                  width = read.right - read.left;
+    for (uint32_t slice = 0u; slice < read.back - read.front; slice++) {
+        for (uint32_t row = 0u; row < read.bottom - read.top; row++) {
+            D3D12_TEXTURE_COPY_LOCATION to = {};
+            D3D12_TEXTURE_COPY_LOCATION from = {};
+            if (!copy_location(destination, to) || !copy_location(source, from)) return false;
+            D3D12_TEXTURE_COPY_LOCATION &line = into_footprint ? to : from;
+            line.PlacedFootprint.Footprint.Width = width;
+            line.PlacedFootprint.Footprint.Height = 1u;
+            line.PlacedFootprint.Footprint.Depth = 1u;
+            line.PlacedFootprint.Footprint.RowPitch = rows.pitch_of(width);
+            if (into_footprint) {
+                line.PlacedFootprint.Offset = rows.row_offset(placed.offset, z + slice, y + row, x);
+                const D3D12_BOX row_box = {read.left, read.top + row, read.front + slice, read.right,
+                                           read.top + row + 1u, read.front + slice + 1u};
+                recorded->CopyTextureRegion(&to, 0u, 0u, 0u, &from, &row_box);
+            } else {
+                line.PlacedFootprint.Offset = rows.row_offset(placed.offset, read.front + slice, read.top + row, read.left);
+                recorded->CopyTextureRegion(&to, x, y + row, z + slice, &from, nullptr);
+            }
+        }
+    }
     return true;
 }
 

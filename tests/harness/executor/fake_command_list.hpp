@@ -31,7 +31,23 @@ public:
     void STDMETHODCALLTYPE DrawIndexedInstanced(UINT, UINT, UINT, INT, UINT) override { recorded++; }
     void STDMETHODCALLTYPE Dispatch(UINT, UINT, UINT) override { recorded++; }
     void STDMETHODCALLTYPE CopyBufferRegion(ID3D12Resource *, UINT64, ID3D12Resource *, UINT64, UINT64) override { recorded++; buffer_copies++; }
-    void STDMETHODCALLTYPE CopyTextureRegion(const D3D12_TEXTURE_COPY_LOCATION *, UINT, UINT, UINT, const D3D12_TEXTURE_COPY_LOCATION *, const D3D12_BOX *) override { recorded++; texture_copies++; }
+    void STDMETHODCALLTYPE CopyTextureRegion(const D3D12_TEXTURE_COPY_LOCATION *to, UINT x, UINT y, UINT z, const D3D12_TEXTURE_COPY_LOCATION *from, const D3D12_BOX *box) override
+    {
+        if (texture_copies < most_logged_copies) {
+            const D3D12_TEXTURE_COPY_LOCATION &placed = to->Type == D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT ? *to : *from;
+            CopyLog &entry = copy_log[texture_copies];
+            entry.placed = placed.Type == D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            entry.offset = placed.PlacedFootprint.Offset;
+            entry.width = placed.PlacedFootprint.Footprint.Width;
+            entry.height = placed.PlacedFootprint.Footprint.Height;
+            entry.row_pitch = placed.PlacedFootprint.Footprint.RowPitch;
+            entry.x = x; entry.y = y; entry.z = z;
+            entry.boxed = box != nullptr;
+            if (box != nullptr) { entry.box_left = box->left; entry.box_top = box->top; entry.box_front = box->front; }
+        }
+        recorded++;
+        texture_copies++;
+    }
     void STDMETHODCALLTYPE CopyResource(ID3D12Resource *, ID3D12Resource *) override { recorded++; whole_copies++; }
     void STDMETHODCALLTYPE CopyTiles(ID3D12Resource *, const D3D12_TILED_RESOURCE_COORDINATE *, const D3D12_TILE_REGION_SIZE *, ID3D12Resource *, UINT64, D3D12_TILE_COPY_FLAGS) override { recorded++; }
     void STDMETHODCALLTYPE ResolveSubresource(ID3D12Resource *, UINT, ID3D12Resource *, UINT, DXGI_FORMAT) override { recorded++; }
@@ -127,6 +143,16 @@ public:
     std::uint32_t buffer_copies = 0u;
     std::uint32_t whole_copies = 0u;
     std::uint32_t texture_copies = 0u;
+    static constexpr std::uint32_t most_logged_copies = 64u;
+    struct CopyLog {
+        bool          placed = false;
+        bool          boxed = false;
+        std::uint64_t offset = 0u;
+        std::uint32_t width = 0u, height = 0u, row_pitch = 0u;
+        std::uint32_t x = 0u, y = 0u, z = 0u;
+        std::uint32_t box_left = 0u, box_top = 0u, box_front = 0u;
+    };
+    CopyLog copy_log[most_logged_copies];
 };
 
 }

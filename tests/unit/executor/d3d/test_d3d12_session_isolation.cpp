@@ -492,3 +492,57 @@ TEST(d3d12_session_isolation, a_resolve_names_subresources_of_one_size_and_sampl
   scene.rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 4u);
   scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 4u);
   CHECK(!scene.session().on_ResolveSubresource12(list, texture, 0u, other_texture, 0u, format_rgba)); }
+
+TEST(d3d12_session_isolation, a_96_bit_footprint_whose_pitch_is_not_whole_texels_is_copied_one_row_at_a_time)
+{ constexpr std::uint32_t format_rgb32 = 6u;
+  Scene scene;
+  scene.dst.desc = buffer_desc(1u << 16);
+  scene.src.desc = buffer_desc(1u << 16);
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_R32G32B32_FLOAT, 5u, 3u);
+  const CopyLocation image = subresource_of(texture);
+  CopyLocation       from = footprint_of(source, format_rgb32, 5u, 3u);
+  from.offset = 512u;
+  CHECK(scene.session().on_CopyTextureRegion12(list, image, 0u, 0u, 0u, from, 0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 3u);
+  for (std::uint32_t row = 0u; row < 3u; row++) {
+      const av::FakeCommandList::CopyLog &each = scene.commands.copy_log[row];
+      CHECK_EQ(each.offset, 512u + std::uint64_t{row} * 256u);
+      CHECK_EQ(each.width, 5u);
+      CHECK_EQ(each.height, 1u);
+      CHECK_EQ(each.row_pitch, 60u);
+      CHECK_EQ(each.y, row);
+      CHECK(!each.boxed);
+  }
+  CopyLocation into = footprint_of(target, format_rgb32, 5u, 3u);
+  into.offset = 1024u;
+  CHECK(scene.session().on_CopyTextureRegion12(list, into, 0u, 1u, 0u, image, 1u, Box{0u, 1u, 0u, 5u, 3u, 1u}));
+  CHECK_EQ(scene.commands.texture_copies, 5u);
+  for (std::uint32_t row = 0u; row < 2u; row++) {
+      const av::FakeCommandList::CopyLog &each = scene.commands.copy_log[3u + row];
+      CHECK_EQ(each.offset, 1024u + (1u + std::uint64_t{row}) * 256u);
+      CHECK_EQ(each.row_pitch, 60u);
+      CHECK_EQ(each.x + each.y + each.z, 0u);
+      CHECK(each.boxed);
+      CHECK_EQ(each.width, 5u);
+      CHECK_EQ(each.box_top, 1u + row);
+  } }
+
+TEST(d3d12_session_isolation, a_96_bit_footprint_copy_that_leaves_its_buffer_is_still_refused_before_it_is_split)
+{ constexpr std::uint32_t format_rgb32 = 6u;
+  Scene scene;
+  scene.src.desc = buffer_desc(512u);
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_R32G32B32_FLOAT, 5u, 3u);
+  CHECK(!scene.session().on_CopyTextureRegion12(list, subresource_of(texture), 0u, 0u, 0u,
+                                                footprint_of(source, format_rgb32, 5u, 3u), 0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 0u); }
+
+TEST(d3d12_session_isolation, a_footprint_with_a_pitch_of_whole_texels_is_copied_whole)
+{ constexpr std::uint32_t format_rgb32 = 6u;
+  Scene scene;
+  scene.src.desc = buffer_desc(1u << 16);
+  scene.rgba.desc = texture_desc(DXGI_FORMAT_R32G32B32_FLOAT, 5u, 3u);
+  CopyLocation from = footprint_of(source, format_rgb32, 5u, 3u);
+  from.row_pitch = 192u;
+  CHECK(scene.session().on_CopyTextureRegion12(list, subresource_of(texture), 0u, 0u, 0u, from, 0u, Box{}));
+  CHECK_EQ(scene.commands.texture_copies, 1u);
+  CHECK_EQ(scene.commands.copy_log[0].row_pitch, 192u); }

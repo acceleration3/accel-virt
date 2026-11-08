@@ -178,6 +178,9 @@ private:
                                                  const D3D12_TEXTURE_COPY_LOCATION &from) const;
     bool                       footprint_placeable(const D3D12_RESOURCE_DESC &texture, uint32_t subresource,
                                                    uint32_t footprint_format) const;
+    bool                       copy_by_rows(ID3D12GraphicsCommandList *recorded, const d3d12proto::CopyLocation &destination,
+                                            uint32_t x, uint32_t y, uint32_t z,
+                                            const d3d12proto::CopyLocation &source, const d3d12proto::Box &read);
     bool                       footprint_holds(const d3d12proto::CopyLocation &location,
                                                const d3d12proto::Box &region) const;
     bool                       tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,

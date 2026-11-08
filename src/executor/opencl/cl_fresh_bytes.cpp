@@ -110,7 +110,7 @@ bool ClFreshBytes::zero_image(cl_context context, cl_device_id device, cl_mem im
 
 uint64_t ClFreshBytes::zeroings() const
 {
-    AV_SCOPE("ClFreshBytes::zeroed");
+    AV_SCOPE("ClFreshBytes::zeroings");
     return zeroings_;
 }
 
