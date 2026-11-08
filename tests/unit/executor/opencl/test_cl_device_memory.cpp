@@ -90,9 +90,9 @@ TEST(cl_device_memory, forgetting_an_unknown_object_changes_nothing)
   std::uint64_t claimed = 0u;
   CHECK_EQ(rig.memory.claim(CL_MEM_READ_WRITE, gib, claimed), CL_SUCCESS);
   CHECK(rig.memory.keep(handle(0x50), claimed));
-  rig.memory.forget(handle(0x60));
-  rig.memory.forget(handle(0x50));
-  rig.memory.forget(handle(0x50));
+  CHECK_EQ(rig.memory.forget(handle(0x60)), 0u);
+  CHECK_EQ(rig.memory.forget(handle(0x50)), gib);
+  CHECK_EQ(rig.memory.forget(handle(0x50)), 0u);
   CHECK_EQ(rig.ledger.used(), 0u); }
 
 TEST(cl_device_memory, clearing_returns_every_object_the_guest_never_released)
@@ -103,7 +103,7 @@ TEST(cl_device_memory, clearing_returns_every_object_the_guest_never_released)
       CHECK(rig.memory.keep(handle(key * 16u), claimed));
   }
   CHECK_EQ(rig.ledger.used(), 5 * gib);
-  rig.memory.clear();
+  CHECK_EQ(rig.memory.clear(), 5 * gib);
   CHECK_EQ(rig.ledger.used(), 0u);
   CHECK_EQ(rig.memory.objects(), 0u); }
 

@@ -10,6 +10,7 @@
 #include "executor/shim/host_heap.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/host_ram_ledger.hpp"
+#include "executor/opencl/cl_freed_memory.hpp"
 #include "executor/vram_ledger.hpp"
 #include "harness/executor/mock_memory_exporter.hpp"
 
@@ -49,6 +50,8 @@ public:
     HostMemorySource   *memory_source(uint32_t index) override;
     VramLedger         *vram_ledger(uint32_t index) override;
     VramLedger         &ledger();
+    ClFreedMemory      *cl_freed(uint32_t index) override;
+    ClFreedMemory      &freed();
     HostRamLedger      *host_ram_ledger() override;
     HostRamLedger      &host_ram();
 
@@ -73,6 +76,7 @@ private:
     MockMemoryExporter exporter_;
     HostMemorySource   source_;
     VramLedger         ledger_;
+    ClFreedMemory      freed_;
     HostRamLedger      host_ram_;
     bool               memory_withheld_;
 };

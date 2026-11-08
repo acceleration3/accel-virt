@@ -26,8 +26,8 @@ public:
     [[nodiscard]] cl_int claim(cl_mem_flags flags, uint64_t bytes, uint64_t &claimed);
     [[nodiscard]] bool   keep(cl_mem memory, uint64_t claimed);
     void                 unclaim(uint64_t claimed);
-    void                 forget(cl_mem memory);
-    void                 clear();
+    uint64_t             forget(cl_mem memory);
+    uint64_t             clear();
 
     uint64_t held() const;
     uint64_t host_held() const;

@@ -1,5 +1,6 @@
 #include "core/log/driver_log.hpp"
 #include "executor/executor_log.hpp"
+#include "executor/opencl/cl_freed_memory.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/host_ram_ledger.hpp"
 #include "harness/executor/fake_memory_gauge.hpp"
@@ -348,3 +349,34 @@ TEST(opencl_backend_host_ram, a_host_resident_buffer_the_host_cannot_spare_is_ou
   CHECK_EQ(fake.creates, 0u);
   gauge.set(20 * gib, av::HostRamLedger::refresh_ms);
   CHECK(rig.buffer(2 * gib, CL_MEM_ALLOC_HOST_PTR, error) != nullptr); }
+
+TEST(opencl_backend_freed, a_released_buffer_a_freed_svm_block_and_what_a_shut_down_session_left_are_told_to_the_shared_total)
+{ av::ClFreedMemory shared;
+  av::HostRamLedger host;
+  Rig rig;
+  host.budget(8 * gib);
+  rig.backend().use_vram(&rig.ledger(), &host);
+  rig.backend().use_freed(&shared);
+  cl_int error = CL_SUCCESS;
+  cl_mem const first = rig.buffer(1u << 20, CL_MEM_READ_WRITE, error);
+  CHECK(first != nullptr);
+  CHECK_EQ(shared.total(), 0u);
+  CHECK_EQ(rig.backend().on_clReleaseMemObject(first), CL_SUCCESS);
+  CHECK_EQ(shared.total(), 2u << 20);
+  void *const block = rig.backend().on_clSVMAlloc(nullptr, 0u, 3u << 20, 0u);
+  CHECK(block != nullptr);
+  rig.backend().on_clSVMFree(nullptr, block);
+  CHECK_EQ(shared.total(), (2u << 20) + (8u << 20));
+  CHECK(rig.buffer(1u << 20, CL_MEM_READ_WRITE, error) != nullptr);
+  rig.backend().shut_down();
+  CHECK_EQ(shared.total(), (2u << 20) + (8u << 20) + (2u << 20)); }
+
+TEST(opencl_backend_freed, a_buffer_the_guest_still_holds_a_reference_to_is_not_freed_yet)
+{ av::ClFreedMemory shared;
+  Rig rig;
+  rig.backend().use_freed(&shared);
+  cl_int error = CL_SUCCESS;
+  cl_mem const held = rig.buffer(4096u, CL_MEM_READ_WRITE, error);
+  fake.references = 2u;
+  CHECK_EQ(rig.backend().on_clReleaseMemObject(held), CL_SUCCESS);
+  CHECK_EQ(shared.total(), 0u); }

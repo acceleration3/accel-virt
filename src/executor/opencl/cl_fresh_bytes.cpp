@@ -1,12 +1,13 @@
 #include "executor/opencl/cl_fresh_bytes.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/opencl/cl_freed_memory.hpp"
 #include "executor/opencl/cl_queue_wait.hpp"
 
 namespace av {
 
 ClFreshBytes::ClFreshBytes(ClQueueWait &wait)
-    : wait_(wait), context_(nullptr), device_(nullptr), queue_(nullptr), zeroings_(0u), pattern_{}
+    : wait_(wait), context_(nullptr), device_(nullptr), queue_(nullptr), freed_(nullptr), own_(0u), zeroings_(0u), skipped_(0u), pattern_{}
 {
     AV_SCOPE("ClFreshBytes::ClFreshBytes");
 }
@@ -52,10 +53,55 @@ uint64_t ClFreshBytes::pattern_bytes(uint64_t bytes) const
     return lowest < widest_pattern ? lowest : widest_pattern;
 }
 
+void ClFreshBytes::share(ClFreedMemory *freed)
+{
+    AV_SCOPE("ClFreshBytes::share");
+    freed_ = freed;
+    own_ = 0u;
+}
+
+void ClFreshBytes::leave()
+{
+    AV_SCOPE("ClFreshBytes::leave");
+    own_ = 0u;
+}
+
+uint64_t ClFreshBytes::reach_of(uint64_t bytes) const
+{
+    AV_SCOPE("ClFreshBytes::reach_of");
+    if (bytes > (ClFreedMemory::saturated >> 2)) return ClFreedMemory::saturated >> 1;
+    uint64_t rounded = 1u;
+    while (rounded < bytes) rounded <<= 1;
+    return rounded << 1;
+}
+
+void ClFreshBytes::freed(uint64_t bytes)
+{
+    AV_SCOPE("ClFreshBytes::freed");
+    if (freed_ == nullptr || bytes == 0u) return;
+    const uint64_t reach = reach_of(bytes);
+    freed_->add(reach);
+    own_ = reach > ClFreedMemory::saturated - own_ ? ClFreedMemory::saturated : own_ + reach;
+}
+
+bool ClFreshBytes::may_hold_others(uint64_t bytes) const
+{
+    AV_SCOPE("ClFreshBytes::may_hold_others");
+    if (freed_ == nullptr) return true;
+    const uint64_t total = freed_->total();
+    if (total == ClFreedMemory::saturated || own_ == ClFreedMemory::saturated) return true;
+    const uint64_t others = total - own_;
+    return bytes < slab_bytes ? others != 0u : others >= bytes;
+}
+
 bool ClFreshBytes::zero_buffer(cl_context context, cl_device_id device, cl_mem buffer, uint64_t bytes)
 {
     AV_SCOPE("ClFreshBytes::zero_buffer");
     if (bytes == 0u) return true;
+    if (!may_hold_others(bytes)) {
+        skipped_++;
+        return true;
+    }
     cl_command_queue const queue = queue_for(context, device);
     if (queue == nullptr) return false;
     if (::clEnqueueFillBuffer(queue, buffer, pattern_, static_cast<size_t>(pattern_bytes(bytes)), 0u,
@@ -70,6 +116,10 @@ bool ClFreshBytes::zero_svm(cl_context context, cl_device_id device, void *memor
 {
     AV_SCOPE("ClFreshBytes::zero_svm");
     if (bytes == 0u) return true;
+    if (!may_hold_others(bytes)) {
+        skipped_++;
+        return true;
+    }
     cl_command_queue const queue = queue_for(context, device);
     if (queue == nullptr) return false;
     if (::clEnqueueSVMMemFill(queue, memory, pattern_, static_cast<size_t>(pattern_bytes(bytes)),
@@ -95,6 +145,14 @@ bool ClFreshBytes::zero_image(cl_context context, cl_device_id device, cl_mem im
         ::clGetImageInfo(image, CL_IMAGE_DEPTH, sizeof depth, &depth, nullptr) != CL_SUCCESS ||
         ::clGetImageInfo(image, CL_IMAGE_ARRAY_SIZE, sizeof layers, &layers, nullptr) != CL_SUCCESS)
         return false;
+    size_t bytes = 0u;
+    if (freed_ != nullptr &&
+        (::clGetMemObjectInfo(image, CL_MEM_SIZE, sizeof bytes, &bytes, nullptr) != CL_SUCCESS || bytes == 0u))
+        bytes = 1u;
+    if (!may_hold_others(bytes)) {
+        skipped_++;
+        return true;
+    }
     size_t region[3] = {width, height == 0u ? 1u : height, depth == 0u ? 1u : depth};
     if (type == CL_MEM_OBJECT_IMAGE1D_ARRAY) region[1] = layers;
     if (type == CL_MEM_OBJECT_IMAGE2D_ARRAY) region[2] = layers;
@@ -106,6 +164,12 @@ bool ClFreshBytes::zero_image(cl_context context, cl_device_id device, cl_mem im
     if (!finished()) return false;
     zeroings_++;
     return true;
+}
+
+uint64_t ClFreshBytes::skipped() const
+{
+    AV_SCOPE("ClFreshBytes::skipped");
+    return skipped_;
 }
 
 uint64_t ClFreshBytes::zeroings() const

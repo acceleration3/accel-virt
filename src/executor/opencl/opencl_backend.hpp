@@ -46,6 +46,7 @@ class OpenGlBackend;
 class GlDisplay;
 class ImportTable;
 class OpenClDevice;
+class ClFreedMemory;
 class SourceMemory;
 class ByteLedger;
 class TeardownBudget;
@@ -57,6 +58,7 @@ public:
     OpenClBackend(BlockSource &blocks, DriverLog &lines);
 
     void use_vram(ByteLedger *vram, ByteLedger *host);
+    void use_freed(ClFreedMemory *freed);
     [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
                                   const ImportTable &imports);
 

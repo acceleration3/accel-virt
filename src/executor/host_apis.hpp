@@ -8,6 +8,7 @@ namespace av {
 class D3d11HostDevice;
 class D3d12HostDevice;
 class D3d9HostDevice;
+class ClFreedMemory;
 class GlDisplay;
 class OpenClDevice;
 class HostMemorySource;
@@ -35,6 +36,7 @@ public:
     virtual HostShares         *shares(uint32_t index) = 0;
     virtual HostMemorySource   *memory_source(uint32_t index) = 0;
     virtual VramLedger         *vram_ledger(uint32_t index) = 0;
+    virtual ClFreedMemory      *cl_freed(uint32_t index) = 0;
     virtual HostRamLedger      *host_ram_ledger() = 0;
 
 protected:

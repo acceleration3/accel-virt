@@ -1,4 +1,5 @@
 #include "core/platform/poll_clock.hpp"
+#include "executor/opencl/cl_freed_memory.hpp"
 #include "executor/opencl/cl_fresh_bytes.hpp"
 #include "executor/opencl/cl_queue_wait.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -27,6 +28,7 @@ struct Fake {
     cl_mem_object_type type = CL_MEM_OBJECT_IMAGE2D;
     cl_mem         associated = nullptr;
     std::size_t    width = 4u, height = 5u, depth = 0u, layers = 0u;
+    std::size_t    image_bytes = 0u;
 };
 
 Fake fake;
@@ -94,6 +96,7 @@ CL_API_ENTRY cl_int CL_API_CALL clEnqueueFillImage(cl_command_queue, cl_mem, con
 CL_API_ENTRY cl_int CL_API_CALL clGetMemObjectInfo(cl_mem, cl_mem_info name, size_t, void *value, size_t *)
 { if (name == CL_MEM_TYPE) *static_cast<cl_mem_object_type *>(value) = fake.type;
   else if (name == CL_MEM_ASSOCIATED_MEMOBJECT) *static_cast<cl_mem *>(value) = fake.associated;
+  else if (name == CL_MEM_SIZE && fake.image_bytes != 0u) *static_cast<std::size_t *>(value) = fake.image_bytes;
   else return CL_INVALID_VALUE;
   return CL_SUCCESS; }
 
@@ -225,3 +228,95 @@ TEST(cl_fresh_bytes, an_image_over_another_object_s_bytes_is_left_to_that_object
   fake.type = CL_MEM_OBJECT_IMAGE1D_BUFFER;
   CHECK(rig.fresh.zero_image(context_a(), device(), memory()));
   CHECK_EQ(fake.image_fills, 0); }
+
+TEST(cl_fresh_bytes, memory_nobody_else_freed_is_not_filled)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 4096u));
+  CHECK(rig.fresh.zero_svm(context_a(), device(), memory(), 4096u));
+  CHECK(rig.fresh.zero_image(context_a(), device(), memory()));
+  CHECK_EQ(fake.fills + fake.svm_fills + fake.image_fills, 0);
+  CHECK_EQ(rig.fresh.skipped(), 3u);
+  CHECK_EQ(rig.fresh.zeroings(), 0u); }
+
+TEST(cl_fresh_bytes, what_an_owner_freed_itself_never_makes_its_own_memory_dirty)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  rig.fresh.freed(1u << 20);
+  rig.fresh.freed(8u << 20);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 4096u));
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 16u << 20));
+  CHECK_EQ(fake.fills, 0);
+  CHECK_EQ(rig.fresh.skipped(), 2u); }
+
+TEST(cl_fresh_bytes, anything_small_is_filled_once_another_owner_freed_something)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  Rig other;
+  other.fresh.share(&shared);
+  other.fresh.freed(100u);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 4096u));
+  CHECK_EQ(fake.fills, 1);
+  CHECK(rig.fresh.zero_svm(context_a(), device(), memory(), (4u << 20) - 1u));
+  CHECK_EQ(fake.svm_fills, 1);
+  CHECK(rig.fresh.zero_image(context_a(), device(), memory()));
+  CHECK_EQ(fake.image_fills, 1);
+  CHECK_EQ(rig.fresh.skipped(), 0u); }
+
+TEST(cl_fresh_bytes, a_large_allocation_is_filled_only_when_others_freed_at_least_its_size_rounded_up_twice)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  Rig other;
+  other.fresh.share(&shared);
+  other.fresh.freed(5u << 20);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), (16u << 20) + 1u));
+  CHECK_EQ(fake.fills, 0);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 16u << 20));
+  CHECK_EQ(fake.fills, 1);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 32u << 20));
+  CHECK_EQ(fake.fills, 1);
+  other.fresh.freed(8u << 20);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 32u << 20));
+  CHECK_EQ(fake.fills, 2);
+  CHECK_EQ(rig.fresh.skipped(), 2u); }
+
+TEST(cl_fresh_bytes, a_session_that_leaves_makes_what_it_freed_foreign_to_the_next_one)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  rig.fresh.freed(1u << 20);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 4096u));
+  CHECK_EQ(fake.fills, 0);
+  rig.fresh.leave();
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 4096u));
+  CHECK_EQ(fake.fills, 1); }
+
+TEST(cl_fresh_bytes, a_total_that_saturated_fills_everything)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  shared.add(av::ClFreedMemory::saturated);
+  CHECK(rig.fresh.zero_buffer(context_a(), device(), memory(), 64u << 20));
+  CHECK_EQ(fake.fills, 1);
+  Rig big;
+  big.fresh.share(&shared);
+  big.fresh.freed(~std::uint64_t{0});
+  CHECK(big.fresh.zero_buffer(context_a(), device(), memory(), 64u << 20));
+  CHECK_EQ(fake.fills, 1); }
+
+TEST(cl_fresh_bytes, an_image_whose_size_is_unknown_is_filled_when_anyone_else_freed)
+{ Rig rig;
+  av::ClFreedMemory shared;
+  rig.fresh.share(&shared);
+  Rig other;
+  other.fresh.share(&shared);
+  other.fresh.freed(1u);
+  CHECK(rig.fresh.zero_image(context_a(), device(), memory()));
+  CHECK_EQ(fake.image_fills, 1);
+  fake.image_bytes = 64u << 20;
+  CHECK(rig.fresh.zero_image(context_a(), device(), memory()));
+  CHECK_EQ(fake.image_fills, 1); }

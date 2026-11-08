@@ -110,6 +110,10 @@ VramLedger *MockHostApis::vram_ledger(uint32_t index)
 
 VramLedger &MockHostApis::ledger() { return ledger_; }
 
+ClFreedMemory *MockHostApis::cl_freed(uint32_t index) { return index < count_ ? &freed_ : nullptr; }
+
+ClFreedMemory &MockHostApis::freed() { return freed_; }
+
 HostRamLedger *MockHostApis::host_ram_ledger() { return &host_ram_; }
 
 HostRamLedger &MockHostApis::host_ram() { return host_ram_; }

@@ -147,6 +147,12 @@ VramLedger *LoaderHostApis::vram_ledger(uint32_t index)
     return index < count_ ? &ledgers_[index] : nullptr;
 }
 
+ClFreedMemory *LoaderHostApis::cl_freed(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::cl_freed");
+    return index < count_ ? &cl_freed_[index] : nullptr;
+}
+
 HostRamLedger *LoaderHostApis::host_ram_ledger()
 {
     AV_SCOPE("LoaderHostApis::host_ram_ledger");

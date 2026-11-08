@@ -96,6 +96,12 @@ void OpenClBackend::use_vram(ByteLedger *vram, ByteLedger *host)
     device_memory_.bind(vram, host);
 }
 
+void OpenClBackend::use_freed(ClFreedMemory *freed)
+{
+    AV_SCOPE("OpenClBackend::use_freed");
+    fresh_.share(freed);
+}
+
 bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
                                const ImportTable &imports)
 {
@@ -661,7 +667,8 @@ void OpenClBackend::shut_down()
                          });
     svm_.forget_all();
     mapped_.forget_all();
-    device_memory_.clear();
+    fresh_.freed(device_memory_.clear());
+    fresh_.leave();
     fresh_.release();
     if (queue_ != nullptr) {
         static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(queue_)));
@@ -812,7 +819,7 @@ void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
 {
     AV_SCOPE("OpenClBackend::on_clSVMFree");
     if (!svm_.forget(svm_pointer)) return;
-    device_memory_.forget(reinterpret_cast<cl_mem>(svm_pointer));
+    fresh_.freed(device_memory_.forget(reinterpret_cast<cl_mem>(svm_pointer)));
     ::clSVMFree(context, svm_pointer);
 }
 
@@ -959,7 +966,7 @@ cl_int OpenClBackend::on_clReleaseMemObject(cl_mem memobj)
     cl_uint references = 0u;
     if (::clGetMemObjectInfo(memobj, CL_MEM_REFERENCE_COUNT, sizeof references, &references, nullptr) == CL_SUCCESS &&
         references == 1u)
-        device_memory_.forget(memobj);
+        fresh_.freed(device_memory_.forget(memobj));
     static_cast<void>(mapped_.forget_owned(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(memobj))));
     return RealDispatch::on_clReleaseMemObject(memobj);
 }

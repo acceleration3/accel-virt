@@ -15,6 +15,7 @@
 #include "executor/sharing/host_shares.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/gl_display.hpp"
+#include "executor/opencl/cl_freed_memory.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "executor/host_ram_ledger.hpp"
 #include "executor/proc_memory_gauge.hpp"
@@ -50,6 +51,7 @@ public:
     HostShares         *shares(uint32_t index) override;
     HostMemorySource   *memory_source(uint32_t index) override;
     VramLedger         *vram_ledger(uint32_t index) override;
+    ClFreedMemory      *cl_freed(uint32_t index) override;
     HostRamLedger      *host_ram_ledger() override;
 
 private:
@@ -72,6 +74,7 @@ private:
     ObjectStorage<SharedSurfaces> surfaces_[HostGpuSet::max_gpus];
     ObjectStorage<HostShares>  shares_[HostGpuSet::max_gpus];
     VramLedger  ledgers_[HostGpuSet::max_gpus];
+    ClFreedMemory cl_freed_[HostGpuSet::max_gpus];
     ProcMemoryGauge gauge_;
     HostRamLedger host_ram_;
     VramGate    vram_gate_;

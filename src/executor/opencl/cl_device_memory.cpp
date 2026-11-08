@@ -64,19 +64,23 @@ void ClDeviceMemory::unclaim(uint64_t claimed)
     else account_.give(claimed);
 }
 
-void ClDeviceMemory::forget(cl_mem memory)
+uint64_t ClDeviceMemory::forget(cl_mem memory)
 {
     AV_SCOPE("ClDeviceMemory::forget");
     uint64_t bytes = 0u;
-    if (sizes_.take(key_of(memory), bytes)) unclaim(bytes);
+    if (!sizes_.take(key_of(memory), bytes)) return 0u;
+    unclaim(bytes);
+    return bytes & ~host_bit;
 }
 
-void ClDeviceMemory::clear()
+uint64_t ClDeviceMemory::clear()
 {
     AV_SCOPE("ClDeviceMemory::clear");
+    const uint64_t left = account_.held() + host_.held();
     sizes_.clear();
     static_cast<void>(account_.close());
     static_cast<void>(host_.close());
+    return left;
 }
 
 uint64_t ClDeviceMemory::held() const

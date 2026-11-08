@@ -392,6 +392,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     switch (sub_api) {
     case AV_EXECUTOR_SUB_API_OPENCL:
         opencl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
+        opencl_[slot].object().use_freed(apis_->cl_freed(gpu.index()));
         return opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
                                                  share, sessions_[slot].object().imports());
     case AV_EXECUTOR_SUB_API_OPENGL:

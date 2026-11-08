@@ -113,6 +113,12 @@ TEST(executor_root, offers_what_the_host_runs)
   CHECK_EQ(root.sub_apis(), AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
   CHECK(root.invariants_hold()); }
 
+TEST(executor_root, a_gpu_has_one_tally_of_the_opencl_memory_its_sessions_freed_and_a_missing_one_has_none)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_OPENCL);
+  CHECK(apis.cl_freed(0u) == &apis.freed());
+  CHECK(apis.cl_freed(1u) == nullptr); }
+
 TEST(executor_root, a_host_with_no_gpu_offers_nothing)
 { MockHostApis apis;
   RootUnderTest held;
