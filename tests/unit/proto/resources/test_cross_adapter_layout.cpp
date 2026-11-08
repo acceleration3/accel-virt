@@ -12,7 +12,11 @@ TEST(cross_adapter_layout, a_texture_has_aligned_rows_and_an_aligned_height)
   CHECK_EQ(layout.surface().height(), 805u);
   CHECK_EQ(layout.surface().pitch(), 5120u);
   CHECK(layout.surface().bytes() <= layout.bytes());
-  CHECK_EQ(CrossAdapterLayout(1056u, 16u, 21u, 4u).pitch(), 4352u); }
+  CHECK_EQ(CrossAdapterLayout(1056u, 16u, 21u, 4u).pitch(), 4352u);
+  CHECK_EQ(CrossAdapterLayout(1056u, 16u, 21u, 4u).reported_pitch(), 4224u);
+  CHECK_EQ(CrossAdapterLayout(160u, 120u, 21u, 4u).pitch(), 768u);
+  CHECK_EQ(CrossAdapterLayout(160u, 120u, 21u, 4u).reported_pitch(), 640u);
+  CHECK_EQ(CrossAdapterLayout(0u, 120u, 21u, 4u).reported_pitch(), 0u); }
 
 TEST(cross_adapter_layout, a_heap_is_one_row_of_its_bytes)
 { const CrossAdapterLayout heap(0x30000u, 1u, 0u, 0u);

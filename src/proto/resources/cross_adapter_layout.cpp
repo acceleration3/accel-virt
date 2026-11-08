@@ -18,7 +18,7 @@ uint64_t aligned(uint64_t value, uint64_t alignment)
 }
 
 CrossAdapterLayout::CrossAdapterLayout(uint32_t width, uint32_t height, uint32_t format, uint32_t bytes_per_pixel)
-    : width_(width), height_(height), format_(format), pitch_(0u), bytes_(0u), valid_(false)
+    : width_(width), height_(height), format_(format), pitch_(0u), reported_(0u), bytes_(0u), valid_(false)
 {
     AV_SCOPE("CrossAdapterLayout::CrossAdapterLayout");
     const bool     heap = format == 0u;
@@ -29,6 +29,7 @@ CrossAdapterLayout::CrossAdapterLayout(uint32_t width, uint32_t height, uint32_t
     const uint64_t bytes = aligned(pitch * rows, page_bytes);
     if (pitch > max_u32 || bytes > max_u32) return;
     pitch_ = static_cast<uint32_t>(pitch);
+    reported_ = static_cast<uint32_t>(aligned(uint64_t{width} * element, reported_alignment));
     bytes_ = bytes;
     valid_ = true;
 }
@@ -43,6 +44,12 @@ uint32_t CrossAdapterLayout::pitch() const
 {
     AV_SCOPE("CrossAdapterLayout::pitch");
     return pitch_;
+}
+
+uint32_t CrossAdapterLayout::reported_pitch() const
+{
+    AV_SCOPE("CrossAdapterLayout::reported_pitch");
+    return reported_;
 }
 
 uint64_t CrossAdapterLayout::bytes() const
