@@ -944,4 +944,40 @@ bool av_d3d12_SetStreamOutputTargets12(::av::ClientTransport& t, uint32_t list, 
     return t.send_async(kCmd_SetStreamOutputTargets12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_ClearUnorderedAccessViewUint12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Uint4& values, uint32_t rect_count, const Rect* rects) {
+    AV_SCOPE("av_d3d12_ClearUnorderedAccessViewUint12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod(gpu_view);
+    b.write_pod(cpu_view);
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(values);
+    b.write_pod<uint32_t>(rect_count);
+    if (rect_count > 16u || (rect_count != 0u && rects == nullptr)) return abandon(t);
+    if (rect_count != 0u) b.write(rects, sizeof(*rects) * rect_count);
+    return t.send_async(kCmd_ClearUnorderedAccessViewUint12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_ClearUnorderedAccessViewFloat12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Float4& values, uint32_t rect_count, const Rect* rects) {
+    AV_SCOPE("av_d3d12_ClearUnorderedAccessViewFloat12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod(gpu_view);
+    b.write_pod(cpu_view);
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(values);
+    b.write_pod<uint32_t>(rect_count);
+    if (rect_count > 16u || (rect_count != 0u && rects == nullptr)) return abandon(t);
+    if (rect_count != 0u) b.write(rects, sizeof(*rects) * rect_count);
+    return t.send_async(kCmd_ClearUnorderedAccessViewFloat12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_ExecuteBundle12(::av::ClientTransport& t, uint32_t list, uint32_t bundle) {
+    AV_SCOPE("av_d3d12_ExecuteBundle12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(bundle);
+    return t.send_async(kCmd_ExecuteBundle12, b) == ::av::TransportResult::ok;
+}
+
 }  // namespace av::d3d12proto

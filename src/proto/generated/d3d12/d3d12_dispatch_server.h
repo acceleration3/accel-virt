@@ -106,6 +106,9 @@ public:
     virtual bool on_SetDepthBounds12(uint32_t list, float minimum, float maximum) = 0;
     virtual bool on_SetPredication12(uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) = 0;
     virtual bool on_SetStreamOutputTargets12(uint32_t list, uint32_t start, uint32_t count, const StreamOutputView* views) = 0;
+    virtual bool on_ClearUnorderedAccessViewUint12(uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Uint4& values, uint32_t rect_count, const Rect* rects) = 0;
+    virtual bool on_ClearUnorderedAccessViewFloat12(uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Float4& values, uint32_t rect_count, const Rect* rects) = 0;
+    virtual bool on_ExecuteBundle12(uint32_t list, uint32_t bundle) = 0;
 
 protected:
     // `guest` is the context's blob arena, which the implementation owns and

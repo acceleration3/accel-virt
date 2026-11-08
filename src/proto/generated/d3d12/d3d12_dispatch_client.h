@@ -168,5 +168,13 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_SetPredication12(::av::ClientTransport& t, uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op);
 // Binds `count` stream output buffers from slot `start`; an address of 0 unbinds its slot.
 [[nodiscard]] bool av_d3d12_SetStreamOutputTargets12(::av::ClientTransport& t, uint32_t list, uint32_t start, uint32_t count, const StreamOutputView* views);
+// Fills the unordered access view `gpu_view` (a slot of a shader-visible heap, `cpu_view` its copy in a
+// CPU-only heap) of `resource` with `values`, within the rectangles or whole when there are none.
+[[nodiscard]] bool av_d3d12_ClearUnorderedAccessViewUint12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Uint4& values, uint32_t rect_count, const Rect* rects);
+// ClearUnorderedAccessViewUint12 with a float value.
+[[nodiscard]] bool av_d3d12_ClearUnorderedAccessViewFloat12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Float4& values, uint32_t rect_count, const Rect* rects);
+// Plays the closed bundle `bundle` inside the recording `list`; the list keeps alive what the bundle recorded.
+// A bundle cannot play a bundle.
+[[nodiscard]] bool av_d3d12_ExecuteBundle12(::av::ClientTransport& t, uint32_t list, uint32_t bundle);
 
 }  // namespace av::d3d12proto

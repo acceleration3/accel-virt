@@ -137,6 +137,9 @@ public:
     bool on_SetSamplePositions12(uint32_t list, uint32_t samples, uint32_t pixels, uint32_t count, const d3d12proto::SamplePosition* positions) override;
     bool on_WriteBufferImmediate12(uint32_t list, uint32_t count, const d3d12proto::ImmediateWrite* writes) override;
     bool on_SetViewInstanceMask12(uint32_t list, uint32_t mask) override;
+    bool on_ClearUnorderedAccessViewUint12(uint32_t list, const d3d12proto::DescriptorRef& gpu_view, const d3d12proto::DescriptorRef& cpu_view, uint32_t resource, const d3d12proto::Uint4& values, uint32_t rect_count, const d3d12proto::Rect* rects) override;
+    bool on_ClearUnorderedAccessViewFloat12(uint32_t list, const d3d12proto::DescriptorRef& gpu_view, const d3d12proto::DescriptorRef& cpu_view, uint32_t resource, const d3d12proto::Float4& values, uint32_t rect_count, const d3d12proto::Rect* rects) override;
+    bool on_ExecuteBundle12(uint32_t list, uint32_t bundle) override;
     bool on_SetDepthBounds12(uint32_t list, float minimum, float maximum) override;
     bool on_SetPredication12(uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) override;
     bool on_SetStreamOutputTargets12(uint32_t list, uint32_t start, uint32_t count, const d3d12proto::StreamOutputView* views) override;
@@ -190,6 +193,8 @@ private:
                                           const d3d12proto::TileSize &size) const;
     bool                       drain();
     bool                       wait_for(uint64_t mark);
+    template <typename Values>
+    bool                       clear_unordered_access_view(uint32_t list, const d3d12proto::DescriptorRef &gpu_view, const d3d12proto::DescriptorRef &cpu_view, uint32_t resource, const Values &values, uint32_t rect_count, const d3d12proto::Rect *rects);
     bool                       retain_slot(uint32_t list, const d3d12proto::DescriptorRef &ref);
     bool                       resolve_holds(const D3D12_RESOURCE_DESC &to, uint32_t to_subresource,
                                              const D3D12_RESOURCE_DESC &from, uint32_t from_subresource,

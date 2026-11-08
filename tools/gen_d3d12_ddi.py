@@ -84,7 +84,8 @@ IMPLEMENTED = {
         "pfnOMSetRenderTargets", "pfnSetMarker", "pfnClearRootArguments", "pfnExecuteIndirect",
         "pfnPresent", "pfnCopyTiles", "pfnResourceResolveSubresourceRegion", "pfnSetSamplePositions",
         "pfnWriteBufferImmediate", "pfnSetViewInstanceMask", "pfnOMSetDepthBounds", "pfnSetPredication",
-        "pfnSOSetTargets",
+        "pfnSOSetTargets", "pfnClearUnorderedAccessViewUint", "pfnClearUnorderedAccessViewFloat",
+        "pfnExecuteBundle", "pfnAtomicCopyBufferRegion",
     },
 }
 

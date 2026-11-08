@@ -26,6 +26,8 @@ constexpr uint32_t most_barriers = 128u;
 constexpr uint32_t most_views = 16u;
 constexpr uint32_t most_sample_positions = 64u;
 constexpr uint32_t most_stream_outputs = 4u;
+constexpr uint64_t atomic_word_bytes = 4u;
+constexpr uint64_t atomic_quad_bytes = 8u;
 constexpr uint32_t most_immediate_writes = 64u;
 constexpr uint32_t most_buffers = 32u;
 constexpr uint32_t most_targets = 8u;
@@ -160,6 +162,54 @@ VOID D3d12Recorder::clear_depth_stencil_view(D3D12DDI_HCOMMANDLIST handle, D3D12
     }
 }
 
+VOID D3d12Recorder::clear_unordered_access_view_uint(D3D12DDI_HCOMMANDLIST handle,
+                                                      D3D12DDI_GPU_DESCRIPTOR_HANDLE gpu_view,
+                                                      D3D12DDI_CPU_DESCRIPTOR_HANDLE cpu_view,
+                                                      D3D12DDI_HRESOURCE resource, const UINT *values,
+                                                      UINT rect_count, const D3D12DDI_RECT *rects)
+{
+    AV_SCOPE("D3d12Recorder::clear_unordered_access_view_uint");
+    Uint4 value = {};
+    for (uint32_t channel = 0u; values != nullptr && channel < 4u; channel++) value.v[channel] = values[channel];
+    icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, most_views);
+    while (pieces.next()) {
+        Rect       areas[most_views] = {};
+        const auto count = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < count; index++) {
+            const D3D12DDI_RECT &from = rects[pieces.offset() + index];
+            areas[index] = Rect{from.left, from.top, from.right, from.bottom};
+        }
+        sent(av_d3d12_ClearUnorderedAccessViewUint12(device_.wire(), list(handle), device_.descriptor(gpu_view),
+                                                       device_.descriptor(cpu_view),
+                                                       device_.id_of(resource.pDrvPrivate), value, count, areas),
+             "ClearUnorderedAccessViewUint12");
+    }
+}
+
+VOID D3d12Recorder::clear_unordered_access_view_float(D3D12DDI_HCOMMANDLIST handle,
+                                                      D3D12DDI_GPU_DESCRIPTOR_HANDLE gpu_view,
+                                                      D3D12DDI_CPU_DESCRIPTOR_HANDLE cpu_view,
+                                                      D3D12DDI_HRESOURCE resource, const FLOAT *values,
+                                                      UINT rect_count, const D3D12DDI_RECT *rects)
+{
+    AV_SCOPE("D3d12Recorder::clear_unordered_access_view_float");
+    Float4 value = {};
+    for (uint32_t channel = 0u; values != nullptr && channel < 4u; channel++) value.v[channel] = values[channel];
+    icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, most_views);
+    while (pieces.next()) {
+        Rect       areas[most_views] = {};
+        const auto count = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < count; index++) {
+            const D3D12DDI_RECT &from = rects[pieces.offset() + index];
+            areas[index] = Rect{from.left, from.top, from.right, from.bottom};
+        }
+        sent(av_d3d12_ClearUnorderedAccessViewFloat12(device_.wire(), list(handle), device_.descriptor(gpu_view),
+                                                       device_.descriptor(cpu_view),
+                                                       device_.id_of(resource.pDrvPrivate), value, count, areas),
+             "ClearUnorderedAccessViewFloat12");
+    }
+}
+
 CopyLocation D3d12Recorder::location(const D3D12DDIARG_BUFFER_PLACEMENT &placement,
                                      const D3D12DDIARG_PLACED_RESOURCE &layout) const
 {
@@ -240,6 +290,24 @@ VOID D3d12Recorder::copy_buffer_region(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG
                                       device_.id_of(source.BaseAddress.UMD.hResource.pDrvPrivate),
                                       source.BaseAddress.UMD.Offset, bytes),
          "CopyBufferRegion12");
+}
+
+VOID D3d12Recorder::atomic_copy_buffer_region(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT destination,
+                                              D3D12DDIARG_BUFFER_PLACEMENT source, UINT64 bytes)
+{
+    AV_SCOPE("D3d12Recorder::atomic_copy_buffer_region");
+    if ((bytes != atomic_word_bytes && bytes != atomic_quad_bytes) || destination.BaseAddress.UMD.Offset % bytes != 0u ||
+        source.BaseAddress.UMD.Offset % bytes != 0u) {
+        device_.lost("an atomic buffer copy that is not one aligned 32-bit or 64-bit value");
+        return;
+    }
+    copy_buffer_region(handle, destination, source, bytes);
+}
+
+VOID D3d12Recorder::execute_bundle(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDLIST bundle)
+{
+    AV_SCOPE("D3d12Recorder::execute_bundle");
+    sent(av_d3d12_ExecuteBundle12(device_.wire(), list(handle), list(bundle)), "ExecuteBundle12");
 }
 
 VOID D3d12Recorder::execute_indirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDSIGNATURE signature,

@@ -23,7 +23,7 @@ public:
         return S_OK;
     }
 
-    D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() override { return D3D12_COMMAND_LIST_TYPE_DIRECT; }
+    D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() override { return type; }
     HRESULT STDMETHODCALLTYPE Close() override { return S_OK; }
     HRESULT STDMETHODCALLTYPE Reset(ID3D12CommandAllocator *, ID3D12PipelineState *) override { return S_OK; }
     void STDMETHODCALLTYPE ClearState(ID3D12PipelineState *) override { recorded++; }
@@ -58,7 +58,7 @@ public:
     void STDMETHODCALLTYPE OMSetStencilRef(UINT) override { recorded++; }
     void STDMETHODCALLTYPE SetPipelineState(ID3D12PipelineState *) override { recorded++; }
     void STDMETHODCALLTYPE ResourceBarrier(UINT, const D3D12_RESOURCE_BARRIER *) override { recorded++; }
-    void STDMETHODCALLTYPE ExecuteBundle(ID3D12GraphicsCommandList *) override { recorded++; }
+    void STDMETHODCALLTYPE ExecuteBundle(ID3D12GraphicsCommandList *played) override { recorded++; bundle_executions++; last_bundle = played; }
     void STDMETHODCALLTYPE SetDescriptorHeaps(UINT, ID3D12DescriptorHeap *const *) override { recorded++; }
     void STDMETHODCALLTYPE SetComputeRootSignature(ID3D12RootSignature *) override { recorded++; }
     void STDMETHODCALLTYPE SetGraphicsRootSignature(ID3D12RootSignature *) override { recorded++; }
@@ -87,8 +87,28 @@ public:
     void STDMETHODCALLTYPE OMSetRenderTargets(UINT, const D3D12_CPU_DESCRIPTOR_HANDLE *, WINBOOL, const D3D12_CPU_DESCRIPTOR_HANDLE *) override { recorded++; }
     void STDMETHODCALLTYPE ClearDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_CLEAR_FLAGS, FLOAT, UINT8, UINT, const D3D12_RECT *) override { recorded++; }
     void STDMETHODCALLTYPE ClearRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE, const FLOAT[], UINT, const D3D12_RECT *) override { recorded++; }
-    void STDMETHODCALLTYPE ClearUnorderedAccessViewUint(D3D12_GPU_DESCRIPTOR_HANDLE, D3D12_CPU_DESCRIPTOR_HANDLE, ID3D12Resource *, const UINT[], UINT, const D3D12_RECT *) override { recorded++; }
-    void STDMETHODCALLTYPE ClearUnorderedAccessViewFloat(D3D12_GPU_DESCRIPTOR_HANDLE, D3D12_CPU_DESCRIPTOR_HANDLE, ID3D12Resource *, const float[], UINT, const D3D12_RECT *) override { recorded++; }
+    void STDMETHODCALLTYPE ClearUnorderedAccessViewUint(D3D12_GPU_DESCRIPTOR_HANDLE gpu, D3D12_CPU_DESCRIPTOR_HANDLE cpu, ID3D12Resource *target, const UINT values[], UINT rects, const D3D12_RECT *) override
+    {
+        recorded++;
+        uav_clears++;
+        uav_gpu = gpu.ptr;
+        uav_cpu = cpu.ptr;
+        uav_target = target;
+        uav_integer = true;
+        uav_rects = rects;
+        uav_first = values[0];
+    }
+    void STDMETHODCALLTYPE ClearUnorderedAccessViewFloat(D3D12_GPU_DESCRIPTOR_HANDLE gpu, D3D12_CPU_DESCRIPTOR_HANDLE cpu, ID3D12Resource *target, const float values[], UINT rects, const D3D12_RECT *) override
+    {
+        recorded++;
+        uav_clears++;
+        uav_gpu = gpu.ptr;
+        uav_cpu = cpu.ptr;
+        uav_target = target;
+        uav_integer = false;
+        uav_rects = rects;
+        uav_first = static_cast<std::uint32_t>(values[0]);
+    }
     void STDMETHODCALLTYPE DiscardResource(ID3D12Resource *, const D3D12_DISCARD_REGION *) override { recorded++; }
     void STDMETHODCALLTYPE BeginQuery(ID3D12QueryHeap *, D3D12_QUERY_TYPE, UINT) override { recorded++; }
     void STDMETHODCALLTYPE EndQuery(ID3D12QueryHeap *, D3D12_QUERY_TYPE, UINT) override { recorded++; }
@@ -160,6 +180,16 @@ public:
     std::uint32_t immediate_writes = 0u;
     std::uint64_t immediate_last_address = 0u;
     D3D12_WRITEBUFFERIMMEDIATE_MODE immediate_last_mode = D3D12_WRITEBUFFERIMMEDIATE_MODE_DEFAULT;
+    D3D12_COMMAND_LIST_TYPE type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    std::uint32_t bundle_executions = 0u;
+    ID3D12GraphicsCommandList *last_bundle = nullptr;
+    std::uint32_t uav_clears = 0u;
+    std::uint64_t uav_gpu = 0u;
+    std::uint64_t uav_cpu = 0u;
+    ID3D12Resource *uav_target = nullptr;
+    bool          uav_integer = false;
+    std::uint32_t uav_rects = 0u;
+    std::uint32_t uav_first = 0u;
     std::uint32_t depth_bounds_sets = 0u;
     float         depth_minimum = 0.0f;
     float         depth_maximum = 0.0f;

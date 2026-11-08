@@ -86,5 +86,8 @@ inline constexpr uint32_t kCmd_GetClockOrigin12 = 0x00041525;
 inline constexpr uint32_t kCmd_SetDepthBounds12 = 0x00041526;
 inline constexpr uint32_t kCmd_SetPredication12 = 0x00041527;
 inline constexpr uint32_t kCmd_SetStreamOutputTargets12 = 0x00041528;
+inline constexpr uint32_t kCmd_ClearUnorderedAccessViewUint12 = 0x00041529;
+inline constexpr uint32_t kCmd_ClearUnorderedAccessViewFloat12 = 0x0004152a;
+inline constexpr uint32_t kCmd_ExecuteBundle12 = 0x0004152b;
 
 }  // namespace av::d3d12proto

@@ -26,6 +26,7 @@ constexpr uint32_t most_stream_outputs = 4u;
 constexpr uint32_t most_predication_op = 1u;
 constexpr uint64_t predicate_bytes = sizeof(uint64_t);
 constexpr uint64_t counter_bytes = sizeof(uint32_t);
+constexpr uint32_t most_clear_rects = 16u;
 
 }
 
@@ -182,6 +183,72 @@ bool D3d12Session::on_SetStreamOutputTargets12(uint32_t id, uint32_t start, uint
         made[index] = {host, view.size, filled};
     }
     recorded->SOSetTargets(start, count, count == 0u ? nullptr : made);
+    return true;
+}
+
+template <typename Values>
+bool D3d12Session::clear_unordered_access_view(uint32_t id, const d3d12proto::DescriptorRef &gpu_view,
+                                               const d3d12proto::DescriptorRef &cpu_view, uint32_t resource,
+                                               const Values &values, uint32_t rect_count,
+                                               const d3d12proto::Rect *rects)
+{
+    AV_SCOPE("D3d12Session::clear_unordered_access_view");
+    ID3D12GraphicsCommandList *const recorded = list(id);
+    ID3D12Resource *const            target = objects_.find_as<ID3D12Resource>(resource, D3dObjectKind::resource12);
+    uint64_t                         gpu = 0u;
+    size_t                           cpu = 0u;
+    if (recorded == nullptr || target == nullptr || rect_count > most_clear_rects ||
+        !gpu_handle(gpu_view, gpu) || !cpu_handle(cpu_view, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, cpu) ||
+        !retain_object(id, gpu_view.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, gpu_view) ||
+        !retain_object(id, cpu_view.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, cpu_view) ||
+        !retain_resource(id, resource))
+        return false;
+    D3D12_RECT made[most_clear_rects] = {};
+    for (uint32_t index = 0u; index < rect_count; index++)
+        made[index] = {rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
+    const D3D12_GPU_DESCRIPTOR_HANDLE shader_visible{gpu};
+    const D3D12_CPU_DESCRIPTOR_HANDLE cpu_only{cpu};
+    if constexpr (__is_same(Values, d3d12proto::Uint4))
+        recorded->ClearUnorderedAccessViewUint(shader_visible, cpu_only, target, values.v, rect_count,
+                                               rect_count == 0u ? nullptr : made);
+    else
+        recorded->ClearUnorderedAccessViewFloat(shader_visible, cpu_only, target, values.v, rect_count,
+                                                rect_count == 0u ? nullptr : made);
+    return true;
+}
+
+bool D3d12Session::on_ClearUnorderedAccessViewUint12(uint32_t id, const d3d12proto::DescriptorRef &gpu_view,
+                                                     const d3d12proto::DescriptorRef &cpu_view, uint32_t resource,
+                                                     const d3d12proto::Uint4 &values, uint32_t rect_count,
+                                                     const d3d12proto::Rect *rects)
+{
+    AV_SCOPE("D3d12Session::on_ClearUnorderedAccessViewUint12");
+    return clear_unordered_access_view(id, gpu_view, cpu_view, resource, values, rect_count, rects);
+}
+
+bool D3d12Session::on_ClearUnorderedAccessViewFloat12(uint32_t id, const d3d12proto::DescriptorRef &gpu_view,
+                                                      const d3d12proto::DescriptorRef &cpu_view, uint32_t resource,
+                                                      const d3d12proto::Float4 &values, uint32_t rect_count,
+                                                      const d3d12proto::Rect *rects)
+{
+    AV_SCOPE("D3d12Session::on_ClearUnorderedAccessViewFloat12");
+    return clear_unordered_access_view(id, gpu_view, cpu_view, resource, values, rect_count, rects);
+}
+
+bool D3d12Session::on_ExecuteBundle12(uint32_t id, uint32_t bundle)
+{
+    AV_SCOPE("D3d12Session::on_ExecuteBundle12");
+    ID3D12GraphicsCommandList *const recorded = list(id);
+    ID3D12GraphicsCommandList *const played = list(bundle);
+    if (recorded == nullptr || played == nullptr || id == bundle || recorded->GetType() == D3D12_COMMAND_LIST_TYPE_BUNDLE ||
+        played->GetType() != D3D12_COMMAND_LIST_TYPE_BUNDLE || !retain_object(id, bundle, D3dObjectKind::list12))
+        return false;
+    bool kept = true;
+    holds_.for_each_pinned(bundle, [&](IUnknown *object, D3d12BlockHeap *pin) {
+        kept = retain(id, object, holds_.repinned(pin)) && kept;
+    });
+    if (!kept) return false;
+    recorded->ExecuteBundle(played);
     return true;
 }
 

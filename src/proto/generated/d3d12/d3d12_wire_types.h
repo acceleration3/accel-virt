@@ -14,6 +14,12 @@ struct Float4 {
 static_assert(sizeof(Float4) == 16, "Float4 crosses as 16 bytes");
 static_assert(__is_trivially_copyable(Float4), "Float4 is plain data");
 
+struct Uint4 {
+    uint32_t v[4];
+};
+static_assert(sizeof(Uint4) == 16, "Uint4 crosses as 16 bytes");
+static_assert(__is_trivially_copyable(Uint4), "Uint4 is plain data");
+
 struct Rect {
     int32_t left;
     int32_t top;

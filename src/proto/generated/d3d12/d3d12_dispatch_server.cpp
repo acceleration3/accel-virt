@@ -1598,6 +1598,78 @@ static bool decode_SetStreamOutputTargets12(ServerDispatch& s, ::av::WireReader&
     return true;
 }
 
+static bool decode_ClearUnorderedAccessViewUint12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ClearUnorderedAccessViewUint12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    DescriptorRef gpu_view{};
+    if (!r.read_pod(gpu_view)) return false;
+    DescriptorRef cpu_view{};
+    if (!r.read_pod(cpu_view)) return false;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    Uint4 values{};
+    if (!r.read_pod(values)) return false;
+    uint32_t rect_count{};
+    if (!r.read_pod(rect_count)) return false;
+    if (rect_count > 16u) return false;
+    Rect* rects = nullptr;
+    if (rect_count != 0u) {
+        rects = arena.allocate<Rect>(rect_count);
+        if (rects == nullptr) return false;
+        if (!r.read(rects, sizeof(Rect) * rect_count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ClearUnorderedAccessViewUint12(list, gpu_view, cpu_view, resource, values, rect_count, rects)) return false;
+    return true;
+}
+
+static bool decode_ClearUnorderedAccessViewFloat12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ClearUnorderedAccessViewFloat12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    DescriptorRef gpu_view{};
+    if (!r.read_pod(gpu_view)) return false;
+    DescriptorRef cpu_view{};
+    if (!r.read_pod(cpu_view)) return false;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    Float4 values{};
+    if (!r.read_pod(values)) return false;
+    uint32_t rect_count{};
+    if (!r.read_pod(rect_count)) return false;
+    if (rect_count > 16u) return false;
+    Rect* rects = nullptr;
+    if (rect_count != 0u) {
+        rects = arena.allocate<Rect>(rect_count);
+        if (rects == nullptr) return false;
+        if (!r.read(rects, sizeof(Rect) * rect_count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ClearUnorderedAccessViewFloat12(list, gpu_view, cpu_view, resource, values, rect_count, rects)) return false;
+    return true;
+}
+
+static bool decode_ExecuteBundle12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ExecuteBundle12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t bundle{};
+    if (!r.read_pod(bundle)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ExecuteBundle12(list, bundle)) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1677,6 +1749,9 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_SetDepthBounds12:
         case kCmd_SetPredication12:
         case kCmd_SetStreamOutputTargets12:
+        case kCmd_ClearUnorderedAccessViewUint12:
+        case kCmd_ClearUnorderedAccessViewFloat12:
+        case kCmd_ExecuteBundle12:
             return true;
         default: return false;
     }
@@ -1762,6 +1837,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_SetDepthBounds12: return decode_SetDepthBounds12(s, r, reply, arena);
         case kCmd_SetPredication12: return decode_SetPredication12(s, r, reply, arena);
         case kCmd_SetStreamOutputTargets12: return decode_SetStreamOutputTargets12(s, r, reply, arena);
+        case kCmd_ClearUnorderedAccessViewUint12: return decode_ClearUnorderedAccessViewUint12(s, r, reply, arena);
+        case kCmd_ClearUnorderedAccessViewFloat12: return decode_ClearUnorderedAccessViewFloat12(s, r, reply, arena);
+        case kCmd_ExecuteBundle12: return decode_ExecuteBundle12(s, r, reply, arena);
         default: return false;
     }
 }

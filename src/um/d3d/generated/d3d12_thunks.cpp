@@ -431,10 +431,10 @@ extern "C" VOID APIENTRY avumd_d3d12l_Dispatch(D3D12DDI_HCOMMANDLIST handle, UIN
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.dispatch(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("Dispatch", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_ClearUnorderedAccessViewUint(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_GPU_DESCRIPTOR_HANDLE a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2, D3D12DDI_HRESOURCE a3, const UINT * a4, UINT a5, const D3D12DDI_RECT * a6)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.clear_unordered_access_view_uint(handle, a1, a2, a3, a4, a5, a6); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ClearUnorderedAccessViewUint", handle, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_ClearUnorderedAccessViewFloat(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_GPU_DESCRIPTOR_HANDLE a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2, D3D12DDI_HRESOURCE a3, const FLOAT * a4, UINT a5, const D3D12DDI_RECT * a6)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.clear_unordered_access_view_float(handle, a1, a2, a3, a4, a5, a6); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ClearUnorderedAccessViewFloat", handle, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE a1, const FLOAT * a2, UINT a3, const D3D12DDI_RECT * a4)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.clear_render_target_view(handle, a1, a2, a3, a4); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ClearRenderTargetView", handle, a1, a2, a3, a4); }
@@ -461,7 +461,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_ResourceResolveSubresource(D3D12DDI_HCOMMA
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.resource_resolve_subresource(handle, a1, a2, a3, a4, a5); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ResourceResolveSubresource", handle, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_ExecuteBundle(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDLIST a1)
-{ static_cast<void>(handle); static_cast<void>(a1); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.execute_bundle(handle, a1); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ExecuteBundle", handle, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDSIGNATURE a1, UINT a2, D3D12DDIARG_BUFFER_PLACEMENT a3, D3D12DDIARG_BUFFER_PLACEMENT a4)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.execute_indirect(handle, a1, a2, a3, a4); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ExecuteIndirect", handle, a1, a2, a3, a4); }
@@ -569,7 +569,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_ClearRootArguments(D3D12DDI_HCOMMANDLIST h
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.clear_root_arguments(handle); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ClearRootArguments", handle); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_AtomicCopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT a1, D3D12DDIARG_BUFFER_PLACEMENT a2, UINT64 a3)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.atomic_copy_buffer_region(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("AtomicCopyBufferRegion", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_OMSetDepthBounds(D3D12DDI_HCOMMANDLIST handle, FLOAT a1, FLOAT a2)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.om_set_depth_bounds(handle, a1, a2); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("OMSetDepthBounds", handle, a1, a2); }

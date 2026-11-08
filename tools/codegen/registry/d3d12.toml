@@ -7,6 +7,9 @@ last_id = 0x1fff
 [structs.Float4]
 fields = ["f32 v[4]"]
 
+[structs.Uint4]
+fields = ["u32 v[4]"]
+
 [structs.Rect]
 fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
 
@@ -613,3 +616,25 @@ name = "SetStreamOutputTargets12"
 id = 0x1528
 doc = "Binds `count` stream output buffers from slot `start`; an address of 0 unbinds its slot."
 params = ["u32 list", "u32 start", "u32 count", "StreamOutputView views[count] max 4"]
+
+[[command]]
+name = "ClearUnorderedAccessViewUint12"
+id = 0x1529
+doc = """Fills the unordered access view `gpu_view` (a slot of a shader-visible heap, `cpu_view` its copy in a
+CPU-only heap) of `resource` with `values`, within the rectangles or whole when there are none."""
+params = ["u32 list", "DescriptorRef gpu_view", "DescriptorRef cpu_view", "u32 resource", "Uint4 values",
+          "u32 rect_count", "Rect rects[rect_count] max 16"]
+
+[[command]]
+name = "ClearUnorderedAccessViewFloat12"
+id = 0x152a
+doc = "ClearUnorderedAccessViewUint12 with a float value."
+params = ["u32 list", "DescriptorRef gpu_view", "DescriptorRef cpu_view", "u32 resource", "Float4 values",
+          "u32 rect_count", "Rect rects[rect_count] max 16"]
+
+[[command]]
+name = "ExecuteBundle12"
+id = 0x152b
+doc = """Plays the closed bundle `bundle` inside the recording `list`; the list keeps alive what the bundle recorded.
+A bundle cannot play a bundle."""
+params = ["u32 list", "u32 bundle"]

@@ -1,6 +1,7 @@
 #include "harness/executor/d3d12_session_loopback.hpp"
 #include "harness/executor/fake_allocator.hpp"
 #include "harness/executor/fake_command_list.hpp"
+#include "harness/executor/fake_descriptor_heap.hpp"
 #include "harness/executor/fake_device.hpp"
 #include "harness/executor/fake_resource.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -17,6 +18,9 @@ constexpr std::uint32_t list = 1u;
 constexpr std::uint32_t resolved = 2u;
 constexpr std::uint32_t multisampled = 3u;
 constexpr std::uint32_t buffer = 4u;
+constexpr std::uint32_t shader_heap_id = 10u;
+constexpr std::uint32_t cpu_heap_id = 11u;
+constexpr std::uint32_t bundle_id = 12u;
 constexpr std::uint32_t format_rgba = 28u;
 constexpr std::uint32_t heap_default = 1u;
 constexpr std::uint32_t mode_decompress = 0u;
@@ -72,6 +76,15 @@ public:
         insert(list, D3dObjectKind::list12, &commands);
         insert(resolved, D3dObjectKind::resource12, &target);
         insert(multisampled, D3dObjectKind::resource12, &source);
+        shader_heap.desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        shader_heap.desc.NumDescriptors = 8u;
+        shader_heap.desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        cpu_heap.desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        cpu_heap.desc.NumDescriptors = 8u;
+        bundle.type = D3D12_COMMAND_LIST_TYPE_BUNDLE;
+        insert(bundle_id, D3dObjectKind::list12, &bundle);
+        insert(shader_heap_id, D3dObjectKind::descriptor_heap12, &shader_heap);
+        insert(cpu_heap_id, D3dObjectKind::descriptor_heap12, &cpu_heap);
         std::uint32_t answer = 1u;
         CHECK(av_d3d12_CreateCommittedResource12(rig, buffer, HeapProperties{heap_default, 0u, 0u, 0u}, 0u,
                                                  buffer_of(buffer_bytes), 0u, ClearValue{}, guest_address, &answer));
@@ -86,8 +99,9 @@ public:
     av::D3d12Session &session() { return rig.session(); }
 
     av::FakeDevice          device;
-    av::FakeCommandList     commands;
+    av::FakeCommandList     commands, bundle;
     av::FakeResource        target, source, written, odd;
+    av::FakeDescriptorHeap  shader_heap, cpu_heap;
     av::D3d12SessionLoopback rig;
 };
 
@@ -358,3 +372,83 @@ TEST(d3d12_session_extended_lists, stream_output_targets_that_leave_their_buffer
   view = {guest_address, 64u, 0u};
   CHECK(scene.session().on_SetStreamOutputTargets12(list, 3u, 1u, &view));
   CHECK_EQ(scene.commands.stream_output_last.BufferFilledSizeLocation, 0u); }
+
+TEST(d3d12_session_extended_lists, an_unordered_access_view_is_cleared_through_the_host_heaps_handles)
+{ Scene scene;
+  const DescriptorRef gpu = {shader_heap_id, 2u};
+  const DescriptorRef cpu = {cpu_heap_id, 3u};
+  const Uint4 integers = {{7u, 0u, 0u, 0u}};
+  const Rect areas[2] = {{0, 0, 4, 4}, {4, 4, 8, 8}};
+  CHECK(scene.session().on_ClearUnorderedAccessViewUint12(list, gpu, cpu, resolved, integers, 2u, areas));
+  CHECK_EQ(scene.commands.uav_clears, 1u);
+  CHECK_EQ(scene.commands.uav_gpu, 0x2000u + 2u * 32u);
+  CHECK_EQ(scene.commands.uav_cpu, 0x1000u + 3u * 32u);
+  CHECK(scene.commands.uav_target == &scene.target);
+  CHECK(scene.commands.uav_integer);
+  CHECK_EQ(scene.commands.uav_rects, 2u);
+  CHECK_EQ(scene.commands.uav_first, 7u);
+  const Float4 floats = {{9.0f, 0.0f, 0.0f, 0.0f}};
+  CHECK(scene.session().on_ClearUnorderedAccessViewFloat12(list, gpu, cpu, resolved, floats, 0u, nullptr));
+  CHECK(!scene.commands.uav_integer);
+  CHECK_EQ(scene.commands.uav_rects, 0u);
+  CHECK_EQ(scene.commands.uav_first, 9u);
+  CHECK(scene.session().invariants_hold()); }
+
+TEST(d3d12_session_extended_lists, an_unordered_access_view_clear_naming_a_bad_handle_or_resource_is_refused)
+{ Scene scene;
+  const Uint4 integers = {};
+  const DescriptorRef gpu = {shader_heap_id, 2u};
+  const DescriptorRef cpu = {cpu_heap_id, 3u};
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(list, {cpu_heap_id, 0u}, cpu, resolved, integers, 0u, nullptr));
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(list, {shader_heap_id, 8u}, cpu, resolved, integers, 0u, nullptr));
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(list, gpu, {cpu_heap_id, 8u}, resolved, integers, 0u, nullptr));
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(list, gpu, {99u, 0u}, resolved, integers, 0u, nullptr));
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(list, gpu, cpu, 99u, integers, 0u, nullptr));
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(99u, gpu, cpu, resolved, integers, 0u, nullptr));
+  const Rect areas[17] = {};
+  CHECK(!scene.session().on_ClearUnorderedAccessViewUint12(list, gpu, cpu, resolved, integers, 17u, areas));
+  CHECK_EQ(scene.commands.uav_clears, 0u); }
+
+TEST(d3d12_session_extended_lists, a_cleared_unordered_access_view_keeps_its_heaps_and_resource_alive)
+{ Scene scene;
+  const DescriptorRef gpu = {shader_heap_id, 0u};
+  const DescriptorRef cpu = {cpu_heap_id, 0u};
+  const Float4 floats = {};
+  CHECK(scene.session().on_ClearUnorderedAccessViewFloat12(list, gpu, cpu, resolved, floats, 0u, nullptr));
+  const std::uint32_t before = references_of(&scene.target);
+  CHECK(scene.session().on_Destroy12(resolved));
+  CHECK_EQ(references_of(&scene.target), before - 1u);
+  CHECK(scene.session().on_Destroy12(list));
+  CHECK_EQ(references_of(&scene.target), before - 2u); }
+
+TEST(d3d12_session_extended_lists, a_bundle_is_played_in_a_list_and_the_list_keeps_what_the_bundle_recorded)
+{ Scene scene;
+  scene.written.desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  scene.written.desc.Width = buffer_bytes;
+  CHECK(scene.session().on_SetPredication12(bundle_id, buffer, 0u, 0u));
+  CHECK(scene.session().on_ExecuteBundle12(list, bundle_id));
+  CHECK_EQ(scene.commands.bundle_executions, 1u);
+  CHECK(scene.commands.last_bundle == &scene.bundle);
+  const std::uint32_t before = references_of(&scene.written);
+  CHECK(scene.session().on_Destroy12(bundle_id));
+  CHECK(scene.session().on_Destroy12(buffer));
+  const std::uint32_t after = references_of(&scene.written);
+  CHECK(after < before);
+  CHECK(after > 1u);
+  CHECK(scene.session().on_Destroy12(list));
+  CHECK_EQ(references_of(&scene.written), after - 1u);
+  CHECK(scene.session().invariants_hold()); }
+
+TEST(d3d12_session_extended_lists, a_bundle_that_is_not_a_bundle_or_plays_in_a_bundle_or_itself_is_refused)
+{ Scene scene;
+  CHECK(!scene.session().on_ExecuteBundle12(list, list));
+  CHECK(!scene.session().on_ExecuteBundle12(list, resolved));
+  CHECK(!scene.session().on_ExecuteBundle12(list, 99u));
+  CHECK(!scene.session().on_ExecuteBundle12(99u, bundle_id));
+  CHECK(!scene.session().on_ExecuteBundle12(bundle_id, bundle_id));
+  scene.commands.type = D3D12_COMMAND_LIST_TYPE_BUNDLE;
+  CHECK(!scene.session().on_ExecuteBundle12(list, bundle_id));
+  scene.commands.type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+  scene.bundle.type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+  CHECK(!scene.session().on_ExecuteBundle12(list, bundle_id));
+  CHECK_EQ(scene.commands.bundle_executions, 0u); }
