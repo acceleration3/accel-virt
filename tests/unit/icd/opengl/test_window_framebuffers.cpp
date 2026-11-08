@@ -11,6 +11,7 @@
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/batch_ready.hpp"
 #include "icd/opengl/client_array_state.hpp"
+#include "icd/common/present_pacing.hpp"
 #include "icd/common/window_present_queue.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/pixel_format.hpp"
@@ -450,6 +451,34 @@ TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
   rig.framebuffers.drop_gone(rig.wire(), rig.surface);
   rig.framebuffers.hand_over(rig.context.mark());
   CHECK_EQ(loop.queued(), 0u);
+  CHECK(rig.framebuffers.invariants_hold());
+  rig.framebuffers.release(nullptr); }
+
+TEST(window_framebuffers, showing_held_frames_hands_every_held_window_frame_to_the_thread_at_once)
+{ Rig                      rig;
+  av::ScriptedThread       thread;
+  av::CountedWakeSignal    handed;
+  av::CountedWakeSignal    shown;
+  av::LockTrace            trace;
+  av::RecordingThreadLock  lock{trace, 'P'};
+  av::ScriptedWindowChains chains;
+  av::glicd::BatchReady    ready{rig.context_rig.kmt()};
+  av::glicd::GlPresentQueue loop{rig.context_rig.platform(), thread, handed, shown, lock, ready, rig.surface,
+                                 chains, rig.context_rig.lines()};
+  av::icd::PresentPacing   pacing;
+  CHECK(pacing.ask(0));
+  CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
+  rig.context_rig.host().blob_import(0u, 0x0000600000000090ull);
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop, 0u));
+  rig.context.flush();
+  rig.framebuffers.hold_over(rig.context.mark(), pacing);
+  CHECK_EQ(loop.queued(), 0u);
+  rig.framebuffers.show_held_now();
+  CHECK_EQ(loop.queued(), 1u);
+  rig.framebuffers.show_held_now();
+  CHECK_EQ(loop.queued(), 1u);
+  CHECK(thread.step());
+  CHECK_EQ(rig.surface.blits(), 1u);
   CHECK(rig.framebuffers.invariants_hold());
   rig.framebuffers.release(nullptr); }
 

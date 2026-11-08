@@ -64,7 +64,7 @@ GLenum APIENTRY Wrap_glClientWaitSync(GLsync sync, GLbitfield flags, GLuint64 ti
 void APIENTRY Wrap_glFinish(void)
 {
     AV_SCOPE("Wrap_glFinish");
-    ::av::glicd::gl_icd_binding.root().manual().finish();
+    ::av::glicd::gl_icd_binding.root().finish_current();
 }
 
 void APIENTRY Wrap_glColorPointer(GLint, GLenum, GLsizei, const void*)

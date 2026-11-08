@@ -80,6 +80,7 @@ public:
     bool        pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
                                      int32_t *ints, float *floats);
     void        flush_current();
+    void        finish_current();
     void        viewport(int32_t x, int32_t y, int32_t width, int32_t height);
     bool        set_swap_interval(int32_t interval);
     int32_t     swap_interval();

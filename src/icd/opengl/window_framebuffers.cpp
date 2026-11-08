@@ -200,6 +200,13 @@ void WindowFramebuffers::release(ClientTransport *wire)
     });
 }
 
+void WindowFramebuffers::show_held_now()
+{
+    AV_SCOPE("WindowFramebuffers::show_held_now");
+    for (uint32_t slot = presenters_.next_live(0u); slot != presenters_.no_slot; slot = presenters_.next_live(slot + 1u))
+        (*presenters_.at(slot))->show_held_now();
+}
+
 uint32_t WindowFramebuffers::held() const
 {
     AV_SCOPE("WindowFramebuffers::held");

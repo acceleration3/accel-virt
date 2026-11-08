@@ -404,7 +404,16 @@ void GlIcdRoot::flush_current()
     GuestGlContext *const context = currents_.current();
     if (context != nullptr && !formats_.format(context->pixel_format()).double_buffer())
         static_cast<void>(show_frame(context->current_dc()));
+    if (context != nullptr) context->framebuffers().show_held_now();
     manual_.flush();
+}
+
+void GlIcdRoot::finish_current()
+{
+    AV_SCOPE("GlIcdRoot::finish_current");
+    GuestGlContext *const context = currents_.current();
+    if (context != nullptr) context->framebuffers().show_held_now();
+    manual_.finish();
 }
 
 bool GlIcdRoot::set_swap_interval(int32_t interval)

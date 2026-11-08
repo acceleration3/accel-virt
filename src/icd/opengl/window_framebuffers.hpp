@@ -61,6 +61,7 @@ public:
                      icd::WindowSurface &surface, GlPresentQueue *loop, uint64_t luid);
     void     hand_over(const BatchMark &mark);
     void     hold_over(const BatchMark &mark, icd::PresentPacing &pacing);
+    void     show_held_now();
     bool     viewport_resizes(uint32_t width, uint32_t height);
     void     follow(ClientTransport &wire, void *window, const PixelFormat &format, icd::WindowSurface &surface);
     void     drop_gone(ClientTransport &wire, icd::WindowSurface &surface);
