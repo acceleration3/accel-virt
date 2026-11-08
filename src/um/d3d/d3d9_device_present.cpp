@@ -91,6 +91,12 @@ HRESULT D3d9Device::allocate_shared(D3d9Resource &resource, const D3DDDIARG_CREA
     resource.allocation_resource = create.hResource;
     resource.allocation_pitch = surface.pitch();
     resource.shared_key = surface.key();
+    if (resource.shared_key == 0u) return S_OK;
+    uint32_t id = 0u, subresource = 0u;
+    if (!surface_of(resource, 0u, id, subresource)) return E_INVALIDARG;
+    if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, resource.shared_key, 0u) ||
+        wire().flush() != Status::ok)
+        return lost(__func__);
     return S_OK;
 }
 
