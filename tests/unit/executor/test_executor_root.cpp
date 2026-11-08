@@ -518,6 +518,23 @@ TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, nullptr) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
+TEST(executor_root_open, a_refused_context_says_which_check_refused_it)
+{ Opened opened;
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the opencl context is refused: the GPU does not run this API"), 1u);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, absent) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the vulkan context is refused: the domain names no GPU"), 1u);
+  const AvContextOptions asked = {4u, 6u, 0u, 0u, 0u};
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel, &asked) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("context options were asked of an API that takes none"), 1u);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, intel) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the backend would not start"), 1u); }
+
+TEST(executor_root_open, a_refusal_repeated_many_times_is_spoken_a_few_times)
+{ Opened opened;
+  for (std::uint32_t i = 0u; i < 300u; i++) CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the GPU does not run this API"), 6u); }
+
 TEST(executor_root_open, every_slot_taken_refuses_the_next)
 { Opened opened;
   for (std::uint32_t i = 0u; i < ExecutorRoot::sessions; i++) {

@@ -1,5 +1,6 @@
 #include "executor/executor_root.hpp"
 
+#include "executor/context_refusals.hpp"
 #include "executor/executor_log.hpp"
 #include "core/log/log_line.hpp"
 
@@ -46,7 +47,7 @@ void *run_closing_watch(void *root)
 
 ExecutorRoot::ExecutorRoot(ExecutorLog &log)
     : gpus_(), domains_(), memory_groups_{}, group_of_{}, group_refs_{}, sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
-      wedged_{}, reaping_{}, closing_{}, wedged_since_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), helpers_{}, helpers_running_(0u), prepared_{}, exhausted_(0u), exhaustion_logged_(false), stopping_(false), clock_(), apis_(nullptr), log_(log), lost_leak_after_(lost_leak_nanoseconds)
+      wedged_{}, reaping_{}, closing_{}, wedged_since_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), helpers_{}, helpers_running_(0u), prepared_{}, exhausted_(0u), exhaustion_logged_(false), stopping_(false), clock_(), apis_(nullptr), log_(log), lost_leak_after_(lost_leak_nanoseconds), refusals_(log.sessions())
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) group_of_[slot] = max_sessions;
@@ -275,20 +276,36 @@ bool ExecutorRoot::sync_surface(uint32_t domain, uint64_t surface, uint32_t flag
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &options, ContextSession *share)
 {
     AV_SCOPE("ExecutorRoot::open");
+    const char *const api = api_name(sub_api);
     const HostGpu *const gpu = gpu_of(options.domain);
-    if (gpu == nullptr) return nullptr;
-    const bool options_asked = options.major != 0u || options.minor != 0u || options.profile != 0u || options.flags != 0u;
-    if (options_asked && sub_api != AV_EXECUTOR_SUB_API_OPENGL) return nullptr;
-    if (share != nullptr && sub_api != AV_EXECUTOR_SUB_API_OPENGL && sub_api != AV_EXECUTOR_SUB_API_OPENCL)
+    if (gpu == nullptr) {
+        refusals_.refuse(ContextRefusals::Reason::domain, api, options.domain);
         return nullptr;
-    if ((gpu->sub_apis() & sub_api) == 0u) return nullptr;
-    if (backend_in(0u, sub_api) == nullptr) return nullptr;
+    }
+    const bool options_asked = options.major != 0u || options.minor != 0u || options.profile != 0u || options.flags != 0u;
+    if (options_asked && sub_api != AV_EXECUTOR_SUB_API_OPENGL) {
+        refusals_.refuse(ContextRefusals::Reason::options, api, options.flags);
+        return nullptr;
+    }
+    if (share != nullptr && sub_api != AV_EXECUTOR_SUB_API_OPENGL && sub_api != AV_EXECUTOR_SUB_API_OPENCL) {
+        refusals_.refuse(ContextRefusals::Reason::share_api, api, sub_api);
+        return nullptr;
+    }
+    if ((gpu->sub_apis() & sub_api) == 0u) {
+        refusals_.refuse(ContextRefusals::Reason::sub_api_mask, api, gpu->sub_apis());
+        return nullptr;
+    }
+    if (backend_in(0u, sub_api) == nullptr) {
+        refusals_.refuse(ContextRefusals::Reason::no_backend, api, sub_api);
+        return nullptr;
+    }
     reap_wedged();
 
     lock_.acquire();
     const OpenGlBackend *const shared = share != nullptr ? sharing(share, *gpu) : nullptr;
     if (share != nullptr && shared == nullptr) {
         lock_.release();
+        refusals_.refuse(ContextRefusals::Reason::share_gone, api, 0u);
         return nullptr;
     }
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
@@ -415,29 +432,43 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     AV_SCOPE("ExecutorRoot::bind");
     sessions_[slot].object().use_host_ram(apis_->host_ram_ledger(), session_host_bytes);
     backend_in(slot, sub_api)->use_host_ram(apis_->host_ram_ledger(), session_host_bytes);
+    bool started = false;
     switch (sub_api) {
     case AV_EXECUTOR_SUB_API_OPENCL:
         opencl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
         opencl_[slot].object().use_freed(apis_->cl_freed(gpu.index()));
-        return opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
-                                                 share, sessions_[slot].object().imports());
+        started = opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
+                                                    share, sessions_[slot].object().imports());
+        break;
     case AV_EXECUTOR_SUB_API_OPENGL:
-        if (group == nullptr) return false;
-        opengl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
-        return opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group);
+        if (group != nullptr) {
+            opengl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
+            started = opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group);
+        }
+        break;
     case AV_EXECUTOR_SUB_API_D3D: {
         constexpr uint32_t renew_wait_ms = 2000u;
         D3d11HostDevice *const device11 = apis_->d3d11_device(gpu.index());
-        if (device11 == nullptr || !device11->renew(renew_wait_ms)) return false;
-        return d3d_[slot].object().initialize(shares_[slot], sessions_[slot].object().imports(), device11,
-                                              apis_->d3d12_device(gpu.index()), apis_->surfaces(gpu.index()),
-                                              apis_->d3d9_device(gpu.index()));
+        if (device11 == nullptr || !device11->renew(renew_wait_ms)) {
+            refusals_.refuse(ContextRefusals::Reason::d3d11_device, api_name(sub_api), device11 != nullptr ? 1u : 0u);
+            return false;
+        }
+        started = d3d_[slot].object().initialize(shares_[slot], sessions_[slot].object().imports(), device11,
+                                                 apis_->d3d12_device(gpu.index()), apis_->surfaces(gpu.index()),
+                                                 apis_->d3d9_device(gpu.index()));
+        break;
     }
     default:
         vulkan_[slot].object().use_vram(apis_->vram_ledger(gpu.index()), apis_->host_ram_ledger());
         vulkan_[slot].object().initialize(gpu, apis_->memory_source(gpu.index()), sessions_[slot].object().imports());
-        return true;
+        started = true;
+        break;
     }
+    if (!started) {
+        const HostRamLedger *const ram = apis_->host_ram_ledger();
+        refusals_.refuse(ContextRefusals::Reason::bind, api_name(sub_api), ram != nullptr ? ram->tight_refusals() : 0u);
+    }
+    return started;
 }
 
 void ExecutorRoot::close(ContextSession *session)

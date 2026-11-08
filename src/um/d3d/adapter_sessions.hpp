@@ -3,6 +3,7 @@
 
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/scope_exit.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -57,6 +58,8 @@ private:
     ObjectStorage<icd::LinkGenerations<d3d::D3dSession>> sessions_[max_adapters];
     uint32_t                       adapters_[max_adapters];
     bool                           exhausted_;
+    const char                    *learn_step_;
+    Status                         learn_status_;
 };
 
 template <typename Caps>
@@ -65,7 +68,7 @@ AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog 
                                        uint32_t flush_command, const d3d::SliceOffer *offer)
     : kmt_(kmt), memory_(memory), lines_(log), refusal_(refusal), arena_bytes_(arena_bytes),
       select_command_(select_command), flush_command_(flush_command), offer_(offer), caps_(),
-      sessions_(), adapters_{}, exhausted_(false)
+      sessions_(), adapters_{}, exhausted_(false), learn_step_(""), learn_status_(Status::ok)
 {
     AV_SCOPE("AdapterSessions::AdapterSessions");
     for (auto &slot : sessions_) static_cast<void>(slot.construct(memory));
@@ -89,7 +92,13 @@ uint32_t AdapterSessions<Caps>::slot_of(uint32_t kmt_adapter, bool &learned)
     for (uint32_t slot = 0u; slot < max_adapters; slot++) {
         if (caps_[slot].learned()) continue;
         if (!learn(caps_[slot], kmt_adapter)) {
-            lines_.write(refusal_);
+            LogLine(lines_)
+                .text(refusal_)
+                .text(": ")
+                .text(learn_step_)
+                .text(", status ")
+                .number(static_cast<uint32_t>(learn_status_))
+                .write();
             return none;
         }
         adapters_[slot] = kmt_adapter;
@@ -104,7 +113,9 @@ bool AdapterSessions<Caps>::learn(Caps &caps, uint32_t kmt_adapter)
 {
     AV_SCOPE("AdapterSessions::learn");
     GuestConnection connection(kmt_);
-    if (connection.open(kmt_adapter) != Status::ok) return false;
+    learn_step_ = "the adapter would not open";
+    learn_status_ = connection.open(kmt_adapter);
+    if (learn_status_ != Status::ok) return false;
     ScopeExit        closed([&] { connection.close(); });
     SrwLock          unshared;
     icd::HostChannel probe(memory_, lines_,
@@ -112,11 +123,14 @@ bool AdapterSessions<Caps>::learn(Caps &caps, uint32_t kmt_adapter)
                                              0u, 0u),
                            unshared);
     const Status opened = probe.open(connection);
+    learn_step_ = "the probe context was refused";
+    learn_status_ = opened;
     if (opened != Status::ok) {
         exhausted_ = opened == Status::no_memory;
         return false;
     }
     const bool learned = caps.learn(probe.transport(), kmt_, kmt_adapter);
+    learn_step_ = "the host did not answer the capability queries";
     exhausted_ = !learned && probe.exhausted();
     probe.close(false);
     return learned;

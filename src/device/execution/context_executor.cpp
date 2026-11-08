@@ -1,11 +1,14 @@
 #include "device/execution/context_executor.hpp"
 
+#include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/execution/command_api.hpp"
 #include "device/context/context_signal.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/host/host.hpp"
+#include "device/host/stdio_log.hpp"
 
 namespace av {
 extern "C" void av_context_signalled(void *context)
@@ -61,7 +64,12 @@ Status ContextExecutor::create()
     host_.require_worker("ContextExecutor::create");
     if (executor_ != nullptr || !configured_) return Status::invalid_state;
     executor_ = make();
-    if (executor_ == nullptr) return Status::no_memory;
+    if (executor_ == nullptr) {
+        StdioLog  sink(stderr);
+        DriverLog lines(sink, "virtio-gpu-av: ");
+        LogLine(lines).text("context ").number(id_).text(" got no executor session for sub-API ").number(static_cast<uint32_t>(api_)).write();
+        return Status::no_memory;
+    }
     if (signal_ != nullptr) library_.set_signal(executor_, &av_context_signalled, signal_);
     if (api_ != SubApi::opengl) return Status::ok;
     const Status published = shares_.publish(id_, uuid_.raw(), executor_);

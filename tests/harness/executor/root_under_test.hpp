@@ -27,6 +27,7 @@ public:
     ContextSession *open(std::uint32_t sub_api, const std::uint8_t *gpu_uuid,
                          const AvContextOptions *options = nullptr, ContextSession *share = nullptr);
 
+    const RecordingLog &lines() const;
     bool invariants_hold() const;
 
 private:

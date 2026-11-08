@@ -7,6 +7,7 @@
 #include "device/shim/posix_condition.hpp"
 #include "device/shim/posix_lock.hpp"
 #include "device/abi/av_executor.h"
+#include "executor/context_refusals.hpp"
 #include "executor/context_session.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/executor_domains.hpp"
@@ -163,6 +164,7 @@ private:
     HostApis      *apis_;
     ExecutorLog   &log_;
     uint64_t       lost_leak_after_;
+    ContextRefusals refusals_;
 };
 
 }

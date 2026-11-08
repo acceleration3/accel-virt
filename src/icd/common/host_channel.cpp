@@ -48,7 +48,12 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
     static_cast<void>(transport_.construct(device, memory_, sub_api_, ring_order_, reply_bytes_, staging_, staging_bytes_));
     const Status initialized = transport_.object().initialize(options);
     if (initialized != Status::ok) {
-        lines_.write("the driver refused the context");
+        LogLine(lines_)
+            .text("the driver refused the context, status ")
+            .number(static_cast<uint32_t>(initialized))
+            .text(", host faulted ")
+            .number(transport_.object().host_faulted() ? 1u : 0u)
+            .write();
         return initialized;
     }
     if (batch_bytes_ != 0u) {

@@ -73,6 +73,12 @@ ContextSession *RootUnderTest::open(std::uint32_t sub_api, const std::uint8_t *g
     return storage.object().open(sub_api, asked, share);
 }
 
+const RecordingLog &RootUnderTest::lines() const
+{
+    AV_SCOPE("RootUnderTest::lines");
+    return sink_;
+}
+
 bool RootUnderTest::invariants_hold() const
 {
     AV_SCOPE("RootUnderTest::invariants_hold");

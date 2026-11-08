@@ -334,6 +334,7 @@ TEST(host_channel, a_driver_that_refuses_the_context_opens_nothing)
   rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, 0xC0000001u);
   CHECK(channel.open(rig.device()) != Status::ok);
   CHECK_EQ(rig.log().holding("avtest: the driver refused the context"), 1u);
+  CHECK_EQ(rig.log().holding("the driver refused the context, status "), 1u);
   rig.check_nothing_held(channel); }
 
 TEST(host_channel, a_shape_that_neither_batches_nor_lends_opens_the_transport_alone)
