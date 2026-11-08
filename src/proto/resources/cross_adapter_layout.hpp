@@ -9,7 +9,7 @@ namespace av {
 
 class CrossAdapterLayout {
 public:
-    static constexpr uint32_t pitch_alignment = 128u;
+    static constexpr uint32_t pitch_alignment = 256u;
     static constexpr uint32_t height_alignment = 4u;
 
     CrossAdapterLayout(uint32_t width, uint32_t height, uint32_t format, uint32_t bytes_per_pixel);

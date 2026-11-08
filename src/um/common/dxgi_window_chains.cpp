@@ -301,8 +301,13 @@ bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, 
     AV_SCOPE("DxgiWindowChains::make_chain");
     drop_slots(chain);
     if (chain.chain.get() != nullptr) {
-        if (FAILED(chain.chain->ResizeBuffers(0u, width, height, static_cast<DXGI_FORMAT>(chain.format), 0u))) {
-            refuse("the window's chain would not resize");
+        const HRESULT resized =
+            chain.chain->ResizeBuffers(0u, width, height, static_cast<DXGI_FORMAT>(chain.format), 0u);
+        if (FAILED(resized)) {
+            LogLine(lines_)
+                .text("no DXGI chain for a window: the window's chain would not resize, answering ")
+                .hex(static_cast<uint32_t>(resized), 8u)
+                .write();
             return false;
         }
     } else {
