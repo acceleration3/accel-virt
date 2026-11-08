@@ -333,7 +333,9 @@ TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
   table.record(nv12, api_sample, 0u);
   table.settle();
   CHECK((table.format_support(nv12) & ddi_multiplane_overlay) != 0u);
-  CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u); }
+  CHECK((table.format_support(nv12) & ddi_display) != 0u);
+  CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u);
+  CHECK_EQ(table.format_support(yuy2) & ddi_display, 0u); }
 
 TEST(dxgi_format_table, formats_past_the_rows_the_host_sent_have_no_support)
 { av::d3dproto::FormatCaps rows[av::DxgiFormat::count] = {};

@@ -184,7 +184,7 @@ uint32_t DxgiFormatTable::format_support(uint32_t format) const
     for (const uint32_t overlay : overlay_formats)
         if (format == overlay && (support & ddi_display) != 0u) support |= ddi_multiplane_overlay;
     for (const uint32_t video : overlay_video_formats)
-        if (format == video && support != 0u) support |= ddi_multiplane_overlay;
+        if (format == video && support != 0u) support |= ddi_multiplane_overlay | ddi_display;
     return support;
 }
 
