@@ -12,6 +12,8 @@ public:
     bool     raw_copy() const;
     bool     convertible() const;
     bool     packed_bytes() const;
+    bool     float_pass() const;
+    bool     shader_encodes() const;
     uint32_t format() const;
 
 private:

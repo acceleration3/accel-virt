@@ -97,6 +97,21 @@ bool ConversionTarget::packed_bytes() const
     return base == dxgi_r8g8b8a8_unorm || base == dxgi_b8g8r8a8_unorm || base == dxgi_b8g8r8x8_unorm;
 }
 
+bool ConversionTarget::float_pass() const
+{
+    AV_SCOPE("ConversionTarget::float_pass");
+    if (!floating(source_)) return false;
+    const uint32_t base = unorm_of(destination_);
+    return base == dxgi_r8g8b8a8_unorm || base == dxgi_b8g8r8a8_unorm || base == dxgi_b8g8r8x8_unorm ||
+           base == dxgi_r10g10b10a2_unorm;
+}
+
+bool ConversionTarget::shader_encodes() const
+{
+    AV_SCOPE("ConversionTarget::shader_encodes");
+    return float_pass() && !encoded(format());
+}
+
 uint32_t ConversionTarget::format() const
 {
     AV_SCOPE("ConversionTarget::format");

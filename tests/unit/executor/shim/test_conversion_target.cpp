@@ -53,3 +53,17 @@ TEST(conversion_target, formats_the_host_cannot_draw_are_not_convertible)
   CHECK(!ConversionTarget(b8g8r8a8_unorm, nv12).convertible());
   CHECK(!ConversionTarget(r32_float, b8g8r8a8_unorm).convertible());
   CHECK(ConversionTarget(r8g8b8a8_unorm, b8g8r8a8_unorm).convertible()); }
+
+TEST(conversion_target, float_sources_are_drawn_by_a_shader_into_eight_and_ten_bit_targets)
+{ CHECK(ConversionTarget(r16g16b16a16_float, b8g8r8a8_unorm).float_pass());
+  CHECK(ConversionTarget(r32_float, b8g8r8a8_unorm).float_pass() == false);
+  CHECK(ConversionTarget(r16g16b16a16_float, r8g8b8a8_unorm).float_pass());
+  CHECK(ConversionTarget(r16g16b16a16_float, r10g10b10a2_unorm).float_pass());
+  CHECK(!ConversionTarget(r16g16b16a16_float, r16g16b16a16_float).float_pass());
+  CHECK(!ConversionTarget(b8g8r8a8_unorm, b8g8r8a8_unorm).float_pass());
+  CHECK(!ConversionTarget(r10g10b10a2_unorm, b8g8r8a8_unorm).float_pass()); }
+
+TEST(conversion_target, the_shader_encodes_unless_the_target_format_encodes_in_hardware)
+{ CHECK(ConversionTarget(r16g16b16a16_float, b8g8r8a8_unorm).shader_encodes());
+  CHECK(!ConversionTarget(r16g16b16a16_float, b8g8r8a8_srgb).shader_encodes());
+  CHECK(!ConversionTarget(b8g8r8a8_unorm, b8g8r8a8_unorm).shader_encodes()); }

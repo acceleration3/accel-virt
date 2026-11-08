@@ -1,7 +1,7 @@
 #ifndef AV_HOST_FORMAT_CONVERTER_HPP
 #define AV_HOST_FORMAT_CONVERTER_HPP
 
-#include "executor/shim/scrgb_rows.hpp"
+#include "executor/shim/float_blit_pass.hpp"
 
 #include <stdint.h>
 
@@ -18,12 +18,7 @@ namespace av {
 
 class HostFormatConverter {
 public:
-    struct Rectangle {
-        uint32_t left;
-        uint32_t top;
-        uint32_t right;
-        uint32_t bottom;
-    };
+    using Rectangle = FloatBlitPass::Rectangle;
 
     HostFormatConverter();
     ~HostFormatConverter();
@@ -36,12 +31,6 @@ public:
     void             release();
 
 private:
-    ID3D11Texture2D *draw_scrgb(ID3D11Device5 *device, ID3D11DeviceContext4 *context, ID3D11Texture2D *source,
-                                uint32_t subresource, const Rectangle &from, uint32_t width, uint32_t height,
-                                uint32_t target_format);
-    [[nodiscard]] bool stage(ID3D11Device5 *device, ID3D11Texture2D *&texture, uint32_t &held_width,
-                             uint32_t &held_height, uint32_t &held_format, uint32_t width, uint32_t height,
-                             uint32_t format, bool writing);
     [[nodiscard]] bool prepare(ID3D11Device5 *device, ID3D11DeviceContext4 *context, ID3D11Texture2D *source,
                                uint32_t width, uint32_t height, uint32_t target_format);
 
@@ -56,15 +45,7 @@ private:
     uint32_t                        width_;
     uint32_t                        height_;
     uint32_t                        format_;
-    ScrgbRows                       rows_;
-    ID3D11Texture2D                *read_;
-    ID3D11Texture2D                *written_;
-    uint32_t                        read_width_;
-    uint32_t                        read_height_;
-    uint32_t                        read_format_;
-    uint32_t                        written_width_;
-    uint32_t                        written_height_;
-    uint32_t                        written_format_;
+    FloatBlitPass                   float_pass_;
 };
 
 }
