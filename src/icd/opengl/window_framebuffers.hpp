@@ -22,6 +22,7 @@ namespace av::icd {
 }
 
 namespace av::icd {
+class PresentPacing;
 class WindowSurface;
 }
 
@@ -59,6 +60,7 @@ public:
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
                      icd::WindowSurface &surface, GlPresentQueue *loop, uint64_t luid);
     void     hand_over(const BatchMark &mark);
+    void     hold_over(const BatchMark &mark, icd::PresentPacing &pacing);
     void     follow(ClientTransport &wire, void *window, const PixelFormat &format, icd::WindowSurface &surface);
     void     drop_gone(ClientTransport &wire, icd::WindowSurface &surface);
     void     release(ClientTransport *wire);

@@ -39,7 +39,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
                                const GlContextOptions &options)
     : memory_(memory), lines_(lines), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), held_swap_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
+      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
       channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, groups, groups.mint(), lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
@@ -125,18 +125,6 @@ void *GuestGlContext::current_dc() const
 {
     AV_SCOPE("GuestGlContext::current_dc");
     return current_dc_;
-}
-
-void *GuestGlContext::held_swap() const
-{
-    AV_SCOPE("GuestGlContext::held_swap");
-    return held_swap_;
-}
-
-void GuestGlContext::hold_swap(void *dc)
-{
-    AV_SCOPE("GuestGlContext::hold_swap");
-    held_swap_ = dc;
 }
 
 void GuestGlContext::set_current_dc(void *dc)

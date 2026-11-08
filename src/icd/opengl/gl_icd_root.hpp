@@ -105,8 +105,8 @@ private:
     enum class Shown { refused, nothing, handed };
 
     Shown show_frame(void *dc);
-    Shown present_frame(void *dc);
-    void  present_held(GuestGlContext &context);
+    Shown present_frame(void *dc, bool paced);
+    bool  admits(GuestGlContext &context);
     uint64_t take_pending(uint32_t thread);
     [[nodiscard]] Status put_pending(uint32_t thread, uint64_t handle);
     void     fail(uint32_t error);

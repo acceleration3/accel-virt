@@ -1,6 +1,7 @@
 #ifndef AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 #define AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 
+#include "icd/common/held_flusher.hpp"
 #include "icd/common/once_latch.hpp"
 #include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
@@ -26,6 +27,7 @@ class StateWriter;
 }
 
 namespace av::icd {
+class PresentPacing;
 class WindowSurface;
 template <typename Source, typename Readiness>
 class WindowPresentQueue;
@@ -41,7 +43,7 @@ struct BackBufferPresenterProbe;
 using GlPresentQueue = icd::WindowPresentQueue<BackBufferPresenter, BatchReady>;
 using GlFrame = icd::HandedFrame<BackBufferPresenter, BatchMark>;
 
-class BackBufferPresenter {
+class BackBufferPresenter final : public icd::HeldFlusher {
 public:
     static constexpr uint32_t max_edge = 8192u;
     static constexpr uint32_t slot_count = 2u;
@@ -72,6 +74,9 @@ public:
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, icd::WindowSurface &surface,
                      GlPresentQueue *loop, uint64_t luid);
     void     hand_over(const BatchMark &mark);
+    void     hold_over(const BatchMark &mark, icd::PresentPacing &pacing);
+    void     show_held_now();
+    uint32_t flush_held() override;
     void     done(const GlFrame &frame, bool drawn);
     void     release(ClientTransport *wire);
 
@@ -95,6 +100,8 @@ private:
     bool                 queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentQueue &loop);
     bool                 reserve_room(ClientTransport &wire, GlPresentQueue &loop);
     void                 give_room_back();
+    void                 drop_held();
+    GlFrame              take_pending(const BatchMark &mark);
     uint8_t             *room_pixels(uint32_t slot) const;
     void                 settle() const;
     size_t               frame_bytes() const;
@@ -117,6 +124,9 @@ private:
     icd::ArenaRegion room_;
     uint32_t         pending_;
     bool             pending_chained_;
+    bool             held_;
+    BatchMark        held_mark_;
+    icd::PresentPacing *pacing_;
     ChainedFrames    chained_;
     bool             chain_refused_;
 

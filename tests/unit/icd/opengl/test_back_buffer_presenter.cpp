@@ -10,6 +10,7 @@
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
+#include "icd/common/present_pacing.hpp"
 #include "icd/opengl/chained_frames.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_present_queue.hpp"
@@ -831,3 +832,42 @@ TEST(back_buffer_presenter_invariants, fail_for_a_chained_frame_without_a_slot_o
   CHECK(part.presenter.invariants_hold());
   Probe::forget_chain_texture(part.presenter);
   CHECK(!part.presenter.invariants_hold()); }
+
+TEST(back_buffer_presenter, a_held_frame_is_shown_by_the_thread_once_pacing_admits_and_the_newest_replaces_it)
+{ Rig      rig;
+  Presents presents(rig);
+  av::icd::PresentPacing pacing;
+  CHECK(pacing.ask(0));
+  rig.host().gl_window(1u, 1u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  rig.room_import();
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
+  rig.context.flush();
+  rig.presenter.hold_over(rig.context.mark(), pacing);
+  CHECK_EQ(presents.loop.queued(), 0u);
+  CHECK(rig.presenter.invariants_hold());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
+  rig.context.flush();
+  rig.presenter.hold_over(rig.context.mark(), pacing);
+  CHECK_EQ(presents.loop.queued(), 0u);
+  CHECK_EQ(rig.presenter.flush_held(), 0u);
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK_EQ(rig.presenter.flush_held(), 0u);
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK(rig.presenter.invariants_hold()); }
+
+TEST(back_buffer_presenter, releasing_a_presenter_shows_the_frame_it_holds)
+{ Rig      rig;
+  Presents presents(rig);
+  av::icd::PresentPacing pacing;
+  CHECK(pacing.ask(0));
+  rig.host().gl_window(1u, 1u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  rig.room_import();
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
+  rig.context.flush();
+  rig.presenter.hold_over(rig.context.mark(), pacing);
+  rig.presenter.show_held_now();
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK_EQ(rig.presenter.flush_held(), 0u);
+  CHECK_EQ(presents.loop.queued(), 1u); }

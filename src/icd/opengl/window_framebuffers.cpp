@@ -143,6 +143,13 @@ void WindowFramebuffers::hand_over(const BatchMark &mark)
     presented_ = nullptr;
 }
 
+void WindowFramebuffers::hold_over(const BatchMark &mark, icd::PresentPacing &pacing)
+{
+    AV_SCOPE("WindowFramebuffers::hold_over");
+    if (presented_ != nullptr) presented_->hold_over(mark, pacing);
+    presented_ = nullptr;
+}
+
 void WindowFramebuffers::follow(ClientTransport &wire, void *window, const PixelFormat &format,
                                 icd::WindowSurface &surface)
 {

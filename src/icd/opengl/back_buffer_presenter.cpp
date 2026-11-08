@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/driver_log.hpp"
+#include "icd/common/present_pacing.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/common/slot_format.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -33,7 +34,7 @@ static_assert(BackBufferPresenter::max_edge * 4u + TransferRoom::command_bytes <
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, DriverLog &log)
     : memory_(memory), lines_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
       framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(),
-      loop_(nullptr), room_(), pending_(slot_count), pending_chained_(false), chained_(),
+      loop_(nullptr), room_(), pending_(slot_count), pending_chained_(false), held_(false), held_mark_(), pacing_(nullptr), chained_(),
       chain_refused_(false)
 {
     AV_SCOPE("BackBufferPresenter::BackBufferPresenter");
@@ -56,6 +57,7 @@ Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const P
     if (seen == icd::WindowExtent::Look::gone || width > max_edge || height > max_edge)
         return Status::invalid_parameter;
     if (framebuffers_[draw] != 0u && window == window_ && seen == icd::WindowExtent::Look::same) return Status::ok;
+    show_held_now();
     settle();
     delete_objects(wire);
     chain_refused_ = false;
@@ -114,6 +116,7 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     AV_SCOPE("BackBufferPresenter::present");
     if (framebuffers_[draw] == 0u) return false;
     if (width_ == 0u || height_ == 0u) return true;
+    drop_held();
     const auto right = static_cast<int32_t>(width_);
     const auto top = static_cast<int32_t>(height_);
     if (framebuffers_[resolve] != 0u)
@@ -136,11 +139,73 @@ void BackBufferPresenter::hand_over(const BatchMark &mark)
 {
     AV_SCOPE("BackBufferPresenter::hand_over");
     if (pending_ == slot_count || loop_ == nullptr) return;
+    static_cast<void>(loop_->hand(take_pending(mark)));
+}
+
+GlFrame BackBufferPresenter::take_pending(const BatchMark &mark)
+{
+    AV_SCOPE("BackBufferPresenter::take_pending");
     const GlFrame frame(*this, pending_, pending_chained_ ? nullptr : room_pixels(pending_),
                         GlFrame::Rows::bgra_bottom_up, width_, height_, window_, mark);
     pending_ = slot_count;
     pending_chained_ = false;
-    static_cast<void>(loop_->hand(frame));
+    return frame;
+}
+
+void BackBufferPresenter::hold_over(const BatchMark &mark, icd::PresentPacing &pacing)
+{
+    AV_SCOPE("BackBufferPresenter::hold_over");
+    if (pending_ == slot_count || loop_ == nullptr) return;
+    loop_->acquire();
+    held_ = true;
+    held_mark_ = mark;
+    pacing_ = &pacing;
+    loop_->release();
+    loop_->keep(*this);
+}
+
+void BackBufferPresenter::drop_held()
+{
+    AV_SCOPE("BackBufferPresenter::drop_held");
+    if (loop_ == nullptr) return;
+    loop_->acquire();
+    if (held_) {
+        held_ = false;
+        pending_ = slot_count;
+        pending_chained_ = false;
+    }
+    loop_->release();
+}
+
+void BackBufferPresenter::show_held_now()
+{
+    AV_SCOPE("BackBufferPresenter::show_held_now");
+    if (loop_ == nullptr) return;
+    GlFrame frame;
+    loop_->acquire();
+    const bool holding = held_ && pending_ != slot_count;
+    held_ = false;
+    if (holding) frame = take_pending(held_mark_);
+    loop_->release();
+    if (holding) static_cast<void>(loop_->hand(frame));
+}
+
+uint32_t BackBufferPresenter::flush_held()
+{
+    AV_SCOPE("BackBufferPresenter::flush_held");
+    if (loop_ == nullptr) return 0u;
+    GlFrame frame;
+    loop_->acquire();
+    const bool     holding = held_ && pending_ != slot_count;
+    const bool     admitted = holding && pacing_->admits();
+    const uint32_t later = holding && !admitted ? pacing_->next_admit_milliseconds() : 0u;
+    if (admitted) {
+        held_ = false;
+        frame = take_pending(held_mark_);
+    }
+    loop_->release();
+    if (admitted) static_cast<void>(loop_->hand(frame));
+    return later;
 }
 
 void BackBufferPresenter::done(const GlFrame &frame, bool drawn)
@@ -167,6 +232,8 @@ bool BackBufferPresenter::read_front(int32_t x, int32_t y, int32_t width, int32_
 void BackBufferPresenter::release(ClientTransport *wire)
 {
     AV_SCOPE("BackBufferPresenter::release");
+    if (loop_ != nullptr) loop_->forget(*this);
+    show_held_now();
     settle();
     give_room_back();
     pending_ = slot_count;
