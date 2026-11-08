@@ -71,8 +71,9 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
 bool D3d9Device::shares_render_target(const D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create) const
 {
     AV_SCOPE("D3d9Device::shares_render_target");
-    return create.Flags.SharedResource && create.Flags.RenderTarget && resource.kind == D3d9Resource::Kind::surface &&
-           resource.count == 1u && create.Pool != D3DDDIPOOL_SYSTEMMEM;
+    const bool single = (resource.kind == D3d9Resource::Kind::surface && resource.count == 1u) ||
+                        (resource.kind == D3d9Resource::Kind::texture && resource.levels == 1u);
+    return create.Flags.SharedResource && create.Flags.RenderTarget && single && create.Pool != D3DDDIPOOL_SYSTEMMEM;
 }
 
 HRESULT D3d9Device::allocate_shared(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
