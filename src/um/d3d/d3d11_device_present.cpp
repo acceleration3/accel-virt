@@ -73,7 +73,9 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
     switch (source.present_model) {
     case d3d::SwapChainBuffer::Model::flip:
     case d3d::SwapChainBuffer::Model::scanout: break;
-    case d3d::SwapChainBuffer::Model::blt: return present_pages(source, subresource, destination, dxgi_context);
+    case d3d::SwapChainBuffer::Model::blt:
+        if (destination == nullptr) return present_pages(source, subresource, destination, dxgi_context);
+        break;
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
 }
