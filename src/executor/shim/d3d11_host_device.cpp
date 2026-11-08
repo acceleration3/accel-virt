@@ -25,7 +25,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice(DriverLog &lines)
-    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_, lines), copies_(), frames_(*this), staging_(nullptr), read_(nullptr), read_mapped_(false), lock_(), waiting_(0u), taken_(0u), lines_(lines), clock_(), carry_heap_(), carried_(carry_heap_)
+    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_, lines), copies_(), converter_(), frames_(*this), staging_(nullptr), read_(nullptr), read_mapped_(false), lock_(), waiting_(0u), taken_(0u), lines_(lines), clock_(), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
 }
@@ -92,6 +92,7 @@ void D3d11HostDevice::unmake()
 {
     AV_SCOPE("D3d11HostDevice::unmake");
     composer_.release();
+    converter_.release();
     exports_.release();
     if (context_ != nullptr) frames_.clear();
     images_.release();
@@ -297,6 +298,12 @@ bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint32_t f
     synced = synced && vulkan_.sync_file(fd);
     unlock();
     return synced;
+}
+
+HostFormatConverter &D3d11HostDevice::converter()
+{
+    AV_SCOPE("D3d11HostDevice::converter");
+    return converter_;
 }
 
 StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width,

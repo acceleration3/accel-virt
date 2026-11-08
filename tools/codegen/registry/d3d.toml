@@ -417,6 +417,18 @@ params = ["u32 destination", "u32 destination_subresource", "u32 x", "u32 y", "u
           "u32 source_subresource", "u32 has_box", "Box box", "u32 copy_flags"]
 
 [[command]]
+name = "BltResource"
+id = 0x0410
+doc = """A DXGI blt between two 2D textures that a copy cannot be: the source rectangle (left, top, right, bottom)
+drawn over the destination rectangle on the host GPU in one pass, stretched when the sizes differ and converted
+when the formats do. A destination of another family than the source takes a 10:10:10:2 or half-float source
+decoded, an sRGB-typed or floating source encoded as sRGB, so a value already encoded is not encoded twice.
+Nothing is answered; textures the host cannot draw between are left as they were."""
+params = ["u32 destination", "u32 destination_subresource", "u32 destination_left", "u32 destination_top",
+          "u32 destination_right", "u32 destination_bottom", "u32 source", "u32 source_subresource",
+          "u32 source_left", "u32 source_top", "u32 source_right", "u32 source_bottom"]
+
+[[command]]
 name = "ResolveSubresource"
 id = 0x0408
 params = ["u32 destination", "u32 destination_subresource", "u32 source", "u32 source_subresource",

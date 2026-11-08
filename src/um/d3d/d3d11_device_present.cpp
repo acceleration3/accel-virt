@@ -310,16 +310,35 @@ HRESULT D3d11Device::present_multiplane_overlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOV
     return presented;
 }
 
+HRESULT D3d11Device::blt_region(const ResourceRecord &to, uint32_t to_subresource, const d3dproto::Box &into,
+                                const ResourceRecord &from, uint32_t from_subresource, const d3dproto::Box &out_of,
+                                bool converts)
+{
+    AV_SCOPE("D3d11Device::blt_region");
+    const bool drawn = converts || to.format != from.format || into.right - into.left != out_of.right - out_of.left ||
+                       into.bottom - into.top != out_of.bottom - out_of.top;
+    const bool wired = drawn
+        ? d3dproto::av_d3d_BltResource(wire(), to.stamp.id(), to_subresource, into.left, into.top, into.right, into.bottom,
+                                       from.stamp.id(), from_subresource, out_of.left, out_of.top, out_of.right,
+                                       out_of.bottom)
+        : d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), to_subresource, into.left, into.top, 0u,
+                                                 from.stamp.id(), from_subresource, 1u, out_of, 0u);
+    if (!wired) return E_OUTOFMEMORY;
+    return show_flip(to, to_subresource);
+}
+
 HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)
 {
     AV_SCOPE("D3d11Device::blt");
     const ResourceRecord &to = record(args->hDstResource);
     const ResourceRecord &from = record(args->hSrcResource);
-    const d3dproto::Box region = {0u, 0u, 0u, args->DstRight - args->DstLeft, args->DstBottom - args->DstTop, 1u};
-    if (!d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
-                                                from.stamp.id(), args->SrcSubresource, 1u, region, 0u))
-        return E_OUTOFMEMORY;
-    return show_flip(to, args->DstSubresource);
+    const bool            whole = args->Flags.Stretch != 0u || args->Flags.Convert != 0u;
+    const d3dproto::Box   into = {args->DstLeft, args->DstTop, 0u, args->DstRight, args->DstBottom, 1u};
+    const d3dproto::Box   out_of = whole ? d3dproto::Box{0u, 0u, 0u, from.width, from.height, 1u}
+                                         : d3dproto::Box{0u, 0u, 0u, args->DstRight - args->DstLeft,
+                                                         args->DstBottom - args->DstTop, 1u};
+    return blt_region(to, args->DstSubresource, into, from, args->SrcSubresource, out_of,
+                      args->Flags.Convert != 0u || args->Flags.Stretch != 0u);
 }
 
 HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
@@ -327,11 +346,10 @@ HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
     AV_SCOPE("D3d11Device::blt1");
     const ResourceRecord &to = record(args->hDstResource);
     const ResourceRecord &from = record(args->hSrcResource);
-    const d3dproto::Box region = {args->SrcLeft, args->SrcTop, 0u, args->SrcRight, args->SrcBottom, 1u};
-    if (!d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
-                                                from.stamp.id(), args->SrcSubresource, 1u, region, 0u))
-        return E_OUTOFMEMORY;
-    return show_flip(to, args->DstSubresource);
+    const d3dproto::Box   into = {args->DstLeft, args->DstTop, 0u, args->DstRight, args->DstBottom, 1u};
+    const d3dproto::Box   out_of = {args->SrcLeft, args->SrcTop, 0u, args->SrcRight, args->SrcBottom, 1u};
+    return blt_region(to, args->DstSubresource, into, from, args->SrcSubresource, out_of,
+                      args->Flags.Convert != 0u || args->Flags.Stretch != 0u);
 }
 
 HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args)

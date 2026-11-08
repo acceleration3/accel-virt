@@ -1,10 +1,17 @@
 #include "executor/shim/d3d11_frame_pool.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/shim/conversion_target.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
 namespace av {
+
+namespace {
+
+constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
+
+}
 
 D3d11FramePool::D3d11FramePool(D3d11HostDevice &device) : frames_()
 {
@@ -37,7 +44,7 @@ void D3d11FramePool::clear()
 }
 
 D3d11FramePool::Frame::Frame()
-    : device_(nullptr), held_(nullptr), texture_(nullptr), staged_(false), format_(0u), mapped_(false)
+    : device_(nullptr), held_(nullptr), texture_(nullptr), staged_(false), format_(0u), held_format_(0u), mapped_(false)
 {
     AV_SCOPE("D3d11FramePool::Frame::Frame");
 }
@@ -67,7 +74,9 @@ bool D3d11FramePool::Frame::take(ID3D11Texture2D *source, uint32_t subresource, 
     AV_SCOPE("D3d11FramePool::Frame::take");
     if (!fits(width, height, format)) {
         drop();
-        const D3D11_TEXTURE2D_DESC held = {width, height, 1u, 1u, static_cast<DXGI_FORMAT>(format), {1u, 0u},
+        const ConversionTarget target(format, dxgi_b8g8r8a8_unorm);
+        held_format_ = target.convertible() && !target.packed_bytes() ? dxgi_b8g8r8a8_unorm : format;
+        const D3D11_TEXTURE2D_DESC held = {width, height, 1u, 1u, static_cast<DXGI_FORMAT>(held_format_), {1u, 0u},
                                            D3D11_USAGE_DEFAULT, 0u, 0u, 0u};
         if (FAILED(device_->device()->CreateTexture2D(&held, nullptr, &held_))) {
             held_ = nullptr;
@@ -75,6 +84,15 @@ bool D3d11FramePool::Frame::take(ID3D11Texture2D *source, uint32_t subresource, 
         }
         size(width, height);
         format_ = format;
+    }
+    if (held_format_ != format) {
+        const ConversionTarget target(format, dxgi_b8g8r8a8_unorm);
+        ID3D11Texture2D *const drawn = device_->converter().draw(
+            device_->device(), device_->context(), source, subresource, HostFormatConverter::Rectangle{0u, 0u, width, height},
+            width, height, target.format());
+        if (drawn == nullptr) return false;
+        source = drawn;
+        subresource = 0u;
     }
     device_->context()->CopySubresourceRegion(held_, 0u, 0u, 0u, 0u, source, subresource, nullptr);
     device_->context()->Flush();
@@ -86,7 +104,7 @@ bool D3d11FramePool::Frame::copy_to_staging()
 {
     AV_SCOPE("D3d11FramePool::Frame::copy_to_staging");
     if (texture_ == nullptr) {
-        const D3D11_TEXTURE2D_DESC staging = {width(), height(), 1u, 1u, static_cast<DXGI_FORMAT>(format_), {1u, 0u},
+        const D3D11_TEXTURE2D_DESC staging = {width(), height(), 1u, 1u, static_cast<DXGI_FORMAT>(held_format_), {1u, 0u},
                                               D3D11_USAGE_STAGING, 0u, D3D11_CPU_ACCESS_READ, 0u};
         if (FAILED(device_->device()->CreateTexture2D(&staging, nullptr, &texture_))) {
             texture_ = nullptr;
@@ -111,6 +129,7 @@ void D3d11FramePool::Frame::drop()
     mapped_ = false;
     size(0u, 0u);
     format_ = 0u;
+    held_format_ = 0u;
 }
 
 StagedFrame::Reading D3d11FramePool::Frame::map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch)

@@ -73,6 +73,7 @@ const char* command_name(uint32_t id) {
         case kCmd_PresentPoint: return "PresentPoint";
         case kCmd_QueryBufferSlices11: return "QueryBufferSlices11";
         case kCmd_BindBufferSlice: return "BindBufferSlice";
+        case kCmd_BltResource: return "BltResource";
         case kCmd_BeginQuery: return "BeginQuery";
         case kCmd_EndQuery: return "EndQuery";
         case kCmd_GetQueryData: return "GetQueryData";

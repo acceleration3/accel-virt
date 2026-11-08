@@ -14,6 +14,7 @@
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/exportable_images.hpp"
 #include "executor/shim/host_image_export.hpp"
+#include "executor/shim/host_format_converter.hpp"
 #include "executor/shim/host_surface_copy.hpp"
 #include "executor/shim/plane_composer.hpp"
 #include "executor/shim/slice_importer.hpp"
@@ -105,6 +106,7 @@ public:
     [[nodiscard]] bool bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset,
                                     uint64_t bytes, void *host);
     DxvkVulkanDevice  &vulkan();
+    HostFormatConverter &converter();
 
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;
@@ -151,6 +153,7 @@ private:
     PlaneComposer           composer_;
     ExportableImages        images_;
     HostSurfaceCopy         copies_;
+    HostFormatConverter     converter_;
     D3d11FramePool          frames_;
     ID3D11Texture2D        *staging_;
     ID3D11Texture2D        *read_;

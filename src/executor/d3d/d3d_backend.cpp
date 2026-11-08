@@ -27,6 +27,7 @@
 #include "executor/import_table.hpp"
 #include "core/platform/poll_budget.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
+#include "executor/shim/conversion_target.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/surface_identity.hpp"
@@ -65,6 +66,7 @@ constexpr uint32_t known_bind_flags = D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDE
 constexpr uint32_t max_dimension = 16384u;
 constexpr uint32_t mebibyte_shift = 20u;
 constexpr uint32_t no_stream = 0xffffffffu;
+constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
 constexpr size_t   container_slack = 64u * 1024u;
 
 class PresentedTexture final : public FrameStager {
@@ -93,7 +95,9 @@ PresentedTexture::PresentedTexture(D3d11HostDevice &device, ID3D11Texture2D *tex
 StagedFrame *PresentedTexture::stage()
 {
     AV_SCOPE("PresentedTexture::stage");
-    if (texture_ == nullptr || !DxgiFormatLayout(format_).word_texels()) return nullptr;
+    const ConversionTarget target(format_, dxgi_b8g8r8a8_unorm);
+    const bool             converted = target.convertible() && !target.packed_bytes();
+    if (texture_ == nullptr || (!converted && !DxgiFormatLayout(format_).word_texels())) return nullptr;
     return device_.stage_frame(texture_, subresource_, width_, height_, format_);
 }
 
@@ -1719,6 +1723,52 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     device11_->context()->CopySubresourceRegion1(to, destination_subresource, x, y, z, from, source_subresource,
                                                  has_box != 0u ? &region : nullptr,
                                                  copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+    counted(to);
+    return true;
+}
+
+bool D3dBackend::on_BltResource(uint32_t destination, uint32_t destination_subresource, uint32_t destination_left,
+                                uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom,
+                                uint32_t source, uint32_t source_subresource, uint32_t source_left,
+                                uint32_t source_top, uint32_t source_right, uint32_t source_bottom)
+{
+    AV_SCOPE("D3dBackend::on_BltResource");
+    ID3D11Resource *const to = objects_.find_as<ID3D11Resource>(destination, D3dObjectKind::resource);
+    ID3D11Resource *const from = objects_.find_as<ID3D11Resource>(source, D3dObjectKind::resource);
+    if (!ready() || to == nullptr || from == nullptr) return false;
+    D3D11_RESOURCE_DIMENSION into_dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    D3D11_RESOURCE_DIMENSION from_dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    to->GetType(&into_dimension);
+    from->GetType(&from_dimension);
+    if (into_dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D || from_dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D ||
+        destination_right <= destination_left || destination_bottom <= destination_top || source_right <= source_left ||
+        source_bottom <= source_top)
+        return false;
+    ID3D11Texture2D *const into = static_cast<ID3D11Texture2D *>(to);
+    ID3D11Texture2D *const origin = static_cast<ID3D11Texture2D *>(from);
+    D3D11_TEXTURE2D_DESC into_desc = {};
+    D3D11_TEXTURE2D_DESC from_desc = {};
+    into->GetDesc(&into_desc);
+    origin->GetDesc(&from_desc);
+    const ConversionTarget target(from_desc.Format, into_desc.Format);
+    const uint32_t         width = destination_right - destination_left;
+    const uint32_t         height = destination_bottom - destination_top;
+    const bool             same_size = width == source_right - source_left && height == source_bottom - source_top;
+    if (target.raw_copy() && same_size) {
+        const D3D11_BOX region = {source_left, source_top, 0u, source_right, source_bottom, 1u};
+        device11_->context()->CopySubresourceRegion1(to, destination_subresource, destination_left, destination_top, 0u,
+                                                     from, source_subresource, &region, 0u);
+        counted(to);
+        return true;
+    }
+    if (!target.convertible() || from_desc.SampleDesc.Count != 1u) return false;
+    ID3D11Texture2D *const drawn = device11_->converter().draw(
+        device11_->device(), device11_->context(), origin, source_subresource,
+        HostFormatConverter::Rectangle{source_left, source_top, source_right, source_bottom}, width, height,
+        target.format());
+    if (drawn == nullptr) return false;
+    device11_->context()->CopySubresourceRegion(to, destination_subresource, destination_left, destination_top, 0u, drawn,
+                                                0u, nullptr);
     counted(to);
     return true;
 }

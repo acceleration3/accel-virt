@@ -617,6 +617,24 @@ bool av_d3d_CopySubresourceRegion(::av::ClientTransport& t, uint32_t destination
     return t.send_async(kCmd_CopySubresourceRegion, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d_BltResource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t destination_left, uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom, uint32_t source, uint32_t source_subresource, uint32_t source_left, uint32_t source_top, uint32_t source_right, uint32_t source_bottom) {
+    AV_SCOPE("av_d3d_BltResource");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(destination);
+    b.write_pod<uint32_t>(destination_subresource);
+    b.write_pod<uint32_t>(destination_left);
+    b.write_pod<uint32_t>(destination_top);
+    b.write_pod<uint32_t>(destination_right);
+    b.write_pod<uint32_t>(destination_bottom);
+    b.write_pod<uint32_t>(source);
+    b.write_pod<uint32_t>(source_subresource);
+    b.write_pod<uint32_t>(source_left);
+    b.write_pod<uint32_t>(source_top);
+    b.write_pod<uint32_t>(source_right);
+    b.write_pod<uint32_t>(source_bottom);
+    return t.send_async(kCmd_BltResource, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d_ResolveSubresource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) {
     AV_SCOPE("av_d3d_ResolveSubresource");
     ::av::WireWriter b = t.request_writer();

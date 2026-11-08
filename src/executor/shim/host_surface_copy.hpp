@@ -5,6 +5,7 @@
 #include "device/shim/posix_lock.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/owned_fd.hpp"
+#include "executor/shim/host_format_converter.hpp"
 
 #include <stdint.h>
 
@@ -33,6 +34,8 @@ public:
 private:
     [[nodiscard]] bool compatible(ID3D11Texture2D *source, ID3D11Texture2D *destination, uint32_t &width,
                                   uint32_t &height) const;
+    ID3D11Texture2D   *converted(ID3D11Device5 *device, ID3D11DeviceContext4 *context, ID3D11Texture2D *source,
+                                 ID3D11Texture2D *destination, uint32_t &width, uint32_t &height);
     [[nodiscard]] bool fits(const AvCopyRegion &region, uint32_t width, uint32_t height) const;
     [[nodiscard]] bool arm(ID3D11Device5 *device);
     void               drain();
@@ -44,6 +47,7 @@ private:
     OwnedFd        event_;
     PosixLock      waiting_;
     MonotonicClock clock_;
+    HostFormatConverter converter_;
 };
 
 }

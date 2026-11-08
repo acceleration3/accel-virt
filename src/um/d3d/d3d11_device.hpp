@@ -68,6 +68,9 @@ public:
     HRESULT present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args);
     HRESULT blt(DXGI_DDI_ARG_BLT *args);
     HRESULT blt1(DXGI_DDI_ARG_BLT1 *args);
+    HRESULT blt_region(const ResourceRecord &to, uint32_t to_subresource, const d3dproto::Box &into,
+                       const ResourceRecord &from, uint32_t from_subresource, const d3dproto::Box &out_of,
+                       bool converts);
     HRESULT rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args);
     HRESULT resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args);
     HRESULT set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args);
