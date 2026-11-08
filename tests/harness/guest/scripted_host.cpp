@@ -160,6 +160,28 @@ void ScriptedHost::vk_memory_properties(std::uint32_t count, std::uint32_t host_
     queue(writer);
 }
 
+void ScriptedHost::vk_memory_properties_with_usage(std::uint32_t count, std::uint32_t host_visible, std::uint64_t usage)
+{
+    WireWriter                                writer(answer_, sizeof answer_);
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
+    budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+    budget.heapUsage[0] = usage;
+    budget.heapBudget[0] = memory_heap_bytes;
+    VkPhysicalDeviceMemoryProperties2 properties = {};
+    properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+    properties.pNext = &budget;
+    properties.memoryProperties.memoryTypeCount = count;
+    for (std::uint32_t type = 0u; type < count && type < VK_MAX_MEMORY_TYPES; type++)
+        properties.memoryProperties.memoryTypes[type].propertyFlags = (host_visible >> type & 1u) != 0u
+                                                                          ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                                                                          : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    properties.memoryProperties.memoryHeapCount = 1u;
+    properties.memoryProperties.memoryHeaps[0].size = memory_heap_bytes;
+    writer.write_pod<std::int32_t>(0);
+    vkproto::serialize_VkPhysicalDeviceMemoryProperties2(writer, handles_, properties);
+    queue(writer);
+}
+
 void ScriptedHost::vk_lendable_memory_properties(std::uint32_t count, std::uint32_t lendable)
 {
     WireWriter                       writer(answer_, sizeof answer_);

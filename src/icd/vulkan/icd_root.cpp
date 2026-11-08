@@ -1086,6 +1086,23 @@ void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_devi
     if (built != Status::ok) lines_.note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
 }
 
+void IcdRoot::learn_types_with_budget(Connection &connection, VkPhysicalDevice physical_device,
+                                      MemoryTypeTable &types, const char *entry,
+                                      VkPhysicalDeviceMemoryBudgetPropertiesEXT &hosted)
+{
+    AV_SCOPE("IcdRoot::learn_types_with_budget");
+    if (connection.refuses(entry)) return;
+    hosted = VkPhysicalDeviceMemoryBudgetPropertiesEXT();
+    hosted.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+    VkPhysicalDeviceMemoryProperties2 host = {};
+    host.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+    host.pNext = &hosted;
+    vkproto::av_vkGetPhysicalDeviceMemoryProperties2(connection.transport(), translation_, physical_device, &host);
+    if (connection.refuses(entry)) return;
+    const Status built = types.build(host.memoryProperties);
+    if (built != Status::ok) lines_.note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+}
+
 void IcdRoot::physical_device_memory_properties(VkPhysicalDevice physical_device,
                                                 VkPhysicalDeviceMemoryProperties *properties)
 {
@@ -1104,12 +1121,19 @@ void IcdRoot::physical_device_memory_properties2(VkPhysicalDevice physical_devic
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     MemoryTypeTable types(kmt_, connection->adapter());
-    learn_types(*connection, physical_device, types, "vkGetPhysicalDeviceMemoryProperties2");
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT hosted = {};
+    bool budgeted = false;
+    uint32_t looked = 1u;
+    for (const auto *link = static_cast<const VkBaseInStructure *>(properties->pNext); link != nullptr && looked < max_chain;
+         looked++, link = link->pNext)
+        budgeted = budgeted || link->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+    if (budgeted) learn_types_with_budget(*connection, physical_device, types, "vkGetPhysicalDeviceMemoryProperties2", hosted);
+    else learn_types(*connection, physical_device, types, "vkGetPhysicalDeviceMemoryProperties2");
     types.properties(properties->memoryProperties);
     auto *node = static_cast<VkBaseOutStructure *>(properties->pNext);
     for (uint32_t seen = 1u; node != nullptr && seen < max_chain; seen++, node = node->pNext)
         if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT)
-            types.budget(*reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT *>(node));
+            types.budget(*reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT *>(node), hosted);
 }
 
 LoaderHandle *IcdRoot::allocating_device(VkDevice device)

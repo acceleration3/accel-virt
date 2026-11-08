@@ -159,7 +159,8 @@ TEST(memory_type_table, the_budget_of_each_heap_is_its_size)
   budget.pNext = &budget;
   for (auto &value : budget.heapBudget) value = 7u;
   for (auto &value : budget.heapUsage) value = 7u;
-  table.budget(budget);
+  const VkPhysicalDeviceMemoryBudgetPropertiesEXT nothing = {};
+  table.budget(budget, nothing);
   CHECK_EQ(budget.sType, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT);
   CHECK(budget.pNext == &budget);
   CHECK_EQ(budget.heapBudget[0], 1024u * mib);
@@ -181,7 +182,8 @@ TEST(memory_type_table, a_rebuild_reads_the_budgets_again)
   CHECK_STATUS(table.build(nvidia()), Status::ok);
   CHECK(table.invariants_hold());
   VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
-  table.budget(budget);
+  const VkPhysicalDeviceMemoryBudgetPropertiesEXT nothing = {};
+  table.budget(budget, nothing);
   CHECK_EQ(budget.heapBudget[0], 1024u * mib);
   CHECK_EQ(budget.heapUsage[0], 5u * mib);
   CHECK_EQ(budget.heapBudget[1], 32u * mib);
@@ -242,7 +244,7 @@ TEST(memory_type_table, a_host_lying_about_its_arrays_is_refused_and_empties_the
       check_empty(table);
       VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
       budget.heapBudget[0] = 1u;
-      table.budget(budget);
+      table.budget(budget, VkPhysicalDeviceMemoryBudgetPropertiesEXT());
       CHECK_EQ(budget.heapBudget[0], 0u);
   }
 }
@@ -315,3 +317,22 @@ TEST(memory_type_table, figures_held_before_the_adapter_was_read_are_unsound)
   MemoryTypeTable table(rig.kmt(), rig.adapter());
   AdapterMemoryProbe::set_budget(MemoryTypeTableProbe::memory(table), 0u, 4096u);
   CHECK(!table.invariants_hold()); }
+
+TEST(memory_type_table, the_usage_of_a_heap_is_the_larger_of_the_adapter_s_and_the_host_ledger_s)
+{ TableRig      rig;
+  MemoryTypeTable table(rig.kmt(), rig.adapter());
+  CHECK_STATUS(table.build(nvidia()), Status::ok);
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT hosted = {};
+  hosted.heapUsage[0] = 256u * mib;
+  hosted.heapUsage[1] = 1u;
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
+  table.budget(budget, hosted);
+  CHECK_EQ(budget.heapUsage[0], 256u * mib);
+  CHECK_EQ(budget.heapBudget[0], 1024u * mib);
+  CHECK_EQ(budget.heapUsage[1], shared_usage);
+  hosted.heapUsage[0] = 4096u * mib;
+  table.budget(budget, hosted);
+  CHECK_EQ(budget.heapUsage[0], 4096u * mib);
+  CHECK_EQ(budget.heapBudget[0], 4096u * mib);
+  CHECK_EQ(budget.heapUsage[2], 0u);
+  CHECK_EQ(budget.heapBudget[2], 0u); }

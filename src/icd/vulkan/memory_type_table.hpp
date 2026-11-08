@@ -25,7 +25,8 @@ public:
 
     [[nodiscard]] Status build(const VkPhysicalDeviceMemoryProperties &host);
     void                 properties(VkPhysicalDeviceMemoryProperties &answer) const;
-    void                 budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer) const;
+    void                 budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer,
+                                const VkPhysicalDeviceMemoryBudgetPropertiesEXT &hosted) const;
     bool                 host_visible(uint32_t type) const;
     uint32_t             lendable_types() const;
 

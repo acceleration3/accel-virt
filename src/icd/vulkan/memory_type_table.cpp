@@ -63,13 +63,17 @@ void MemoryTypeTable::properties(VkPhysicalDeviceMemoryProperties &answer) const
     answer = properties_;
 }
 
-void MemoryTypeTable::budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer) const
+void MemoryTypeTable::budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer,
+                             const VkPhysicalDeviceMemoryBudgetPropertiesEXT &hosted) const
 {
     AV_SCOPE("MemoryTypeTable::budget");
     for (uint32_t heap = 0u; heap < VK_MAX_MEMORY_HEAPS; heap++) {
         const bool listed = heap < properties_.memoryHeapCount;
-        answer.heapBudget[heap] = listed ? properties_.memoryHeaps[heap].size : 0u;
-        answer.heapUsage[heap] = listed ? memory_.usage(group_of(properties_.memoryHeaps[heap])) : 0u;
+        const uint64_t adapter = listed ? memory_.usage(group_of(properties_.memoryHeaps[heap])) : 0u;
+        const uint64_t usage = listed && hosted.heapUsage[heap] > adapter ? hosted.heapUsage[heap] : adapter;
+        const uint64_t size = listed ? properties_.memoryHeaps[heap].size : 0u;
+        answer.heapUsage[heap] = usage;
+        answer.heapBudget[heap] = listed && size < usage ? usage : size;
     }
 }
 

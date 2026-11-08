@@ -162,6 +162,9 @@ private:
     void                 destroy_one_instance(VkInstance instance, const VkAllocationCallbacks *allocator);
     void                 learn_types(Connection &connection, VkPhysicalDevice physical_device,
                                      MemoryTypeTable &types, const char *entry);
+    void                 learn_types_with_budget(Connection &connection, VkPhysicalDevice physical_device,
+                                                 MemoryTypeTable &types, const char *entry,
+                                                 VkPhysicalDeviceMemoryBudgetPropertiesEXT &hosted);
     LoaderHandle        *wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
                                     LoaderHandle *parent);
     void                *wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent);

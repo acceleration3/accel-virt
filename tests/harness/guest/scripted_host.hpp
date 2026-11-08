@@ -64,6 +64,7 @@ public:
     void vk_physical_devices(std::int32_t result, std::uint32_t count);
     void vk_memory_requirements(std::uint32_t memory_types);
     void vk_memory_properties(std::uint32_t count, std::uint32_t host_visible);
+    void vk_memory_properties_with_usage(std::uint32_t count, std::uint32_t host_visible, std::uint64_t usage);
     void vk_lendable_memory_properties(std::uint32_t count, std::uint32_t lendable);
     void blob_import(std::uint32_t status, std::uint64_t memory);
     void arena_import(std::uint64_t memory, std::uint32_t segments);

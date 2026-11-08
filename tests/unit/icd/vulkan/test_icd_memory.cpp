@@ -172,7 +172,7 @@ TEST(icd_memory, the_physical_device_s_types_sit_on_the_adapter_s_budgets)
 TEST(icd_memory, the_budget_nodes_in_the_chain_are_the_adapter_s)
 { MemoryRig rig;
   rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 512u * mib, 12u * mib);
-  rig.host().vk_memory_properties(types, visible);
+  rig.host().vk_memory_properties_with_usage(types, visible, 3u * mib);
   VkPhysicalDeviceMemoryBudgetPropertiesEXT second = {};
   second.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
   VkPhysicalDeviceIDProperties other = {};
@@ -211,7 +211,7 @@ TEST(icd_memory, the_budget_nodes_in_the_chain_are_the_adapter_s)
 
 TEST(icd_memory, a_cyclic_chain_is_walked_a_bounded_distance)
 { MemoryRig rig;
-  rig.host().vk_memory_properties(types, visible);
+  rig.host().vk_memory_properties_with_usage(types, visible, 3u * mib);
   VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
   budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
   budget.pNext = &budget;
@@ -221,6 +221,29 @@ TEST(icd_memory, a_cyclic_chain_is_walked_a_bounded_distance)
   rig.entry<MemoryProperties2>("vkGetPhysicalDeviceMemoryProperties2")(rig.physical(), &properties);
   CHECK_EQ(budget.heapBudget[0], MockKmt::default_non_local_budget);
   CHECK(budget.pNext == &budget); }
+
+TEST(icd_memory, a_budget_chain_asks_the_host_and_reports_the_larger_usage_of_the_host_ledger_and_the_adapter)
+{ MemoryRig rig;
+  rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 512u * mib, 12u * mib);
+  rig.host().vk_memory_properties_with_usage(types, visible, 300u * mib);
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
+  budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+  VkPhysicalDeviceMemoryProperties2 properties = {};
+  properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+  properties.pNext = &budget;
+  rig.entry<MemoryProperties2>("vkGetPhysicalDeviceMemoryProperties2")(rig.physical(), &properties);
+  CHECK_EQ(budget.heapUsage[0], 300u * mib);
+  CHECK_EQ(budget.heapBudget[0], 512u * mib);
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties2)); }
+
+TEST(icd_memory, a_properties_query_without_a_budget_chain_does_not_ask_for_the_budget)
+{ MemoryRig rig;
+  rig.host().vk_memory_properties(types, visible);
+  VkPhysicalDeviceMemoryProperties2 properties = {};
+  properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+  rig.entry<MemoryProperties2>("vkGetPhysicalDeviceMemoryProperties2")(rig.physical(), &properties);
+  CHECK_EQ(properties.memoryProperties.memoryTypeCount, types);
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties)); }
 
 TEST(icd_memory, types_that_cannot_be_taken_answer_nothing)
 { MemoryRig rig;
