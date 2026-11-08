@@ -32,6 +32,7 @@ struct ResourceRecord {
     uint32_t mips;
     uint32_t layers;
     uint32_t samples;
+    d3d::SwapChainBuffer buffer;
     d3d::SwapChainBuffer::Model present_model;
     uint32_t vidpn_source;
     uint32_t allocation;

@@ -43,7 +43,8 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     resource.allocation = allocation;
     resource.allocation_owned = 1u;
     resource.allocation_pitch = surface.pitch();
-    resource.present_model = d3d::SwapChainBuffer(primary, create.MiscFlags).model();
+    resource.buffer = d3d::SwapChainBuffer(primary, create.MiscFlags);
+    resource.present_model = resource.buffer.model();
     resource.vidpn_source = primary ? create.pPrimaryDesc->VidPnSourceId : 0u;
     return S_OK;
 }
@@ -72,9 +73,7 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
     switch (source.present_model) {
     case d3d::SwapChainBuffer::Model::flip:
     case d3d::SwapChainBuffer::Model::scanout: break;
-    case d3d::SwapChainBuffer::Model::blt:
-        if (destination == nullptr) return present_pages(source, subresource, destination, dxgi_context);
-        break;
+    case d3d::SwapChainBuffer::Model::blt: return present_pages(source, subresource, destination, dxgi_context);
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
 }
@@ -188,6 +187,7 @@ HRESULT D3d11Device::present(DXGI_DDI_ARG_PRESENT *args)
         present_flags_ = args->Flags.Value;
         log_present("presents are flagged", present_flags_, source);
     }
+    source.present_model = source.buffer.model_for(args->Flags.Blt != 0u, args->Flags.Flip != 0u);
     return present_surface(source, args->SrcSubResourceIndex, destination, args->pDXGIContext);
 }
 
@@ -207,6 +207,7 @@ HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
         present_flags_ = args->Flags.Value;
         log_present("presents are flagged", present_flags_, source);
     }
+    source.present_model = source.buffer.model_for(args->Flags.Blt != 0u, args->Flags.Flip != 0u);
     return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext);
 }
 
