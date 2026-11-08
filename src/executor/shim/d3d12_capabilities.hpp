@@ -23,7 +23,6 @@ public:
 
 private:
     void measure_options(ID3D12Device &device);
-    void measure_later_options(ID3D12Device &device);
     void measure_formats(ID3D12Device &device);
 
     d3d12proto::Caps12 caps_;

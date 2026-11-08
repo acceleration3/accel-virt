@@ -231,25 +231,9 @@ HRESULT D3d12HostCaps::answer_options(const D3D12DDIARG_GETCAPS &args) const
     AV_SCOPE("D3d12HostCaps::answer_options");
     const UINT bytes = args.DataSize;
     switch (static_cast<UINT>(args.Type)) {
-    case D3D12DDICAPS_TYPE_OPTIONS_0090: {
-        D3D12DDI_OPTIONS_DATA_0090 answer = {};
-        answer.RelaxedFormatCastingSupported = caps_.relaxed_format_casting != 0u;
-        return fill(args.pData, bytes, &answer, sizeof(answer));
-    }
-    case D3D12DDICAPS_TYPE_OPTIONS_0091: {
-        D3D12DDI_OPTIONS_DATA_0091 answer = {};
-        answer.UnrestrictedBufferTextureCopyPitchSupported = caps_.unrestricted_buffer_texture_copy_pitch != 0u;
-        answer.UnrestrictedVertexElementAlignmentSupported = caps_.unrestricted_vertex_element_alignment != 0u;
-        answer.InvertedViewportHeightFlipsYSupported = caps_.inverted_viewport_height_flips_y != 0u;
-        answer.InvertedViewportDepthFlipsZSupported = caps_.inverted_viewport_depth_flips_z != 0u;
-        return fill(args.pData, bytes, &answer, sizeof(answer));
-    }
-    case D3D12DDICAPS_TYPE_OPTIONS_0093: {
-        D3D12DDI_OPTIONS_DATA_0093 answer = {};
-        answer.AdvancedTextureOpsSupported = caps_.advanced_texture_ops != 0u;
-        answer.WriteableMSAATexturesSupported = caps_.writeable_msaa_textures != 0u;
-        return fill(args.pData, bytes, &answer, sizeof(answer));
-    }
+    case D3D12DDICAPS_TYPE_OPTIONS_0090:
+    case D3D12DDICAPS_TYPE_OPTIONS_0091:
+    case D3D12DDICAPS_TYPE_OPTIONS_0093:
     case D3D12DDICAPS_TYPE_OPTIONS_0098:
     case D3D12DDICAPS_TYPE_OPTIONS_0101:
     case D3D12DDICAPS_TYPE_OPTIONS_0109:
