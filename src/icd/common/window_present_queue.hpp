@@ -34,6 +34,7 @@ public:
     static constexpr uint32_t idle_milliseconds = 1000u;
     static constexpr uint32_t slot_milliseconds = 4u;
     static constexpr uint32_t slot_looks = 500u;
+    static constexpr uint32_t completion_guard_milliseconds = 100u;
 
     WindowPresentQueue(BlockSource &memory, ServiceThread &thread, ThreadWake &handed, ThreadWake &shown,
                        ThreadLock &lock, Readiness &readiness, WindowSurface &surface, WindowChains &chains,
@@ -50,7 +51,8 @@ public:
     void     forget(HeldFlusher &owner);
     bool     hand(const Frame &frame);
     void     settle(const Source &owner);
-    void     await_shown(uint32_t milliseconds);
+    bool     await_shown(uint32_t milliseconds);
+    void     announce();
     bool     show_now(const Frame &frame);
     WindowChains &chains();
     void     acquire();
@@ -196,15 +198,18 @@ template <typename Source, typename Readiness>
 void WindowPresentQueue<Source, Readiness>::forget(HeldFlusher &owner)
 {
     AV_SCOPE("WindowPresentQueue::forget");
+    bool waited = false;
     for (;;) {
         {
             const ThreadLockHold held(lock_);
             const uint32_t       at = keeper_of(&owner);
             if (at != no_row) keepers_.remove_swap(at);
-            if (flushing_ != &owner || !thread_.running()) return;
+            if (flushing_ != &owner || !thread_.running()) break;
         }
-        static_cast<void>(shown_.wait(slot_milliseconds));
+        waited = true;
+        static_cast<void>(shown_.wait(completion_guard_milliseconds));
     }
+    if (waited) shown_.raise();
 }
 
 template <typename Source, typename Readiness>
@@ -244,10 +249,17 @@ void WindowPresentQueue<Source, Readiness>::settle(const Source &owner)
 }
 
 template <typename Source, typename Readiness>
-void WindowPresentQueue<Source, Readiness>::await_shown(uint32_t milliseconds)
+bool WindowPresentQueue<Source, Readiness>::await_shown(uint32_t milliseconds)
 {
     AV_SCOPE("WindowPresentQueue::await_shown");
-    static_cast<void>(shown_.wait(milliseconds));
+    return shown_.wait(milliseconds);
+}
+
+template <typename Source, typename Readiness>
+void WindowPresentQueue<Source, Readiness>::announce()
+{
+    AV_SCOPE("WindowPresentQueue::announce");
+    shown_.raise();
 }
 
 template <typename Source, typename Readiness>

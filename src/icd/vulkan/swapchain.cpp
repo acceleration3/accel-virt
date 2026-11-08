@@ -15,7 +15,6 @@ namespace av::icd {
 namespace {
 
 constexpr uint32_t pixel_bytes = 4u;
-constexpr uint32_t acquire_milliseconds = 1u;
 constexpr uint64_t nanoseconds_per_millisecond = 1000000u;
 
 }
@@ -145,7 +144,8 @@ VkResult Swapchain::acquire(uint64_t timeout, uint32_t &index)
     if (retired_) return VK_ERROR_OUT_OF_DATE_KHR;
     const VkResult state = window_state();
     if (state != VK_SUCCESS) return state;
-    for (uint64_t waited = 0u;; waited += acquire_milliseconds * nanoseconds_per_millisecond) {
+    uint64_t remaining = timeout;
+    for (;;) {
         bool presenting = false;
         bool found = false;
         presents_.acquire();
@@ -161,8 +161,14 @@ VkResult Swapchain::acquire(uint64_t timeout, uint32_t &index)
         presents_.release();
         if (found) return VK_SUCCESS;
         if (timeout == 0u) return VK_NOT_READY;
-        if (!presenting || waited >= timeout) return VK_TIMEOUT;
-        presents_.await_shown(acquire_milliseconds);
+        if (!presenting || remaining == 0u) return VK_TIMEOUT;
+        const uint64_t whole = remaining / nanoseconds_per_millisecond + (remaining % nanoseconds_per_millisecond != 0u ? 1u : 0u);
+        const uint32_t slice = whole < WindowPresentQueue<Swapchain, FenceReady>::completion_guard_milliseconds
+                                   ? static_cast<uint32_t>(whole)
+                                   : WindowPresentQueue<Swapchain, FenceReady>::completion_guard_milliseconds;
+        if (presents_.await_shown(slice)) continue;
+        const uint64_t spent = uint64_t{slice} * nanoseconds_per_millisecond;
+        remaining = remaining > spent ? remaining - spent : 0u;
     }
 }
 
@@ -235,6 +241,7 @@ VkResult Swapchain::hold(VkQueue queue, uint32_t index, uint32_t wait_count, con
     held_index_ = index;
     held_queue_ = queue;
     presents_.release();
+    presents_.announce();
     presents_.keep(*this);
     return VK_SUCCESS;
 }
@@ -255,6 +262,7 @@ void Swapchain::drop_held()
     if (held_index_ != no_image) holders_[held_index_] = Holder::none;
     held_index_ = no_image;
     presents_.release();
+    presents_.announce();
 }
 
 void Swapchain::settle_flush()
@@ -269,7 +277,7 @@ void Swapchain::settle_flush()
         }
         presents_.release();
         if (!busy) return;
-        presents_.await_shown(acquire_milliseconds);
+        static_cast<void>(presents_.await_shown(WindowPresentQueue<Swapchain, FenceReady>::completion_guard_milliseconds));
     }
 }
 

@@ -194,9 +194,12 @@ TEST(window_present_queue, waiting_for_a_shown_frame_waits_on_the_shown_signal_f
   CHECK_EQ(rig.shown.waits(), 1u);
   CHECK_EQ(rig.shown.last_wait(), 7u);
   CHECK_EQ(rig.handed.waits(), 0u);
-  rig.queue.await_shown(0u);
+  CHECK(!rig.queue.await_shown(0u));
   CHECK_EQ(rig.shown.waits(), 2u);
-  CHECK_EQ(rig.shown.last_wait(), 0u); }
+  CHECK_EQ(rig.shown.last_wait(), 0u);
+  rig.queue.announce();
+  CHECK_EQ(rig.shown.raises(), 1u);
+  CHECK(rig.queue.await_shown(5u)); }
 
 TEST(window_present_queue, its_invariants_walk_the_rows_in_order_and_catch_a_repeated_order_or_a_wrong_scratch)
 { Rig rig;

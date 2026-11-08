@@ -127,6 +127,8 @@ public:
 
     void pump() { thread_.run_until_done(); }
     std::uint32_t shown_waits() const { return shown_.waits(); }
+    std::uint32_t shown_raises() const { return shown_.raises(); }
+    std::uint32_t shown_last_wait() const { return shown_.last_wait(); }
 
     MockPlatform          &memory() { return memory_; }
     MockKmt               &kmt() { return open_.kmt(); }
@@ -630,7 +632,8 @@ TEST(swapchain, an_acquire_that_waits_for_a_queued_present_gives_up_when_its_tim
   std::uint32_t none = 9u;
   const std::uint32_t waits = rig.shown_waits();
   CHECK_EQ(chain.acquire(1000u, none), VK_TIMEOUT);
-  CHECK(rig.shown_waits() > waits);
+  CHECK_EQ(rig.shown_waits(), waits + 1u);
+  CHECK_EQ(rig.shown_last_wait(), 1u);
   CHECK_EQ(none, 9u);
   rig.pump();
   CHECK_EQ(chain.acquire(1000u, none), VK_SUCCESS);
@@ -909,3 +912,34 @@ TEST(swapchain, a_refused_present_without_a_present_thread_is_dropped_as_before)
       CHECK_EQ(chain.acquire(0u, again), VK_SUCCESS);
   }
   CHECK(chain.invariants_hold()); }
+
+TEST(swapchain, an_acquire_waits_once_on_the_shown_event_for_the_whole_time_up_to_the_guard)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+  std::uint32_t first = 9u;
+  std::uint32_t second = 9u;
+  CHECK_EQ(chain.acquire(0u, first), VK_SUCCESS);
+  CHECK_EQ(chain.acquire(0u, second), VK_SUCCESS);
+  CHECK_EQ(chain.present(rig.host().queue(), first, 0u, nullptr), VK_SUCCESS);
+  std::uint32_t none = 9u;
+  const std::uint32_t waits = rig.shown_waits();
+  CHECK_EQ(chain.acquire(30u * 1000000u, none), VK_TIMEOUT);
+  CHECK_EQ(rig.shown_waits(), waits + 1u);
+  CHECK_EQ(rig.shown_last_wait(), 30u);
+  CHECK_EQ(chain.acquire(1000ull * 1000000ull, none), VK_TIMEOUT);
+  CHECK_EQ(rig.shown_last_wait(), av::icd::VkPresentQueue::completion_guard_milliseconds); }
+
+TEST(swapchain, replacing_and_dropping_the_held_present_tell_the_waiters)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, immediate_info()), VK_SUCCESS);
+  rig.kmt().reads_clock(nullptr, 1000u);
+  present_painted(rig, chain, 0x11u);
+  present_painted(rig, chain, 0x22u);
+  const std::uint32_t raises = rig.shown_raises();
+  present_painted(rig, chain, 0x33u);
+  CHECK(rig.shown_raises() > raises);
+  const std::uint32_t before_retire = rig.shown_raises();
+  chain.retire();
+  CHECK(rig.shown_raises() > before_retire); }
