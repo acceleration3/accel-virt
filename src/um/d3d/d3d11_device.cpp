@@ -164,6 +164,26 @@ void D3d11Device::still_drawing()
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, DXGI_DDI_ERR_WASSTILLDRAWING);
 }
 
+bool D3d11Device::staging_pending(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::staging_pending");
+    if (resource.gpu_wrote == 0u) return false;
+    if (!session_.shared_memory().gpu_pending(resource.gpu_wrote)) {
+        resource.gpu_wrote = 0u;
+        return false;
+    }
+    if (wire().flush() != Status::ok) lost(__func__);
+    return true;
+}
+
+void D3d11Device::note_gpu_write(D3D10DDI_HRESOURCE handle)
+{
+    AV_SCOPE("D3d11Device::note_gpu_write");
+    if (parent_ != nullptr) return;
+    ResourceRecord &resource = record(handle);
+    if ((resource.cpu_access & D3D10_DDI_CPU_ACCESS_READ) != 0u) resource.gpu_wrote = session_.shared_memory().gpu_fence();
+}
+
 HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_CREATEDEFERREDCONTEXT &create)
 {
     AV_SCOPE("D3d11Device::initialize_deferred");

@@ -50,6 +50,7 @@ struct ResourceRecord {
     uint32_t                 on_slice;
     HostAllocation          *lent;
     ResourceRecord          *immediate;
+    uint64_t                 gpu_wrote;
 };
 
 struct ObjectRecord {

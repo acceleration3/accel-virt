@@ -511,6 +511,7 @@ VOID D3d11Device::resource_copy(D3D10DDI_HRESOURCE destination, D3D10DDI_HRESOUR
     AV_SCOPE("D3d11Device::resource_copy");
     static_cast<void>(
         d3dproto::av_d3d_CopyResource(wire(), id_of(destination.pDrvPrivate), id_of(source.pDrvPrivate)));
+    note_gpu_write(destination);
 }
 
 VOID D3d11Device::resource_copy_region(D3D10DDI_HRESOURCE destination, UINT destination_sub, UINT x, UINT y, UINT z,
@@ -525,6 +526,7 @@ VOID D3d11Device::resource_copy_region(D3D10DDI_HRESOURCE destination, UINT dest
     static_cast<void>(d3dproto::av_d3d_CopySubresourceRegion(wire(), id_of(destination.pDrvPrivate), destination_sub,
                                                               x, y, z, id_of(source.pDrvPrivate), source_sub,
                                                               box != nullptr ? 1u : 0u, region, flags));
+    note_gpu_write(destination);
 }
 
 VOID D3d11Device::resource_convert(D3D10DDI_HRESOURCE destination, D3D10DDI_HRESOURCE source)
@@ -548,6 +550,7 @@ VOID D3d11Device::resource_resolve_subresource(D3D10DDI_HRESOURCE destination, U
     static_cast<void>(d3dproto::av_d3d_ResolveSubresource(wire(), id_of(destination.pDrvPrivate), destination_sub,
                                                            id_of(source.pDrvPrivate), source_sub,
                                                            static_cast<uint32_t>(format)));
+    note_gpu_write(destination);
 }
 
 VOID D3d11Device::gen_mips(D3D10DDI_HSHADERRESOURCEVIEW view)
@@ -561,6 +564,7 @@ VOID D3d11Device::copy_structure_count(D3D10DDI_HRESOURCE destination, UINT offs
     AV_SCOPE("D3d11Device::copy_structure_count");
     static_cast<void>(
         d3dproto::av_d3d_CopyStructureCount(wire(), id_of(destination.pDrvPrivate), offset, id_of(view.pDrvPrivate)));
+    note_gpu_write(destination);
 }
 
 VOID D3d11Device::query_begin(D3D10DDI_HQUERY query)

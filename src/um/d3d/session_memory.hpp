@@ -43,6 +43,8 @@ public:
     void               retire_pages(void *pages);
     void               reclaim();
     void               trim();
+    uint64_t           gpu_fence() const;
+    bool               gpu_pending(uint64_t fence) const;
 
     bool invariants_hold() const;
 

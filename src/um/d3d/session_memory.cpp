@@ -99,6 +99,19 @@ void SessionMemory::reclaim()
     lent_pages_.reclaim(completed);
 }
 
+uint64_t SessionMemory::gpu_fence() const
+{
+    AV_SCOPE("SessionMemory::gpu_fence");
+    return timeline_.constructed() ? timeline_.object().covering() : 0u;
+}
+
+bool SessionMemory::gpu_pending(uint64_t fence) const
+{
+    AV_SCOPE("SessionMemory::gpu_pending");
+    if (fence == 0u || !timeline_.constructed() || !channel_.transport().knows_gpu_progress()) return false;
+    return timeline_.object().completed() < fence;
+}
+
 void SessionMemory::trim()
 {
     AV_SCOPE("SessionMemory::trim");

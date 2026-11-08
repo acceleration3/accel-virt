@@ -100,6 +100,8 @@ private:
     HRESULT         lost(const char *entry);
     void            not_implemented(const char *call);
     void            still_drawing();
+    bool            staging_pending(ResourceRecord &resource);
+    void            note_gpu_write(D3D10DDI_HRESOURCE handle);
     bool            context_local(void *handle, const void *immediate, size_t bytes) const;
     SIZE_T          context_handle_bytes(uint32_t type) const;
     bool            removed_on_host();

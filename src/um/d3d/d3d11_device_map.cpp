@@ -11,10 +11,11 @@ namespace av::d3d11 {
 namespace {
 constexpr uint32_t copy_no_overwrite = 0x1u;
 constexpr uint32_t copy_discard = 0x2u;
+constexpr uint32_t map_do_not_wait = 0x00100000u;
 
 }
 
-void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP type, UINT,
+void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP type, UINT map_flags,
                       D3D10DDI_MAPPED_SUBRESOURCE *mapped)
 {
     AV_SCOPE("D3d11Device::map");
@@ -22,6 +23,11 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     ResourceRecord &resource = record(handle);
     if (resource.shadow == nullptr || subresource >= subresource_count(resource) || mapped == nullptr) {
         set_error(E_INVALIDARG);
+        return;
+    }
+    if ((map_flags & map_do_not_wait) != 0u && (type == D3D10_DDI_MAP_READ || type == D3D10_DDI_MAP_READWRITE) &&
+        staging_pending(resource)) {
+        still_drawing();
         return;
     }
     if (parent_ != nullptr && type == D3D10_DDI_MAP_WRITE_DISCARD && !leave_immediate_slice(resource)) {
@@ -206,10 +212,10 @@ VOID D3d11Device::dynamic_resource_unmap(D3D10DDI_HRESOURCE resource, UINT sub)
     unmap(resource, sub);
 }
 
-BOOL D3d11Device::resource_is_staging_busy(D3D10DDI_HRESOURCE)
+BOOL D3d11Device::resource_is_staging_busy(D3D10DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d11Device::resource_is_staging_busy");
-    return FALSE;
+    return staging_pending(record(handle)) ? TRUE : FALSE;
 }
 
 VOID D3d11Device::resource_update_subresource_up(D3D10DDI_HRESOURCE handle, UINT subresource, const D3D10_DDI_BOX *box,
