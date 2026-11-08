@@ -30,6 +30,9 @@ constexpr std::uint32_t ddi_logic_op = 0x2000u;
 constexpr std::uint32_t ddi_uav_reads = 0x20000u;
 constexpr std::uint32_t ddi_display = 0x200000u;
 constexpr std::uint32_t ddi_multiplane_overlay = 0x8000u;
+constexpr std::uint32_t ddi_displayable = 0x100000u;
+constexpr std::uint32_t ddi_video_processor_output = 0x40u;
+constexpr std::uint32_t ddi_video_processor_input = 0x80u;
 
 constexpr std::uint32_t rgba32_float = 2u;
 constexpr std::uint32_t rgb32_typeless = 5u, rgb32_float = 6u, rgb32_uint = 7u;
@@ -334,6 +337,9 @@ TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
   table.settle();
   CHECK((table.format_support(nv12) & ddi_multiplane_overlay) != 0u);
   CHECK((table.format_support(nv12) & ddi_display) != 0u);
+  CHECK((table.format_support(nv12) & ddi_displayable) != 0u);
+  CHECK((table.format_support(nv12) & ddi_video_processor_input) != 0u);
+  CHECK((table.format_support(nv12) & ddi_video_processor_output) != 0u);
   CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u);
   CHECK_EQ(table.format_support(yuy2) & ddi_display, 0u); }
 

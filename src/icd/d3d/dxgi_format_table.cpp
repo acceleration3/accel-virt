@@ -24,6 +24,9 @@ constexpr uint32_t ddi_shader_gather = 0x4000u;
 constexpr uint32_t ddi_tiled = 0x10000u;
 constexpr uint32_t ddi_uav_reads = 0x20000u;
 constexpr uint32_t ddi_display = 0x200000u;
+constexpr uint32_t ddi_displayable = 0x100000u;
+constexpr uint32_t ddi_video_processor_output = 0x40u;
+constexpr uint32_t ddi_video_processor_input = 0x80u;
 constexpr uint32_t ddi_multiplane_overlay = 0x8000u;
 constexpr uint32_t overlay_formats[] = {87u, 88u, 28u};
 constexpr uint32_t overlay_video_formats[] = {103u, 107u};
@@ -184,7 +187,9 @@ uint32_t DxgiFormatTable::format_support(uint32_t format) const
     for (const uint32_t overlay : overlay_formats)
         if (format == overlay && (support & ddi_display) != 0u) support |= ddi_multiplane_overlay;
     for (const uint32_t video : overlay_video_formats)
-        if (format == video && support != 0u) support |= ddi_multiplane_overlay | ddi_display;
+        if (format == video && support != 0u)
+            support |= ddi_multiplane_overlay | ddi_display | ddi_displayable | ddi_video_processor_input |
+                       ddi_video_processor_output;
     return support;
 }
 
