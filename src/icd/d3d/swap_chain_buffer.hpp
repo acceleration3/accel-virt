@@ -11,11 +11,9 @@ public:
 
     static constexpr uint32_t misc_shared = 0x2u;
 
-    SwapChainBuffer();
     SwapChainBuffer(bool primary, uint32_t misc);
 
     Model model() const;
-    Model model_for(bool blt, bool flip) const;
 
 private:
     bool     primary_;
