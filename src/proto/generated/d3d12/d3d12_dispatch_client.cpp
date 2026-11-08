@@ -914,4 +914,34 @@ bool av_d3d12_GetClockOrigin12(::av::ClientTransport& t, uint32_t queue, uint64_
     return r.remaining() == 0u;
 }
 
+bool av_d3d12_SetDepthBounds12(::av::ClientTransport& t, uint32_t list, float minimum, float maximum) {
+    AV_SCOPE("av_d3d12_SetDepthBounds12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<float>(minimum);
+    b.write_pod<float>(maximum);
+    return t.send_async(kCmd_SetDepthBounds12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_SetPredication12(::av::ClientTransport& t, uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) {
+    AV_SCOPE("av_d3d12_SetPredication12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(buffer);
+    b.write_pod<uint64_t>(offset);
+    b.write_pod<uint32_t>(op);
+    return t.send_async(kCmd_SetPredication12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_SetStreamOutputTargets12(::av::ClientTransport& t, uint32_t list, uint32_t start, uint32_t count, const StreamOutputView* views) {
+    AV_SCOPE("av_d3d12_SetStreamOutputTargets12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(start);
+    b.write_pod<uint32_t>(count);
+    if (count > 4u || (count != 0u && views == nullptr)) return abandon(t);
+    if (count != 0u) b.write(views, sizeof(*views) * count);
+    return t.send_async(kCmd_SetStreamOutputTargets12, b) == ::av::TransportResult::ok;
+}
+
 }  // namespace av::d3d12proto

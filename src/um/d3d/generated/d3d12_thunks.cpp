@@ -485,7 +485,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_ResolveQueryData(D3D12DDI_HCOMMANDLIST han
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.resolve_query_data(handle, a1, a2, a3, a4, a5, a6); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("ResolveQueryData", handle, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_SetPredication(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE a1, UINT64 a2, D3D12DDI_PREDICATION_OP a3)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.set_predication(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("SetPredication", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_IaSetTopology(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_PRIMITIVE_TOPOLOGY a1)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.ia_set_topology(handle, a1); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("IaSetTopology", handle, a1); }
@@ -557,7 +557,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_IASetVertexBuffers(D3D12DDI_HCOMMANDLIST h
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.ia_set_vertex_buffers(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("IASetVertexBuffers", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_SOSetTargets(D3D12DDI_HCOMMANDLIST handle, UINT a1, UINT a2, const D3D12DDI_STREAM_OUTPUT_BUFFER_VIEW * a3)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.so_set_targets(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("SOSetTargets", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_OMSetRenderTargets(D3D12DDI_HCOMMANDLIST handle, UINT a1, const D3D12DDI_CPU_DESCRIPTOR_HANDLE * a2, BOOL a3, const D3D12DDI_CPU_DESCRIPTOR_HANDLE * a4)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.om_set_render_targets(handle, a1, a2, a3, a4); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("OMSetRenderTargets", handle, a1, a2, a3, a4); }
@@ -572,7 +572,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_AtomicCopyBufferRegion(D3D12DDI_HCOMMANDLI
 { static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_OMSetDepthBounds(D3D12DDI_HCOMMANDLIST handle, FLOAT a1, FLOAT a2)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.om_set_depth_bounds(handle, a1, a2); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("OMSetDepthBounds", handle, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_SetSamplePositions(D3D12DDI_HCOMMANDLIST handle, UINT a1, UINT a2, D3D12DDI_SAMPLE_POSITION * a3)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.set_sample_positions(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("SetSamplePositions", handle, a1, a2, a3); }

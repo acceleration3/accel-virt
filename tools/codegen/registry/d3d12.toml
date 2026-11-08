@@ -22,6 +22,9 @@ fields = ["i32 x", "i32 y"]
 [structs.ImmediateWrite]
 fields = ["u64 address", "u32 value", "u32 mode"]
 
+[structs.StreamOutputView]
+fields = ["u64 address", "u64 size", "u64 filled_address"]
+
 [structs.DescriptorRef]
 fields = ["u32 heap", "u32 index"]
 
@@ -591,3 +594,22 @@ answer. The caller times the exchange against its own clock and hands the pair t
 the timestamp calibration counts from."""
 params = ["u32 queue"]
 reply = ["u64 ticks", "u64 frequency"]
+
+[[command]]
+name = "SetDepthBounds12"
+id = 0x1526
+doc = "The depth range a pixel's stored depth must lie in for the draws after; both within 0 to 1."
+params = ["u32 list", "f32 minimum", "f32 maximum"]
+
+[[command]]
+name = "SetPredication12"
+id = 0x1527
+doc = """Draws and dispatches after are skipped by the 64-bit value at `offset` in `buffer`: zero skips when op is
+D3D12_PREDICATION_OP_NOT_EQUAL_ZERO, non-zero when it is EQUAL_ZERO. buffer 0 turns predication off."""
+params = ["u32 list", "u32 buffer", "u64 offset", "u32 op"]
+
+[[command]]
+name = "SetStreamOutputTargets12"
+id = 0x1528
+doc = "Binds `count` stream output buffers from slot `start`; an address of 0 unbinds its slot."
+params = ["u32 list", "u32 start", "u32 count", "StreamOutputView views[count] max 4"]

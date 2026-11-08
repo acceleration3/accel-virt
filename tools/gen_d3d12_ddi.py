@@ -83,7 +83,8 @@ IMPLEMENTED = {
         "pfnSetGraphicsRootUnorderedAccessView", "pfnIASetIndexBuffer", "pfnIASetVertexBuffers",
         "pfnOMSetRenderTargets", "pfnSetMarker", "pfnClearRootArguments", "pfnExecuteIndirect",
         "pfnPresent", "pfnCopyTiles", "pfnResourceResolveSubresourceRegion", "pfnSetSamplePositions",
-        "pfnWriteBufferImmediate", "pfnSetViewInstanceMask",
+        "pfnWriteBufferImmediate", "pfnSetViewInstanceMask", "pfnOMSetDepthBounds", "pfnSetPredication",
+        "pfnSOSetTargets",
     },
 }
 

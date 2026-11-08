@@ -1541,6 +1541,63 @@ static bool decode_GetClockOrigin12(ServerDispatch& s, ::av::WireReader& r, ::av
     return true;
 }
 
+static bool decode_SetDepthBounds12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetDepthBounds12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    float minimum{};
+    if (!r.read_pod(minimum)) return false;
+    float maximum{};
+    if (!r.read_pod(maximum)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetDepthBounds12(list, minimum, maximum)) return false;
+    return true;
+}
+
+static bool decode_SetPredication12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetPredication12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t buffer{};
+    if (!r.read_pod(buffer)) return false;
+    uint64_t offset{};
+    if (!r.read_pod(offset)) return false;
+    uint32_t op{};
+    if (!r.read_pod(op)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetPredication12(list, buffer, offset, op)) return false;
+    return true;
+}
+
+static bool decode_SetStreamOutputTargets12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetStreamOutputTargets12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t start{};
+    if (!r.read_pod(start)) return false;
+    uint32_t count{};
+    if (!r.read_pod(count)) return false;
+    if (count > 4u) return false;
+    StreamOutputView* views = nullptr;
+    if (count != 0u) {
+        views = arena.allocate<StreamOutputView>(count);
+        if (views == nullptr) return false;
+        if (!r.read(views, sizeof(StreamOutputView) * count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetStreamOutputTargets12(list, start, count, views)) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1617,6 +1674,9 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_WriteBufferImmediate12:
         case kCmd_SetViewInstanceMask12:
         case kCmd_GetClockOrigin12:
+        case kCmd_SetDepthBounds12:
+        case kCmd_SetPredication12:
+        case kCmd_SetStreamOutputTargets12:
             return true;
         default: return false;
     }
@@ -1699,6 +1759,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_WriteBufferImmediate12: return decode_WriteBufferImmediate12(s, r, reply, arena);
         case kCmd_SetViewInstanceMask12: return decode_SetViewInstanceMask12(s, r, reply, arena);
         case kCmd_GetClockOrigin12: return decode_GetClockOrigin12(s, r, reply, arena);
+        case kCmd_SetDepthBounds12: return decode_SetDepthBounds12(s, r, reply, arena);
+        case kCmd_SetPredication12: return decode_SetPredication12(s, r, reply, arena);
+        case kCmd_SetStreamOutputTargets12: return decode_SetStreamOutputTargets12(s, r, reply, arena);
         default: return false;
     }
 }

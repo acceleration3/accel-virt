@@ -25,6 +25,7 @@ constexpr uint32_t barrier_uav = 2u;
 constexpr uint32_t most_barriers = 128u;
 constexpr uint32_t most_views = 16u;
 constexpr uint32_t most_sample_positions = 64u;
+constexpr uint32_t most_stream_outputs = 4u;
 constexpr uint32_t most_immediate_writes = 64u;
 constexpr uint32_t most_buffers = 32u;
 constexpr uint32_t most_targets = 8u;
@@ -319,6 +320,37 @@ VOID D3d12Recorder::write_buffer_immediate(D3D12DDI_HCOMMANDLIST handle, UINT co
         }
         sent(av_d3d12_WriteBufferImmediate12(device_.wire(), list(handle), taken, batch), "WriteBufferImmediate12");
     }
+}
+
+VOID D3d12Recorder::om_set_depth_bounds(D3D12DDI_HCOMMANDLIST handle, FLOAT minimum, FLOAT maximum)
+{
+    AV_SCOPE("D3d12Recorder::om_set_depth_bounds");
+    sent(av_d3d12_SetDepthBounds12(device_.wire(), list(handle), minimum, maximum), "SetDepthBounds12");
+}
+
+VOID D3d12Recorder::set_predication(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE buffer, UINT64 offset,
+                                    D3D12DDI_PREDICATION_OP op)
+{
+    AV_SCOPE("D3d12Recorder::set_predication");
+    const uint32_t named = buffer.pDrvPrivate == nullptr ? 0u : device_.id_of(buffer.pDrvPrivate);
+    sent(av_d3d12_SetPredication12(device_.wire(), list(handle), named, offset, static_cast<uint32_t>(op)),
+         "SetPredication12");
+}
+
+VOID D3d12Recorder::so_set_targets(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
+                                   const D3D12DDI_STREAM_OUTPUT_BUFFER_VIEW *views)
+{
+    AV_SCOPE("D3d12Recorder::so_set_targets");
+    StreamOutputView made[most_stream_outputs] = {};
+    if (views == nullptr ? count != 0u : count > most_stream_outputs) {
+        device_.lost("stream output targets that name more buffers than a pipeline writes");
+        return;
+    }
+    for (UINT index = 0u; index < count; index++)
+        made[index] = StreamOutputView{views[index].BufferLocation, views[index].SizeInBytes,
+                                       views[index].BufferFilledSizeLocation};
+    sent(av_d3d12_SetStreamOutputTargets12(device_.wire(), list(handle), start, count, made),
+         "SetStreamOutputTargets12");
 }
 
 VOID D3d12Recorder::set_view_instance_mask(D3D12DDI_HCOMMANDLIST handle, UINT mask)

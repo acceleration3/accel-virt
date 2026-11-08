@@ -161,5 +161,12 @@ namespace av::d3d12proto {
 // answer. The caller times the exchange against its own clock and hands the pair to the kernel driver as the origin
 // the timestamp calibration counts from.
 [[nodiscard]] bool av_d3d12_GetClockOrigin12(::av::ClientTransport& t, uint32_t queue, uint64_t* ticks, uint64_t* frequency);
+// The depth range a pixel's stored depth must lie in for the draws after; both within 0 to 1.
+[[nodiscard]] bool av_d3d12_SetDepthBounds12(::av::ClientTransport& t, uint32_t list, float minimum, float maximum);
+// Draws and dispatches after are skipped by the 64-bit value at `offset` in `buffer`: zero skips when op is
+// D3D12_PREDICATION_OP_NOT_EQUAL_ZERO, non-zero when it is EQUAL_ZERO. buffer 0 turns predication off.
+[[nodiscard]] bool av_d3d12_SetPredication12(::av::ClientTransport& t, uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op);
+// Binds `count` stream output buffers from slot `start`; an address of 0 unbinds its slot.
+[[nodiscard]] bool av_d3d12_SetStreamOutputTargets12(::av::ClientTransport& t, uint32_t list, uint32_t start, uint32_t count, const StreamOutputView* views);
 
 }  // namespace av::d3d12proto

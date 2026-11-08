@@ -22,6 +22,10 @@ constexpr uint32_t pixel_grid = 4u;
 constexpr uint32_t most_samples = 16u;
 constexpr int32_t  lowest_sample_offset = -8;
 constexpr int32_t  highest_sample_offset = 7;
+constexpr uint32_t most_stream_outputs = 4u;
+constexpr uint32_t most_predication_op = 1u;
+constexpr uint64_t predicate_bytes = sizeof(uint64_t);
+constexpr uint64_t counter_bytes = sizeof(uint32_t);
 
 }
 
@@ -128,6 +132,56 @@ bool D3d12Session::on_SetViewInstanceMask12(uint32_t id, uint32_t mask)
     const D3d12ListCast<ID3D12GraphicsCommandList1> extended(list(id));
     if (extended.get() == nullptr) return false;
     extended.get()->SetViewInstanceMask(mask);
+    return true;
+}
+
+bool D3d12Session::on_SetDepthBounds12(uint32_t id, float minimum, float maximum)
+{
+    AV_SCOPE("D3d12Session::on_SetDepthBounds12");
+    const D3d12ListCast<ID3D12GraphicsCommandList1> extended(list(id));
+    if (extended.get() == nullptr || !(minimum >= 0.0f) || !(maximum <= 1.0f) || minimum > maximum) return false;
+    extended.get()->OMSetDepthBounds(minimum, maximum);
+    return true;
+}
+
+bool D3d12Session::on_SetPredication12(uint32_t id, uint32_t buffer, uint64_t offset, uint32_t op)
+{
+    AV_SCOPE("D3d12Session::on_SetPredication12");
+    ID3D12GraphicsCommandList *const recorded = list(id);
+    if (recorded == nullptr || op > most_predication_op) return false;
+    if (buffer == 0u) {
+        recorded->SetPredication(nullptr, 0u, D3D12_PREDICATION_OP_EQUAL_ZERO);
+        return true;
+    }
+    ID3D12Resource *const resource = objects_.find_as<ID3D12Resource>(buffer, D3dObjectKind::resource12);
+    if (resource == nullptr) return false;
+    const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+    if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || offset % predicate_bytes != 0u || offset > desc.Width ||
+        desc.Width - offset < predicate_bytes)
+        return false;
+    if (!retain_resource(id, buffer)) return false;
+    recorded->SetPredication(resource, offset, static_cast<D3D12_PREDICATION_OP>(op));
+    return true;
+}
+
+bool D3d12Session::on_SetStreamOutputTargets12(uint32_t id, uint32_t start, uint32_t count,
+                                               const d3d12proto::StreamOutputView *views)
+{
+    AV_SCOPE("D3d12Session::on_SetStreamOutputTargets12");
+    ID3D12GraphicsCommandList *const recorded = list(id);
+    if (recorded == nullptr || start > most_stream_outputs || count > most_stream_outputs - start) return false;
+    D3D12_STREAM_OUTPUT_BUFFER_VIEW made[most_stream_outputs] = {};
+    for (uint32_t index = 0u; index < count; index++) {
+        const d3d12proto::StreamOutputView &view = views[index];
+        if (view.address == 0u) continue;
+        const uint64_t host = addresses_.translate(view.address, view.size);
+        const uint64_t filled = view.filled_address == 0u ? 0u : addresses_.translate(view.filled_address, counter_bytes);
+        if (host == 0u || view.size == 0u || (view.filled_address != 0u && filled == 0u) ||
+            !retain_address(id, view.address) || (view.filled_address != 0u && !retain_address(id, view.filled_address)))
+            return false;
+        made[index] = {host, view.size, filled};
+    }
+    recorded->SOSetTargets(start, count, count == 0u ? nullptr : made);
     return true;
 }
 

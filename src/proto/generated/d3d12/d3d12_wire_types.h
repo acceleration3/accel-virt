@@ -60,6 +60,14 @@ struct ImmediateWrite {
 static_assert(sizeof(ImmediateWrite) == 16, "ImmediateWrite crosses as 16 bytes");
 static_assert(__is_trivially_copyable(ImmediateWrite), "ImmediateWrite is plain data");
 
+struct StreamOutputView {
+    uint64_t address;
+    uint64_t size;
+    uint64_t filled_address;
+};
+static_assert(sizeof(StreamOutputView) == 24, "StreamOutputView crosses as 24 bytes");
+static_assert(__is_trivially_copyable(StreamOutputView), "StreamOutputView is plain data");
+
 struct DescriptorRef {
     uint32_t heap;
     uint32_t index;

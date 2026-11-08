@@ -265,3 +265,96 @@ TEST(d3d12_session_extended_lists, a_buffer_written_immediately_stays_alive_afte
   CHECK(!scene.session().on_WriteBufferImmediate12(list, 1u, &write));
   CHECK(scene.session().on_Destroy12(list));
   CHECK_EQ(references_of(&scene.written), 1u); }
+
+TEST(d3d12_session_extended_lists, depth_bounds_inside_zero_to_one_and_ordered_are_set)
+{ Scene scene;
+  CHECK(scene.session().on_SetDepthBounds12(list, 0.25f, 0.75f));
+  CHECK_EQ(scene.commands.depth_bounds_sets, 1u);
+  CHECK(scene.commands.depth_minimum == 0.25f && scene.commands.depth_maximum == 0.75f);
+  CHECK(scene.session().on_SetDepthBounds12(list, 0.0f, 1.0f));
+  CHECK(scene.session().on_SetDepthBounds12(list, 0.5f, 0.5f));
+  CHECK_EQ(scene.commands.depth_bounds_sets, 3u); }
+
+TEST(d3d12_session_extended_lists, depth_bounds_outside_zero_to_one_unordered_or_not_numbers_are_refused)
+{ Scene scene;
+  CHECK(!scene.session().on_SetDepthBounds12(list, -0.1f, 0.5f));
+  CHECK(!scene.session().on_SetDepthBounds12(list, 0.5f, 1.1f));
+  CHECK(!scene.session().on_SetDepthBounds12(list, 0.75f, 0.25f));
+  const float not_a_number = __builtin_nanf("");
+  CHECK(!scene.session().on_SetDepthBounds12(list, not_a_number, 0.5f));
+  CHECK(!scene.session().on_SetDepthBounds12(list, 0.0f, not_a_number));
+  scene.commands.extended = false;
+  CHECK(!scene.session().on_SetDepthBounds12(list, 0.0f, 1.0f));
+  CHECK_EQ(scene.commands.depth_bounds_sets, 0u); }
+
+TEST(d3d12_session_extended_lists, predication_names_a_value_inside_a_buffer_and_zero_turns_it_off)
+{ Scene scene;
+  scene.written.desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  scene.written.desc.Width = buffer_bytes;
+  CHECK(scene.session().on_SetPredication12(list, buffer, buffer_bytes - 8u, 1u));
+  CHECK_EQ(scene.commands.predications, 1u);
+  CHECK_EQ(scene.commands.predication_offset, buffer_bytes - 8u);
+  CHECK(scene.commands.predication_op == D3D12_PREDICATION_OP_NOT_EQUAL_ZERO);
+  CHECK(scene.commands.predication_buffer == &scene.written);
+  CHECK(scene.session().on_SetPredication12(list, 0u, 0u, 0u));
+  CHECK(scene.commands.predication_buffer == nullptr);
+  CHECK_EQ(scene.commands.predications, 2u);
+  CHECK(scene.session().invariants_hold()); }
+
+TEST(d3d12_session_extended_lists, predication_outside_a_buffer_misaligned_or_of_an_unknown_op_is_refused)
+{ Scene scene;
+  scene.written.desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  scene.written.desc.Width = buffer_bytes;
+  CHECK(!scene.session().on_SetPredication12(list, buffer, buffer_bytes - 4u, 0u));
+  CHECK(!scene.session().on_SetPredication12(list, buffer, buffer_bytes, 0u));
+  CHECK(!scene.session().on_SetPredication12(list, buffer, 4u, 0u));
+  CHECK(!scene.session().on_SetPredication12(list, buffer, 0u, 2u));
+  CHECK(!scene.session().on_SetPredication12(list, 99u, 0u, 0u));
+  CHECK(!scene.session().on_SetPredication12(list, resolved, 0u, 0u));
+  CHECK_EQ(scene.commands.predications, 0u); }
+
+TEST(d3d12_session_extended_lists, a_predicating_buffer_stays_alive_after_the_guest_destroys_it)
+{ Scene scene;
+  scene.written.desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  scene.written.desc.Width = buffer_bytes;
+  CHECK(scene.session().on_SetPredication12(list, buffer, 0u, 0u));
+  const std::uint32_t before = references_of(&scene.written);
+  CHECK(scene.session().on_Destroy12(buffer));
+  CHECK_EQ(references_of(&scene.written), before - 1u);
+  CHECK(scene.session().on_Destroy12(list));
+  CHECK_EQ(references_of(&scene.written), before - 2u); }
+
+TEST(d3d12_session_extended_lists, stream_output_targets_bind_host_addresses_and_zero_unbinds_a_slot)
+{ Scene scene;
+  const StreamOutputView views[2] = {{guest_address + 16u, 256u, guest_address + 8u}, {0u, 0u, 0u}};
+  CHECK(scene.session().on_SetStreamOutputTargets12(list, 1u, 2u, views));
+  CHECK_EQ(scene.commands.stream_output_sets, 1u);
+  CHECK_EQ(scene.commands.stream_output_start, 1u);
+  CHECK_EQ(scene.commands.stream_output_count, 2u);
+  CHECK_EQ(scene.commands.stream_output_last.BufferLocation, 0u);
+  const StreamOutputView first[1] = {{guest_address + 16u, 256u, guest_address + 8u}};
+  CHECK(scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, first));
+  CHECK_EQ(scene.commands.stream_output_last.BufferLocation, host_address + 16u);
+  CHECK_EQ(scene.commands.stream_output_last.SizeInBytes, 256u);
+  CHECK_EQ(scene.commands.stream_output_last.BufferFilledSizeLocation, host_address + 8u);
+  CHECK(scene.session().on_SetStreamOutputTargets12(list, 0u, 0u, nullptr));
+  CHECK_EQ(scene.commands.stream_output_count, 0u); }
+
+TEST(d3d12_session_extended_lists, stream_output_targets_that_leave_their_buffer_or_slots_are_refused)
+{ Scene scene;
+  StreamOutputView view = {guest_address + buffer_bytes - 8u, 16u, guest_address};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
+  view = {guest_address, 64u, guest_address + buffer_bytes - 2u};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
+  view = {guest_address, 0u, 0u};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
+  view = {0x1000u, 16u, 0u};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
+  StreamOutputView many[5] = {};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 5u, many));
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 3u, 2u, many));
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 5u, 0u, many));
+  CHECK_EQ(scene.commands.stream_output_sets, 0u);
+  view = {guest_address, 64u, 0u};
+  CHECK(scene.session().on_SetStreamOutputTargets12(list, 3u, 1u, &view));
+  CHECK_EQ(scene.commands.stream_output_last.BufferFilledSizeLocation, 0u); }

@@ -83,6 +83,9 @@ const char* command_name(uint32_t id) {
         case kCmd_WriteBufferImmediate12: return "WriteBufferImmediate12";
         case kCmd_SetViewInstanceMask12: return "SetViewInstanceMask12";
         case kCmd_GetClockOrigin12: return "GetClockOrigin12";
+        case kCmd_SetDepthBounds12: return "SetDepthBounds12";
+        case kCmd_SetPredication12: return "SetPredication12";
+        case kCmd_SetStreamOutputTargets12: return "SetStreamOutputTargets12";
         default: return nullptr;
     }
 }

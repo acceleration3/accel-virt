@@ -76,7 +76,14 @@ public:
     void STDMETHODCALLTYPE SetGraphicsRootUnorderedAccessView(UINT, D3D12_GPU_VIRTUAL_ADDRESS) override { recorded++; }
     void STDMETHODCALLTYPE IASetIndexBuffer(const D3D12_INDEX_BUFFER_VIEW *) override { recorded++; }
     void STDMETHODCALLTYPE IASetVertexBuffers(UINT, UINT, const D3D12_VERTEX_BUFFER_VIEW *) override { recorded++; }
-    void STDMETHODCALLTYPE SOSetTargets(UINT, UINT, const D3D12_STREAM_OUTPUT_BUFFER_VIEW *) override { recorded++; }
+    void STDMETHODCALLTYPE SOSetTargets(UINT start, UINT count, const D3D12_STREAM_OUTPUT_BUFFER_VIEW *views) override
+    {
+        recorded++;
+        stream_output_sets++;
+        stream_output_start = start;
+        stream_output_count = count;
+        if (count != 0u) stream_output_last = views[count - 1u];
+    }
     void STDMETHODCALLTYPE OMSetRenderTargets(UINT, const D3D12_CPU_DESCRIPTOR_HANDLE *, WINBOOL, const D3D12_CPU_DESCRIPTOR_HANDLE *) override { recorded++; }
     void STDMETHODCALLTYPE ClearDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_CLEAR_FLAGS, FLOAT, UINT8, UINT, const D3D12_RECT *) override { recorded++; }
     void STDMETHODCALLTYPE ClearRenderTargetView(D3D12_CPU_DESCRIPTOR_HANDLE, const FLOAT[], UINT, const D3D12_RECT *) override { recorded++; }
@@ -86,7 +93,14 @@ public:
     void STDMETHODCALLTYPE BeginQuery(ID3D12QueryHeap *, D3D12_QUERY_TYPE, UINT) override { recorded++; }
     void STDMETHODCALLTYPE EndQuery(ID3D12QueryHeap *, D3D12_QUERY_TYPE, UINT) override { recorded++; }
     void STDMETHODCALLTYPE ResolveQueryData(ID3D12QueryHeap *, D3D12_QUERY_TYPE, UINT, UINT, ID3D12Resource *, UINT64) override { recorded++; }
-    void STDMETHODCALLTYPE SetPredication(ID3D12Resource *, UINT64, D3D12_PREDICATION_OP) override { recorded++; }
+    void STDMETHODCALLTYPE SetPredication(ID3D12Resource *buffer, UINT64 offset, D3D12_PREDICATION_OP op) override
+    {
+        recorded++;
+        predications++;
+        predication_buffer = buffer;
+        predication_offset = offset;
+        predication_op = op;
+    }
     void STDMETHODCALLTYPE SetMarker(UINT, const void *, UINT) override { recorded++; }
     void STDMETHODCALLTYPE BeginEvent(UINT, const void *, UINT) override { recorded++; }
     void STDMETHODCALLTYPE EndEvent() override { recorded++; }
@@ -94,7 +108,13 @@ public:
 
     void STDMETHODCALLTYPE AtomicCopyBufferUINT(ID3D12Resource *, UINT64, ID3D12Resource *, UINT64, UINT, ID3D12Resource *const *, const D3D12_SUBRESOURCE_RANGE_UINT64 *) override { recorded++; }
     void STDMETHODCALLTYPE AtomicCopyBufferUINT64(ID3D12Resource *, UINT64, ID3D12Resource *, UINT64, UINT, ID3D12Resource *const *, const D3D12_SUBRESOURCE_RANGE_UINT64 *) override { recorded++; }
-    void STDMETHODCALLTYPE OMSetDepthBounds(FLOAT, FLOAT) override { recorded++; }
+    void STDMETHODCALLTYPE OMSetDepthBounds(FLOAT minimum, FLOAT maximum) override
+    {
+        recorded++;
+        depth_bounds_sets++;
+        depth_minimum = minimum;
+        depth_maximum = maximum;
+    }
     void STDMETHODCALLTYPE SetSamplePositions(UINT samples, UINT pixels, D3D12_SAMPLE_POSITION *positions) override
     {
         recorded++;
@@ -140,6 +160,17 @@ public:
     std::uint32_t immediate_writes = 0u;
     std::uint64_t immediate_last_address = 0u;
     D3D12_WRITEBUFFERIMMEDIATE_MODE immediate_last_mode = D3D12_WRITEBUFFERIMMEDIATE_MODE_DEFAULT;
+    std::uint32_t depth_bounds_sets = 0u;
+    float         depth_minimum = 0.0f;
+    float         depth_maximum = 0.0f;
+    std::uint32_t predications = 0u;
+    ID3D12Resource *predication_buffer = nullptr;
+    std::uint64_t predication_offset = 0u;
+    D3D12_PREDICATION_OP predication_op = D3D12_PREDICATION_OP_EQUAL_ZERO;
+    std::uint32_t stream_output_sets = 0u;
+    std::uint32_t stream_output_start = 0u;
+    std::uint32_t stream_output_count = 0u;
+    D3D12_STREAM_OUTPUT_BUFFER_VIEW stream_output_last = {};
     std::uint32_t buffer_copies = 0u;
     std::uint32_t whole_copies = 0u;
     std::uint32_t texture_copies = 0u;
