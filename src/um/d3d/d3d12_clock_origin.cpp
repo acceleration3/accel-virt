@@ -10,16 +10,17 @@
 namespace av::d3d12 {
 
 D3d12ClockOrigin::D3d12ClockOrigin(d3d::D3dSession &session, KeyedLog &lines)
-    : session_(session), lines_(lines), clock_(), taken_(false)
+    : session_(session), lines_(lines), clock_(), schedule_()
 {
     AV_SCOPE("D3d12ClockOrigin::D3d12ClockOrigin");
 }
 
-void D3d12ClockOrigin::take(d3d::D3dDeviceChannel &wire, uint32_t queue)
+void D3d12ClockOrigin::refresh(d3d::D3dDeviceChannel &wire, uint32_t queue)
 {
-    AV_SCOPE("D3d12ClockOrigin::take");
-    if (taken_) return;
-    taken_ = true;
+    AV_SCOPE("D3d12ClockOrigin::refresh");
+    const uint64_t now = clock_.now_nanoseconds();
+    if (!schedule_.due(now)) return;
+    schedule_.taken(now);
     uint64_t ticks = 0u, frequency = 0u;
     const uint64_t before = clock_.ticks();
     const bool     answered = d3d12proto::av_d3d12_GetClockOrigin12(wire, queue, &ticks, &frequency);

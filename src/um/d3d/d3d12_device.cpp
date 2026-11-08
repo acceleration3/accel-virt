@@ -263,7 +263,7 @@ HRESULT D3d12Device::create_command_queue(const D3D12DDIARG_CREATECOMMANDQUEUE_0
     if (!sent(d3d12proto::av_d3d12_CreateCommandQueue12(wire(), queue.header.stamp.id(), queue.type, 0u, 0u),
               "CreateCommandQueue12"))
         return E_OUTOFMEMORY;
-    clock_origin_.take(wire(), queue.header.stamp.id());
+    clock_origin_.refresh(wire(), queue.header.stamp.id());
     return S_OK;
 }
 
@@ -299,7 +299,11 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
     if (queue.executed % verdict_every != 0u) return;
     uint32_t removed = 0u;
     if (!sent(d3d12proto::av_d3d12_Finish12(wire(), &removed), "Finish12")) return;
-    if (removed != 0u) lost("the host removed the device");
+    if (removed != 0u) {
+        lost("the host removed the device");
+        return;
+    }
+    clock_origin_.refresh(wire(), queue.header.stamp.id());
 }
 
 bool D3d12Device::follow(const QueueRecord &queue)

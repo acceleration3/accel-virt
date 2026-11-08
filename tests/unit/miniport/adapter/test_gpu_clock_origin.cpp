@@ -68,3 +68,17 @@ TEST(gpu_clock_origin, the_latest_origin_replaces_the_one_before)
   CHECK(origin.project(9000u + counter_frequency, counter_frequency, ticks, frequency));
   CHECK_EQ(ticks, 100u + 12000000u);
   CHECK_EQ(frequency, 12000000u); }
+
+TEST(gpu_clock_origin, a_later_origin_replaces_the_drifted_one_and_projects_from_its_own_counter)
+{ MockPlatform platform;
+  GpuClockOrigin origin(platform);
+  origin.adopt(ClockOriginRecord(2000u, 1000000u, gpu_frequency));
+  const std::uint64_t later = 2000u + 60u * counter_frequency;
+  std::uint64_t ticks = 0u, frequency = 0u;
+  CHECK(origin.project(later, counter_frequency, ticks, frequency));
+  CHECK_EQ(ticks, 1000000u + 60u * gpu_frequency);
+  origin.adopt(ClockOriginRecord(later, 1000000u + 60u * gpu_frequency + 6000u, gpu_frequency));
+  CHECK(origin.project(later, counter_frequency, ticks, frequency));
+  CHECK_EQ(ticks, 1000000u + 60u * gpu_frequency + 6000u);
+  CHECK(origin.project(later + counter_frequency, counter_frequency, ticks, frequency));
+  CHECK_EQ(ticks, 1000000u + 61u * gpu_frequency + 6000u); }
