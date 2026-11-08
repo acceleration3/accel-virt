@@ -460,3 +460,25 @@ TEST(window_framebuffers_invariants, fail_for_a_presented_window_not_held)
   CHECK(!rig.framebuffers.invariants_hold());
   av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, nullptr);
   CHECK(rig.framebuffers.invariants_hold()); }
+
+TEST(window_framebuffers, a_viewport_of_a_new_size_asks_for_the_window_and_the_same_size_does_not)
+{ Rig rig;
+  CHECK(!rig.framebuffers.viewport_resizes(8u, 4u));
+  CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
+  CHECK(rig.framebuffers.viewport_resizes(8u, 4u));
+  CHECK(!rig.framebuffers.viewport_resizes(8u, 4u));
+  CHECK(rig.framebuffers.viewport_resizes(8u, 5u));
+  CHECK(!rig.framebuffers.viewport_resizes(8u, 5u));
+  CHECK(rig.framebuffers.viewport_resizes(9u, 5u));
+  CHECK_STATUS(rig.current_on(1, 200u), Status::ok);
+  CHECK(rig.framebuffers.viewport_resizes(9u, 5u)); }
+
+TEST(window_framebuffers, a_viewport_after_a_resize_makes_the_window_framebuffer_at_the_new_size)
+{ Rig rig;
+  CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
+  CHECK(rig.framebuffers.viewport_resizes(8u, 4u));
+  rig.surface.resize(&rig.windows[0], 16u, 8u);
+  rig.context_rig.host().gl_window(1u, 1u, 300u);
+  CHECK(rig.framebuffers.viewport_resizes(16u, 8u));
+  rig.framebuffers.follow(rig.wire(), rig.framebuffers.window(), doubled, rig.surface);
+  CHECK_EQ(rig.framebuffers.name_of(0u), 300u); }

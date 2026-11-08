@@ -386,6 +386,18 @@ GlIcdRoot::Shown GlIcdRoot::present_frame(void *dc, bool paced)
     return Shown::handed;
 }
 
+void GlIcdRoot::viewport(int32_t x, int32_t y, int32_t width, int32_t height)
+{
+    AV_SCOPE("GlIcdRoot::viewport");
+    GuestGlContext *const context = currents_.current();
+    ClientTransport *const transport = wire();
+    if (context == nullptr || transport == nullptr) return;
+    WindowFramebuffers &framebuffers = context->framebuffers();
+    if (framebuffers.viewport_resizes(static_cast<uint32_t>(width), static_cast<uint32_t>(height)))
+        framebuffers.follow(*transport, framebuffers.window(), formats_.format(context->pixel_format()), surface_);
+    glproto::av_glViewport(*transport, x, y, width, height);
+}
+
 void GlIcdRoot::flush_current()
 {
     AV_SCOPE("GlIcdRoot::flush_current");

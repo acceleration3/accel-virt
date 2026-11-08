@@ -1877,7 +1877,7 @@ HANDWRITTEN = {
     "glLinkProgram", "glDeleteProgram",
     "glGenBuffers", "glGenVertexArrays", "glGenTextures",
     "glFlush",
-    "glBindFramebuffer", "glDrawBuffer", "glReadBuffer", "glReadPixels",
+    "glBindFramebuffer", "glDrawBuffer", "glReadBuffer", "glReadPixels", "glViewport",
 
     "glVertexPointer", "glNormalPointer", "glColorPointer",
     "glSecondaryColorPointer", "glIndexPointer", "glEdgeFlagPointer",

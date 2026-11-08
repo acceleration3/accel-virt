@@ -1261,3 +1261,24 @@ TEST(gl_icd_root_swap_buffers, a_swap_the_screen_did_not_show_still_fixes_its_fr
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
   CHECK_EQ(rig.surface().blits(), 2u);
   CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_icd_root, a_viewport_after_the_window_was_resized_makes_its_framebuffer_at_the_new_size_first)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  av::glicd::GuestGlContext *const context = rig.root().current();
+  void *const window = rig.surface().window_of(rig.dc());
+  rig.root().viewport(0, 0, 8, 8);
+  const std::uint32_t before = context->framebuffers().name_of(0u);
+  rig.surface().resize(window, 16u, 8u);
+  rig.root().viewport(0, 0, 8, 8);
+  CHECK_EQ(context->framebuffers().name_of(0u), before);
+  rig.host().gl_window(1u, 1u, 300u);
+  rig.root().viewport(0, 0, 16, 8);
+  CHECK(context->framebuffers().name_of(0u) != before);
+  CHECK_EQ(context->framebuffers().name_of(0u), 300u);
+  const std::uint32_t viewports = sent(rig, av::glproto::kCmd_glViewport);
+  rig.root().viewport(0, 0, 16, 8);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glViewport), viewports + 1u);
+  CHECK_EQ(context->framebuffers().name_of(0u), 300u);
+  CHECK(rig.root().invariants_hold()); }
