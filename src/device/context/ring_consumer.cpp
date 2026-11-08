@@ -145,6 +145,7 @@ Status RingConsumer::consume_next()
         return ran;
     }
     __atomic_store_n(&head_, head_ + batch.span(), __ATOMIC_RELEASE);
+    if (ordering_ != nullptr) ordering_->progressed();
     last_fence_ = batch.fence_id();
     batches_++;
     static_cast<void>(ring_.publish_head(head_));

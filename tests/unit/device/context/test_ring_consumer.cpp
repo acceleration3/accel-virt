@@ -26,6 +26,8 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <thread>
+#include <unistd.h>
 
 #include <sched.h>
 #include <unistd.h>
@@ -635,9 +637,15 @@ TEST(d3d_ordering, settling_waits_only_for_what_was_published_before_it_began)
   published.ring().write_batch(2u, 0u);
   stamp(published.ring(), 32u, 2u);
   published.ring().publish();
+  published.consumer().order_with(ordering);
+  std::uint64_t waited = 0u;
   started = now_ns();
-  ordering.settle();
-  CHECK(now_ns() - started >= 2000000u);
+  std::thread settling([&] { ordering.settle(); waited = now_ns() - started; });
+  usleep(5000);
+  published.serve();
+  settling.join();
+  CHECK(waited >= 4000000u);
+  CHECK(published.consumer().consumed_to(published.consumer().published_end()));
   ordering.remove(published.consumer());
   ordering.remove(drained.consumer()); }
 
@@ -891,9 +899,13 @@ TEST(d3d_ordering, an_ordering_never_initialized_or_an_unstamped_batch_waits_for
   started = now_ns();
   ordering.wait_before(waiting.consumer(), 900u);
   CHECK(now_ns() - started >= 20000000u);
+  std::uint64_t waited = 0u;
   started = now_ns();
-  ordering.settle();
-  CHECK(now_ns() - started >= 2000000u);
+  std::thread settling([&] { ordering.settle(); waited = now_ns() - started; });
+  usleep(5000);
+  waiting.host().set_clock(waiting.host().monotonic_nanoseconds() + 1000000000u);
+  settling.join();
+  CHECK(waited >= 4000000u);
   ordering.remove(other.consumer());
   ordering.remove(other.consumer());
   started = now_ns();

@@ -14,6 +14,7 @@ class Worker;
 class D3dOrdering {
 public:
     static constexpr uint32_t capacity = 64u;
+    static constexpr uint32_t waiter_capacity = 32u;
 
     explicit D3dOrdering(Host &host);
     ~D3dOrdering();
@@ -25,6 +26,7 @@ public:
     void                 remove(RingConsumer &ring);
     void                 wait_before(const RingConsumer &ring, uint64_t published_at);
     void                 settle();
+    void                 progressed();
 
 private:
     struct Member {
@@ -37,11 +39,15 @@ private:
     uint32_t cut(const RingConsumer **rings, uint64_t *ends);
     bool     unsettled(const RingConsumer *const *rings, const uint64_t *ends, uint32_t count);
     void pause() const;
+    bool enlist(void *event);
+    void withdraw(void *event);
 
     Host    &host_;
     void    *mutex_;
     Member   members_[capacity];
     uint32_t count_;
+    void    *waiters_[waiter_capacity];
+    uint32_t waiting_;
 };
 
 }

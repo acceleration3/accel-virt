@@ -13,11 +13,11 @@ namespace {
 
 constexpr long     pause_nanoseconds = 20000;
 constexpr uint32_t most_pauses = 1000;
-constexpr uint32_t most_settling_pauses = 100;
+constexpr uint64_t settling_nanoseconds = 250000000u;
 
 }
 
-D3dOrdering::D3dOrdering(Host &host) : host_(host), mutex_(nullptr), members_{}, count_(0u)
+D3dOrdering::D3dOrdering(Host &host) : host_(host), mutex_(nullptr), members_{}, count_(0u), waiters_{}, waiting_(0u)
 {
     AV_SCOPE("D3dOrdering::D3dOrdering");
 }
@@ -55,6 +55,7 @@ void D3dOrdering::remove(RingConsumer &ring)
         break;
     }
     host_.unlock_mutex(mutex_);
+    progressed();
 }
 
 bool D3dOrdering::wake_earlier(const RingConsumer *ring, uint64_t published_at)
@@ -123,6 +124,42 @@ bool D3dOrdering::unsettled(const RingConsumer *const *rings, const uint64_t *en
     return pending;
 }
 
+bool D3dOrdering::enlist(void *event)
+{
+    AV_SCOPE("D3dOrdering::enlist");
+    host_.lock_mutex(mutex_);
+    const bool room = waiting_ < waiter_capacity;
+    if (room) {
+        waiters_[waiting_] = event;
+        __atomic_store_n(&waiting_, waiting_ + 1u, __ATOMIC_SEQ_CST);
+    }
+    host_.unlock_mutex(mutex_);
+    return room;
+}
+
+void D3dOrdering::withdraw(void *event)
+{
+    AV_SCOPE("D3dOrdering::withdraw");
+    host_.lock_mutex(mutex_);
+    for (uint32_t index = 0u; index < waiting_; index++) {
+        if (waiters_[index] != event) continue;
+        waiters_[index] = waiters_[waiting_ - 1u];
+        waiters_[waiting_ - 1u] = nullptr;
+        __atomic_store_n(&waiting_, waiting_ - 1u, __ATOMIC_SEQ_CST);
+        break;
+    }
+    host_.unlock_mutex(mutex_);
+}
+
+void D3dOrdering::progressed()
+{
+    AV_SCOPE("D3dOrdering::progressed");
+    if (mutex_ == nullptr || __atomic_load_n(&waiting_, __ATOMIC_SEQ_CST) == 0u) return;
+    host_.lock_mutex(mutex_);
+    for (uint32_t index = 0u; index < waiting_; index++) host_.signal_event(waiters_[index]);
+    host_.unlock_mutex(mutex_);
+}
+
 void D3dOrdering::settle()
 {
     AV_SCOPE("D3dOrdering::settle");
@@ -130,7 +167,15 @@ void D3dOrdering::settle()
     const RingConsumer *rings[capacity] = {};
     uint64_t            ends[capacity] = {};
     const uint32_t      count = cut(rings, ends);
-    for (uint32_t pauses = 0u; pauses < most_settling_pauses && count != 0u && unsettled(rings, ends, count); pauses++) pause();
+    if (count == 0u || !unsettled(rings, ends, count)) return;
+    void *event = nullptr;
+    if (host_.create_event(event) != Status::ok) return;
+    if (enlist(event)) {
+        const uint64_t deadline = host_.monotonic_nanoseconds() + settling_nanoseconds;
+        while (unsettled(rings, ends, count) && host_.wait_event_until(event, deadline)) {}
+        withdraw(event);
+    }
+    host_.destroy_event(event);
 }
 
 }
