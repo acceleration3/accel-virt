@@ -3,6 +3,7 @@
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/carried_share.hpp"
+#include "executor/shim/context_gate.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/exportable_images.hpp"
@@ -353,13 +354,25 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     device->retire_shares();
 }
 
+namespace {
+
+class IdleGate final : public av::ContextGate {
+public:
+    void enter() override {}
+    void leave() override {}
+    bool inside() const override { return true; }
+};
+
+}
+
 TEST(carried_share, a_recorded_resource_is_made_again_as_it_was_and_marked_as_the_surface)
 {
     av::ExecutorLogRig rig;
     av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    av::DxvkVulkanDevice   unconnected;
+    IdleGate               gate;
+    av::DxvkVulkanDevice   unconnected(gate);
     av::ExportableImages   images(unconnected, rig.log.d3d11());
     ID3D11Device5 *const   d3d11 = device->device();
     const D3D11_BUFFER_DESC buffer_desc = {256u, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0u, 0u, 0u};

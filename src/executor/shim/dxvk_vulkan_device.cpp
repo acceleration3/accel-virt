@@ -12,8 +12,8 @@
 
 namespace av {
 
-DxvkVulkanDevice::DxvkVulkanDevice()
-    : interop_(nullptr), sync_(VK_NULL_HANDLE), sync_spent_(false)
+DxvkVulkanDevice::DxvkVulkanDevice(ContextGate &gate)
+    : interop_(nullptr), queue_(), gated_(queue_, gate), sync_(VK_NULL_HANDLE), sync_spent_(false)
 {
     AV_SCOPE("DxvkVulkanDevice::DxvkVulkanDevice");
 }
@@ -38,7 +38,7 @@ bool DxvkVulkanDevice::connect(ID3D11Device5 *device)
     interop->GetVulkanHandles(&instance, &physical, &vulkan);
     interop_ = interop;
     queue_.borrow(interop);
-    if (table_.load(instance, physical, vulkan) && table_.interoperates() && work_.open(table_, queue_)) return true;
+    if (table_.load(instance, physical, vulkan) && table_.interoperates() && work_.open(table_, gated_)) return true;
     release();
     return false;
 }
@@ -125,11 +125,11 @@ bool DxvkVulkanDevice::sync_file(int &fd)
                                                       VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
         if (!table_.create_semaphore(&exported, sync_)) return false;
     }
-    queue_.flush();
+    gated_.flush();
     const VkSubmitInfo submit = {VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, 0u, nullptr, nullptr, 0u, nullptr, 1u, &sync_};
-    queue_.lock();
-    const bool submitted = table_.submit(queue_.queue(), submit);
-    queue_.unlock();
+    gated_.lock();
+    const bool submitted = table_.submit(gated_.queue(), submit);
+    gated_.unlock();
     if (!submitted) return false;
     if (table_.semaphore_fd(sync_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, fd)) return true;
     sync_spent_ = true;

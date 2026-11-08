@@ -7,6 +7,7 @@
 #include "executor/renewable_device.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/shim/carried_share.hpp"
+#include "executor/shim/context_gate.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/d3d11_capabilities.hpp"
 #include "proto/context/device_uuid.hpp"
@@ -48,7 +49,7 @@ class D3d12HostDevice;
 class Vkd3dImageExport;
 class WakeSignal;
 
-class D3d11HostDevice final : public RenewableDevice, public SliceImporter {
+class D3d11HostDevice final : public RenewableDevice, public SliceImporter, private ContextGate {
 public:
     explicit D3d11HostDevice(DriverLog &lines);
     ~D3d11HostDevice();
@@ -117,6 +118,10 @@ private:
     [[nodiscard]] bool make();
     void               unmake();
     bool               present() const override;
+    void               enter() override;
+    void               leave() override;
+    bool               inside() const override;
+    uint64_t           current_owner() const;
     bool               removed() override;
     [[nodiscard]] bool remake() override;
     void               carry_shares();
@@ -159,6 +164,7 @@ private:
     ID3D11Texture2D        *read_;
     bool                    read_mapped_;
     PosixLock               lock_;
+    uint64_t                owner_;
     uint32_t                waiting_;
     uint64_t                taken_;
     DriverLog              &lines_;

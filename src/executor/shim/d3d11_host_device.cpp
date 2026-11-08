@@ -5,10 +5,10 @@
 
 
 
+#include <pthread.h>
 #include <stdio.h>
 
 #include "core/log/log_line.hpp"
-#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/bgra_rows.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
@@ -25,7 +25,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice(DriverLog &lines)
-    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_, lines), copies_(), converter_(), frames_(*this), staging_(nullptr), read_(nullptr), read_mapped_(false), lock_(), waiting_(0u), taken_(0u), lines_(lines), clock_(), carry_heap_(), carried_(carry_heap_)
+    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(*this), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_, lines), copies_(), converter_(), frames_(*this), staging_(nullptr), read_(nullptr), read_mapped_(false), lock_(), owner_(0u), waiting_(0u), taken_(0u), lines_(lines), clock_(), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
 }
@@ -513,6 +513,7 @@ void D3d11HostDevice::lock(ID3DDeviceContextState *state)
     lock_.acquire();
     __atomic_fetch_sub(&waiting_, 1u, __ATOMIC_ACQ_REL);
     __atomic_fetch_add(&taken_, uint64_t{1}, __ATOMIC_RELEASE);
+    __atomic_store_n(&owner_, current_owner(), __ATOMIC_RELAXED);
     select(state);
 }
 
@@ -528,11 +529,36 @@ void D3d11HostDevice::unlock()
 {
     AV_SCOPE("D3d11HostDevice::unlock");
     const uint64_t mine = __atomic_load_n(&taken_, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&owner_, uint64_t{0}, __ATOMIC_RELAXED);
     lock_.release();
     if (__atomic_load_n(&waiting_, __ATOMIC_ACQUIRE) == 0u) return;
     constexpr uint32_t patience = 100000u;
     for (uint32_t spin = 0u; spin < patience && __atomic_load_n(&taken_, __ATOMIC_ACQUIRE) == mine; spin++)
         __builtin_ia32_pause();
+}
+
+void D3d11HostDevice::enter()
+{
+    AV_SCOPE("D3d11HostDevice::enter");
+    lock(nullptr);
+}
+
+void D3d11HostDevice::leave()
+{
+    AV_SCOPE("D3d11HostDevice::leave");
+    unlock();
+}
+
+bool D3d11HostDevice::inside() const
+{
+    AV_SCOPE("D3d11HostDevice::inside");
+    return __atomic_load_n(&owner_, __ATOMIC_RELAXED) == current_owner();
+}
+
+uint64_t D3d11HostDevice::current_owner() const
+{
+    AV_SCOPE("D3d11HostDevice::current_owner");
+    return static_cast<uint64_t>(pthread_self());
 }
 
 ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
@@ -545,9 +571,10 @@ ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
     ID3DDeviceContextState *state = nullptr;
     HRESULT                 made = E_FAIL;
     {
-        const ThreadLockHold locked(lock_);
+        lock(nullptr);
         made = device_->CreateDeviceContextState(0u, &level, 1u, D3D11_SDK_VERSION, __uuidof(ID3D11Device1), &chosen,
                                                  &state);
+        unlock();
     }
     if (FAILED(made)) return nullptr;
     feature_level = chosen;
@@ -557,7 +584,7 @@ ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
 void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
 {
     AV_SCOPE("D3d11HostDevice::forget_state");
-    const ThreadLockHold locked(lock_);
+    lock(nullptr);
     if (state != nullptr && state == active_) {
         const D3D_FEATURE_LEVEL wanted = static_cast<D3D_FEATURE_LEVEL>(feature_level_);
         D3D_FEATURE_LEVEL chosen = wanted;
@@ -569,6 +596,7 @@ void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
         }
         active_ = nullptr;
     }
+    unlock();
 }
 
 ID3D11Device5 *D3d11HostDevice::device() const
