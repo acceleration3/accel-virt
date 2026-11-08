@@ -11,6 +11,30 @@ namespace {
 constexpr uint32_t level_12_2 = 0xc200u;
 constexpr uint32_t shader_model_6_6 = 0x66u;
 constexpr uint32_t descriptor_heap_types = 4u;
+constexpr uint32_t feature_options12 = 41u;
+constexpr uint32_t feature_options13 = 42u;
+constexpr uint32_t feature_options14 = 43u;
+
+struct Options12 {
+    uint32_t ms_primitives_pipeline_statistic_includes_culled_primitives;
+    uint32_t enhanced_barriers;
+    uint32_t relaxed_format_casting;
+};
+
+struct Options13 {
+    uint32_t unrestricted_buffer_texture_copy_pitch;
+    uint32_t unrestricted_vertex_element_alignment;
+    uint32_t inverted_viewport_height_flips_y;
+    uint32_t inverted_viewport_depth_flips_z;
+    uint32_t texture_copy_between_dimensions;
+    uint32_t alpha_blend_factor;
+};
+
+struct Options14 {
+    uint32_t advanced_texture_ops;
+    uint32_t writeable_msaa_textures;
+    uint32_t independent_front_and_back_stencil_ref_mask;
+};
 
 }
 
@@ -24,6 +48,7 @@ void D3d12Capabilities::measure(ID3D12Device &device)
     AV_SCOPE("D3d12Capabilities::measure");
     caps_ = d3d12proto::Caps12{};
     measure_options(device);
+    measure_later_options(device);
     measure_formats(device);
 }
 
@@ -69,6 +94,26 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
     for (uint32_t type = 0u; type < descriptor_heap_types; type++)
         caps_.descriptor_sizes[type] =
             device.GetDescriptorHandleIncrementSize(static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));
+}
+
+void D3d12Capabilities::measure_later_options(ID3D12Device &device)
+{
+    AV_SCOPE("D3d12Capabilities::measure_later_options");
+    Options12 casting = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(feature_options12), &casting, sizeof(casting))))
+        caps_.relaxed_format_casting = casting.relaxed_format_casting != 0u ? 1u : 0u;
+    Options13 copies = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(feature_options13), &copies, sizeof(copies)))) {
+        caps_.unrestricted_buffer_texture_copy_pitch = copies.unrestricted_buffer_texture_copy_pitch != 0u ? 1u : 0u;
+        caps_.unrestricted_vertex_element_alignment = copies.unrestricted_vertex_element_alignment != 0u ? 1u : 0u;
+        caps_.inverted_viewport_height_flips_y = copies.inverted_viewport_height_flips_y != 0u ? 1u : 0u;
+        caps_.inverted_viewport_depth_flips_z = copies.inverted_viewport_depth_flips_z != 0u ? 1u : 0u;
+    }
+    Options14 textures = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(feature_options14), &textures, sizeof(textures)))) {
+        caps_.advanced_texture_ops = textures.advanced_texture_ops != 0u ? 1u : 0u;
+        caps_.writeable_msaa_textures = textures.writeable_msaa_textures != 0u ? 1u : 0u;
+    }
 }
 
 void D3d12Capabilities::measure_formats(ID3D12Device &device)

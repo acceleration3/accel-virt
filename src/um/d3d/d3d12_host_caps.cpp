@@ -204,9 +204,101 @@ HRESULT D3d12HostCaps::answer(const D3D12DDIARG_GETCAPS &args) const
         answer.ExecuteIndirectTier = D3D12DDI_EXECUTE_INDIRECT_TIER_1_0;
         return fill(args.pData, bytes, &answer, sizeof(answer));
     }
-    default:
-        return fill(args.pData, bytes, nullptr, 0u);
+    default: return answer_later(args);
     }
+}
+
+HRESULT D3d12HostCaps::answer_later(const D3D12DDIARG_GETCAPS &args) const
+{
+    AV_SCOPE("D3d12HostCaps::answer_later");
+    const UINT bytes = args.DataSize;
+    switch (static_cast<UINT>(args.Type)) {
+    case D3D12DDI_FEATURE_D3D12_PREDICATION_106: {
+        D3D12DDI_FEATURE_DATA_PREDICATION_106 answer = {};
+        answer.Supported = TRUE;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    case D3D12DDI_FEATURE_PLACED_RESOURCE_SUPPORT_INFO_106: return placed_resources(args.pData, bytes);
+    case D3D12DDICAPS_TYPE_0103_WAVE_MMA: return wave_mma(args.pData, bytes);
+    case D3D12DDICAPS_TYPE_0030_PROTECTED_RESOURCE_SESSION_SUPPORT: return protected_sessions(args.pData, bytes);
+    case D3D12DDICAPS_TYPE_QUERY_META_COMMAND_CAPS_0061: return E_INVALIDARG;
+    default: return answer_options(args);
+    }
+}
+
+HRESULT D3d12HostCaps::answer_options(const D3D12DDIARG_GETCAPS &args) const
+{
+    AV_SCOPE("D3d12HostCaps::answer_options");
+    const UINT bytes = args.DataSize;
+    switch (static_cast<UINT>(args.Type)) {
+    case D3D12DDICAPS_TYPE_OPTIONS_0090: {
+        D3D12DDI_OPTIONS_DATA_0090 answer = {};
+        answer.RelaxedFormatCastingSupported = caps_.relaxed_format_casting != 0u;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    case D3D12DDICAPS_TYPE_OPTIONS_0091: {
+        D3D12DDI_OPTIONS_DATA_0091 answer = {};
+        answer.UnrestrictedBufferTextureCopyPitchSupported = caps_.unrestricted_buffer_texture_copy_pitch != 0u;
+        answer.UnrestrictedVertexElementAlignmentSupported = caps_.unrestricted_vertex_element_alignment != 0u;
+        answer.InvertedViewportHeightFlipsYSupported = caps_.inverted_viewport_height_flips_y != 0u;
+        answer.InvertedViewportDepthFlipsZSupported = caps_.inverted_viewport_depth_flips_z != 0u;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    case D3D12DDICAPS_TYPE_OPTIONS_0093: {
+        D3D12DDI_OPTIONS_DATA_0093 answer = {};
+        answer.AdvancedTextureOpsSupported = caps_.advanced_texture_ops != 0u;
+        answer.WriteableMSAATexturesSupported = caps_.writeable_msaa_textures != 0u;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    case D3D12DDICAPS_TYPE_OPTIONS_0098:
+    case D3D12DDICAPS_TYPE_OPTIONS_0101:
+    case D3D12DDICAPS_TYPE_OPTIONS_0109:
+    case D3D12DDICAPS_TYPE_OPTIONS1_0103:
+    case D3D12DDICAPS_TYPE_SAMPLER_FEEDBACK_0073:
+    case D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS:
+    case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPE_COUNT:
+    case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPES:
+    case D3D12DDICAPS_TYPE_SHADER_MODEL_6_8_OPTIONS_0110:
+    case D3D12DDI_FEATURE_HARDWARE_COPY_106:
+    case D3D12DDICAPS_TYPE_SWIZZLE_PATTERN:
+    case D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN:
+    case D3D12DDICAPS_TYPE_0030_CRYPTO_SESSION_SUPPORT:
+    case D3D12DDICAPS_TYPE_0030_CONTENT_PROTECTION_SYSTEM_COUNT:
+    case D3D12DDICAPS_TYPE_0030_CONTENT_PROTECTION_SYSTEM_SUPPORT:
+    case D3D12DDICAPS_TYPE_0030_CRYPTO_SESSION_TRANSFORM_SUPPORT:
+    default: return fill(args.pData, bytes, nullptr, 0u);
+    }
+}
+
+HRESULT D3d12HostCaps::placed_resources(void *data, UINT bytes) const
+{
+    AV_SCOPE("D3d12HostCaps::placed_resources");
+    if (data == nullptr || bytes < sizeof(D3D12DDI_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO_106)) return E_INVALIDARG;
+    auto &info = *static_cast<D3D12DDI_FEATURE_DATA_PLACED_RESOURCE_SUPPORT_INFO_106 *>(data);
+    info.Supported = info.ResourceType == D3D12DDI_RT_BUFFER || format_support(info.Format) != 0u;
+    return S_OK;
+}
+
+HRESULT D3d12HostCaps::wave_mma(void *data, UINT bytes) const
+{
+    AV_SCOPE("D3d12HostCaps::wave_mma");
+    if (data == nullptr || bytes < sizeof(D3D12DDI_WAVE_MMA_DATA_0103)) return E_INVALIDARG;
+    auto &mma = *static_cast<D3D12DDI_WAVE_MMA_DATA_0103 *>(data);
+    mma.Supported = FALSE;
+    mma.K = 0u;
+    mma.AccumDataTypes = D3D12DDI_WAVE_MMA_ACCUM_DATATYPE_NONE;
+    mma.RequiredWaveLaneCountMin = 0u;
+    mma.RequiredWaveLaneCountMax = 0u;
+    return S_OK;
+}
+
+HRESULT D3d12HostCaps::protected_sessions(void *data, UINT bytes) const
+{
+    AV_SCOPE("D3d12HostCaps::protected_sessions");
+    if (data == nullptr || bytes < sizeof(D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030)) return E_INVALIDARG;
+    static_cast<D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030 *>(data)->Support =
+        D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_0030_NONE;
+    return S_OK;
 }
 
 }

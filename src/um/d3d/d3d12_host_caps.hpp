@@ -35,6 +35,11 @@ private:
     HRESULT  options(void *data, UINT bytes) const;
     HRESULT  shader(void *data, UINT bytes) const;
     HRESULT  shader_models(void *data, UINT bytes) const;
+    HRESULT  answer_later(const D3D12DDIARG_GETCAPS &args) const;
+    HRESULT  answer_options(const D3D12DDIARG_GETCAPS &args) const;
+    HRESULT  placed_resources(void *data, UINT bytes) const;
+    HRESULT  wave_mma(void *data, UINT bytes) const;
+    HRESULT  protected_sessions(void *data, UINT bytes) const;
     HRESULT  fill(void *data, UINT bytes, const void *answer, UINT answer_bytes) const;
 
     d3d12proto::Caps12 caps_;

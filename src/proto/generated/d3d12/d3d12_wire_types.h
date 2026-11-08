@@ -384,9 +384,16 @@ struct Caps12 {
     uint32_t wave_lane_min;
     uint32_t wave_lane_max;
     uint32_t total_lanes;
+    uint32_t relaxed_format_casting;
+    uint32_t unrestricted_buffer_texture_copy_pitch;
+    uint32_t unrestricted_vertex_element_alignment;
+    uint32_t inverted_viewport_height_flips_y;
+    uint32_t inverted_viewport_depth_flips_z;
+    uint32_t advanced_texture_ops;
+    uint32_t writeable_msaa_textures;
     uint32_t reserved;
 };
-static_assert(sizeof(Caps12) == 84, "Caps12 crosses as 84 bytes");
+static_assert(sizeof(Caps12) == 112, "Caps12 crosses as 112 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto
