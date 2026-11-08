@@ -102,7 +102,7 @@ uint32_t ConversionTarget::format() const
     AV_SCOPE("ConversionTarget::format");
     if (encoded(destination_)) return destination_;
     const uint32_t base = unorm_of(destination_);
-    return encoded(source_) || floating(source_) ? srgb_of(base) : base;
+    return encoded(source_) ? srgb_of(base) : base;
 }
 
 }

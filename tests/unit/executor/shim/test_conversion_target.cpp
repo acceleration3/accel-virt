@@ -24,12 +24,12 @@ TEST(conversion_target, ten_bit_colour_is_decoded_into_an_unencoded_bgra_target)
   CHECK(!target.packed_bytes());
   CHECK_EQ(target.format(), b8g8r8a8_unorm); }
 
-TEST(conversion_target, half_float_colour_is_encoded_as_srgb_on_its_way_into_bgra)
+TEST(conversion_target, half_float_colour_is_drawn_into_an_unencoded_bgra_target_for_the_rows_to_encode)
 { const ConversionTarget target(r16g16b16a16_float, b8g8r8a8_unorm);
   CHECK(target.convertible());
   CHECK(!target.raw_copy());
-  CHECK_EQ(target.format(), b8g8r8a8_srgb);
-  CHECK_EQ(ConversionTarget(r16g16b16a16_float, b8g8r8a8_typeless).format(), b8g8r8a8_srgb); }
+  CHECK_EQ(target.format(), b8g8r8a8_unorm);
+  CHECK_EQ(ConversionTarget(r16g16b16a16_float, b8g8r8a8_typeless).format(), b8g8r8a8_unorm); }
 
 TEST(conversion_target, a_value_already_encoded_is_not_encoded_again)
 { CHECK(ConversionTarget(b8g8r8a8_srgb, b8g8r8a8_unorm).raw_copy());
