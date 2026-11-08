@@ -68,6 +68,31 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
     return resource.shared_key != 0u ? show_primary(resource, 0u) : S_OK;
 }
 
+bool D3d9Device::shares_render_target(const D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create) const
+{
+    AV_SCOPE("D3d9Device::shares_render_target");
+    return create.Flags.SharedResource && create.Flags.RenderTarget && resource.kind == D3d9Resource::Kind::surface &&
+           resource.count == 1u && create.Pool != D3DDDIPOOL_SYSTEMMEM;
+}
+
+HRESULT D3d9Device::allocate_shared(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
+{
+    AV_SCOPE("D3d9Device::allocate_shared");
+    const D3d9Subresource &top = resource.subresources[0];
+    D3d9PresentFormat presented(0u);
+    if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
+    d3d::KernelSurface surface(top.width, top.height, presented.dxgi());
+    if (surface.make() != Status::ok) return E_INVALIDARG;
+    D3DKMT_HANDLE allocation = 0u;
+    const HRESULT made = allocations_.make(surface, create.hResource, allocation);
+    if (FAILED(made)) return made;
+    resource.allocation = allocation;
+    resource.allocation_resource = create.hResource;
+    resource.allocation_pitch = surface.pitch();
+    resource.shared_key = surface.key();
+    return S_OK;
+}
+
 HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
 {
     AV_SCOPE("D3d9Device::show_primary");

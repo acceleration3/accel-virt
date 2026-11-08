@@ -160,6 +160,8 @@ private:
     uint32_t vertices_of(D3DPRIMITIVETYPE type, uint32_t primitives) const;
 
     HRESULT allocate(D3d9Resource &resource);
+    bool    shares_render_target(const D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create) const;
+    HRESULT allocate_shared(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     HRESULT allocate_primary(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     HRESULT show_primary(D3d9Resource &primary, uint32_t index);
     HRESULT publish_presented(D3d9Resource &resource, uint32_t index);
