@@ -29,10 +29,12 @@ struct ID3D11Resource;
 struct ID3D11Texture2D;
 struct D3D11_TEXTURE2D_DESC;
 struct ID3D11Buffer;
+struct D3D11_BOX;
 
 namespace av {
 
 class ByteLedger;
+class DxgiFormatLayout;
 
 class DriverLog;
 class OwnedFd;
@@ -199,6 +201,11 @@ private:
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
     ID3D11Texture2D         *lent_texture(const D3D11_TEXTURE2D_DESC &texture, uint64_t memory, uint32_t row_pitch);
     void                     counted(ID3D11Resource *destination);
+    bool                     update_in_pieces(ID3D11Resource *resource, uint32_t subresource, const D3D11_BOX &whole,
+                                              const DxgiFormatLayout &layout, uint32_t row_pitch, uint32_t depth_pitch,
+                                              uint32_t copy_flags, const uint8_t *data);
+    bool                     copy_buffer_in_pieces(ID3D11Resource *to, uint32_t to_x, ID3D11Resource *from,
+                                                   uint32_t from_x, uint64_t bytes, uint32_t copy_flags);
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
     bool                     ready() const;
     bool                     has_device() const;

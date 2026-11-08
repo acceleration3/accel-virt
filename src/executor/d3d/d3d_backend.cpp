@@ -1,5 +1,7 @@
 #include "executor/d3d/d3d_backend.hpp"
 
+#include "executor/d3d/bounded_transfer.hpp"
+
 #include "executor/teardown_budget.hpp"
 #include "proto/resources/mip_extent.hpp"
 #include "proto/resources/subresource_layout.hpp"
@@ -1679,7 +1681,12 @@ bool D3dBackend::on_CopyResource(uint32_t destination, uint32_t source)
     if (!ready() || to == nullptr || from == nullptr) return false;
     constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
     constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
-    device11_->context()->CopyResource(to, from);
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    to->GetType(&dimension);
+    D3D11_BUFFER_DESC whole = {};
+    if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER) static_cast<ID3D11Buffer *>(to)->GetDesc(&whole);
+    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER || !copy_buffer_in_pieces(to, 0u, from, 0u, whole.ByteWidth, 0u))
+        device11_->context()->CopyResource(to, from);
     counted(to);
     return true;
 }
@@ -1696,6 +1703,19 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
     if ((copy_flags & D3D11_COPY_DISCARD) != 0u) drop_slice(destination);
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    from->GetType(&dimension);
+    if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER && y == 0u && z == 0u) {
+        D3D11_BUFFER_DESC source_desc = {};
+        static_cast<ID3D11Buffer *>(from)->GetDesc(&source_desc);
+        const uint32_t left = has_box != 0u ? box.left : 0u;
+        const uint32_t right = has_box != 0u ? box.right : source_desc.ByteWidth;
+        if (right > left && right <= source_desc.ByteWidth &&
+            copy_buffer_in_pieces(to, x, from, left, right - left, copy_flags)) {
+            counted(to);
+            return true;
+        }
+    }
     device11_->context()->CopySubresourceRegion1(to, destination_subresource, x, y, z, from, source_subresource,
                                                  has_box != 0u ? &region : nullptr,
                                                  copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
@@ -1765,8 +1785,72 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
     constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
     if ((copy_flags & D3D11_COPY_DISCARD) != 0u) drop_slice(resource);
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
+    const D3D11_BOX whole = has_box != 0u ? region : D3D11_BOX{0u, 0u, 0u, width, height, depth};
+    if (update_in_pieces(found, subresource, whole, layout, row_pitch, depth_pitch, copy_flags, data)) return true;
     device11_->context()->UpdateSubresource1(found, subresource, has_box != 0u ? &region : nullptr, data, row_pitch,
                                              depth_pitch, copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+    return true;
+}
+
+bool D3dBackend::update_in_pieces(ID3D11Resource *resource, uint32_t subresource, const D3D11_BOX &whole,
+                                  const DxgiFormatLayout &layout, uint32_t row_pitch, uint32_t depth_pitch,
+                                  uint32_t copy_flags, const uint8_t *data)
+{
+    AV_SCOPE("D3dBackend::update_in_pieces");
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    resource->GetType(&dimension);
+    const bool     buffer = dimension == D3D11_RESOURCE_DIMENSION_BUFFER;
+    const uint32_t slices = whole.back - whole.front;
+    const uint32_t texel_rows = whole.bottom - whole.top;
+    const bool     by_slices = !buffer && slices > 1u;
+    const uint64_t units = buffer ? whole.right - whole.left : by_slices ? slices : layout.rows(texel_rows);
+    const uint64_t unit_bytes = buffer ? 1u : by_slices ? depth_pitch : row_pitch;
+    BoundedTransfer pieces(units, unit_bytes);
+    if (!pieces.split()) return false;
+    uint64_t first = 0u, count = 0u;
+    uint32_t flags = copy_flags;
+    while (pieces.next(first, count)) {
+        D3D11_BOX part = whole;
+        const uint8_t *source = data;
+        if (buffer) {
+            part.left = whole.left + static_cast<uint32_t>(first);
+            part.right = part.left + static_cast<uint32_t>(count);
+            source = data + first;
+        } else if (by_slices) {
+            part.front = whole.front + static_cast<uint32_t>(first);
+            part.back = part.front + static_cast<uint32_t>(count);
+            source = data + first * depth_pitch;
+        } else {
+            part.top = whole.top + static_cast<uint32_t>(first) * layout.element_height();
+            part.bottom = whole.bottom < part.top + static_cast<uint32_t>(count) * layout.element_height()
+                              ? whole.bottom
+                              : part.top + static_cast<uint32_t>(count) * layout.element_height();
+            source = data + first * row_pitch;
+        }
+        device11_->context()->UpdateSubresource1(resource, subresource, &part, source, row_pitch, depth_pitch,
+                                                 flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+        flags &= ~static_cast<uint32_t>(D3D11_COPY_DISCARD);
+        device11_->context()->Flush();
+    }
+    return true;
+}
+
+bool D3dBackend::copy_buffer_in_pieces(ID3D11Resource *to, uint32_t to_x, ID3D11Resource *from, uint32_t from_x,
+                                       uint64_t bytes, uint32_t copy_flags)
+{
+    AV_SCOPE("D3dBackend::copy_buffer_in_pieces");
+    BoundedTransfer pieces(bytes, 1u);
+    if (!pieces.split()) return false;
+    uint64_t first = 0u, count = 0u;
+    uint32_t flags = copy_flags;
+    while (pieces.next(first, count)) {
+        const D3D11_BOX part = {from_x + static_cast<uint32_t>(first), 0u, 0u,
+                                from_x + static_cast<uint32_t>(first + count), 1u, 1u};
+        device11_->context()->CopySubresourceRegion1(to, 0u, to_x + static_cast<uint32_t>(first), 0u, 0u, from, 0u,
+                                                     &part, flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+        flags &= ~static_cast<uint32_t>(D3D11_COPY_DISCARD);
+        device11_->context()->Flush();
+    }
     return true;
 }
 
