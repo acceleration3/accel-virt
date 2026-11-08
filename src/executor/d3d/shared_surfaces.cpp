@@ -65,7 +65,29 @@ void SharedSurfaces::abandon(const SurfacePoint &frame)
 void SharedSurfaces::stage(const SurfacePoint &frame, Staging staging, FrameStager &stager)
 {
     AV_SCOPE("SharedSurfaces::stage");
-    if (presented(frame, staging)) hold(frame, stager.stage());
+    if (!presented(frame, staging)) return;
+    StagedFrame *staged = stager.stage();
+    if (staged == nullptr && evict_oldest(frame.surface())) staged = stager.stage();
+    hold(frame, staged);
+}
+
+bool SharedSurfaces::evict_oldest(uint64_t surface)
+{
+    AV_SCOPE("SharedSurfaces::evict_oldest");
+    StagedFrame *evicted = nullptr;
+    {
+        const ThreadLockHold locked(lock_);
+        Slot                *oldest = nullptr;
+        for (Slot &kept : slots_)
+            if (kept.staged_ != nullptr && !kept.reading_ && kept.frame_.surface() == surface &&
+                (oldest == nullptr || kept.kept_ < oldest->kept_))
+                oldest = &kept;
+        if (oldest == nullptr) return false;
+        evicted = oldest->staged_;
+        *oldest = Slot{};
+    }
+    evicted->release();
+    return true;
 }
 
 void SharedSurfaces::hold(const SurfacePoint &frame, StagedFrame *staged)

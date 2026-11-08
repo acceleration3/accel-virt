@@ -73,6 +73,22 @@ private:
     std::uint32_t stages_;
 };
 
+class FullPool final : public FrameStager {
+public:
+    explicit FullPool(StagedFrame *after) : after_(after), stages_(0u) {}
+
+    StagedFrame *stage() override
+    {
+        return stages_++ == 0u ? nullptr : after_;
+    }
+
+    std::uint32_t stages() const { return stages_; }
+
+private:
+    StagedFrame  *after_;
+    std::uint32_t stages_;
+};
+
 constexpr std::uint64_t surface = 0x51u;
 
 }
@@ -227,6 +243,29 @@ TEST(shared_surfaces, staging_past_its_slots_evicts_the_oldest_frame_not_being_r
   surfaces.stage(SurfacePoint(surface, 1u), every_present, stager);
   CHECK_EQ(repeated.releases(), 1u);
   CHECK_EQ(frames[0].releases(), 0u);
+  CHECK(surfaces.invariants_hold()); }
+
+TEST(shared_surfaces, an_exhausted_pool_gets_the_surface_s_oldest_unread_frame_back_and_stages_again)
+{ MockPlatform   platform;
+  SharedSurfaces surfaces(platform);
+  Stager         stager;
+  FakeFrame      first, second, newest;
+  AvFrameView    view = {};
+  stager.give(&first);
+  surfaces.stage(SurfacePoint(surface, 1u), every_present, stager);
+  stager.give(&second);
+  surfaces.stage(SurfacePoint(surface, 2u), every_present, stager);
+  FullPool full(&newest);
+  surfaces.stage(SurfacePoint(surface, 3u), every_present, full);
+  CHECK_EQ(full.stages(), 2u);
+  CHECK_EQ(first.releases(), 1u);
+  CHECK_EQ(second.releases(), 0u);
+  CHECK(!surfaces.map(SurfacePoint(surface, 1u), 0u, view));
+  CHECK(surfaces.map(SurfacePoint(surface, 2u), 0u, view));
+  CHECK(surfaces.map(SurfacePoint(surface, 3u), 0u, view));
+  FullPool other(&newest);
+  surfaces.stage(SurfacePoint(0x77u, 1u), every_present, other);
+  CHECK_EQ(other.stages(), 1u);
   CHECK(surfaces.invariants_hold()); }
 
 TEST(shared_surfaces, release_gives_back_a_surface_s_frames_and_forgets_it)
