@@ -34,6 +34,8 @@ private:
 
     bool wake_earlier(const RingConsumer *ring, uint64_t published_at);
     bool must_wait(const RingConsumer *ring, uint64_t published_at);
+    uint32_t cut(const RingConsumer **rings, uint64_t *ends);
+    bool     unsettled(const RingConsumer *const *rings, const uint64_t *ends, uint32_t count);
     void pause() const;
 
     Host    &host_;

@@ -584,6 +584,63 @@ TEST(ring_consumer_earliest_pending, a_ring_whose_executor_was_never_made_holds_
   CHECK(fixture.consumer().faulted());
   CHECK(fixture.consumer().earliest_pending() == UINT64_MAX); }
 
+TEST(ring_consumer_published_end, is_the_tail_of_an_attached_ring_and_nothing_once_it_cannot_be_served)
+{ Fixture fixture;
+  fixture.ring().write_batch(1u, 0u);
+  stamp(fixture.ring(), 0u, 700u);
+  fixture.ring().publish();
+  CHECK_EQ(fixture.consumer().published_end(), 0u);
+  CHECK(fixture.consumer().consumed_to(fixture.ring().tail()));
+  fixture.bind();
+  CHECK_EQ(fixture.consumer().published_end(), fixture.ring().tail());
+  CHECK(!fixture.consumer().consumed_to(fixture.consumer().published_end()));
+  CHECK(fixture.consumer().consumed_to(0u));
+  fixture.serve();
+  CHECK(fixture.consumer().consumed_to(fixture.consumer().published_end()));
+  CHECK(!fixture.consumer().consumed_to(fixture.consumer().published_end() + 1u));
+  fixture.ring().write_batch(2u, 0u);
+  fixture.ring().publish();
+  const std::uint64_t cut = fixture.consumer().published_end();
+  fixture.ring().write_batch(3u, 0u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK(fixture.consumer().consumed_to(cut));
+  fixture.ring().write_batch(4u, 0u);
+  fixture.ring().publish();
+  fixture.ring().data(fixture.ring().head()) = 0u;
+  fixture.serve();
+  CHECK(fixture.consumer().faulted());
+  CHECK_EQ(fixture.consumer().published_end(), 0u);
+  CHECK(fixture.consumer().consumed_to(UINT64_MAX)); }
+
+TEST(d3d_ordering, settling_waits_only_for_what_was_published_before_it_began)
+{ Fixture drained;
+  Fixture published;
+  av::D3dOrdering ordering(drained.host());
+  CHECK_STATUS(ordering.initialize(), Status::ok);
+  published.ring().write_batch(1u, 0u);
+  stamp(published.ring(), 0u, 1u);
+  published.ring().publish();
+  published.bind();
+  drained.bind();
+  ordering.add(drained.consumer(), drained.worker());
+  std::uint64_t started = now_ns();
+  ordering.settle();
+  CHECK(now_ns() - started < 1000000u);
+  published.serve();
+  ordering.add(published.consumer(), published.worker());
+  started = now_ns();
+  ordering.settle();
+  CHECK(now_ns() - started < 1000000u);
+  published.ring().write_batch(2u, 0u);
+  stamp(published.ring(), 32u, 2u);
+  published.ring().publish();
+  started = now_ns();
+  ordering.settle();
+  CHECK(now_ns() - started >= 2000000u);
+  ordering.remove(published.consumer());
+  ordering.remove(drained.consumer()); }
+
 TEST(ring_consumer_announce_awake, writes_the_flag_the_process_reads_once_attached)
 { Fixture fixture;
   constexpr std::size_t awake_at = 5u;
