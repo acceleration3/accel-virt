@@ -118,7 +118,9 @@ void DeviceVblank::tick(uint64_t now, bool latching)
     platform_.store_atomic(sequence_, blank.sequence());
     phase_.observe(blank.sequence(), now, blank.period_ns());
     if (reporting_) {
-        if (report(sources_.shown(target, latching ? blank.latched() : 0u)) == Status::ok) reported_++;
+        const FlipView shown = sources_.shown(target, latching ? blank.latched() : 0u);
+        sources_.note_reported(shown, blank.sequence(), blank.vblank_ns());
+        if (report(shown) == Status::ok) reported_++;
         else platform_.log("avgpu: a vsync was refused");
     }
 }

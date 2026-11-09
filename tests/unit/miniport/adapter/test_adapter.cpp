@@ -3524,6 +3524,8 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
       "adapter/0/present_waiters/0 busy=false waiting=0 waits=0 timeouts=0\n"
       "adapter/0/av_context_table/0 busy=false bound=0\n"
       "adapter/0/display_sources/0 count=1 vsync=false\n"
+      "adapter/0/display_sources/0/programmed/0 frequency=10000000 count=0\n"
+      "adapter/0/display_sources/0/reported/0 frequency=10000000 count=0\n"
       "adapter/0/display_sources/0/source/0 format=0 width=0 height=0 scanout=0x0000000000000000"
       " primary=0x0000000000000000 flip=0 visible=false";
   CHECK(std::strcmp(dump, expected) == 0);

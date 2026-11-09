@@ -2,6 +2,7 @@
 #define AV_DISPLAY_SOURCES_HPP
 
 #include "miniport/ddi/dxgk_multiplane_overlay_plane_record.hpp"
+#include "miniport/display/flip_log.hpp"
 #include "miniport/display/flip_view.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
@@ -43,6 +44,7 @@ public:
     Flip                 flip(uint32_t source);
     uint32_t             frame(uint32_t source);
     FlipView             shown(uint32_t source, uint32_t frame);
+    void                 note_reported(const FlipView &shown, uint64_t sequence, uint64_t blank_ns);
     void                *primary(uint32_t source);
     void                 forget_primary(void *primary);
     [[nodiscard]] Status set_visible(uint32_t source, bool visible);
@@ -68,6 +70,9 @@ private:
     FlipView           numbered_flips_[max_sources][remembered_flips];
     uint32_t           base_attributes_[max_sources][multiplane_overlay_attribute_words];
     OverlayPlane       planes_[max_sources][OverlayPlane::max_planes];
+    uint64_t           last_reported_;
+    FlipLog            programmed_;
+    FlipLog            reported_;
 
     friend struct DisplaySourcesProbe;
 };

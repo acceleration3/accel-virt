@@ -11,7 +11,7 @@ namespace av {
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), count_(1u), private_formats_{}, committed_{}, vsync_enabled_(false),
       scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, frames_{}, numbered_frames_{}, numbered_flips_{}, base_attributes_{},
-      planes_()
+      planes_(), last_reported_(0u), programmed_(platform), reported_(platform)
 {
     AV_SCOPE("DisplaySources::DisplaySources");
 }
@@ -150,6 +150,17 @@ void DisplaySources::number(uint32_t source, const FlipView &flip)
     numbered_flips_[source][slot] = flip;
     platform_.store_atomic(numbered_frames_[source][slot], frame);
     platform_.store_atomic(frames_[source], frame);
+    programmed_.note(flip.plane(0u).present_id(), frame, static_cast<uint64_t>(flip.kind()));
+}
+
+void DisplaySources::note_reported(const FlipView &shown, uint64_t sequence, uint64_t blank_ns)
+{
+    AV_SCOPE("DisplaySources::note_reported");
+    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::note_reported");
+    const uint64_t id = shown.plane(0u).present_id();
+    if (id == platform_.load_atomic(last_reported_)) return;
+    platform_.store_atomic(last_reported_, id);
+    reported_.note(id, sequence, blank_ns);
 }
 
 uint32_t DisplaySources::frame(uint32_t source)
@@ -225,6 +236,8 @@ void DisplaySources::report(StateWriter &writer)
     writer.open("display_sources", 0u);
     writer.number("count", count_);
     writer.flag("vsync", vsync_enabled_);
+    programmed_.report(writer, "programmed");
+    reported_.report(writer, "reported");
     for (uint32_t source = 0u; source < count_; source++) {
         writer.open("source", source);
         writer.number("format", private_formats_[source]);

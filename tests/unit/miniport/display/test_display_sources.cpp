@@ -215,12 +215,15 @@ TEST(display_sources_report, writes_each_source_s_format_mode_scanout_and_visibi
   CHECK_STATUS(sources.set_scanout(0u, 0x7000, &primary), Status::ok);
   CHECK_STATUS(sources.set_visible(1u, true), Status::ok);
   sources.set_vsync(true);
-  char bytes[512];
+  char bytes[1024];
   av::StateWriter writer(bytes, sizeof bytes);
   sources.report(writer);
-  char expected[512];
+  char expected[1024];
   std::snprintf(expected, sizeof expected,
                 "display_sources/0 count=2 vsync=true\n"
+                "display_sources/0/programmed/0 frequency=10000000 count=1\n"
+                "display_sources/0/programmed/0/at/0 counter=0 id=0 mark=1 extra=0\n"
+                "display_sources/0/reported/0 frequency=10000000 count=0\n"
                 "display_sources/0/source/0 format=21 width=1280 height=800 scanout=0x0000000000007000"
                 " primary=0x%016llX flip=0 visible=false\n"
                 "display_sources/0/source/1 format=0 width=0 height=0 scanout=0x0000000000000000"
