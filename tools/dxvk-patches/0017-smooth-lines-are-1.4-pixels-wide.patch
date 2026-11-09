@@ -1,0 +1,26 @@
+From: accel-virt
+Subject: [PATCH] smooth lines are 1.4 pixels wide like the other rectangular line modes
+
+An antialiased line is the rectangle of the wide quadrilateral mode with its coverage in alpha, so a line through a pixel centre covers the pixel fully. DXVK drew smooth lines one pixel wide, which left the centre of a line at a quarter of the alpha.
+---
+diff --git a/src/dxvk/dxvk_graphics.cpp b/src/dxvk/dxvk_graphics.cpp
+--- a/src/dxvk/dxvk_graphics.cpp	2026-11-09 22:22:57.405537778 +0000
++++ b/src/dxvk/dxvk_graphics.cpp	2026-11-09 22:22:57.417971921 +0000
+@@ -603,14 +603,9 @@
+       rsLineInfo.pNext = std::exchange(rsInfo.pNext, &rsLineInfo);
+       rsLineInfo.lineRasterizationMode = state.rs.lineMode();
+ 
+-      if (rsLineInfo.lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT) {
+-        // This line width matches expected D3D behaviour, hard-code this
+-        // so that we don't need to introduce an extra bit of render state.
+-        rsInfo.lineWidth = 1.4f;
+-      } else {
+-        // Vulkan does not allow alphaToCoverage or sample rate shading
+-        // in combination with smooth lines. Override the line mode to
+-        // rectangular to fix this, but keep the width fixed at 1.0.
++      rsInfo.lineWidth = 1.4f;
++
++      if (rsLineInfo.lineRasterizationMode != VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT) {
+         bool needsOverride = state.ms.enableAlphaToCoverage()
+           || (shaders.fs && shaders.fs->metadata().flags.test(DxvkShaderFlag::HasSampleRateShading));
+ 
