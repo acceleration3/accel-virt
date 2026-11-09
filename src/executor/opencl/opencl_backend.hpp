@@ -148,6 +148,10 @@ public:
                                    size_t offset, size_t size, const void *ptr,
                                    cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
                                    cl_event *event) override;
+    cl_sampler on_clCreateSamplerWithProperties(cl_context context, const cl_sampler_properties *sampler_properties,
+                                                cl_int *errcode_ret) override;
+    cl_sampler on_clCreateSampler(cl_context context, cl_bool normalized_coords, cl_addressing_mode addressing_mode,
+                                  cl_filter_mode filter_mode, cl_int *errcode_ret) override;
     cl_int on_clEnqueueCopyBuffer(cl_command_queue command_queue, cl_mem src_buffer, cl_mem dst_buffer,
                                   size_t src_offset, size_t dst_offset, size_t size,
                                   cl_uint num_events_in_wait_list, const cl_event *event_wait_list,

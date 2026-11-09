@@ -1,6 +1,7 @@
 #include "executor/opencl/opencl_backend.hpp"
 
 #include "executor/opencl/cl_buffer_bounds.hpp"
+#include "executor/opencl/cl_sampler_arguments.hpp"
 
 #include "executor/opencl/cl_image_bytes.hpp"
 #include "executor/teardown_budget.hpp"
@@ -1139,6 +1140,30 @@ cl_int OpenClBackend::on_clEnqueueFillBuffer(cl_command_queue command_queue, cl_
     if (pattern == nullptr || !ClBufferBounds::range_inside(buffer, offset, size)) return CL_INVALID_VALUE;
     return RealDispatch::on_clEnqueueFillBuffer(command_queue, buffer, pattern, pattern_size, offset, size,
                                                 num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_sampler OpenClBackend::on_clCreateSamplerWithProperties(cl_context context,
+                                                           const cl_sampler_properties *sampler_properties,
+                                                           cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateSamplerWithProperties");
+    if (context == nullptr || !ClSamplerArguments::properties_valid(sampler_properties)) {
+        if (errcode_ret != nullptr) *errcode_ret = context == nullptr ? CL_INVALID_CONTEXT : CL_INVALID_VALUE;
+        return nullptr;
+    }
+    return RealDispatch::on_clCreateSamplerWithProperties(context, sampler_properties, errcode_ret);
+}
+
+cl_sampler OpenClBackend::on_clCreateSampler(cl_context context, cl_bool normalized_coords,
+                                             cl_addressing_mode addressing_mode, cl_filter_mode filter_mode,
+                                             cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateSampler");
+    if (context == nullptr || !ClSamplerArguments::modes_valid(normalized_coords, addressing_mode, filter_mode)) {
+        if (errcode_ret != nullptr) *errcode_ret = context == nullptr ? CL_INVALID_CONTEXT : CL_INVALID_VALUE;
+        return nullptr;
+    }
+    return RealDispatch::on_clCreateSampler(context, normalized_coords, addressing_mode, filter_mode, errcode_ret);
 }
 
 cl_mem OpenClBackend::on_clCreateFromGLBuffer(cl_context context, cl_mem_flags flags, cl_GLuint bufobj,
