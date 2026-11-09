@@ -337,7 +337,7 @@ bool D3d12Session::on_ClearRenderTargetView12(uint32_t id, const d3d12proto::Des
     AV_SCOPE("D3d12Session::on_ClearRenderTargetView12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     size_t                           handle = 0u;
-    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) ||
+    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, handle) || !written_view(view) ||
         !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, view))
         return false;
     D3D12_RECT made[16] = {};
@@ -355,7 +355,7 @@ bool D3d12Session::on_ClearDepthStencilView12(uint32_t id, const d3d12proto::Des
     AV_SCOPE("D3d12Session::on_ClearDepthStencilView12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     size_t                           handle = 0u;
-    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) ||
+    if (recorded == nullptr || !cpu_handle(view, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, handle) || !written_view(view) ||
         !retain_object(id, view.heap, D3dObjectKind::descriptor_heap12) || !retain_slot(id, view))
         return false;
     D3D12_RECT made[16] = {};

@@ -170,6 +170,7 @@ private:
     void                       refresh_progress();
     ID3D12GraphicsCommandList *list(uint32_t id) const;
     bool                       cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t type, size_t &handle) const;
+    bool                       written_view(const d3d12proto::DescriptorRef &ref) const;
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
     bool                       window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base);

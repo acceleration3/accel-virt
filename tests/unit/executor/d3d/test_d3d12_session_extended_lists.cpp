@@ -21,6 +21,8 @@ constexpr std::uint32_t buffer = 4u;
 constexpr std::uint32_t shader_heap_id = 10u;
 constexpr std::uint32_t cpu_heap_id = 11u;
 constexpr std::uint32_t bundle_id = 12u;
+constexpr std::uint32_t rtv_heap_id = 13u;
+constexpr std::uint32_t dsv_heap_id = 14u;
 constexpr std::uint32_t format_rgba = 28u;
 constexpr std::uint32_t heap_default = 1u;
 constexpr std::uint32_t mode_decompress = 0u;
@@ -81,6 +83,12 @@ public:
         shader_heap.desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         cpu_heap.desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         cpu_heap.desc.NumDescriptors = 8u;
+        rtv_heap.desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        rtv_heap.desc.NumDescriptors = 4u;
+        dsv_heap.desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        dsv_heap.desc.NumDescriptors = 4u;
+        insert(rtv_heap_id, D3dObjectKind::descriptor_heap12, &rtv_heap);
+        insert(dsv_heap_id, D3dObjectKind::descriptor_heap12, &dsv_heap);
         bundle.type = D3D12_COMMAND_LIST_TYPE_BUNDLE;
         insert(bundle_id, D3dObjectKind::list12, &bundle);
         insert(shader_heap_id, D3dObjectKind::descriptor_heap12, &shader_heap);
@@ -101,7 +109,7 @@ public:
     av::FakeDevice          device;
     av::FakeCommandList     commands, bundle;
     av::FakeResource        target, source, written, odd;
-    av::FakeDescriptorHeap  shader_heap, cpu_heap;
+    av::FakeDescriptorHeap  shader_heap, cpu_heap, rtv_heap, dsv_heap;
     av::D3d12SessionLoopback rig;
 };
 
@@ -456,3 +464,33 @@ TEST(d3d12_session_extended_lists, a_bundle_that_is_not_a_bundle_or_plays_in_a_b
   scene.bundle.type = D3D12_COMMAND_LIST_TYPE_DIRECT;
   CHECK(!scene.session().on_ExecuteBundle12(list, bundle_id));
   CHECK_EQ(scene.commands.bundle_executions, 0u); }
+
+TEST(d3d12_session_extended_lists, clearing_a_render_target_or_depth_view_that_holds_no_resource_is_refused)
+{ Scene scene;
+  const Float4 color = {};
+  const DescriptorRef rtv = {rtv_heap_id, 1u};
+  const DescriptorRef dsv = {dsv_heap_id, 1u};
+  const std::uint32_t before = scene.commands.recorded;
+  CHECK(!scene.session().on_ClearRenderTargetView12(list, rtv, color, 0u, nullptr));
+  CHECK(!scene.session().on_ClearDepthStencilView12(list, dsv, 3u, 1.0f, 0u, 0u, nullptr));
+  ViewDesc none = {};
+  CHECK(scene.session().on_CreateRenderTargetView12(rtv, 0u, none) == false);
+  CHECK(!scene.session().on_ClearRenderTargetView12(list, rtv, color, 0u, nullptr));
+  CHECK(!scene.session().on_ClearRenderTargetView12(list, {rtv_heap_id, 4u}, color, 0u, nullptr));
+  CHECK(!scene.session().on_ClearRenderTargetView12(list, {dsv_heap_id, 1u}, color, 0u, nullptr));
+  CHECK(!scene.session().on_ClearDepthStencilView12(list, {rtv_heap_id, 1u}, 3u, 1.0f, 0u, 0u, nullptr));
+  CHECK_EQ(scene.commands.recorded, before);
+  CHECK(scene.session().invariants_hold()); }
+
+TEST(d3d12_session_extended_lists, a_render_target_view_written_for_a_resource_or_copied_from_one_is_cleared)
+{ Scene scene;
+  const Float4 color = {};
+  ViewDesc view = {};
+  view.resource = resolved;
+  CHECK(scene.session().on_CreateRenderTargetView12({rtv_heap_id, 0u}, 0u, view));
+  CHECK(scene.session().on_ClearRenderTargetView12(list, {rtv_heap_id, 0u}, color, 0u, nullptr));
+  CHECK(scene.session().on_CopyDescriptors12({rtv_heap_id, 2u}, {rtv_heap_id, 0u}, 1u));
+  CHECK(scene.session().on_ClearRenderTargetView12(list, {rtv_heap_id, 2u}, color, 0u, nullptr));
+  CHECK(scene.session().on_CopyDescriptors12({rtv_heap_id, 3u}, {rtv_heap_id, 1u}, 1u));
+  CHECK(!scene.session().on_ClearRenderTargetView12(list, {rtv_heap_id, 3u}, color, 0u, nullptr));
+  CHECK(scene.session().invariants_hold()); }

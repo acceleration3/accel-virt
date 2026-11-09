@@ -1,0 +1,33 @@
+From: accel-virt
+Subject: [PATCH] clearing a render target or depth stencil view that holds no view returns instead of dereferencing a null view
+
+accel-virt: a descriptor whose view creation failed (device memory exhausted, format the resource cannot view) or was never written holds no view; ClearRenderTargetView and ClearDepthStencilView read its format and view unconditionally. They now do nothing for such a descriptor.
+---
+--- a/libs/vkd3d/command.c
++++ b/libs/vkd3d/command.c
+@@ -14759,6 +14759,12 @@
+ 
+     list->cmd.estimated_cost += VKD3D_COMMAND_COST_LOW;
+ 
++    if (!dsv_desc->view || !dsv_desc->resource || !dsv_desc->format)
++    {
++        WARN("Clearing a depth stencil view that holds no view.\n");
++        return;
++    }
++
+     if (flags & D3D12_CLEAR_FLAG_DEPTH)
+         clear_aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
+ 
+@@ -14893,6 +14899,12 @@
+ 
+     list->cmd.estimated_cost += VKD3D_COMMAND_COST_LOW;
+ 
++    if (!rtv_desc->view || !rtv_desc->resource || !rtv_desc->format)
++    {
++        WARN("Clearing a render target view that holds no view.\n");
++        return;
++    }
++
+     if (rtv_desc->format->type == VKD3D_FORMAT_TYPE_UINT)
+     {
+         /* Too ad-hoc to add this to generic format struct. */

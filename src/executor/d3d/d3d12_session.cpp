@@ -273,6 +273,13 @@ bool D3d12Session::cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t typ
     return true;
 }
 
+bool D3d12Session::written_view(const d3d12proto::DescriptorRef &ref) const
+{
+    AV_SCOPE("D3d12Session::written_view");
+    const D3d12DescriptorHolds::View *const view = descriptors_.view_at(ref.heap, ref.index);
+    return view != nullptr && view->first_ != nullptr;
+}
+
 bool D3d12Session::gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const
 {
     AV_SCOPE("D3d12Session::gpu_handle");
