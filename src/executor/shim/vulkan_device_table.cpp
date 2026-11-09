@@ -302,7 +302,7 @@ bool VulkanDeviceTable::import_memory(OwnedFd &descriptor, VkExternalMemoryHandl
 {
     AV_SCOPE("VulkanDeviceTable::import_memory");
     memory = VK_NULL_HANDLE;
-    if (!loaded() || !descriptor.held() || type == VK_MAX_MEMORY_TYPES) return false;
+    if (!loaded() || !descriptor.held() || type >= memory_.memoryTypeCount) return false;
     const VkImportMemoryFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, next, handle,
                                               descriptor.fd()};
     const VkMemoryAllocateInfo    info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &imported, size, type};

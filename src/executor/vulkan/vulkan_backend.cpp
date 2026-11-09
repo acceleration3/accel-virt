@@ -1031,10 +1031,16 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
 bool VulkanBackend::import_memory(GuestDevice &device, int fd, uint64_t size, uint64_t &wire_handle)
 {
     AV_SCOPE("VulkanBackend::import_memory");
-    const uint32_t memory_type = first_memory_type(device.memory().dmabuf_types(fd));
-    if (memory_type == max_memory_types) return false;
-    const bool imported = device.memory().import_shared_memory(fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-                                                               size, memory_type, wire_handle);
+    const uint32_t listed = device.memory().dmabuf_types(fd);
+    bool           imported = false;
+    for (uint32_t pass = 0u; pass < 2u && !imported; pass++) {
+        for (uint32_t type = 0u; type < max_memory_types && !imported; type++) {
+            const bool is_listed = (listed & (1u << type)) != 0u;
+            if (is_listed != (pass == 0u)) continue;
+            imported = device.memory().import_shared_memory(fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size,
+                                                            type, wire_handle);
+        }
+    }
     if (!imported) { AV_UNTESTABLE("no host driver here refuses an import"); return false; }
     if (kept_on(device, wire_handle)) return true;
     device.memory().release(wire_handle);
