@@ -228,6 +228,21 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_AMD_buffer_marker", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
     {"VK_AMD_shader_core_properties", 2u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
     {"VK_AMD_shader_core_properties2", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_EXT_color_write_enable", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_vertex_input_dynamic_state", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_provoking_vertex", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_primitive_topology_list_restart", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_depth_clip_control", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_image_2d_view_of_3d", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_shader_atomic_float", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_shader_atomic_float2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_shader_clock", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_primitives_generated_query", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_depth_clamp_zero_one", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_shader_relaxed_extended_instruction", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_depth_range_unrestricted", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_EXT_post_depth_coverage", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_KHR_shader_non_semantic_info", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 struct InstanceExtension {

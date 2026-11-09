@@ -146,7 +146,19 @@ TEST(reported_extensions, every_feature_structure_an_application_chains_reaches_
       {"VK_EXT_image_compression_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT},
       {"VK_AMD_device_coherent_memory", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD},
       {"VK_MESA_image_alignment_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA},
-      {"VK_KHR_cooperative_matrix", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR}};
+      {"VK_KHR_cooperative_matrix", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR},
+      {"VK_EXT_color_write_enable", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT},
+      {"VK_EXT_vertex_input_dynamic_state", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT},
+      {"VK_EXT_provoking_vertex", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT},
+      {"VK_EXT_primitive_topology_list_restart", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT},
+      {"VK_EXT_depth_clip_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT},
+      {"VK_EXT_image_2d_view_of_3d", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT},
+      {"VK_EXT_shader_atomic_float", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT},
+      {"VK_EXT_shader_atomic_float2", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT},
+      {"VK_KHR_shader_clock", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR},
+      {"VK_EXT_primitives_generated_query", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT},
+      {"VK_EXT_depth_clamp_zero_one", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_EXT},
+      {"VK_KHR_shader_relaxed_extended_instruction", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR}};
   const auto features2 =
       rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
   CHECK(features2 != nullptr);
@@ -175,7 +187,10 @@ TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_o
                                 "VK_EXT_sample_locations",
                                 "VK_AMD_buffer_marker",
                                 "VK_AMD_shader_core_properties",
-                                "VK_AMD_shader_core_properties2"};
+                                "VK_AMD_shader_core_properties2",
+                                "VK_EXT_depth_range_unrestricted",
+                                "VK_EXT_post_depth_coverage",
+                                "VK_KHR_shader_non_semantic_info"};
   const auto create = rig.entry<VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *,
                                              const VkAllocationCallbacks *, VkDevice *)>("vkCreateDevice");
   const auto destroy = rig.entry<void (*)(VkDevice, const VkAllocationCallbacks *)>("vkDestroyDevice");
