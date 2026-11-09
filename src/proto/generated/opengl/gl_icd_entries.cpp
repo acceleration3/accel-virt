@@ -1013,6 +1013,7 @@ void APIENTRY Wrap_glDrawArraysIndirect(GLenum mode, const void* indirect) {
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawArraysIndirect(*av_t, mode, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)));
 }
 
@@ -1021,6 +1022,7 @@ void APIENTRY Wrap_glDrawArraysInstancedBaseInstance(GLenum mode, GLint first, G
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_arrays(first, count)) return;
     ::av::glproto::av_glDrawArraysInstancedBaseInstance(*av_t, mode, first, count, instancecount, baseinstance);
 }
 
@@ -1037,7 +1039,9 @@ void APIENTRY Wrap_glDrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum t
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_elements(type, count, indices, basevertex)) return;
     ::av::glproto::av_glDrawElementsBaseVertex(*av_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), basevertex);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glDrawElementsIndirect(GLenum mode, GLenum type, const void* indirect) {
@@ -1045,6 +1049,7 @@ void APIENTRY Wrap_glDrawElementsIndirect(GLenum mode, GLenum type, const void* 
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawElementsIndirect(*av_t, mode, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)));
 }
 
@@ -1053,7 +1058,9 @@ void APIENTRY Wrap_glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei coun
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_elements(type, count, indices, 0)) return;
     ::av::glproto::av_glDrawElementsInstancedBaseInstance(*av_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), instancecount, baseinstance);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex) {
@@ -1061,7 +1068,9 @@ void APIENTRY Wrap_glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count,
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_elements(type, count, indices, basevertex)) return;
     ::av::glproto::av_glDrawElementsInstancedBaseVertex(*av_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), instancecount, basevertex);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glDrawElementsInstancedBaseVertexBaseInstance(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance) {
@@ -1069,7 +1078,9 @@ void APIENTRY Wrap_glDrawElementsInstancedBaseVertexBaseInstance(GLenum mode, GL
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_elements(type, count, indices, basevertex)) return;
     ::av::glproto::av_glDrawElementsInstancedBaseVertexBaseInstance(*av_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), instancecount, basevertex, baseinstance);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void* indices, GLint basevertex) {
@@ -1077,7 +1088,9 @@ void APIENTRY Wrap_glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLui
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_elements(type, count, indices, basevertex)) return;
     ::av::glproto::av_glDrawRangeElementsBaseVertex(*av_t, mode, start, end, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), basevertex);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glDrawTransformFeedback(GLenum mode, GLuint id) {
@@ -1085,6 +1098,7 @@ void APIENTRY Wrap_glDrawTransformFeedback(GLenum mode, GLuint id) {
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawTransformFeedback(*av_t, mode, id);
 }
 
@@ -1093,6 +1107,7 @@ void APIENTRY Wrap_glDrawTransformFeedbackInstanced(GLenum mode, GLuint id, GLsi
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawTransformFeedbackInstanced(*av_t, mode, id, instancecount);
 }
 
@@ -1101,6 +1116,7 @@ void APIENTRY Wrap_glDrawTransformFeedbackStream(GLenum mode, GLuint id, GLuint 
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawTransformFeedbackStream(*av_t, mode, id, stream);
 }
 
@@ -1109,6 +1125,7 @@ void APIENTRY Wrap_glDrawTransformFeedbackStreamInstanced(GLenum mode, GLuint id
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawTransformFeedbackStreamInstanced(*av_t, mode, id, stream, instancecount);
 }
 
@@ -2399,6 +2416,7 @@ void APIENTRY Wrap_glMultiDrawArrays(GLenum mode, const GLint* first, const GLsi
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (!::av::glicd::stage_client_multi_arrays(first, count, drawcount)) return;
     ::av::glproto::av_glMultiDrawArrays(*av_t, mode, first, count, drawcount);
 }
 
@@ -2407,6 +2425,7 @@ void APIENTRY Wrap_glMultiDrawArraysIndirect(GLenum mode, const void* indirect, 
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glMultiDrawArraysIndirect(*av_t, mode, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, stride);
 }
 
@@ -2415,6 +2434,7 @@ void APIENTRY Wrap_glMultiDrawArraysIndirectCount(GLenum mode, const void* indir
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glMultiDrawArraysIndirectCount(*av_t, mode, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, maxdrawcount, stride);
 }
 
@@ -2423,7 +2443,10 @@ void APIENTRY Wrap_glMultiDrawElements(GLenum mode, const GLsizei* count, GLenum
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
-    ::av::glproto::av_glMultiDrawElements(*av_t, mode, count, type, ::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount)), drawcount);
+    const uint64_t* staged_offsets = nullptr;
+    if (!::av::glicd::stage_client_multi_elements(count, type, indices, drawcount, nullptr, staged_offsets)) return;
+    ::av::glproto::av_glMultiDrawElements(*av_t, mode, count, type, (staged_offsets != nullptr ? staged_offsets : ::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount))), drawcount);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glMultiDrawElementsBaseVertex(GLenum mode, const GLsizei* count, GLenum type, const void* const* indices, GLsizei drawcount, const GLint* basevertex) {
@@ -2431,7 +2454,10 @@ void APIENTRY Wrap_glMultiDrawElementsBaseVertex(GLenum mode, const GLsizei* cou
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
-    ::av::glproto::av_glMultiDrawElementsBaseVertex(*av_t, mode, count, type, ::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount)), drawcount, basevertex);
+    const uint64_t* staged_offsets = nullptr;
+    if (!::av::glicd::stage_client_multi_elements(count, type, indices, drawcount, basevertex, staged_offsets)) return;
+    ::av::glproto::av_glMultiDrawElementsBaseVertex(*av_t, mode, count, type, (staged_offsets != nullptr ? staged_offsets : ::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount))), drawcount, basevertex);
+    ::av::glicd::finish_client_draw();
 }
 
 void APIENTRY Wrap_glMultiDrawElementsIndirect(GLenum mode, GLenum type, const void* indirect, GLsizei drawcount, GLsizei stride) {
@@ -2439,6 +2465,7 @@ void APIENTRY Wrap_glMultiDrawElementsIndirect(GLenum mode, GLenum type, const v
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glMultiDrawElementsIndirect(*av_t, mode, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, stride);
 }
 
@@ -2447,6 +2474,7 @@ void APIENTRY Wrap_glMultiDrawElementsIndirectCount(GLenum mode, GLenum type, co
     auto* av_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (av_t == nullptr) return;
+    if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glMultiDrawElementsIndirectCount(*av_t, mode, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, maxdrawcount, stride);
 }
 
@@ -4826,6 +4854,7 @@ void APIENTRY Wrap_glBegin(GLenum mode) {
     }
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
+    ::av::glicd::begin_client_primitives();
     ::av::glproto::av_glBegin(*av_t, mode);
 }
 
@@ -8501,6 +8530,13 @@ void APIENTRY Wrap_glWindowPos3sv(const GLshort* v) {
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
     ::av::glproto::av_glWindowPos3sv(*av_t, v);
+}
+
+void APIENTRY Wrap_glBlendBarrierKHR(void) {
+    AV_SCOPE("glBlendBarrierKHR");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glBlendBarrierKHR(*av_t);
 }
 
 void APIENTRY Wrap_glDeleteObjectARB(GLhandleARB obj) {

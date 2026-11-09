@@ -40,6 +40,15 @@ void             client_attributes_pushed(GLbitfield mask) noexcept;
 void             client_attributes_popped() noexcept;
 void             client_attributes_reset(GLbitfield mask) noexcept;
 void             vertex_array_elements(GLuint array, GLuint buffer) noexcept;
+bool             stage_client_arrays(GLint first, GLsizei count) noexcept;
+bool             stage_client_elements(GLenum type, GLsizei count, const void *&indices, GLint base_vertex) noexcept;
+bool             stage_client_multi_arrays(const GLint *first, const GLsizei *count, GLsizei draws) noexcept;
+bool             stage_client_multi_elements(const GLsizei *count, GLenum type, const void *const *indices,
+                                             GLsizei draws, const GLint *base_vertex,
+                                             const uint64_t *&host_indices) noexcept;
+bool             refuse_client_arrays() noexcept;
+void             finish_client_draw() noexcept;
+void             begin_client_primitives() noexcept;
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint *params) noexcept;
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint64 *params) noexcept;
 bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint *params) noexcept;

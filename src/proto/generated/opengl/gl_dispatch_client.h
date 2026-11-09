@@ -1037,6 +1037,7 @@ void av_glWindowPos3i(::av::ClientTransport& av_t, GLint x, GLint y, GLint z);
 void av_glWindowPos3iv(::av::ClientTransport& av_t, const GLint* v);
 void av_glWindowPos3s(::av::ClientTransport& av_t, GLshort x, GLshort y, GLshort z);
 void av_glWindowPos3sv(::av::ClientTransport& av_t, const GLshort* v);
+void av_glBlendBarrierKHR(::av::ClientTransport& av_t);
 void av_glDeleteObjectARB(::av::ClientTransport& av_t, GLhandleARB obj);
 GLhandleARB av_glGetHandleARB(::av::ClientTransport& av_t, GLenum pname);
 void av_glGetObjectParameterfvARB(::av::ClientTransport& av_t, GLhandleARB obj, GLenum pname, GLfloat* params);

@@ -1034,6 +1034,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_glWindowPos3iv: return "glWindowPos3iv";
         case kCmd_glWindowPos3s: return "glWindowPos3s";
         case kCmd_glWindowPos3sv: return "glWindowPos3sv";
+        case kCmd_glBlendBarrierKHR: return "glBlendBarrierKHR";
         case kCmd_glDeleteObjectARB: return "glDeleteObjectARB";
         case kCmd_glGetHandleARB: return "glGetHandleARB";
         case kCmd_glGetObjectParameterfvARB: return "glGetObjectParameterfvARB";
@@ -2433,6 +2434,7 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case kCmd_glWindowPos3iv:
         case kCmd_glWindowPos3s:
         case kCmd_glWindowPos3sv:
+        case kCmd_glBlendBarrierKHR:
         case kCmd_glDeleteObjectARB:
         case kCmd_glGetHandleARB:
         case kCmd_glGetObjectParameterfvARB:

@@ -35458,6 +35458,14 @@ static bool decode_glWindowPos3sv(const RealGl& av_gl, ::av::WireReader& av_r, :
     return true;
 }
 
+static bool decode_glBlendBarrierKHR(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glBlendBarrierKHR");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    if (av_gl.glBlendBarrierKHR == nullptr) return false;
+    av_gl.glBlendBarrierKHR();
+    return true;
+}
+
 static bool decode_glDeleteObjectARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
     AV_SCOPE("server:glDeleteObjectARB");
     (void)av_arena; (void)av_reply; (void)av_r;
@@ -50495,6 +50503,7 @@ bool dispatch_command(const RealGl& av_gl, uint32_t cmd_id,
         case kCmd_glWindowPos3iv: return decode_glWindowPos3iv(av_gl, av_r, av_reply, av_arena);
         case kCmd_glWindowPos3s: return decode_glWindowPos3s(av_gl, av_r, av_reply, av_arena);
         case kCmd_glWindowPos3sv: return decode_glWindowPos3sv(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glBlendBarrierKHR: return decode_glBlendBarrierKHR(av_gl, av_r, av_reply, av_arena);
         case kCmd_glDeleteObjectARB: return decode_glDeleteObjectARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glGetHandleARB: return decode_glGetHandleARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glGetObjectParameterfvARB: return decode_glGetObjectParameterfvARB(av_gl, av_r, av_reply, av_arena);

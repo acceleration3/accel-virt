@@ -81,6 +81,25 @@ size_t PixelStore::span(uint32_t format, uint32_t type, int32_t width, int32_t h
     return static_cast<size_t>(end);
 }
 
+size_t PixelStore::bitmap_span(int32_t width, int32_t height) const
+{
+    AV_SCOPE("PixelStore::bitmap_span");
+    if (width <= 0 || height <= 0) return 0u;
+    const uint64_t columns = static_cast<uint64_t>(get(Field::row_length) > 0 ? get(Field::row_length) : width);
+    const uint64_t alignment = static_cast<uint64_t>(get(Field::alignment));
+    uint64_t       stride = (columns + 7u) / 8u;
+    stride = (stride + alignment - 1u) / alignment * alignment;
+    uint64_t lines = 0u, bytes = 0u;
+    const uint64_t last = (static_cast<uint64_t>(get(Field::skip_pixels)) + static_cast<uint64_t>(width) + 7u) / 8u;
+    if (__builtin_mul_overflow(static_cast<uint64_t>(get(Field::skip_rows)) + static_cast<uint64_t>(height - 1), stride,
+                               &lines) ||
+        __builtin_add_overflow(lines, last, &bytes))
+        return 0u;
+    if constexpr (sizeof(size_t) < sizeof(uint64_t))
+        if (bytes > SIZE_MAX) return 0u;
+    return static_cast<size_t>(bytes);
+}
+
 bool PixelStore::invariants_hold() const
 {
     AV_SCOPE("PixelStore::invariants_hold");

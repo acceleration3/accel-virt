@@ -14,8 +14,10 @@
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_memory_objects.hpp"
 #include "executor/opengl/gl_texture_slices.hpp"
+#include "executor/opengl/gl_transfer_pacer.hpp"
 #include "executor/opengl/gl_vram_guard.hpp"
 #include "executor/shim/gl_dma_buf_images.hpp"
+#include "executor/opengl/gl_shared_fences.hpp"
 #include "executor/opengl/sync_tokens.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
@@ -99,6 +101,8 @@ private:
     EventfdWake     wake_;
     GlPackBuffer    pack_;
     SyncTokens  fences_;
+    GlTransferPacer pacer_;
+    GlSharedFences *shared_fences_;
     GlBatchProgress progress_;
     GlErrorQueue    pending_;
     GlVramGuard     vram_guard_;

@@ -147,6 +147,19 @@ public:
     void vertex_attrib_pointer(uint32_t index, int32_t size, uint32_t type, uint8_t normalized, int32_t stride,
                                const void *pointer);
     void enable_vertex_attrib_array(uint32_t index, bool enable);
+    void array_pointer(uint32_t slot, int32_t size, uint32_t type, int32_t stride, const void *pointer);
+    void client_state(uint32_t capability, bool enable);
+    void client_active_texture(uint32_t texture);
+    void interleaved_arrays(uint32_t format, int32_t stride, const void *pointer);
+    void array_element(int32_t index);
+    void begin_primitives();
+    bool stage_arrays(int32_t first, int32_t count);
+    bool stage_elements(uint32_t type, int32_t count, const void *&indices, int32_t base_vertex);
+    bool stage_multi_arrays(const int32_t *first, const int32_t *count, int32_t draws);
+    bool stage_multi_elements(const int32_t *count, uint32_t type, const void *const *indices, int32_t draws,
+                              const int32_t *base_vertex, const uint64_t *&host_indices);
+    bool refuse_indirect_draw();
+    void finish_client_draw();
     void draw_arrays(uint32_t mode, int32_t first, int32_t count, int32_t instances);
     void draw_elements(uint32_t mode, int32_t count, uint32_t type, const void *indices, int32_t instances);
     void draw_range_elements(uint32_t mode, uint32_t start, uint32_t end, int32_t count, uint32_t type,
@@ -174,7 +187,6 @@ private:
     GuestGlContext *sending();
     bool            substituted(uint32_t kind, uint32_t name, GuestGlContext *&context, uint32_t &made);
     void            record(uint32_t error);
-    bool            indices_cross(const void *indices);
     bool            bound_to(GuestGlContext &context, uint32_t target, uint32_t &buffer);
     void           *map_name(GuestGlContext &context, uint32_t buffer, int64_t offset, int64_t length,
                              uint32_t access);

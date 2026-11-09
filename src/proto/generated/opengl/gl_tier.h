@@ -416,6 +416,7 @@ inline constexpr const char* kCarriedExtensions[] = {
     "GL_INTEL_blackhole_render",
     "GL_INTEL_conservative_rasterization",
     "GL_INTEL_fragment_shader_ordering",
+    "GL_KHR_blend_equation_advanced",
     "GL_KHR_blend_equation_advanced_coherent",
     "GL_KHR_context_flush_control",
     "GL_KHR_no_error",

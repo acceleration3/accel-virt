@@ -2,6 +2,7 @@
 #define AV_GL_MEMORY_GROUP_HPP
 
 #include "device/shim/posix_lock.hpp"
+#include "executor/opengl/gl_shared_fences.hpp"
 
 #include <stdint.h>
 
@@ -23,6 +24,7 @@ public:
     [[nodiscard]] bool join(GlMemoryObjects &member);
     void               part(GlMemoryObjects &member);
 
+    GlSharedFences  &fences();
     uint32_t         members() const;
     GlMemoryObjects *at(uint32_t index) const;
 
@@ -30,6 +32,7 @@ private:
     PosixLock        lock_;
     GlMemoryObjects *members_[most_members];
     uint32_t         count_;
+    GlSharedFences   fences_;
 };
 
 }

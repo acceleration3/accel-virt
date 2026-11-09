@@ -1,4 +1,5 @@
 #include "core/trace/function_scope.hpp"
+#include "icd/opengl/client_vertex_state.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/manual_calls.hpp"
@@ -7,10 +8,10 @@
 
 namespace av::glicd::generated {
 
-void APIENTRY Wrap_glArrayElement(GLint)
+void APIENTRY Wrap_glArrayElement(GLint i)
 {
     AV_SCOPE("Wrap_glArrayElement");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_element(i);
 }
 
 void APIENTRY Wrap_glBindBuffer(GLenum target, GLuint buffer)
@@ -49,10 +50,10 @@ void APIENTRY Wrap_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr si
     ::av::glicd::gl_icd_binding.root().manual().buffer_sub_data(target, offset, size, data);
 }
 
-void APIENTRY Wrap_glClientActiveTexture(GLenum)
+void APIENTRY Wrap_glClientActiveTexture(GLenum texture)
 {
     AV_SCOPE("Wrap_glClientActiveTexture");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().client_active_texture(texture);
 }
 
 GLenum APIENTRY Wrap_glClientWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
@@ -67,10 +68,10 @@ void APIENTRY Wrap_glFinish(void)
     ::av::glicd::gl_icd_binding.root().finish_current();
 }
 
-void APIENTRY Wrap_glColorPointer(GLint, GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glColorPointer(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glColorPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::color_slot, size, type, stride, pointer);
 }
 
 void APIENTRY Wrap_glDebugMessageCallback(GLDEBUGPROC callback, const void* userParam)
@@ -103,10 +104,10 @@ void APIENTRY Wrap_glDeleteVertexArrays(GLsizei n, const GLuint* arrays)
     ::av::glicd::gl_icd_binding.root().manual().delete_vertex_arrays(n, arrays);
 }
 
-void APIENTRY Wrap_glDisableClientState(GLenum)
+void APIENTRY Wrap_glDisableClientState(GLenum array)
 {
     AV_SCOPE("Wrap_glDisableClientState");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().client_state(array, false);
 }
 
 void APIENTRY Wrap_glDisableVertexAttribArray(GLuint index)
@@ -151,16 +152,16 @@ void APIENTRY Wrap_glDrawRangeElements(GLenum mode, GLuint start, GLuint end, GL
     ::av::glicd::gl_icd_binding.root().manual().draw_range_elements(mode, start, end, count, type, indices);
 }
 
-void APIENTRY Wrap_glEdgeFlagPointer(GLsizei, const void*)
+void APIENTRY Wrap_glEdgeFlagPointer(GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glEdgeFlagPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::edge_flag_slot, 1, 0x1401u, stride, pointer);
 }
 
-void APIENTRY Wrap_glEnableClientState(GLenum)
+void APIENTRY Wrap_glEnableClientState(GLenum array)
 {
     AV_SCOPE("Wrap_glEnableClientState");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().client_state(array, true);
 }
 
 void APIENTRY Wrap_glEnableVertexAttribArray(GLuint index)
@@ -206,10 +207,10 @@ void APIENTRY Wrap_glFlushMappedNamedBufferRangeEXT(GLuint, GLintptr, GLsizeiptr
     ::av::glicd::gl_icd_binding.root().manual().refuse();
 }
 
-void APIENTRY Wrap_glFogCoordPointer(GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glFogCoordPointer(GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glFogCoordPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::fog_coord_slot, 1, type, stride, pointer);
 }
 
 void APIENTRY Wrap_glGenBuffers(GLsizei n, GLuint* buffers)
@@ -326,16 +327,16 @@ void APIENTRY Wrap_glGetVertexAttribPointerv(GLuint index, GLenum pname, void **
     ::av::glicd::gl_icd_binding.root().manual().attribute_pointer(index, pname, pointer);
 }
 
-void APIENTRY Wrap_glIndexPointer(GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glIndexPointer(GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glIndexPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::index_slot, 1, type, stride, pointer);
 }
 
-void APIENTRY Wrap_glInterleavedArrays(GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glInterleavedArrays(GLenum format, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glInterleavedArrays");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().interleaved_arrays(format, stride, pointer);
 }
 
 void APIENTRY Wrap_glLinkProgram(GLuint program)
@@ -418,10 +419,10 @@ void APIENTRY Wrap_glNamedBufferSubDataEXT(GLuint buffer, GLintptr offset, GLsiz
     ::av::glicd::gl_icd_binding.root().manual().named_buffer_sub_data_ext(buffer, offset, size, data);
 }
 
-void APIENTRY Wrap_glNormalPointer(GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glNormalPointer(GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glNormalPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::normal_slot, 3, type, stride, pointer);
 }
 
 void APIENTRY Wrap_glPixelStoref(GLenum pname, GLfloat param)
@@ -442,16 +443,16 @@ void APIENTRY Wrap_glReadBuffer(GLenum src)
     ::av::glicd::gl_icd_binding.root().manual().read_buffer(src);
 }
 
-void APIENTRY Wrap_glSecondaryColorPointer(GLint, GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glSecondaryColorPointer(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glSecondaryColorPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::secondary_color_slot, size, type, stride, pointer);
 }
 
-void APIENTRY Wrap_glTexCoordPointer(GLint, GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glTexCoordPointer(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glTexCoordPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::texcoord_slot, size, type, stride, pointer);
 }
 
 GLboolean APIENTRY Wrap_glUnmapBuffer(GLenum target)
@@ -479,10 +480,10 @@ void APIENTRY Wrap_glVertexAttribPointer(GLuint index, GLint size, GLenum type, 
     ::av::glicd::gl_icd_binding.root().manual().vertex_attrib_pointer(index, size, type, normalized, stride, pointer);
 }
 
-void APIENTRY Wrap_glVertexPointer(GLint, GLenum, GLsizei, const void*)
+void APIENTRY Wrap_glVertexPointer(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glVertexPointer");
-    static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
+    ::av::glicd::gl_icd_binding.root().manual().array_pointer(::av::glicd::ClientVertexState::vertex_slot, size, type, stride, pointer);
 }
 
 

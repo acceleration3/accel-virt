@@ -4,7 +4,7 @@
 
 namespace av {
 
-GlMemoryGroup::GlMemoryGroup() : lock_(), members_{}, count_(0u)
+GlMemoryGroup::GlMemoryGroup() : lock_(), members_{}, count_(0u), fences_()
 {
     AV_SCOPE("GlMemoryGroup::GlMemoryGroup");
 }
@@ -46,6 +46,12 @@ void GlMemoryGroup::part(GlMemoryObjects &member)
         break;
     }
     lock_.release();
+}
+
+GlSharedFences &GlMemoryGroup::fences()
+{
+    AV_SCOPE("GlMemoryGroup::fences");
+    return fences_;
 }
 
 uint32_t GlMemoryGroup::members() const

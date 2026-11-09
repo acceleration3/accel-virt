@@ -1032,6 +1032,7 @@ inline constexpr uint32_t kCmd_glWindowPos3i = 0x00030406;
 inline constexpr uint32_t kCmd_glWindowPos3iv = 0x00030407;
 inline constexpr uint32_t kCmd_glWindowPos3s = 0x00030408;
 inline constexpr uint32_t kCmd_glWindowPos3sv = 0x00030409;
+inline constexpr uint32_t kCmd_glBlendBarrierKHR = 0x00030575;
 inline constexpr uint32_t kCmd_glDeleteObjectARB = 0x000303b9;
 inline constexpr uint32_t kCmd_glGetHandleARB = 0x000303ba;
 inline constexpr uint32_t kCmd_glGetObjectParameterfvARB = 0x000303bb;

@@ -32,7 +32,7 @@ extra = [
     "glGenRenderbuffers", "glDeleteRenderbuffers", "glBindRenderbuffer",
     "glRenderbufferStorage", "glFramebufferRenderbuffer", "glBlitFramebuffer",
 
-    "glDrawArrays", "glDrawElements", "glDrawArraysInstanced",
+    "glBlendBarrierKHR", "glDrawArrays", "glDrawElements", "glDrawArraysInstanced",
     "glDrawElementsInstanced",
 
     "glDeleteObjectARB", "glGetHandleARB", "glGetObjectParameterfvARB",

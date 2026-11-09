@@ -11,6 +11,7 @@
 #include "icd/opengl/reported_gl_errors.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
+#include "icd/opengl/client_vertex_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
 #include "icd/common/present_pacing.hpp"
 #include "icd/common/locked_timeline.hpp"
@@ -95,6 +96,7 @@ public:
     BatchMark            mark() const;
 
     ClientArrayState &arrays();
+    ClientVertexState &vertex();
     PinnedBuffers    &pinned();
     UniformShapes    &uniforms();
     QueryShapes      &queries();
@@ -155,6 +157,7 @@ private:
     icd::HostChannel               channel_;
     ReportedGlErrors               reported_;
     ClientArrayState               arrays_;
+    ClientVertexState              vertex_;
     UniformShapes                  uniforms_;
     QueryShapes                    queries_;
     GrantedProfile                 profile_;

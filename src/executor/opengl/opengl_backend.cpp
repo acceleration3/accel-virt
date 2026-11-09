@@ -126,7 +126,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), vram_guard_(blocks, gl_, pending_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
+    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), pacer_(), shared_fences_(nullptr), progress_(gl_, natives_, wake_), pending_(gl_, errors_), vram_guard_(blocks, gl_, pending_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
       textures_(blocks, gl_, memories_, images_, pending_), guest_(), region_(guest_, lines), published_(guest_), errors_(),
       resolved_(0u), ran_(0u), submitted_(0u), fenced_at_(0u), drained_at_(0u), drain_fence_(nullptr),
       current_(false), poll_failure_logged_(false), lines_(lines)
@@ -158,6 +158,7 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
         context_.close();
         return false;
     }
+    shared_fences_ = group != nullptr ? &group->fences() : nullptr;
     resolved_ = static_cast<uint32_t>(load_real_gl(gl_, resolve_through, &context_));
     install_hooks();
     gl_.av_fixed_function = granted_fixed_function();
@@ -247,15 +248,21 @@ void OpenGlBackend::shut_down()
         memories_.part();
         import_.give_back();
         progress_.release();
+        pacer_.stop(gl_);
         void *fence = nullptr;
-        while (fences_.take_any(fence))
+        while (fences_.take_any(fence)) {
+            if (shared_fences_ != nullptr) shared_fences_->withdraw(fence);
             if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
+        }
     } else {
         memories_.forget_all();
         memories_.part();
         progress_.forget();
         void *fence = nullptr;
-        while (fences_.take_any(fence)) fence = nullptr;
+        while (fences_.take_any(fence)) {
+            if (shared_fences_ != nullptr) shared_fences_->withdraw(fence);
+            fence = nullptr;
+        }
     }
     drain_fence_ = nullptr;
     fenced_at_ = 0u;
@@ -293,10 +300,12 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     current_ = true;
     submitted_++;
     if (slices_.knows(command_id)) return slices_.run(command_id, payload, reply, arena);
+    const WireReader peek = payload;
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
         LogLine(lines_).text(glproto::cmd_id_to_string(command_id)).text(" could not run").write();
         return false;
     }
+    pacer_.ran(gl_, command_id, peek);
     ran_++;
     return true;
 }
@@ -447,7 +456,10 @@ bool OpenGlBackend::bind_fence(uint64_t token, void *fence)
     if (!context_.make_current()) return false;
     if (fences_.crowded()) retire_passed_fence();
     const Status bound = fences_.bind(token, fence);
-    if (bound == Status::ok) return true;
+    if (bound == Status::ok) {
+        if (shared_fences_ != nullptr) shared_fences_->publish(token, fence);
+        return true;
+    }
     if (fence == nullptr) {
         LogLine(lines_).text("glFenceSync made no GLsync for token ").number(token).write();
         return false;
@@ -467,19 +479,24 @@ void OpenGlBackend::retire_passed_fence()
     if (reached != gl_already_signaled && reached != gl_condition_satisfied) return;
     void *deleted = nullptr;
     if (fences_.retire_oldest(deleted) != Status::ok) return;
+    if (shared_fences_ != nullptr) shared_fences_->withdraw(deleted);
     if (deleted != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(deleted));
 }
 
 void *OpenGlBackend::fence_for(uint64_t token) const
 {
     AV_SCOPE("OpenGlBackend::fence_for");
-    return fences_.fence_for(token);
+    void *const own = fences_.fence_for(token);
+    if (own != nullptr || shared_fences_ == nullptr) return own;
+    return shared_fences_->find(token);
 }
 
 void *OpenGlBackend::forget_fence(uint64_t token)
 {
     AV_SCOPE("OpenGlBackend::forget_fence");
-    return fences_.forget(token);
+    void *const forgotten = fences_.forget(token);
+    if (shared_fences_ != nullptr) shared_fences_->withdraw(forgotten);
+    return forgotten;
 }
 
 

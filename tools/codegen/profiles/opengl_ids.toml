@@ -1,3 +1,7 @@
+# Stable command IDs for the OpenGL half of the AV wire.
+# Auto-maintained by codegen — do not hand-edit. New commands
+# get appended at the next free ID; existing IDs never move.
+
 [commands]
 "glGetString" = 196608
 "glGetStringi" = 196609
@@ -1396,3 +1400,4 @@
 "glNamedBufferStorageMemEXT" = 198002
 "glGetUnsignedBytevEXT" = 198003
 "glGetUnsignedBytei_vEXT" = 198004
+"glBlendBarrierKHR" = 198005

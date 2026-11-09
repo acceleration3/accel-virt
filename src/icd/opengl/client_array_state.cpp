@@ -67,6 +67,12 @@ size_t ClientArrayState::compressed_bytes(int32_t image_size, bool packing) cons
     return packing || image_size < 0 ? 0u : static_cast<size_t>(image_size);
 }
 
+size_t ClientArrayState::bitmap_bytes(int32_t width, int32_t height, bool packing) const
+{
+    AV_SCOPE("ClientArrayState::bitmap_bytes");
+    return (packing ? pack_ : unpack_).bitmap_span(width, height);
+}
+
 void ClientArrayState::bind_buffer(uint32_t target, uint32_t buffer)
 {
     AV_SCOPE("ClientArrayState::bind_buffer");

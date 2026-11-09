@@ -97,6 +97,9 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_AMD_vertex_shader_layer", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_fragment_shader_interlock", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_EXT_shader_image_load_formatted", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_KHR_blend_equation_advanced", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_KHR_blend_equation_advanced_coherent", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_gl_spirv", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {

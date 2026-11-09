@@ -40,7 +40,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), lines_(lines), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
-      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, groups, groups.mint(), lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
+      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), vertex_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, groups, groups.mint(), lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -249,6 +249,12 @@ ClientArrayState &GuestGlContext::arrays()
 {
     AV_SCOPE("GuestGlContext::arrays");
     return arrays_;
+}
+
+ClientVertexState &GuestGlContext::vertex()
+{
+    AV_SCOPE("GuestGlContext::vertex");
+    return vertex_;
 }
 
 PinnedBuffers &GuestGlContext::pinned()
@@ -481,7 +487,7 @@ bool GuestGlContext::invariants_hold() const
     if (!held && staging_.name() != 0u) return false;
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
-    return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
+    return arrays_.invariants_hold() && vertex_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
            framebuffers_.invariants_hold() && mappings_.invariants_hold() && slices_.invariants_hold() && shadows_.invariants_hold() &&
            staging_.invariants_hold() && channel_.invariants_hold() && pacing_.invariants_hold();
 }

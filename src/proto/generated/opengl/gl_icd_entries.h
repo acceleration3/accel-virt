@@ -1034,6 +1034,7 @@ void APIENTRY Wrap_glWindowPos3i(GLint x, GLint y, GLint z);
 void APIENTRY Wrap_glWindowPos3iv(const GLint* v);
 void APIENTRY Wrap_glWindowPos3s(GLshort x, GLshort y, GLshort z);
 void APIENTRY Wrap_glWindowPos3sv(const GLshort* v);
+void APIENTRY Wrap_glBlendBarrierKHR(void);
 void APIENTRY Wrap_glDeleteObjectARB(GLhandleARB obj);
 GLhandleARB APIENTRY Wrap_glGetHandleARB(GLenum pname);
 void APIENTRY Wrap_glGetObjectParameterfvARB(GLhandleARB obj, GLenum pname, GLfloat* params);

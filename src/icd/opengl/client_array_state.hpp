@@ -42,6 +42,7 @@ public:
     size_t pixel_bytes(uint32_t format, uint32_t type, int32_t width, int32_t height, int32_t depth,
                        bool packing) const;
     size_t compressed_bytes(int32_t image_size, bool packing) const;
+    size_t bitmap_bytes(int32_t width, int32_t height, bool packing) const;
 
     void     bind_buffer(uint32_t target, uint32_t buffer);
     bool     tracks(uint32_t target) const;

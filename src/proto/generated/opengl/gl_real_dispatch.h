@@ -1133,6 +1133,7 @@ struct RealGl {
     void (*glWindowPos3iv)(const GLint*) = nullptr;
     void (*glWindowPos3s)(GLshort, GLshort, GLshort) = nullptr;
     void (*glWindowPos3sv)(const GLshort*) = nullptr;
+    void (*glBlendBarrierKHR)(void) = nullptr;
     void (*glDeleteObjectARB)(GLhandleARB) = nullptr;
     GLhandleARB (*glGetHandleARB)(GLenum) = nullptr;
     void (*glGetObjectParameterfvARB)(GLhandleARB, GLenum, GLfloat*) = nullptr;
@@ -3582,6 +3583,8 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glWindowPos3s != nullptr) ++found;
     gl.glWindowPos3sv = reinterpret_cast<void (*)(const GLshort*)>(load("glWindowPos3sv", user));
     if (gl.glWindowPos3sv != nullptr) ++found;
+    gl.glBlendBarrierKHR = reinterpret_cast<void (*)(void)>(load("glBlendBarrierKHR", user));
+    if (gl.glBlendBarrierKHR != nullptr) ++found;
     gl.glDeleteObjectARB = reinterpret_cast<void (*)(GLhandleARB)>(load("glDeleteObjectARB", user));
     if (gl.glDeleteObjectARB != nullptr) ++found;
     gl.glGetHandleARB = reinterpret_cast<GLhandleARB (*)(GLenum)>(load("glGetHandleARB", user));

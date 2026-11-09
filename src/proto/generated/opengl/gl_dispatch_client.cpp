@@ -29394,6 +29394,18 @@ void av_glWindowPos3sv(::av::ClientTransport& av_t, const GLshort* v) {
     (void)av_t.send_async(kCmd_glWindowPos3sv, av_b);
 }
 
+void av_glBlendBarrierKHR(::av::ClientTransport& av_t) {
+    AV_SCOPE("av_glBlendBarrierKHR");
+    ::av::WireWriter av_b = av_t.request_writer();
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glBlendBarrierKHR",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glBlendBarrierKHR, av_b);
+}
+
 void av_glDeleteObjectARB(::av::ClientTransport& av_t, GLhandleARB obj) {
     AV_SCOPE("av_glDeleteObjectARB");
     ::av::WireWriter av_b = av_t.request_writer();

@@ -2139,6 +2139,51 @@ def _framebuffer_names(cmd) -> list[str]:
             if p.name in wanted and p.type.pointer_depth == 0]
 
 
+STAGE_ARRAYS = {"glDrawArraysInstancedBaseInstance"}
+
+STAGE_ELEMENTS = {
+    "glDrawElementsBaseVertex": "basevertex",
+    "glDrawElementsInstancedBaseVertex": "basevertex",
+    "glDrawElementsInstancedBaseInstance": "0",
+    "glDrawElementsInstancedBaseVertexBaseInstance": "basevertex",
+    "glDrawRangeElementsBaseVertex": "basevertex",
+}
+
+STAGE_MULTI_ARRAYS = {"glMultiDrawArrays"}
+
+STAGE_MULTI_ELEMENTS = {
+    "glMultiDrawElements": "nullptr",
+    "glMultiDrawElementsBaseVertex": "basevertex",
+}
+
+REFUSE_CLIENT_ARRAYS = {
+    "glDrawArraysIndirect", "glDrawElementsIndirect", "glMultiDrawArraysIndirect",
+    "glMultiDrawArraysIndirectCount", "glMultiDrawElementsIndirect",
+    "glMultiDrawElementsIndirectCount", "glDrawTransformFeedback",
+    "glDrawTransformFeedbackInstanced", "glDrawTransformFeedbackStream",
+    "glDrawTransformFeedbackStreamInstanced",
+}
+
+
+def _client_array_staging(name: str) -> tuple[list[str], list[str], str]:
+    if name in STAGE_ARRAYS:
+        return (["    if (!::av::glicd::stage_client_arrays(first, count)) return;"], [], "")
+    if name in STAGE_ELEMENTS:
+        return ([f"    if (!::av::glicd::stage_client_elements(type, count, indices, {STAGE_ELEMENTS[name]})) return;"],
+                [], "")
+    if name in STAGE_MULTI_ARRAYS:
+        return (["    if (!::av::glicd::stage_client_multi_arrays(first, count, drawcount)) return;"], [], "")
+    if name in STAGE_MULTI_ELEMENTS:
+        return (["    const uint64_t* staged_offsets = nullptr;",
+                 f"    if (!::av::glicd::stage_client_multi_elements(count, type, indices, drawcount, "
+                 f"{STAGE_MULTI_ELEMENTS[name]}, staged_offsets)) return;"], [], "staged")
+    if name in REFUSE_CLIENT_ARRAYS:
+        return (["    if (::av::glicd::refuse_client_arrays()) return;"], [], "")
+    if name == "glBegin":
+        return (["    ::av::glicd::begin_client_primitives();"], [], "")
+    return ([], [], "")
+
+
 def _reads_buffers(cmd) -> bool:
     name = cmd.name
     return (name.startswith("glDraw") or name.startswith("glMultiDraw") or
@@ -2228,8 +2273,14 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             out.append("    ::av::glicd::forget_bindings();")
         kind = _ret_kind(cmd)
         prologue = _icd_prologue(cmd)
+        staging, _, staged_offsets = _client_array_staging(cmd.name)
+        if staged_offsets:
+            args = args.replace("::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount))",
+                                "(staged_offsets != nullptr ? staged_offsets : "
+                                "::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount)))")
         if kind == "void":
             out.append("    if (av_t == nullptr) return;")
+            out += staging
             if cmd.name in BIND_SHADOW:
                 out.append(f"    if ({BIND_SHADOW[cmd.name]}) return;")
             if cmd.name in ANSWERED_BY_GUEST_NAMES:
@@ -2237,6 +2288,8 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             out += prologue
             out += _icd_buffer_writes(cmd)
             out.append(f"    ::av::glproto::av_{cmd.name}({args});")
+            if cmd.name in STAGE_ELEMENTS or cmd.name in STAGE_MULTI_ELEMENTS:
+                out.append("    ::av::glicd::finish_client_draw();")
             out += _icd_epilogue(cmd)
         elif kind == "sync":
             out.append("    if (av_t == nullptr) return nullptr;")

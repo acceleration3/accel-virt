@@ -1063,6 +1063,7 @@ inline const NamedEntry kNamedEntries[] = {
     {"glWindowPos3iv", reinterpret_cast<GlProc>(&Wrap_glWindowPos3iv)},
     {"glWindowPos3s", reinterpret_cast<GlProc>(&Wrap_glWindowPos3s)},
     {"glWindowPos3sv", reinterpret_cast<GlProc>(&Wrap_glWindowPos3sv)},
+    {"glBlendBarrierKHR", reinterpret_cast<GlProc>(&Wrap_glBlendBarrierKHR)},
     {"glDeleteObjectARB", reinterpret_cast<GlProc>(&Wrap_glDeleteObjectARB)},
     {"glGetHandleARB", reinterpret_cast<GlProc>(&Wrap_glGetHandleARB)},
     {"glGetObjectParameterfvARB", reinterpret_cast<GlProc>(&Wrap_glGetObjectParameterfvARB)},
@@ -1997,6 +1998,6 @@ inline const NamedEntry kNamedEntries[] = {
     {"glWindowPos3svMESA", reinterpret_cast<GlProc>(&Wrap_glWindowPos3sv)},
 };
 
-inline constexpr uint32_t kNamedEntryCount = 1621u;
+inline constexpr uint32_t kNamedEntryCount = 1622u;
 
 }  // namespace av::glicd::generated

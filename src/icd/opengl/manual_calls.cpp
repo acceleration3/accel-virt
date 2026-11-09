@@ -15,6 +15,8 @@
 #include "icd/opengl/buffer_pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
+#include "icd/opengl/client_vertex_draw.hpp"
+#include "icd/opengl/client_vertex_state.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
@@ -437,7 +439,9 @@ void ManualCalls::client_attributes_pushed(uint32_t mask)
 {
     AV_SCOPE("ManualCalls::client_attributes_pushed");
     GuestGlContext *const context = sending();
-    if (context != nullptr) context->arrays().push_client(mask);
+    if (context == nullptr) return;
+    context->arrays().push_client(mask);
+    context->vertex().push(mask);
 }
 
 void ManualCalls::client_attributes_popped()
@@ -446,6 +450,7 @@ void ManualCalls::client_attributes_popped()
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     context->arrays().pop_client();
+    context->vertex().pop();
     context->shadows().forget_all();
 }
 
@@ -453,7 +458,9 @@ void ManualCalls::client_attributes_reset(uint32_t mask)
 {
     AV_SCOPE("ManualCalls::client_attributes_reset");
     GuestGlContext *const context = sending();
-    if (context != nullptr) context->arrays().reset_client(mask);
+    if (context == nullptr) return;
+    context->arrays().reset_client(mask);
+    context->vertex().reset(mask);
 }
 
 void ManualCalls::vertex_array_elements(uint32_t array, uint32_t buffer)
@@ -600,7 +607,8 @@ void ManualCalls::bind_vertex_array(uint32_t array)
     AV_SCOPE("ManualCalls::bind_vertex_array");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    if (context->arrays().bind_vertex_array(array) != Status::ok) context->record(GuestGlContext::gl_out_of_memory);
+    if (context->arrays().bind_vertex_array(array) != Status::ok || context->vertex().bind(array) != Status::ok)
+        context->record(GuestGlContext::gl_out_of_memory);
     glproto::av_glBindVertexArray(*context->wire(), array);
 }
 
@@ -610,6 +618,7 @@ void ManualCalls::delete_vertex_arrays(int32_t count, const uint32_t *arrays)
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     context->arrays().delete_vertex_arrays(count, arrays);
+    context->vertex().forget(count, arrays);
     glproto::av_glDeleteVertexArrays(*context->wire(), count, arrays);
 }
 
@@ -729,9 +738,19 @@ void ManualCalls::vertex_attrib_pointer(uint32_t index, int32_t size, uint32_t t
     AV_SCOPE("ManualCalls::vertex_attrib_pointer");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    if (context->arrays().client_pointer(address_of(pointer))) return context->record(gl_invalid_operation);
+    const bool client = context->arrays().client_pointer(address_of(pointer));
+    if (index >= ClientVertexState::generic_slots) {
+        if (client) return context->record(gl_invalid_operation);
+        context->arrays().set_attribute_pointer(index, address_of(pointer));
+        return glproto::av_glVertexAttribPointer(*context->wire(), index, size, type, normalized, stride,
+                                                 address_of(pointer));
+    }
+    if (client && !context->profile().legacy_calls_live()) return context->record(gl_invalid_operation);
+    const uint32_t error = context->vertex().validate(index, size, type, stride);
+    if (error != 0u) return context->record(error);
     context->arrays().set_attribute_pointer(index, address_of(pointer));
-    glproto::av_glVertexAttribPointer(*context->wire(), index, size, type, normalized, stride, address_of(pointer));
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    draw.pointer(index, size, type, normalized != 0u, stride, pointer);
 }
 
 void ManualCalls::enable_vertex_attrib_array(uint32_t index, bool enable)
@@ -739,8 +758,171 @@ void ManualCalls::enable_vertex_attrib_array(uint32_t index, bool enable)
     AV_SCOPE("ManualCalls::enable_vertex_attrib_array");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    if (index < ClientVertexState::generic_slots) {
+        ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+        return draw.enable(index, enable);
+    }
     if (enable) return glproto::av_glEnableVertexAttribArray(*context->wire(), index);
     glproto::av_glDisableVertexAttribArray(*context->wire(), index);
+}
+
+void ManualCalls::array_pointer(uint32_t slot, int32_t size, uint32_t type, int32_t stride, const void *pointer)
+{
+    AV_SCOPE("ManualCalls::array_pointer");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (!context->profile().legacy_calls_live()) return context->record(gl_invalid_operation);
+    if (slot == ClientVertexState::texcoord_slot)
+        slot = context->vertex().texcoord_slot_of_unit(context->vertex().texcoord_unit());
+    const uint32_t error = context->vertex().validate(slot, size, type, stride);
+    if (error != 0u) return context->record(error);
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    draw.pointer(slot, size, type, false, stride, pointer);
+}
+
+void ManualCalls::client_state(uint32_t capability, bool enable)
+{
+    AV_SCOPE("ManualCalls::client_state");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (!context->profile().legacy_calls_live()) return context->record(gl_invalid_operation);
+    const uint32_t slot = context->vertex().slot_of_capability(capability);
+    if (slot == ClientVertexState::no_slot) return context->record(gl_invalid_enum);
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    draw.enable(slot, enable);
+}
+
+void ManualCalls::client_active_texture(uint32_t texture)
+{
+    AV_SCOPE("ManualCalls::client_active_texture");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (!context->profile().legacy_calls_live()) return context->record(gl_invalid_operation);
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    const uint32_t       error = draw.active_texture(texture);
+    if (error != 0u) context->record(error);
+}
+
+void ManualCalls::interleaved_arrays(uint32_t format, int32_t stride, const void *pointer)
+{
+    AV_SCOPE("ManualCalls::interleaved_arrays");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (!context->profile().legacy_calls_live()) return context->record(gl_invalid_operation);
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    const uint32_t       error = draw.interleaved(format, stride, pointer);
+    if (error != 0u) context->record(error);
+}
+
+void ManualCalls::array_element(int32_t index)
+{
+    AV_SCOPE("ManualCalls::array_element");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (!context->profile().legacy_calls_live()) return context->record(gl_invalid_operation);
+    if (index < 0) return context->record(gl_invalid_value);
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    draw.array_element(index);
+}
+
+void ManualCalls::begin_primitives()
+{
+    AV_SCOPE("ManualCalls::begin_primitives");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || !context->vertex().client_active() || context->wire() == nullptr) return;
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    draw.begin_immediate();
+}
+
+bool ManualCalls::stage_arrays(int32_t first, int32_t count)
+{
+    AV_SCOPE("ManualCalls::stage_arrays");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || context->wire() == nullptr || !context->vertex().client_active()) return true;
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    const uint32_t       error = draw.arrays(first, count);
+    if (error == 0u) return true;
+    draw.finish();
+    context->record(error);
+    return false;
+}
+
+bool ManualCalls::stage_elements(uint32_t type, int32_t count, const void *&indices, int32_t base_vertex)
+{
+    AV_SCOPE("ManualCalls::stage_elements");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || context->wire() == nullptr) return true;
+    if (!context->profile().legacy_calls_live()) {
+        if (indices != nullptr && context->arrays().bound_buffer(ClientArrayState::element_array_buffer) == 0u) {
+            context->record(gl_invalid_operation);
+            return false;
+        }
+        return true;
+    }
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    uint64_t             host = 0u;
+    const uint32_t       error = draw.elements(type, count, indices, base_vertex, host);
+    if (error != 0u) {
+        draw.finish();
+        context->record(error);
+        return false;
+    }
+    indices = reinterpret_cast<const void *>(static_cast<uintptr_t>(host));
+    return true;
+}
+
+bool ManualCalls::stage_multi_arrays(const int32_t *first, const int32_t *count, int32_t draws)
+{
+    AV_SCOPE("ManualCalls::stage_multi_arrays");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || context->wire() == nullptr || !context->vertex().client_active()) return true;
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    const uint32_t       error = draw.multi_arrays(first, count, draws);
+    if (error == 0u) return true;
+    draw.finish();
+    context->record(error);
+    return false;
+}
+
+bool ManualCalls::stage_multi_elements(const int32_t *count, uint32_t type, const void *const *indices, int32_t draws,
+                                       const int32_t *base_vertex, const uint64_t *&host_indices)
+{
+    AV_SCOPE("ManualCalls::stage_multi_elements");
+    host_indices = nullptr;
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || context->wire() == nullptr) return true;
+    if (!context->profile().legacy_calls_live()) {
+        if (indices != nullptr && draws > 0 &&
+            context->arrays().bound_buffer(ClientArrayState::element_array_buffer) == 0u) {
+            context->record(gl_invalid_operation);
+            return false;
+        }
+        return true;
+    }
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    const uint32_t       error = draw.multi_elements(count, type, indices, draws, base_vertex, host_indices);
+    if (error == 0u) return true;
+    draw.finish();
+    context->record(error);
+    return false;
+}
+
+bool ManualCalls::refuse_indirect_draw()
+{
+    AV_SCOPE("ManualCalls::refuse_indirect_draw");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || !context->vertex().client_active()) return false;
+    context->record(gl_invalid_operation);
+    return true;
+}
+
+void ManualCalls::finish_client_draw()
+{
+    AV_SCOPE("ManualCalls::finish_client_draw");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || !context->vertex().indexed() || context->wire() == nullptr) return;
+    ClientVertexDraw draw(*context->wire(), context->vertex(), context->arrays(), context->shadows());
+    draw.finish();
 }
 
 void ManualCalls::draw_arrays(uint32_t mode, int32_t first, int32_t count, int32_t instances)
@@ -749,6 +931,7 @@ void ManualCalls::draw_arrays(uint32_t mode, int32_t first, int32_t count, int32
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     context->mappings().flush_persistent(*context->wire());
+    if (!stage_arrays(first, count)) return;
     if (instances < 0) return glproto::av_glDrawArrays(*context->wire(), mode, first, count);
     glproto::av_glDrawArraysInstanced(*context->wire(), mode, first, count, instances);
 }
@@ -758,10 +941,13 @@ void ManualCalls::draw_elements(uint32_t mode, int32_t count, uint32_t type, con
     AV_SCOPE("ManualCalls::draw_elements");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    if (!indices_cross(indices)) return context->record(gl_invalid_operation);
     context->mappings().flush_persistent(*context->wire());
-    if (instances < 0) return glproto::av_glDrawElements(*context->wire(), mode, count, type, address_of(indices));
-    glproto::av_glDrawElementsInstanced(*context->wire(), mode, count, type, address_of(indices), instances);
+    if (!stage_elements(type, count, indices, 0)) return;
+    if (instances < 0)
+        glproto::av_glDrawElements(*context->wire(), mode, count, type, address_of(indices));
+    else
+        glproto::av_glDrawElementsInstanced(*context->wire(), mode, count, type, address_of(indices), instances);
+    finish_client_draw();
 }
 
 void ManualCalls::draw_range_elements(uint32_t mode, uint32_t start, uint32_t end, int32_t count, uint32_t type,
@@ -770,9 +956,10 @@ void ManualCalls::draw_range_elements(uint32_t mode, uint32_t start, uint32_t en
     AV_SCOPE("ManualCalls::draw_range_elements");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    if (!indices_cross(indices)) return context->record(gl_invalid_operation);
     context->mappings().flush_persistent(*context->wire());
+    if (!stage_elements(type, count, indices, 0)) return;
     glproto::av_glDrawRangeElements(*context->wire(), mode, start, end, count, type, address_of(indices));
+    finish_client_draw();
 }
 
 void ManualCalls::flush()
@@ -1358,13 +1545,6 @@ void ManualCalls::wrote_bound(GuestGlContext &context, uint32_t target, intptr_t
         context.shadows().forget_all();
     else if (offset >= 0 && size >= 0)
         context.shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
-}
-
-bool ManualCalls::indices_cross(const void *indices)
-{
-    AV_SCOPE("ManualCalls::indices_cross");
-    GuestGlContext *const context = currents_.current();
-    return indices == nullptr || context->arrays().indices_are_offset();
 }
 
 }
