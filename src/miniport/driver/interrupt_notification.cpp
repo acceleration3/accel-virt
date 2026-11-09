@@ -92,6 +92,12 @@ Status InterruptNotification::report_presented_vsync(uint32_t target, const Dxgk
     const auto address = reinterpret_cast<uintptr_t>(layers);
     data_.UnionRemainder[0] = static_cast<uint32_t>(address);
     data_.UnionRemainder[1] = static_cast<uint32_t>(static_cast<uint64_t>(address) >> 32u);
+    uint64_t       frequency = 0u;
+    const uint64_t counter = platform_.performance_counter(frequency);
+    data_.UnionRemainder[2] = static_cast<uint32_t>(frequency);
+    data_.UnionRemainder[3] = static_cast<uint32_t>(frequency >> 32u);
+    data_.UnionRemainder[4] = static_cast<uint32_t>(counter);
+    data_.UnionRemainder[5] = static_cast<uint32_t>(counter >> 32u);
     return report();
 }
 

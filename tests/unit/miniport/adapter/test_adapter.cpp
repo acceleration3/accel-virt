@@ -5982,6 +5982,40 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, a_base_plane_wit
   CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary);
   CHECK_EQ(AdapterProbe(fixture.adapter()).scanout(0u), 0x6000000000ull); }
 
+TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, an_immediate_flip_is_reported_from_the_dpc_and_a_synchronised_one_at_the_vsync)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  int primary = 0;
+  av::DxgkPrimaryContextDataRecord view = {};
+  view.hAllocation = &primary;
+  view.SegmentId = 1u;
+  view.SegmentAddress = 0x6000000000ll;
+  av::DxgkPrimaryContextDataRecord *views[] = {&view};
+  av::DxgkMultiplaneOverlayPlane3Record plane = {};
+  plane.LayerIndex = 0u;
+  plane.PresentId = 41u;
+  plane.InputFlags = av::plane_input_enabled;
+  plane.ContextCount = 1u;
+  plane.ppContextData = views;
+  av::DxgkMultiplaneOverlayPlane3Record *list[] = {&plane};
+  av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record request = {};
+  request.PlaneCount = 1u;
+  request.ppPlanes = list;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.adapter().dpc_routine();
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  plane.PresentId = 42u;
+  plane.InputFlags = av::plane_input_enabled | av::plane_input_flip_immediate;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.adapter().dpc_routine();
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, 10); }
+
 TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, skips_what_it_cannot_show_and_takes_no_more_than_the_planes_there_are)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);

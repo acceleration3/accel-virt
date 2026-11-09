@@ -112,17 +112,34 @@ void DeviceVblank::tick(uint64_t now, bool latching)
     AV_SCOPE("DeviceVblank::tick");
     platform_.require_irql_at_most(Irql::dispatch, "DeviceVblank::tick");
     if (suspended_) return;
+    if (reporting_) report_now();
     VblankRecord   blank;
     const uint64_t seen = platform_.load_atomic(sequence_);
     if (page_.read(target, blank) != Status::ok || blank.sequence() <= seen) return;
     platform_.store_atomic(sequence_, blank.sequence());
     phase_.observe(blank.sequence(), now, blank.period_ns());
     if (reporting_) {
-        const FlipView shown = sources_.shown(target, latching ? blank.latched() : 0u);
+        const uint32_t newest = sources_.frame(target);
+        const uint32_t latched = latching ? blank.latched() : 0u;
+        const bool     behind = latched != 0u && static_cast<int32_t>(latched - reported_frame_) < 0;
+        const uint32_t frame = behind ? reported_frame_ : latched;
+        const FlipView shown = sources_.shown(target, frame);
+        reported_frame_ = frame != 0u ? frame : newest;
         sources_.note_reported(shown, blank.sequence(), blank.vblank_ns());
         if (report(shown) == Status::ok) reported_++;
         else platform_.log("avgpu: a vsync was refused");
     }
+}
+
+void DeviceVblank::report_now()
+{
+    AV_SCOPE("DeviceVblank::report_now");
+    const uint32_t frame = sources_.frame(target);
+    if (frame == reported_frame_ || !sources_.immediate(target)) return;
+    reported_frame_ = frame;
+    const FlipView shown = sources_.shown(target, 0u);
+    sources_.note_reported(shown, 0u, 1u);
+    static_cast<void>(report(shown));
 }
 
 Status DeviceVblank::report(const FlipView &shown)

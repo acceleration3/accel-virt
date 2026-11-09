@@ -40,6 +40,8 @@ public:
     uint64_t             scanout_address(uint32_t source);
     [[nodiscard]] Status set_multiplane_scanout(uint32_t source, const DxgkMultiplaneOverlayPlaneRecord *base);
     [[nodiscard]] Status present_planes(uint32_t source, const OverlayPlane *planes, uint32_t count);
+    void                 mark_immediate(uint32_t source);
+    bool                 immediate(uint32_t source);
     void                 planes(uint32_t source, OverlayPlane *planes);
     Flip                 flip(uint32_t source);
     uint32_t             frame(uint32_t source);
@@ -66,6 +68,7 @@ private:
     uint64_t           flips_[max_sources];
     void               number(uint32_t source, const FlipView &flip);
     uint64_t           frames_[max_sources];
+    uint64_t           immediate_frames_[max_sources];
     uint64_t           numbered_frames_[max_sources][remembered_flips];
     FlipView           numbered_flips_[max_sources][remembered_flips];
     uint32_t           base_attributes_[max_sources][multiplane_overlay_attribute_words];

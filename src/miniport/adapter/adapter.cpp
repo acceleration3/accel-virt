@@ -1912,9 +1912,12 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay3(
         return NtStatus(Status::invalid_parameter).value();
     OverlayPlane planes[OverlayPlane::max_planes];
     uint32_t     count = 0u;
+    bool         immediate = false;
     for (uint32_t index = 0u; index < request->PlaneCount && count < OverlayPlane::max_planes; index++) {
         const DxgkMultiplaneOverlayPlane3Record *const plane = request->ppPlanes[index];
         if (plane == nullptr || plane->LayerIndex >= OverlayPlane::max_planes) continue;
+        if ((plane->InputFlags & plane_input_enabled) != 0u && (plane->InputFlags & plane_input_flip_immediate) != 0u)
+            immediate = true;
         const DxgkPrimaryContextDataRecord *shown = nullptr;
         if ((plane->InputFlags & plane_input_enabled) != 0u && plane->ContextCount != 0u &&
             plane->ppContextData != nullptr)
@@ -1928,7 +1931,9 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay3(
                                                           shown->SegmentAddress, plane->PlaneAttributes)
                                            : OverlayPlane(plane->LayerIndex, plane->PresentId);
     }
-    return flipped(sources_.present_planes(request->VidPnSourceId, planes, count));
+    const Status presented = sources_.present_planes(request->VidPnSourceId, planes, count);
+    if (presented == Status::ok && immediate) sources_.mark_immediate(request->VidPnSourceId);
+    return flipped(presented);
 }
 
 int32_t Adapter::check_multi_plane_overlay_support3(DxgkargCheckMultiPlaneOverlaySupport3Record *request)

@@ -302,6 +302,29 @@ TEST(display_sources_frames, a_multiplane_flip_is_remembered_with_its_own_attrib
   CHECK(sources.shown(0u, 0u).kind() == DisplaySources::Flip::planes_disabled);
   platform.set_irql(Irql::passive); }
 
+TEST(display_sources_immediate, only_the_newest_flip_counts_and_a_later_flip_clears_it)
+{ MockPlatform platform; DisplaySources sources(platform);
+  std::uint32_t allocation = 0u;
+  av::DxgkMultiplaneOverlayAttributes3Record attributes = {};
+  const av::OverlayPlane plane(0u, 9u, &allocation, 0x4000ll, attributes);
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.present_planes(0u, &plane, 1u), Status::ok);
+  sources.mark_immediate(0u);
+  platform.set_irql(Irql::dispatch);
+  CHECK(sources.immediate(0u));
+  CHECK(!sources.immediate(sources.count()));
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.present_planes(0u, &plane, 1u), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  CHECK(!sources.immediate(0u));
+  platform.set_irql(Irql::isr);
+  sources.mark_immediate(0u);
+  sources.mark_immediate(sources.count());
+  CHECK_STATUS(sources.set_scanout(0u, 0x5000, &allocation), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  CHECK(!sources.immediate(0u));
+  platform.set_irql(Irql::passive); }
+
 TEST(display_sources_frames, the_count_wraps_past_zero_which_is_no_frame)
 { MockPlatform platform; DisplaySources sources(platform);
   av::DisplaySourcesProbe::number_from(sources, 0u, 0xFFFFFFFEu);

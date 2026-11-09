@@ -10,8 +10,8 @@ namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), count_(1u), private_formats_{}, committed_{}, vsync_enabled_(false),
-      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, frames_{}, numbered_frames_{}, numbered_flips_{}, base_attributes_{},
-      planes_(), last_reported_(0u), programmed_(platform), reported_(platform)
+      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, frames_{}, immediate_frames_{}, numbered_frames_{}, numbered_flips_{},
+      base_attributes_{}, planes_(), last_reported_(0u), programmed_(platform), reported_(platform)
 {
     AV_SCOPE("DisplaySources::DisplaySources");
 }
@@ -123,6 +123,22 @@ Status DisplaySources::present_planes(uint32_t source, const OverlayPlane *plane
     platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::presented_plane));
     number(source, FlipView(planes_[source]));
     return Status::ok;
+}
+
+void DisplaySources::mark_immediate(uint32_t source)
+{
+    AV_SCOPE("DisplaySources::mark_immediate");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::mark_immediate");
+    if (source >= count_) return;
+    platform_.store_atomic(immediate_frames_[source], platform_.load_atomic(frames_[source]));
+}
+
+bool DisplaySources::immediate(uint32_t source)
+{
+    AV_SCOPE("DisplaySources::immediate");
+    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::immediate");
+    if (source >= count_) return false;
+    return platform_.load_atomic(immediate_frames_[source]) == platform_.load_atomic(frames_[source]);
 }
 
 void DisplaySources::planes(uint32_t source, OverlayPlane *planes)
