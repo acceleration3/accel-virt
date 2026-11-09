@@ -29,7 +29,40 @@ constexpr uint32_t whole_buffer = 0u;
 void D3d11Device::set_shader(uint32_t stage, D3D10DDI_HSHADER shader)
 {
     AV_SCOPE("D3d11Device::set_shader");
-    static_cast<void>(d3dproto::av_d3d_SetShader(wire(), stage, id_of(shader.pDrvPrivate)));
+    if (stage != stage_geometry) {
+        static_cast<void>(d3dproto::av_d3d_SetShader(wire(), stage, id_of(shader.pDrvPrivate)));
+        return;
+    }
+    geometry_shader_ = shader.pDrvPrivate;
+    bind_geometry_shader();
+}
+
+uint32_t D3d11Device::passthrough_variant_id(const StreamPassthroughRecord &record) const
+{
+    AV_SCOPE("D3d11Device::passthrough_variant_id");
+    switch (topology_) {
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_LINELIST:
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_LINESTRIP: return record.variant[0];
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLELIST:
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP: return record.variant[1];
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_LINELIST_ADJ:
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ: return record.variant[2];
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ:
+    case D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ: return record.variant[3];
+    default: return record.head.stamp.id();
+    }
+}
+
+void D3d11Device::bind_geometry_shader()
+{
+    AV_SCOPE("D3d11Device::bind_geometry_shader");
+    uint32_t id = 0u;
+    if (geometry_shader_ != nullptr) {
+        const auto &record = *static_cast<const StreamPassthroughRecord *>(geometry_shader_);
+        id = record.head.resource == StreamPassthroughRecord::marker ? passthrough_variant_id(record)
+                                                                     : record.head.stamp.id();
+    }
+    static_cast<void>(d3dproto::av_d3d_SetShader(wire(), stage_geometry, id));
 }
 
 void D3d11Device::set_constant_buffers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers,
@@ -292,6 +325,10 @@ VOID D3d11Device::ia_set_index_buffer(D3D10DDI_HRESOURCE buffer, DXGI_FORMAT for
 VOID D3d11Device::ia_set_topology(D3D10_DDI_PRIMITIVE_TOPOLOGY topology)
 {
     AV_SCOPE("D3d11Device::ia_set_topology");
+    topology_ = static_cast<uint32_t>(topology);
+    if (geometry_shader_ != nullptr &&
+        static_cast<const StreamPassthroughRecord *>(geometry_shader_)->head.resource == StreamPassthroughRecord::marker)
+        bind_geometry_shader();
     static_cast<void>(d3dproto::av_d3d_SetTopology(wire(), static_cast<uint32_t>(topology)));
 }
 
@@ -609,7 +646,9 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
         still_drawing();
         return;
     }
-    if (data != nullptr && size != 0u) __builtin_memcpy(data, answer, static_cast<size_t>(size < answered ? size : answered));
+    if (data == nullptr || size == 0u) return;
+    __builtin_memset(data, 0, size);
+    __builtin_memcpy(data, answer, static_cast<size_t>(size < answered ? size : answered));
 }
 
 }

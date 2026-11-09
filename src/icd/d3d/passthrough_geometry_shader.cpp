@@ -17,6 +17,12 @@ constexpr uint32_t op_dcl_output = 0x65u;
 constexpr uint32_t op_dcl_output_siv = 0x67u;
 constexpr uint32_t op_emit = 0x13u;
 constexpr uint32_t point = 1u;
+constexpr uint32_t line = 2u;
+constexpr uint32_t line_strip = 3u;
+constexpr uint32_t triangle = 3u;
+constexpr uint32_t triangle_strip = 5u;
+constexpr uint32_t line_adjacency = 6u;
+constexpr uint32_t triangle_adjacency = 7u;
 constexpr uint32_t four_components = 2u;
 constexpr uint32_t swizzle_mode = 1u << 2u;
 constexpr uint32_t xyzw = 0xE4u;
@@ -29,9 +35,40 @@ constexpr uint32_t opcode(uint32_t code, uint32_t length) { return code | (lengt
 
 }
 
-PassthroughGeometryShader::PassthroughGeometryShader() : masks_{}, names_{}, tokens_{}, count_(0u)
+PassthroughGeometryShader::PassthroughGeometryShader(PassthroughPrimitive primitive)
+    : input_(point), output_(point), emitted_(1u), source_{0u, 0u, 0u}, masks_{}, names_{}, tokens_{}, count_(0u)
 {
     AV_SCOPE("PassthroughGeometryShader::PassthroughGeometryShader");
+    switch (primitive) {
+    case PassthroughPrimitive::point: break;
+    case PassthroughPrimitive::line:
+        input_ = line;
+        output_ = line_strip;
+        emitted_ = 2u;
+        source_[1] = 1u;
+        break;
+    case PassthroughPrimitive::triangle:
+        input_ = triangle;
+        output_ = triangle_strip;
+        emitted_ = 3u;
+        source_[1] = 1u;
+        source_[2] = 2u;
+        break;
+    case PassthroughPrimitive::line_adjacency:
+        input_ = line_adjacency;
+        output_ = line_strip;
+        emitted_ = 2u;
+        source_[0] = 1u;
+        source_[1] = 2u;
+        break;
+    case PassthroughPrimitive::triangle_adjacency:
+        input_ = triangle_adjacency;
+        output_ = triangle_strip;
+        emitted_ = 3u;
+        source_[1] = 2u;
+        source_[2] = 4u;
+        break;
+    }
 }
 
 bool PassthroughGeometryShader::add(uint32_t index, uint32_t mask, uint32_t name)
@@ -50,8 +87,8 @@ const uint32_t *PassthroughGeometryShader::tokens()
     count_ = 0u;
     put(geometry_shader_4_0);
     put(0u);
-    put(opcode(op_dcl_input_primitive, 1u) | (point << 11u));
-    put(opcode(op_dcl_output_topology, 1u) | (point << 11u));
+    put(opcode(op_dcl_input_primitive, 1u) | (input_ << 11u));
+    put(opcode(op_dcl_output_topology, 1u) | (output_ << 11u));
     bool any = false;
     for (uint32_t index = 0u; index < max_registers; index++) {
         if (masks_[index] == 0u) continue;
@@ -60,10 +97,12 @@ const uint32_t *PassthroughGeometryShader::tokens()
         declare_output(index);
     }
     put(opcode(op_dcl_max_vertices, 2u));
-    put(1u);
-    for (uint32_t index = 0u; index < max_registers; index++)
-        if (masks_[index] != 0u) copy(index);
-    put(opcode(op_emit, 1u));
+    put(emitted_);
+    for (uint32_t vertex = 0u; vertex < emitted_; vertex++) {
+        for (uint32_t index = 0u; index < max_registers; index++)
+            if (masks_[index] != 0u) copy(index, source_[vertex]);
+        put(opcode(op_emit, 1u));
+    }
     put(opcode(op_ret, 1u));
     tokens_[1] = count_;
     return any ? tokens_ : nullptr;
@@ -102,14 +141,14 @@ void PassthroughGeometryShader::declare_output(uint32_t index)
     if (named) put(names_[index]);
 }
 
-void PassthroughGeometryShader::copy(uint32_t index)
+void PassthroughGeometryShader::copy(uint32_t index, uint32_t vertex)
 {
     AV_SCOPE("PassthroughGeometryShader::copy");
     put(opcode(op_mov, 6u));
     put(four_components | (masks_[index] << 4u) | type_output | one_index);
     put(index);
     put(four_components | swizzle_mode | (xyzw << 4u) | type_input | two_indices);
-    put(0u);
+    put(vertex);
     put(index);
 }
 

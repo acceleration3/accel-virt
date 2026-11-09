@@ -1512,7 +1512,7 @@ bool D3dBackend::on_SetPredication(uint32_t query, uint32_t value)
     ID3D11Predicate *predicate = nullptr;
     if (found != nullptr &&
         FAILED(found->QueryInterface(__uuidof(ID3D11Predicate), reinterpret_cast<void **>(&predicate))))
-        return false;
+        predicate = nullptr;
     device11_->context()->SetPredication(predicate, value != 0u);
     if (predicate != nullptr) predicate->Release();
     return true;

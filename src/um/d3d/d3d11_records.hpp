@@ -61,6 +61,14 @@ struct ObjectRecord {
     uint32_t resource;
 };
 
+struct StreamPassthroughRecord {
+    static constexpr uint32_t marker = 0x50535452u;
+    static constexpr uint32_t variants = 4u;
+
+    ObjectRecord head;
+    uint32_t     variant[variants];
+};
+
 struct QueryRecord {
     static constexpr uint32_t tag = 0x00515641u;
 

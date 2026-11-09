@@ -38,7 +38,7 @@ D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog
     : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), lender_(session), clock_(), allocations_(kernel_, lines_, clock_),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), caller_(), call_mutex_(), calls_(call_mutex_, caller_), recording_(),
       recorded_(), context_(nullptr), present_order_(), packets_(), feature_level_(0u),
-      guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
+      guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u), geometry_shader_(nullptr), topology_(0u),
       trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
     AV_SCOPE("D3d11Device::D3d11Device");
