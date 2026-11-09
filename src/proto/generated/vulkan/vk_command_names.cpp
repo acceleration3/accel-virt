@@ -216,6 +216,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000100D2u: return "vkGetPhysicalDeviceExternalSemaphoreProperties";
         case 0x000100D3u: return "vkGetPhysicalDevicePresentRectanglesKHR";
         case 0x000100D4u: return "vkGetPhysicalDeviceToolProperties";
+        case 0x000100D5u: return "vkGetPipelineCacheData";
         case 0x000100D6u: return "vkGetPrivateData";
         case 0x000100D7u: return "vkGetQueryPoolResults";
         case 0x000100D8u: return "vkGetRenderAreaGranularity";
@@ -380,6 +381,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x00010183u: return "vkGetRayTracingCaptureReplayShaderGroupHandlesKHR";
         case 0x00010184u: return "vkGetRayTracingShaderGroupHandlesKHR";
         case 0x00010185u: return "vkGetRayTracingShaderGroupStackSizeKHR";
+        case 0x00010187u: return "vkGetShaderBinaryDataEXT";
         case 0x00010188u: return "vkTransitionImageLayoutEXT";
         case 0x00010189u: return "vkWriteAccelerationStructuresPropertiesKHR";
         case 0x0001018Au: return "vkGetCalibratedTimestampsEXT";
@@ -391,6 +393,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x00010190u: return "vkDestroyPipelineBinaryKHR";
         case 0x00010191u: return "vkGetDeviceImageSubresourceLayoutKHR";
         case 0x00010192u: return "vkGetImageSubresourceLayout2KHR";
+        case 0x00010193u: return "vkGetPipelineBinaryDataKHR";
         case 0x00010194u: return "vkGetPipelineKeyKHR";
         case 0x00010195u: return "vkGetRenderingAreaGranularityKHR";
         case 0x00010196u: return "vkReleaseCapturedPipelineDataKHR";
@@ -629,6 +632,7 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case 0x000100D2u:
         case 0x000100D3u:
         case 0x000100D4u:
+        case 0x000100D5u:
         case 0x000100D6u:
         case 0x000100D7u:
         case 0x000100D8u:
@@ -793,6 +797,7 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case 0x00010183u:
         case 0x00010184u:
         case 0x00010185u:
+        case 0x00010187u:
         case 0x00010188u:
         case 0x00010189u:
         case 0x0001018Au:
@@ -804,6 +809,7 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case 0x00010190u:
         case 0x00010191u:
         case 0x00010192u:
+        case 0x00010193u:
         case 0x00010194u:
         case 0x00010195u:
         case 0x00010196u:

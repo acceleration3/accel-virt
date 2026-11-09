@@ -145,6 +145,35 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         if classify.is_count_array_pair(cmd.params, i):
             count = cmd.params[i]
             arr = cmd.params[i + 1]
+            if classify.is_size_blob(count, arr):
+                decl_lines.append("    uint8_t array_present = 0;")
+                decl_lines.append(f"    size_t {count.name}_local = 0;")
+                decl_lines.append(f"    size_t {count.name}_capacity = 0;")
+                decl_lines.append(f"    char* {arr.name}_storage = nullptr;")
+                decode_lines.append("    if (!r.read_pod(array_present)) return false;")
+                decode_lines.append("    if (array_present) {")
+                decode_lines.append("        uint64_t av_wide = 0;")
+                decode_lines.append("        if (!r.read_pod(av_wide)) return false;")
+                decode_lines.append(f"        {count.name}_local = static_cast<size_t>(av_wide);")
+                decode_lines.append(f"        if (static_cast<uint64_t>({count.name}_local) != av_wide) return false;")
+                decode_lines.append(f"        {count.name}_capacity = {count.name}_local;")
+                decode_lines.append(f"        if ({count.name}_local != 0) {{")
+                decode_lines.append(f"            {arr.name}_storage = arena.allocate_chars({count.name}_local);")
+                decode_lines.append(f"            if ({arr.name}_storage == nullptr) return false;")
+                decode_lines.append("        }")
+                decode_lines.append("    }")
+                call_args.append(f"&{count.name}_local")
+                call_args.append(f"array_present ? static_cast<void*>({arr.name}_storage) : nullptr")
+                sent = f"{count.name}_sent"
+                listed = f"{count.name}_local" if failed is None else f"{failed} ? 0u : {count.name}_local"
+                out_after_call.append(f"    uint64_t {sent} = {listed};")
+                out_after_call.append(f"    if (array_present && {sent} > {count.name}_capacity) {{")
+                out_after_call.append(f"        {sent} = {count.name}_capacity;")
+                out_after_call.append("    }")
+                out_after_call.append(f"    reply.write_pod({sent});")
+                out_after_call.append(f"    if (array_present && {sent} != 0) {{ reply.write({arr.name}_storage, static_cast<size_t>({sent})); }}")
+                i += 2
+                continue
             decl_lines.append("    uint8_t array_present = 0;")
             decl_lines.append(f"    uint32_t {count.name}_local = 0;")
             decl_lines.extend(_storage_decls(f"{arr.name}_storage", arr.type.base))

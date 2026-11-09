@@ -214,3 +214,79 @@ TEST(vulkan_dispatch, an_enumeration_answers_no_more_devices_than_the_guest_had_
   CHECK(guest.knows(listed[0]));
   CHECK(guest.knows(listed[1]));
   CHECK(!guest.knows(stale)); }
+
+namespace {
+
+class CacheDriver final : public vkproto::DefaultServerDispatch {
+public:
+    bool handle_for(vkproto::HandleKind, std::uint64_t wire, std::uint64_t &handle) const override
+    { handle = wire; return true; }
+    std::uint64_t template_bytes(VkDescriptorUpdateTemplate) const override { return 0u; }
+    void made(vkproto::HandleKind, std::uint64_t) override {}
+    bool room_for(std::uint64_t) override { return true; }
+    void made_through(std::uint64_t) override {}
+    void ended(std::uint64_t) override {}
+    void children_ended(std::uint64_t) override {}
+
+    VkResult on_vkGetPipelineCacheData(VkDevice, VkPipelineCache, size_t *size, void *data) override
+    { constexpr char stored[] = "cache-blob";
+      constexpr std::size_t whole = sizeof stored;
+      if (data == nullptr) {
+          *size = whole;
+          return VK_SUCCESS;
+      }
+      const std::size_t given = *size < whole ? *size : whole;
+      std::memcpy(data, stored, given);
+      *size = given;
+      return given < whole ? VK_INCOMPLETE : VK_SUCCESS; }
+};
+
+struct CacheAnswer {
+    std::int32_t  result = 0;
+    std::uint64_t size = 0u;
+    char          bytes[16] = {};
+    bool          ran = false;
+};
+
+CacheAnswer ask_for_cache(std::uint8_t present, std::uint64_t room)
+{ CacheDriver driver;
+  std::uint8_t frame[64] = {};
+  WireWriter   writer(frame, sizeof frame);
+  writer.write_pod<std::uint64_t>(0x10u);
+  writer.write_pod<std::uint64_t>(0x20u);
+  writer.write_pod(present);
+  if (present != 0u) writer.write_pod(room);
+  std::uint8_t block[256];
+  WireArena    arena(block, sizeof block);
+  std::uint8_t reply[64] = {};
+  WireWriter   answer(reply, sizeof reply);
+  WireReader   payload(frame, writer.offset());
+  CacheAnswer  out;
+  out.ran = vkproto::dispatch_command(driver, vkproto::kCmd_vkGetPipelineCacheData, payload, answer, arena);
+  WireReader read(reply, answer.offset());
+  if (!out.ran || !read.read_pod(out.result) || !read.read_pod(out.size)) return out;
+  if (present != 0u && out.size <= sizeof out.bytes) CHECK(read.read(out.bytes, static_cast<std::size_t>(out.size)));
+  return out; }
+
+}
+
+TEST(vulkan_dispatch, a_pipeline_cache_size_query_answers_the_size_and_no_bytes)
+{ const CacheAnswer answer = ask_for_cache(0u, 0u);
+  CHECK(answer.ran);
+  CHECK_EQ(answer.result, VK_SUCCESS);
+  CHECK_EQ(answer.size, std::uint64_t{11u}); }
+
+TEST(vulkan_dispatch, a_pipeline_cache_read_answers_the_bytes_it_had_room_for)
+{ const CacheAnswer whole = ask_for_cache(1u, 16u);
+  CHECK(whole.ran);
+  CHECK_EQ(whole.result, VK_SUCCESS);
+  CHECK_EQ(whole.size, std::uint64_t{11u});
+  CHECK(std::strcmp(whole.bytes, "cache-blob") == 0);
+  const CacheAnswer cut = ask_for_cache(1u, 5u);
+  CHECK_EQ(cut.result, VK_INCOMPLETE);
+  CHECK_EQ(cut.size, std::uint64_t{5u});
+  CHECK(std::memcmp(cut.bytes, "cache", 5u) == 0); }
+
+TEST(vulkan_dispatch, a_pipeline_cache_read_asking_for_more_room_than_the_arena_has_is_refused)
+{ const CacheAnswer huge = ask_for_cache(1u, std::uint64_t{1} << 40u);
+  CHECK(!huge.ran); }

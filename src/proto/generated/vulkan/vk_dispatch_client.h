@@ -210,6 +210,7 @@ void av_vkGetPhysicalDeviceExternalFenceProperties(::av::ClientTransport& t, Han
 void av_vkGetPhysicalDeviceExternalSemaphoreProperties(::av::ClientTransport& t, HandleTranslation& handles, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties);
 VkResult av_vkGetPhysicalDevicePresentRectanglesKHR(::av::ClientTransport& t, HandleTranslation& handles, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t* pRectCount, VkRect2D* pRects);
 VkResult av_vkGetPhysicalDeviceToolProperties(::av::ClientTransport& t, HandleTranslation& handles, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties);
+VkResult av_vkGetPipelineCacheData(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkPipelineCache pipelineCache, size_t* pDataSize, void* pData);
 void av_vkGetPrivateData(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot, uint64_t* pData);
 VkResult av_vkGetQueryPoolResults(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, size_t dataSize, void* pData, VkDeviceSize stride, VkQueryResultFlags flags);
 void av_vkGetRenderAreaGranularity(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkRenderPass renderPass, VkExtent2D* pGranularity);
@@ -374,6 +375,7 @@ VkResult av_vkGetPhysicalDeviceFragmentShadingRatesKHR(::av::ClientTransport& t,
 VkResult av_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkPipeline pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData);
 VkResult av_vkGetRayTracingShaderGroupHandlesKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkPipeline pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData);
 VkDeviceSize av_vkGetRayTracingShaderGroupStackSizeKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkPipeline pipeline, uint32_t group, VkShaderGroupShaderKHR groupShader);
+VkResult av_vkGetShaderBinaryDataEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkShaderEXT shader, size_t* pDataSize, void* pData);
 VkResult av_vkTransitionImageLayoutEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, uint32_t transitionCount, const VkHostImageLayoutTransitionInfo* pTransitions);
 VkResult av_vkWriteAccelerationStructuresPropertiesKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, uint32_t accelerationStructureCount, const VkAccelerationStructureKHR* pAccelerationStructures, VkQueryType queryType, size_t dataSize, void* pData, size_t stride);
 VkResult av_vkGetCalibratedTimestampsEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoKHR* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation);
@@ -385,6 +387,7 @@ VkResult av_vkCreatePipelineBinariesKHR(::av::ClientTransport& t, HandleTranslat
 void av_vkDestroyPipelineBinaryKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkPipelineBinaryKHR pipelineBinary, const VkAllocationCallbacks* pAllocator);
 void av_vkGetDeviceImageSubresourceLayoutKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkDeviceImageSubresourceInfo* pInfo, VkSubresourceLayout2* pLayout);
 void av_vkGetImageSubresourceLayout2KHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkImage image, const VkImageSubresource2* pSubresource, VkSubresourceLayout2* pLayout);
+VkResult av_vkGetPipelineBinaryDataKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkPipelineBinaryDataInfoKHR* pInfo, VkPipelineBinaryKeyKHR* pPipelineBinaryKey, size_t* pPipelineBinaryDataSize, void* pPipelineBinaryData);
 VkResult av_vkGetPipelineKeyKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkPipelineCreateInfoKHR* pPipelineCreateInfo, VkPipelineBinaryKeyKHR* pPipelineKey);
 void av_vkGetRenderingAreaGranularityKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkRenderingAreaInfo* pRenderingAreaInfo, VkExtent2D* pGranularity);
 VkResult av_vkReleaseCapturedPipelineDataKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo, const VkAllocationCallbacks* pAllocator);

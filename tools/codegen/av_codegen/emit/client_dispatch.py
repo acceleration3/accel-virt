@@ -49,7 +49,10 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             )
             lines.append("payload.write_pod(array_present);")
             lines.append("if (array_present) {")
-            lines.append(f"    payload.write_pod<uint32_t>(*{count.name});")
+            if classify.is_size_blob(count, arr):
+                lines.append(f"    payload.write_pod<uint64_t>(*{count.name});")
+            else:
+                lines.append(f"    payload.write_pod<uint32_t>(*{count.name});")
             lines.append("}")
             i += 2
             continue
@@ -178,6 +181,18 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             count = cmd.params[i]
             arr = cmd.params[i + 1]
             answered = f"{count.name}_answered"
+            if classify.is_size_blob(count, arr):
+                lines.append(f"uint64_t {answered} = 0;")
+                lines.append(f"if (!r.read_pod({answered})) {{")
+                lines.append(on_fail)
+                lines.append("}")
+                lines.append(f"if (array_present && ({answered} > *{count.name} ||")
+                lines.append(f"    ({answered} != 0 && !r.read({arr.name}, static_cast<size_t>({answered}))))) {{")
+                lines.append(on_fail)
+                lines.append("}")
+                lines.append(f"*{count.name} = static_cast<size_t>({answered});")
+                i += 2
+                continue
             lines.append(f"uint32_t {answered} = 0;")
             lines.append(f"if (!r.read_pod({answered})) {{")
             lines.append(on_fail)

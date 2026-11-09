@@ -267,26 +267,32 @@ def _validation_reason(reg, cmd, classify, is_count_array_pair) -> str | None:
                 "the server. Needs a discriminator-aware serializer"
             )
 
+    blobs: set[str] = set()
     i = 0
     while i < len(cmd.params):
         if is_count_array_pair(cmd.params, i):
             count = cmd.params[i]
             arr = cmd.params[i + 1]
-            if count.type.base != "uint32_t":
+            wide_blob = count.type.base == "size_t" and arr.type.base == "void"
+            if count.type.base != "uint32_t" and not wide_blob:
                 return (
                     f"count_array_pair count {count.name!r} is "
                     f"{count.type.base}; only uint32_t handled"
                 )
-            if arr.type.base == "void":
+            if arr.type.base == "void" and not wide_blob:
                 return (
                     f"count_array_pair element {arr.name!r} is void* "
                     "(opaque blob); needs bespoke serialization"
                 )
+            if wide_blob:
+                blobs.add(arr.name)
             i += 2
         else:
             i += 1
 
     for p in cmd.params:
+        if p.name in blobs:
+            continue
         if p.direction == "out" and p.type.pointer_depth == 1 and p.type.base == "void":
             has_size_sibling = p.len_expr is not None and any(
                 q.name == p.len_expr

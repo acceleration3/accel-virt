@@ -193,3 +193,7 @@ WIDE_RETURN_TYPES = frozenset({
 
 def returns_wide(cmd) -> bool:
     return cmd.return_type.base in WIDE_RETURN_TYPES and cmd.return_type.pointer_depth == 0
+
+
+def is_size_blob(count: Param, array: Param) -> bool:
+    return count.type.base == "size_t" and array.type.base == "void"

@@ -3368,6 +3368,39 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         return true;
     }
+    case ::av::vkproto::kCmd_vkGetPipelineCacheData: {
+        AV_SCOPE("server:vkGetPipelineCacheData");
+        VkDevice device = VK_NULL_HANDLE;
+        VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+        uint8_t array_present = 0;
+        size_t pDataSize_local = 0;
+        size_t pDataSize_capacity = 0;
+        char* pData_storage = nullptr;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkPipelineCache(r, s, pipelineCache)) return false;
+        if (pipelineCache == VK_NULL_HANDLE) return false;
+        if (!r.read_pod(array_present)) return false;
+        if (array_present) {
+            uint64_t av_wide = 0;
+            if (!r.read_pod(av_wide)) return false;
+            pDataSize_local = static_cast<size_t>(av_wide);
+            if (static_cast<uint64_t>(pDataSize_local) != av_wide) return false;
+            pDataSize_capacity = pDataSize_local;
+            if (pDataSize_local != 0) {
+                pData_storage = arena.allocate_chars(pDataSize_local);
+                if (pData_storage == nullptr) return false;
+            }
+        }
+        VkResult result = s.on_vkGetPipelineCacheData(device, pipelineCache, &pDataSize_local, array_present ? static_cast<void*>(pData_storage) : nullptr);
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        uint64_t pDataSize_sent = static_cast<int32_t>(result) < 0 ? 0u : pDataSize_local;
+        if (array_present && pDataSize_sent > pDataSize_capacity) {
+            pDataSize_sent = pDataSize_capacity;
+        }
+        reply.write_pod(pDataSize_sent);
+        if (array_present && pDataSize_sent != 0) { reply.write(pData_storage, static_cast<size_t>(pDataSize_sent)); }
+        return true;
+    }
     case ::av::vkproto::kCmd_vkGetPrivateData: {
         AV_SCOPE("server:vkGetPrivateData");
         VkDevice device = VK_NULL_HANDLE;
@@ -5990,6 +6023,39 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
+    case ::av::vkproto::kCmd_vkGetShaderBinaryDataEXT: {
+        AV_SCOPE("server:vkGetShaderBinaryDataEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkShaderEXT shader = VK_NULL_HANDLE;
+        uint8_t array_present = 0;
+        size_t pDataSize_local = 0;
+        size_t pDataSize_capacity = 0;
+        char* pData_storage = nullptr;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkShaderEXT(r, s, shader)) return false;
+        if (shader == VK_NULL_HANDLE) return false;
+        if (!r.read_pod(array_present)) return false;
+        if (array_present) {
+            uint64_t av_wide = 0;
+            if (!r.read_pod(av_wide)) return false;
+            pDataSize_local = static_cast<size_t>(av_wide);
+            if (static_cast<uint64_t>(pDataSize_local) != av_wide) return false;
+            pDataSize_capacity = pDataSize_local;
+            if (pDataSize_local != 0) {
+                pData_storage = arena.allocate_chars(pDataSize_local);
+                if (pData_storage == nullptr) return false;
+            }
+        }
+        VkResult result = s.on_vkGetShaderBinaryDataEXT(device, shader, &pDataSize_local, array_present ? static_cast<void*>(pData_storage) : nullptr);
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        uint64_t pDataSize_sent = static_cast<int32_t>(result) < 0 ? 0u : pDataSize_local;
+        if (array_present && pDataSize_sent > pDataSize_capacity) {
+            pDataSize_sent = pDataSize_capacity;
+        }
+        reply.write_pod(pDataSize_sent);
+        if (array_present && pDataSize_sent != 0) { reply.write(pData_storage, static_cast<size_t>(pDataSize_sent)); }
+        return true;
+    }
     case ::av::vkproto::kCmd_vkTransitionImageLayoutEXT: {
         AV_SCOPE("server:vkTransitionImageLayoutEXT");
         VkDevice device = VK_NULL_HANDLE;
@@ -6230,6 +6296,47 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         s.on_vkGetImageSubresourceLayout2KHR(device, image, &pSubresource_local, &pLayout_out);
         reply.write_pod<int32_t>(0);
         serialize_VkSubresourceLayout2(reply, s, pLayout_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetPipelineBinaryDataKHR: {
+        AV_SCOPE("server:vkGetPipelineBinaryDataKHR");
+        VkDevice device = VK_NULL_HANDLE;
+        VkPipelineBinaryDataInfoKHR pInfo_local{};
+        VkPipelineBinaryKeyKHR pPipelineBinaryKey_out{};
+        uint8_t array_present = 0;
+        size_t pPipelineBinaryDataSize_local = 0;
+        size_t pPipelineBinaryDataSize_capacity = 0;
+        char* pPipelineBinaryData_storage = nullptr;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkPipelineBinaryDataInfoKHR(r, s, &pInfo_local, arena)) return false;
+        if (!r.read_pod(pPipelineBinaryKey_out.sType)) return false;
+        if (!deserialize_pnext_chain(r, s, reinterpret_cast<VkBaseOutStructure*>(&pPipelineBinaryKey_out), arena)) return false;
+        if (!r.read_pod(array_present)) return false;
+        if (array_present) {
+            uint64_t av_wide = 0;
+            if (!r.read_pod(av_wide)) return false;
+            pPipelineBinaryDataSize_local = static_cast<size_t>(av_wide);
+            if (static_cast<uint64_t>(pPipelineBinaryDataSize_local) != av_wide) return false;
+            pPipelineBinaryDataSize_capacity = pPipelineBinaryDataSize_local;
+            if (pPipelineBinaryDataSize_local != 0) {
+                pPipelineBinaryData_storage = arena.allocate_chars(pPipelineBinaryDataSize_local);
+                if (pPipelineBinaryData_storage == nullptr) return false;
+            }
+        }
+        VkResult result = s.on_vkGetPipelineBinaryDataKHR(device, &pInfo_local, &pPipelineBinaryKey_out, &pPipelineBinaryDataSize_local, array_present ? static_cast<void*>(pPipelineBinaryData_storage) : nullptr);
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkPipelineBinaryKeyKHR pPipelineBinaryKey_blank{};
+            pPipelineBinaryKey_blank.sType = pPipelineBinaryKey_out.sType;
+            pPipelineBinaryKey_out = pPipelineBinaryKey_blank;
+        }
+        serialize_VkPipelineBinaryKeyKHR(reply, s, pPipelineBinaryKey_out);
+        uint64_t pPipelineBinaryDataSize_sent = static_cast<int32_t>(result) < 0 ? 0u : pPipelineBinaryDataSize_local;
+        if (array_present && pPipelineBinaryDataSize_sent > pPipelineBinaryDataSize_capacity) {
+            pPipelineBinaryDataSize_sent = pPipelineBinaryDataSize_capacity;
+        }
+        reply.write_pod(pPipelineBinaryDataSize_sent);
+        if (array_present && pPipelineBinaryDataSize_sent != 0) { reply.write(pPipelineBinaryData_storage, static_cast<size_t>(pPipelineBinaryDataSize_sent)); }
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPipelineKeyKHR: {

@@ -632,6 +632,9 @@ public:
     VkResult on_vkGetPhysicalDeviceToolProperties(VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties) override {
         return ::vkGetPhysicalDeviceToolProperties(physicalDevice, pToolCount, pToolProperties);
     }
+    VkResult on_vkGetPipelineCacheData(VkDevice device, VkPipelineCache pipelineCache, size_t* pDataSize, void* pData) override {
+        return ::vkGetPipelineCacheData(device, pipelineCache, pDataSize, pData);
+    }
     void on_vkGetPrivateData(VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot, uint64_t* pData) override {
         ::vkGetPrivateData(device, objectType, objectHandle, privateDataSlot, pData);
     }
@@ -1604,6 +1607,15 @@ public:
         }
         return pfn_vkGetRayTracingShaderGroupStackSizeKHR_(device, pipeline, group, groupShader);
     }
+    VkResult on_vkGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t* pDataSize, void* pData) override {
+        if (pfn_vkGetShaderBinaryDataEXT_ == nullptr) {
+            pfn_vkGetShaderBinaryDataEXT_ = reinterpret_cast<PFN_vkGetShaderBinaryDataEXT>(::vkGetInstanceProcAddr(instance_, "vkGetShaderBinaryDataEXT"));
+        }
+        if (pfn_vkGetShaderBinaryDataEXT_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkGetShaderBinaryDataEXT_(device, shader, pDataSize, pData);
+    }
     VkResult on_vkTransitionImageLayoutEXT(VkDevice device, uint32_t transitionCount, const VkHostImageLayoutTransitionInfo* pTransitions) override {
         if (pfn_vkTransitionImageLayoutEXT_ == nullptr) {
             pfn_vkTransitionImageLayoutEXT_ = reinterpret_cast<PFN_vkTransitionImageLayoutEXT>(::vkGetInstanceProcAddr(instance_, "vkTransitionImageLayoutEXT"));
@@ -1702,6 +1714,15 @@ public:
             return;
         }
         pfn_vkGetImageSubresourceLayout2KHR_(device, image, pSubresource, pLayout);
+    }
+    VkResult on_vkGetPipelineBinaryDataKHR(VkDevice device, const VkPipelineBinaryDataInfoKHR* pInfo, VkPipelineBinaryKeyKHR* pPipelineBinaryKey, size_t* pPipelineBinaryDataSize, void* pPipelineBinaryData) override {
+        if (pfn_vkGetPipelineBinaryDataKHR_ == nullptr) {
+            pfn_vkGetPipelineBinaryDataKHR_ = reinterpret_cast<PFN_vkGetPipelineBinaryDataKHR>(::vkGetInstanceProcAddr(instance_, "vkGetPipelineBinaryDataKHR"));
+        }
+        if (pfn_vkGetPipelineBinaryDataKHR_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkGetPipelineBinaryDataKHR_(device, pInfo, pPipelineBinaryKey, pPipelineBinaryDataSize, pPipelineBinaryData);
     }
     VkResult on_vkGetPipelineKeyKHR(VkDevice device, const VkPipelineCreateInfoKHR* pPipelineCreateInfo, VkPipelineBinaryKeyKHR* pPipelineKey) override {
         if (pfn_vkGetPipelineKeyKHR_ == nullptr) {
@@ -2105,6 +2126,7 @@ private:
     PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR pfn_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR_ = nullptr;
     PFN_vkGetRayTracingShaderGroupHandlesKHR pfn_vkGetRayTracingShaderGroupHandlesKHR_ = nullptr;
     PFN_vkGetRayTracingShaderGroupStackSizeKHR pfn_vkGetRayTracingShaderGroupStackSizeKHR_ = nullptr;
+    PFN_vkGetShaderBinaryDataEXT pfn_vkGetShaderBinaryDataEXT_ = nullptr;
     PFN_vkTransitionImageLayoutEXT pfn_vkTransitionImageLayoutEXT_ = nullptr;
     PFN_vkWriteAccelerationStructuresPropertiesKHR pfn_vkWriteAccelerationStructuresPropertiesKHR_ = nullptr;
     PFN_vkGetCalibratedTimestampsEXT pfn_vkGetCalibratedTimestampsEXT_ = nullptr;
@@ -2116,6 +2138,7 @@ private:
     PFN_vkDestroyPipelineBinaryKHR pfn_vkDestroyPipelineBinaryKHR_ = nullptr;
     PFN_vkGetDeviceImageSubresourceLayoutKHR pfn_vkGetDeviceImageSubresourceLayoutKHR_ = nullptr;
     PFN_vkGetImageSubresourceLayout2KHR pfn_vkGetImageSubresourceLayout2KHR_ = nullptr;
+    PFN_vkGetPipelineBinaryDataKHR pfn_vkGetPipelineBinaryDataKHR_ = nullptr;
     PFN_vkGetPipelineKeyKHR pfn_vkGetPipelineKeyKHR_ = nullptr;
     PFN_vkGetRenderingAreaGranularityKHR pfn_vkGetRenderingAreaGranularityKHR_ = nullptr;
     PFN_vkReleaseCapturedPipelineDataKHR pfn_vkReleaseCapturedPipelineDataKHR_ = nullptr;

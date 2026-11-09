@@ -368,6 +368,10 @@ public:
         if (pToolCount != nullptr) { *pToolCount = 0; }
         return VK_SUCCESS;
     }
+    VkResult on_vkGetPipelineCacheData(VkDevice, VkPipelineCache, size_t* pDataSize, void*) override {
+        if (pDataSize != nullptr) { *pDataSize = 0; }
+        return VK_SUCCESS;
+    }
     void on_vkGetPrivateData(VkDevice, VkObjectType, uint64_t, VkPrivateDataSlot, uint64_t*) override {}
     VkResult on_vkGetQueryPoolResults(VkDevice, VkQueryPool, uint32_t, uint32_t, size_t, void*, VkDeviceSize, VkQueryResultFlags) override {
         return VK_SUCCESS;
@@ -626,6 +630,10 @@ public:
     VkDeviceSize on_vkGetRayTracingShaderGroupStackSizeKHR(VkDevice, VkPipeline, uint32_t, VkShaderGroupShaderKHR) override {
         return VK_SUCCESS;
     }
+    VkResult on_vkGetShaderBinaryDataEXT(VkDevice, VkShaderEXT, size_t* pDataSize, void*) override {
+        if (pDataSize != nullptr) { *pDataSize = 0; }
+        return VK_SUCCESS;
+    }
     VkResult on_vkTransitionImageLayoutEXT(VkDevice, uint32_t, const VkHostImageLayoutTransitionInfo*) override {
         return VK_SUCCESS;
     }
@@ -648,6 +656,10 @@ public:
     void on_vkDestroyPipelineBinaryKHR(VkDevice, VkPipelineBinaryKHR, const VkAllocationCallbacks*) override {}
     void on_vkGetDeviceImageSubresourceLayoutKHR(VkDevice, const VkDeviceImageSubresourceInfo*, VkSubresourceLayout2*) override {}
     void on_vkGetImageSubresourceLayout2KHR(VkDevice, VkImage, const VkImageSubresource2*, VkSubresourceLayout2*) override {}
+    VkResult on_vkGetPipelineBinaryDataKHR(VkDevice, const VkPipelineBinaryDataInfoKHR*, VkPipelineBinaryKeyKHR*, size_t* pPipelineBinaryDataSize, void*) override {
+        if (pPipelineBinaryDataSize != nullptr) { *pPipelineBinaryDataSize = 0; }
+        return VK_SUCCESS;
+    }
     VkResult on_vkGetPipelineKeyKHR(VkDevice, const VkPipelineCreateInfoKHR*, VkPipelineBinaryKeyKHR*) override {
         return VK_SUCCESS;
     }

@@ -3357,6 +3357,37 @@ VkResult av_vkGetPhysicalDeviceToolProperties(::av::ClientTransport& t, HandleTr
     return static_cast<VkResult>(result_code);
 }
 
+VkResult av_vkGetPipelineCacheData(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkPipelineCache pipelineCache, size_t* pDataSize, void* pData) {
+    AV_SCOPE("av_vkGetPipelineCacheData");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, handles, device);
+    serialize_VkPipelineCache(payload, handles, pipelineCache);
+    const uint8_t array_present = pData != nullptr ? 1 : 0;
+    payload.write_pod(array_present);
+    if (array_present) {
+        payload.write_pod<uint64_t>(*pDataSize);
+    }
+    const ::av::SyncCallScope av_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(::av::vkproto::kCmd_vkGetPipelineCacheData, payload, r) != ::av::TransportResult::ok) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    int32_t result_code = 0;
+    if (!r.read_pod(result_code)) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    uint64_t pDataSize_answered = 0;
+    if (!r.read_pod(pDataSize_answered)) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (array_present && (pDataSize_answered > *pDataSize ||
+        (pDataSize_answered != 0 && !r.read(pData, static_cast<size_t>(pDataSize_answered))))) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    *pDataSize = static_cast<size_t>(pDataSize_answered);
+    return static_cast<VkResult>(result_code);
+}
+
 void av_vkGetPrivateData(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot, uint64_t* pData) {
     AV_SCOPE("av_vkGetPrivateData");
     ::av::WireWriter payload = t.request_writer();
@@ -5932,6 +5963,37 @@ VkDeviceSize av_vkGetRayTracingShaderGroupStackSizeKHR(::av::ClientTransport& t,
     return static_cast<VkDeviceSize>(result_code);
 }
 
+VkResult av_vkGetShaderBinaryDataEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkShaderEXT shader, size_t* pDataSize, void* pData) {
+    AV_SCOPE("av_vkGetShaderBinaryDataEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, handles, device);
+    serialize_VkShaderEXT(payload, handles, shader);
+    const uint8_t array_present = pData != nullptr ? 1 : 0;
+    payload.write_pod(array_present);
+    if (array_present) {
+        payload.write_pod<uint64_t>(*pDataSize);
+    }
+    const ::av::SyncCallScope av_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(::av::vkproto::kCmd_vkGetShaderBinaryDataEXT, payload, r) != ::av::TransportResult::ok) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    int32_t result_code = 0;
+    if (!r.read_pod(result_code)) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    uint64_t pDataSize_answered = 0;
+    if (!r.read_pod(pDataSize_answered)) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (array_present && (pDataSize_answered > *pDataSize ||
+        (pDataSize_answered != 0 && !r.read(pData, static_cast<size_t>(pDataSize_answered))))) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    *pDataSize = static_cast<size_t>(pDataSize_answered);
+    return static_cast<VkResult>(result_code);
+}
+
 VkResult av_vkTransitionImageLayoutEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, uint32_t transitionCount, const VkHostImageLayoutTransitionInfo* pTransitions) {
     AV_SCOPE("av_vkTransitionImageLayoutEXT");
     ::av::WireWriter payload = t.request_writer();
@@ -6154,6 +6216,42 @@ void av_vkGetImageSubresourceLayout2KHR(::av::ClientTransport& t, HandleTranslat
     if (!deserialize_VkSubresourceLayout2(r, handles, pLayout, t.decode_arena())) {
         return;
     }
+}
+
+VkResult av_vkGetPipelineBinaryDataKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkPipelineBinaryDataInfoKHR* pInfo, VkPipelineBinaryKeyKHR* pPipelineBinaryKey, size_t* pPipelineBinaryDataSize, void* pPipelineBinaryData) {
+    AV_SCOPE("av_vkGetPipelineBinaryDataKHR");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, handles, device);
+    serialize_VkPipelineBinaryDataInfoKHR(payload, handles, *pInfo);
+    payload.write_pod(pPipelineBinaryKey->sType);
+    serialize_pnext_chain(payload, handles, pPipelineBinaryKey->pNext);
+    const uint8_t array_present = pPipelineBinaryData != nullptr ? 1 : 0;
+    payload.write_pod(array_present);
+    if (array_present) {
+        payload.write_pod<uint64_t>(*pPipelineBinaryDataSize);
+    }
+    const ::av::SyncCallScope av_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(::av::vkproto::kCmd_vkGetPipelineBinaryDataKHR, payload, r) != ::av::TransportResult::ok) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    int32_t result_code = 0;
+    if (!r.read_pod(result_code)) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (!deserialize_VkPipelineBinaryKeyKHR(r, handles, pPipelineBinaryKey, t.decode_arena())) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    uint64_t pPipelineBinaryDataSize_answered = 0;
+    if (!r.read_pod(pPipelineBinaryDataSize_answered)) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (array_present && (pPipelineBinaryDataSize_answered > *pPipelineBinaryDataSize ||
+        (pPipelineBinaryDataSize_answered != 0 && !r.read(pPipelineBinaryData, static_cast<size_t>(pPipelineBinaryDataSize_answered))))) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    *pPipelineBinaryDataSize = static_cast<size_t>(pPipelineBinaryDataSize_answered);
+    return static_cast<VkResult>(result_code);
 }
 
 VkResult av_vkGetPipelineKeyKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkPipelineCreateInfoKHR* pPipelineCreateInfo, VkPipelineBinaryKeyKHR* pPipelineKey) {
