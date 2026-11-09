@@ -79,8 +79,8 @@ fields = ["u32 blend_enable", "u32 logic_op_enable", "u32 src_blend", "u32 dest_
 
 [structs.RasterizerDesc]
 fields = ["u32 fill_mode", "u32 cull_mode", "u32 front_counter_clockwise", "i32 depth_bias",
-          "f32 depth_bias_clamp", "f32 slope_scaled_depth_bias", "u32 depth_clip", "u32 multisample",
-          "u32 antialiased_line", "u32 forced_sample_count", "u32 conservative", "u32 reserved"]
+          "f32 depth_bias_clamp", "f32 slope_scaled_depth_bias", "u32 depth_clip", "u32 line_mode",
+          "u32 forced_sample_count", "u32 conservative"]
 
 [structs.StencilOp]
 fields = ["u32 fail", "u32 depth_fail", "u32 pass", "u32 func"]
@@ -654,6 +654,12 @@ name = "SetDepthBounds12"
 id = 0x1526
 doc = "The depth range a pixel's stored depth must lie in for the draws after; both within 0 to 1."
 params = ["u32 list", "f32 minimum", "f32 maximum"]
+
+[[command]]
+name = "SetFrontAndBackStencilRef12"
+id = 0x1530
+doc = "The stencil reference of front-facing and of back-facing triangles for the draws after."
+params = ["u32 list", "u32 front", "u32 back"]
 
 [[command]]
 name = "SetPredication12"

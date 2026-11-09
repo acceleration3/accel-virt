@@ -146,6 +146,7 @@ public:
     bool on_SetShadingRate12(uint32_t list, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1) override;
     bool on_SetShadingRateImage12(uint32_t list, uint32_t image) override;
     bool on_SetDepthBounds12(uint32_t list, float minimum, float maximum) override;
+    bool on_SetFrontAndBackStencilRef12(uint32_t list, uint32_t front, uint32_t back) override;
     bool on_SetPredication12(uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) override;
     bool on_SetStreamOutputTargets12(uint32_t list, uint32_t start, uint32_t count, const d3d12proto::StreamOutputView* views) override;
     bool on_GetClockOrigin12(uint32_t queue, uint64_t& ticks, uint64_t& frequency) override;

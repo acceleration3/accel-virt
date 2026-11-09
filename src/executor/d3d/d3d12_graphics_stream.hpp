@@ -17,6 +17,7 @@ using D3d12UintSubobject = D3d12Subobject<0, UINT>;
 static_assert(sizeof(D3d12UintSubobject) == sizeof(void *) && offsetof(D3d12UintSubobject, value) == 4u);
 static_assert(sizeof(D3d12Subobject<0, ID3D12RootSignature *>) == 2u * sizeof(void *));
 static_assert(sizeof(D3d12Subobject<0, D3D12_SHADER_BYTECODE>) == 3u * sizeof(void *));
+static_assert(sizeof(d3d12new::Rasterizer2) == 40u);
 static_assert(sizeof(d3d12new::DepthStencil2) == 60u && sizeof(d3d12new::RenderTargetFormats) == 36u);
 
 struct D3d12GraphicsStream {
@@ -31,7 +32,7 @@ struct D3d12GraphicsStream {
     D3d12Subobject<d3d12new::subobject_stream_output, D3D12_STREAM_OUTPUT_DESC> stream_output;
     D3d12Subobject<d3d12new::subobject_blend, D3D12_BLEND_DESC>               blend;
     D3d12Subobject<d3d12new::subobject_sample_mask, UINT>                     sample_mask;
-    D3d12Subobject<d3d12new::subobject_rasterizer, D3D12_RASTERIZER_DESC>     rasterizer;
+    D3d12Subobject<d3d12new::subobject_rasterizer2, d3d12new::Rasterizer2>    rasterizer;
     D3d12Subobject<d3d12new::subobject_depth_stencil2, d3d12new::DepthStencil2> depth_stencil;
     D3d12Subobject<d3d12new::subobject_input_layout, D3D12_INPUT_LAYOUT_DESC> input_layout;
     D3d12Subobject<d3d12new::subobject_ib_strip_cut, D3D12_INDEX_BUFFER_STRIP_CUT_VALUE> strip_cut;

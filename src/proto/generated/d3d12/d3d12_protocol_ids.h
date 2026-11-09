@@ -93,5 +93,6 @@ inline constexpr uint32_t kCmd_DispatchMesh12 = 0x0004152c;
 inline constexpr uint32_t kCmd_SetShadingRate12 = 0x0004152d;
 inline constexpr uint32_t kCmd_SetShadingRateImage12 = 0x0004152e;
 inline constexpr uint32_t kCmd_Barrier12 = 0x0004152f;
+inline constexpr uint32_t kCmd_SetFrontAndBackStencilRef12 = 0x00041530;
 
 }  // namespace av::d3d12proto

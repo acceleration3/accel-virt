@@ -247,13 +247,11 @@ struct RasterizerDesc {
     float depth_bias_clamp;
     float slope_scaled_depth_bias;
     uint32_t depth_clip;
-    uint32_t multisample;
-    uint32_t antialiased_line;
+    uint32_t line_mode;
     uint32_t forced_sample_count;
     uint32_t conservative;
-    uint32_t reserved;
 };
-static_assert(sizeof(RasterizerDesc) == 48, "RasterizerDesc crosses as 48 bytes");
+static_assert(sizeof(RasterizerDesc) == 40, "RasterizerDesc crosses as 40 bytes");
 static_assert(__is_trivially_copyable(RasterizerDesc), "RasterizerDesc is plain data");
 
 struct StencilOp {
@@ -308,7 +306,7 @@ struct GraphicsState {
     uint32_t view_instancing_flags;
     ViewInstanceLocation view_instances[4];
 };
-static_assert(sizeof(GraphicsState) == 552, "GraphicsState crosses as 552 bytes");
+static_assert(sizeof(GraphicsState) == 544, "GraphicsState crosses as 544 bytes");
 static_assert(__is_trivially_copyable(GraphicsState), "GraphicsState is plain data");
 
 struct LayoutBarrier {

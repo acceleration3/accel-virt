@@ -297,6 +297,14 @@ TEST(d3d12_session_extended_lists, depth_bounds_inside_zero_to_one_and_ordered_a
   CHECK(scene.session().on_SetDepthBounds12(list, 0.5f, 0.5f));
   CHECK_EQ(scene.commands.depth_bounds_sets, 3u); }
 
+TEST(d3d12_session_extended_lists, front_and_back_stencil_references_reach_the_list_separately)
+{ Scene scene;
+  CHECK(scene.session().on_SetFrontAndBackStencilRef12(list, 0x12u, 0x34u));
+  CHECK_EQ(scene.commands.stencil_ref_sets, 1u);
+  CHECK(scene.commands.stencil_front == 0x12u && scene.commands.stencil_back == 0x34u);
+  CHECK(!scene.session().on_SetFrontAndBackStencilRef12(list + 1000u, 1u, 2u));
+  CHECK_EQ(scene.commands.stencil_ref_sets, 1u); }
+
 TEST(d3d12_session_extended_lists, depth_bounds_outside_zero_to_one_unordered_or_not_numbers_are_refused)
 { Scene scene;
   CHECK(!scene.session().on_SetDepthBounds12(list, -0.1f, 0.5f));

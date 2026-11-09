@@ -88,7 +88,7 @@ IMPLEMENTED = {
         "pfnWriteBufferImmediate", "pfnSetViewInstanceMask", "pfnOMSetDepthBounds", "pfnSetPredication",
         "pfnSOSetTargets", "pfnClearUnorderedAccessViewUint", "pfnClearUnorderedAccessViewFloat",
         "pfnExecuteBundle", "pfnAtomicCopyBufferRegion", "pfnDispatchMesh", "pfnRSSetShadingRate",
-        "pfnRSSetShadingRateImage", "pfnBarrier",
+        "pfnRSSetShadingRateImage", "pfnBarrier", "pfnOmSetFrontAndBackStencilRef",
     },
 }
 

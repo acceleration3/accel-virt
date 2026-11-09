@@ -7,11 +7,11 @@
 
 namespace av {
 
-class FakeCommandList final : public CountedChild<ID3D12GraphicsCommandList2> {
+class FakeCommandList final : public CountedChild<ID3D12GraphicsCommandList8> {
 public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) override
     {
-        const bool known = (iid == __uuidof(ID3D12GraphicsCommandList2)) ||
+        const bool known = (iid == __uuidof(ID3D12GraphicsCommandList8)) || (iid == __uuidof(ID3D12GraphicsCommandList2)) ||
                            (iid == __uuidof(ID3D12GraphicsCommandList1)) ||
                            (iid == __uuidof(ID3D12GraphicsCommandList)) || (iid == __uuidof(IUnknown));
         if (!known || !extended) {
@@ -19,7 +19,7 @@ public:
             return E_NOINTERFACE;
         }
         AddRef();
-        *object = static_cast<ID3D12GraphicsCommandList2 *>(this);
+        *object = static_cast<ID3D12GraphicsCommandList8 *>(this);
         return S_OK;
     }
 
@@ -165,6 +165,28 @@ public:
         immediate_last_mode = modes[count - 1u];
     }
 
+    void STDMETHODCALLTYPE SetProtectedResourceSession(void *) override { recorded++; }
+    void STDMETHODCALLTYPE BeginRenderPass() override { recorded++; }
+    void STDMETHODCALLTYPE EndRenderPass() override { recorded++; }
+    void STDMETHODCALLTYPE InitializeMetaCommand() override { recorded++; }
+    void STDMETHODCALLTYPE ExecuteMetaCommand() override { recorded++; }
+    void STDMETHODCALLTYPE BuildRaytracingAccelerationStructure() override { recorded++; }
+    void STDMETHODCALLTYPE EmitRaytracingAccelerationStructurePostbuildInfo() override { recorded++; }
+    void STDMETHODCALLTYPE CopyRaytracingAccelerationStructure() override { recorded++; }
+    void STDMETHODCALLTYPE SetPipelineState1() override { recorded++; }
+    void STDMETHODCALLTYPE DispatchRays() override { recorded++; }
+    void STDMETHODCALLTYPE RSSetShadingRate(UINT, const UINT *) override { recorded++; }
+    void STDMETHODCALLTYPE RSSetShadingRateImage(ID3D12Resource *) override { recorded++; }
+    void STDMETHODCALLTYPE DispatchMesh(UINT, UINT, UINT) override { recorded++; }
+    void STDMETHODCALLTYPE Barrier(UINT, const av::d3d12new::BarrierGroup *) override { recorded++; }
+    void STDMETHODCALLTYPE OMSetFrontAndBackStencilRef(UINT front, UINT back) override
+    {
+        recorded++;
+        stencil_ref_sets++;
+        stencil_front = front;
+        stencil_back = back;
+    }
+
     bool                       extended = true;
     std::uint32_t recorded = 0u;
     std::uint32_t sample_positions = 0u;
@@ -191,6 +213,9 @@ public:
     std::uint32_t uav_rects = 0u;
     std::uint32_t uav_first = 0u;
     std::uint32_t depth_bounds_sets = 0u;
+    std::uint32_t stencil_ref_sets = 0u;
+    std::uint32_t stencil_front = 0u;
+    std::uint32_t stencil_back = 0u;
     float         depth_minimum = 0.0f;
     float         depth_maximum = 0.0f;
     std::uint32_t predications = 0u;

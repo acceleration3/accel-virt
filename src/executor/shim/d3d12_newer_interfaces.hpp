@@ -29,6 +29,7 @@ constexpr int subobject_view_instancing = 22;
 constexpr int subobject_as = 24;
 constexpr int subobject_ms = 25;
 constexpr int subobject_depth_stencil2 = 26;
+constexpr int subobject_rasterizer2 = 28;
 
 constexpr int feature_options6 = 30;
 constexpr int feature_options7 = 32;
@@ -63,6 +64,19 @@ struct DepthStencil2 {
     DepthStencilOp1         front;
     DepthStencilOp1         back;
     BOOL                    depth_bounds_enable;
+};
+
+struct Rasterizer2 {
+    D3D12_FILL_MODE                       fill_mode;
+    D3D12_CULL_MODE                       cull_mode;
+    BOOL                                  front_counter_clockwise;
+    FLOAT                                 depth_bias;
+    FLOAT                                 depth_bias_clamp;
+    FLOAT                                 slope_scaled_depth_bias;
+    BOOL                                  depth_clip;
+    UINT                                  line_mode;
+    UINT                                  forced_sample_count;
+    D3D12_CONSERVATIVE_RASTERIZATION_MODE conservative;
 };
 
 struct RenderTargetFormats {
@@ -188,5 +202,11 @@ ID3D12GraphicsCommandList7 : public ID3D12GraphicsCommandList6 {
     virtual void STDMETHODCALLTYPE Barrier(UINT group_count, const av::d3d12new::BarrierGroup *groups) = 0;
 };
 __CRT_UUID_DECL(ID3D12GraphicsCommandList7, 0xdd171223, 0x8b61, 0x4769, 0x90, 0xe3, 0x16, 0x0c, 0xcd, 0xe4, 0xe2, 0xc1);
+
+MIDL_INTERFACE("7013c015-d161-4b63-a08c-238552dd8acc")
+ID3D12GraphicsCommandList8 : public ID3D12GraphicsCommandList7 {
+    virtual void STDMETHODCALLTYPE OMSetFrontAndBackStencilRef(UINT front, UINT back) = 0;
+};
+__CRT_UUID_DECL(ID3D12GraphicsCommandList8, 0x7013c015, 0xd161, 0x4b63, 0xa0, 0x8c, 0x23, 0x85, 0x52, 0xdd, 0x8a, 0xcc);
 
 #endif

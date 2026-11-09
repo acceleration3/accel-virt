@@ -147,6 +147,15 @@ bool D3d12Session::on_SetDepthBounds12(uint32_t id, float minimum, float maximum
     return true;
 }
 
+bool D3d12Session::on_SetFrontAndBackStencilRef12(uint32_t id, uint32_t front, uint32_t back)
+{
+    AV_SCOPE("D3d12Session::on_SetFrontAndBackStencilRef12");
+    const D3d12ListCast<ID3D12GraphicsCommandList8> stencil(list(id));
+    if (stencil.get() == nullptr) return false;
+    stencil.get()->OMSetFrontAndBackStencilRef(front, back);
+    return true;
+}
+
 bool D3d12Session::on_SetShadingRate12(uint32_t id, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1)
 {
     AV_SCOPE("D3d12Session::on_SetShadingRate12");

@@ -517,10 +517,7 @@ void D3d12Device::graphics_state(const D3D12DDIARG_CREATE_PIPELINE_STATE_0099 &a
         state.rasterizer.depth_bias_clamp = from.DepthBiasClamp;
         state.rasterizer.slope_scaled_depth_bias = from.SlopeScaledDepthBias;
         state.rasterizer.depth_clip = from.DepthClipEnable ? 1u : 0u;
-        state.rasterizer.multisample =
-            from.LineRasterizationMode >= D3D12DDI_LINE_RASTERIZATION_MODE_QUADRILATERAL_WIDE ? 1u : 0u;
-        state.rasterizer.antialiased_line =
-            from.LineRasterizationMode == D3D12DDI_LINE_RASTERIZATION_MODE_ALPHA_ANTIALIASED ? 1u : 0u;
+        state.rasterizer.line_mode = static_cast<uint32_t>(from.LineRasterizationMode);
         state.rasterizer.forced_sample_count = from.ForcedSampleCount;
         state.rasterizer.conservative = static_cast<uint32_t>(from.ConservativeRasterizationMode);
     }

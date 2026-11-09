@@ -258,6 +258,7 @@ TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
   CHECK(!session.on_SetRenderTargets12(list, 1u, &ref, 0u, ref));
   CHECK(!session.on_SetBlendFactor12(list, color));
   CHECK(!session.on_SetStencilRef12(list, 1u));
+  CHECK(!session.on_SetFrontAndBackStencilRef12(list, 1u, 2u));
   CHECK(!session.on_ClearRenderTargetView12(list, ref, color, 0u, nullptr));
   CHECK(!session.on_ClearDepthStencilView12(list, ref, 1u, 1.0f, 0u, 0u, nullptr));
   CHECK(!session.on_DrawInstanced12(list, 3u, 1u, 0u, 0u));

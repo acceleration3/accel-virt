@@ -437,6 +437,12 @@ VOID D3d12Recorder::om_set_depth_bounds(D3D12DDI_HCOMMANDLIST handle, FLOAT mini
     sent(av_d3d12_SetDepthBounds12(device_.wire(), list(handle), minimum, maximum), "SetDepthBounds12");
 }
 
+VOID D3d12Recorder::om_set_front_and_back_stencil_ref(D3D12DDI_HCOMMANDLIST handle, UINT front, UINT back)
+{
+    AV_SCOPE("D3d12Recorder::om_set_front_and_back_stencil_ref");
+    sent(av_d3d12_SetFrontAndBackStencilRef12(device_.wire(), list(handle), front, back), "SetFrontAndBackStencilRef12");
+}
+
 VOID D3d12Recorder::set_predication(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE buffer, UINT64 offset,
                                     D3D12DDI_PREDICATION_OP op)
 {

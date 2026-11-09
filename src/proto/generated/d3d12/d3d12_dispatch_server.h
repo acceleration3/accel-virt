@@ -108,6 +108,7 @@ public:
     virtual bool on_SetViewInstanceMask12(uint32_t list, uint32_t mask) = 0;
     virtual bool on_GetClockOrigin12(uint32_t queue, uint64_t& ticks, uint64_t& frequency) = 0;
     virtual bool on_SetDepthBounds12(uint32_t list, float minimum, float maximum) = 0;
+    virtual bool on_SetFrontAndBackStencilRef12(uint32_t list, uint32_t front, uint32_t back) = 0;
     virtual bool on_SetPredication12(uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) = 0;
     virtual bool on_SetStreamOutputTargets12(uint32_t list, uint32_t start, uint32_t count, const StreamOutputView* views) = 0;
     virtual bool on_ClearUnorderedAccessViewUint12(uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Uint4& values, uint32_t rect_count, const Rect* rects) = 0;

@@ -93,6 +93,7 @@ const char* command_name(uint32_t id) {
         case kCmd_SetShadingRate12: return "SetShadingRate12";
         case kCmd_SetShadingRateImage12: return "SetShadingRateImage12";
         case kCmd_Barrier12: return "Barrier12";
+        case kCmd_SetFrontAndBackStencilRef12: return "SetFrontAndBackStencilRef12";
         default: return nullptr;
     }
 }

@@ -34,6 +34,7 @@ constexpr uint32_t stage_amplification = 6u;
 constexpr uint32_t most_stencil_op = 8u;
 constexpr uint32_t most_comparison = 8u;
 constexpr uint32_t most_mask = 0xFFu;
+constexpr uint32_t most_line_mode = 3u;
 constexpr uint32_t most_viewport_index = 15u;
 constexpr uint32_t most_target_array_index = 2047u;
 constexpr uint32_t dxil_magic = 0x4c495844u;
@@ -261,7 +262,8 @@ bool D3d12PipelineBuilder::state_holds(const d3d12proto::GraphicsState &state) c
     AV_SCOPE("D3d12PipelineBuilder::state_holds");
     if (state.render_targets > 8u || state.topology_type > most_topology_type || !DxgiFormatLayout(state.dsv_format).known())
         return false;
-    if (state.sample_count == 0u || state.sample_count > most_samples) return false;
+    if (state.sample_count == 0u || state.sample_count > most_samples || state.rasterizer.line_mode > most_line_mode)
+        return false;
     for (uint32_t target = 0u; target < 8u; target++)
         if (!DxgiFormatLayout(state.rtv_formats[target]).known()) return false;
     const d3d12proto::DepthStencilDesc &depth = state.depth_stencil;
@@ -346,12 +348,11 @@ bool D3d12PipelineBuilder::graphics(uint32_t id, uint32_t root, const d3d12proto
     made.rasterizer.value = {static_cast<D3D12_FILL_MODE>(raster.fill_mode),
                              static_cast<D3D12_CULL_MODE>(raster.cull_mode),
                              raster.front_counter_clockwise != 0u,
-                             raster.depth_bias,
+                             static_cast<FLOAT>(raster.depth_bias),
                              raster.depth_bias_clamp,
                              raster.slope_scaled_depth_bias,
                              raster.depth_clip != 0u,
-                             raster.multisample != 0u,
-                             raster.antialiased_line != 0u,
+                             raster.line_mode,
                              raster.forced_sample_count,
                              static_cast<D3D12_CONSERVATIVE_RASTERIZATION_MODE>(raster.conservative)};
     const d3d12proto::DepthStencilDesc &depth = state.depth_stencil;

@@ -129,7 +129,11 @@ TEST(d3d12_pipeline_builder, depth_bounds_back_masks_and_view_instances_that_fit
   state.view_instance_count = 4u;
   state.view_instancing_flags = 1u;
   state.view_instances[3] = {15u, 2047u};
-  CHECK(builder.state_holds(state)); }
+  CHECK(builder.state_holds(state));
+  for (std::uint32_t mode = 0u; mode < 4u; mode++) {
+    state = plain_state();
+    state.rasterizer.line_mode = mode;
+    CHECK(builder.state_holds(state)); } }
 
 TEST(d3d12_pipeline_builder, depth_stencil_and_view_instancing_fields_past_their_range_are_refused)
 { D3d12PipelineBuilder builder(objects);
@@ -156,6 +160,9 @@ TEST(d3d12_pipeline_builder, depth_stencil_and_view_instancing_fields_past_their
   CHECK(!builder.state_holds(state));
   state = plain_state();
   state.view_instance_count = 5u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.rasterizer.line_mode = 4u;
   CHECK(!builder.state_holds(state));
   state = plain_state();
   state.view_instance_count = 1u;

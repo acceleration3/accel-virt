@@ -175,6 +175,8 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_GetClockOrigin12(::av::ClientTransport& t, uint32_t queue, uint64_t* ticks, uint64_t* frequency);
 // The depth range a pixel's stored depth must lie in for the draws after; both within 0 to 1.
 [[nodiscard]] bool av_d3d12_SetDepthBounds12(::av::ClientTransport& t, uint32_t list, float minimum, float maximum);
+// The stencil reference of front-facing and of back-facing triangles for the draws after.
+[[nodiscard]] bool av_d3d12_SetFrontAndBackStencilRef12(::av::ClientTransport& t, uint32_t list, uint32_t front, uint32_t back);
 // Draws and dispatches after are skipped by the 64-bit value at `offset` in `buffer`: zero skips when op is
 // D3D12_PREDICATION_OP_NOT_EQUAL_ZERO, non-zero when it is EQUAL_ZERO. buffer 0 turns predication off.
 [[nodiscard]] bool av_d3d12_SetPredication12(::av::ClientTransport& t, uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op);

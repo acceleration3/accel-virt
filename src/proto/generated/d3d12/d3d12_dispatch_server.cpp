@@ -1654,6 +1654,22 @@ static bool decode_SetDepthBounds12(ServerDispatch& s, ::av::WireReader& r, ::av
     return true;
 }
 
+static bool decode_SetFrontAndBackStencilRef12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetFrontAndBackStencilRef12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t front{};
+    if (!r.read_pod(front)) return false;
+    uint32_t back{};
+    if (!r.read_pod(back)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetFrontAndBackStencilRef12(list, front, back)) return false;
+    return true;
+}
+
 static bool decode_SetPredication12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:SetPredication12");
     (void)s;
@@ -1848,6 +1864,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_SetViewInstanceMask12:
         case kCmd_GetClockOrigin12:
         case kCmd_SetDepthBounds12:
+        case kCmd_SetFrontAndBackStencilRef12:
         case kCmd_SetPredication12:
         case kCmd_SetStreamOutputTargets12:
         case kCmd_ClearUnorderedAccessViewUint12:
@@ -1940,6 +1957,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_SetViewInstanceMask12: return decode_SetViewInstanceMask12(s, r, reply, arena);
         case kCmd_GetClockOrigin12: return decode_GetClockOrigin12(s, r, reply, arena);
         case kCmd_SetDepthBounds12: return decode_SetDepthBounds12(s, r, reply, arena);
+        case kCmd_SetFrontAndBackStencilRef12: return decode_SetFrontAndBackStencilRef12(s, r, reply, arena);
         case kCmd_SetPredication12: return decode_SetPredication12(s, r, reply, arena);
         case kCmd_SetStreamOutputTargets12: return decode_SetStreamOutputTargets12(s, r, reply, arena);
         case kCmd_ClearUnorderedAccessViewUint12: return decode_ClearUnorderedAccessViewUint12(s, r, reply, arena);

@@ -626,7 +626,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_OmSetAlphaBlendFactor(D3D12DDI_HCOMMANDLIS
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_OmSetFrontAndBackStencilRef(D3D12DDI_HCOMMANDLIST handle, UINT a1, UINT a2)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.om_set_front_and_back_stencil_ref(handle, a1, a2); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("OmSetFrontAndBackStencilRef", handle, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_RSSetDepthBias(D3D12DDI_HCOMMANDLIST handle, FLOAT a1, FLOAT a2, FLOAT a3)
 { static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }

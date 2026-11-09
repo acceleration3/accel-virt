@@ -970,6 +970,15 @@ bool av_d3d12_SetDepthBounds12(::av::ClientTransport& t, uint32_t list, float mi
     return t.send_async(kCmd_SetDepthBounds12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_SetFrontAndBackStencilRef12(::av::ClientTransport& t, uint32_t list, uint32_t front, uint32_t back) {
+    AV_SCOPE("av_d3d12_SetFrontAndBackStencilRef12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(front);
+    b.write_pod<uint32_t>(back);
+    return t.send_async(kCmd_SetFrontAndBackStencilRef12, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d12_SetPredication12(::av::ClientTransport& t, uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) {
     AV_SCOPE("av_d3d12_SetPredication12");
     ::av::WireWriter b = t.request_writer();
