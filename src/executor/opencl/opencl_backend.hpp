@@ -148,6 +148,19 @@ public:
                                    size_t offset, size_t size, const void *ptr,
                                    cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
                                    cl_event *event) override;
+    cl_int on_clEnqueueCopyBuffer(cl_command_queue command_queue, cl_mem src_buffer, cl_mem dst_buffer,
+                                  size_t src_offset, size_t dst_offset, size_t size,
+                                  cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                  cl_event *event) override;
+    cl_int on_clEnqueueCopyBufferRect(cl_command_queue command_queue, cl_mem src_buffer, cl_mem dst_buffer,
+                                      const size_t *src_origin, const size_t *dst_origin, const size_t *region,
+                                      size_t src_row_pitch, size_t src_slice_pitch, size_t dst_row_pitch,
+                                      size_t dst_slice_pitch, cl_uint num_events_in_wait_list,
+                                      const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clEnqueueFillBuffer(cl_command_queue command_queue, cl_mem buffer, const void *pattern,
+                                  size_t pattern_size, size_t offset, size_t size,
+                                  cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                  cl_event *event) override;
     cl_int on_clEnqueueReadImage(cl_command_queue command_queue, cl_mem image, cl_bool blocking_read,
                                  const size_t *origin, const size_t *region, size_t row_pitch,
                                  size_t slice_pitch, void *ptr, cl_uint num_events_in_wait_list,
