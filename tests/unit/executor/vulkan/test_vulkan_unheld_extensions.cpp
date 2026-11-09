@@ -15,12 +15,14 @@ bool advertised(const char *name)
 }
 
 TEST(vulkan_unheld_extensions, no_extension_that_makes_a_handle_the_guard_cannot_hold_is_advertised)
-{ CHECK(!advertised("VK_EXT_shader_object"));
-  CHECK(!advertised("VK_NV_ray_tracing"));
+{ CHECK(!advertised("VK_NV_ray_tracing"));
   CHECK(!advertised("VK_EXT_device_generated_commands"));
   CHECK(!advertised("VK_NV_device_generated_commands"));
-  CHECK(!advertised("VK_NV_device_generated_commands_compute"));
-  CHECK(!advertised("VK_KHR_pipeline_binary")); }
+  CHECK(!advertised("VK_NV_device_generated_commands_compute")); }
+
+TEST(vulkan_unheld_extensions, shader_objects_and_pipeline_binaries_are_on_the_wire_and_the_host_refuses_a_device_naming_them)
+{ CHECK(advertised("VK_EXT_shader_object"));
+  CHECK(advertised("VK_KHR_pipeline_binary")); }
 
 TEST(vulkan_unheld_extensions, acceleration_structures_are_advertised_because_the_guard_holds_them)
 { CHECK(advertised("VK_KHR_acceleration_structure")); }

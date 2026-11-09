@@ -622,7 +622,7 @@ VOID D3d11Device::create_geometry_shader_with_stream_output(const D3D11DDIARG_CR
                                                             const D3D11_1DDIARG_STAGE_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_geometry_shader_with_stream_output");
-    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(StreamPassthroughRecord))) return;
     if (args->pShaderCode == nullptr) {
         stream_vertex_output(*args, shader, *signatures);
         return;
