@@ -12,7 +12,7 @@
 namespace av {
 
 D3d12HostDevice::D3d12HostDevice(DriverLog &lines)
-    : runtime_(nullptr), uuid_(), tenant_heap_(),
+    : lines_(lines), runtime_(nullptr), uuid_(), tenant_heap_(),
       renewal_(tenant_heap_, lines), shown_by_(nullptr),
       device_(nullptr), capabilities_(), dispatch_limit_(), frames_()
 {
@@ -32,6 +32,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
     runtime_ = &runtime;
     uuid_ = DeviceUuid(uuid);
     if (!make()) {
+        lines_.write("the host Direct3D 12 device could not be made on this GPU");
         runtime_ = nullptr;
         return false;
     }

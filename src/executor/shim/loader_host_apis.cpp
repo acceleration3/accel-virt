@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/executor_log.hpp"
 #include "device/abi/av_executor.h"
+#include "core/platform/thread_lock_hold.hpp"
 #include "executor/shim/physical_device_identity.hpp"
 
 #include <string.h>
@@ -13,7 +14,7 @@ namespace av {
 LoaderHostApis::LoaderHostApis(ExecutorLog &log)
     : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
       gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{},
-      shares_{}, ledgers_{}, gauge_(), host_ram_(), vram_gate_(*this, heap_), count_(0u), opened_(false)
+      shares_{}, ledgers_{}, gauge_(), host_ram_(), vram_gate_(*this, heap_), reopen_lock_(), reopened_{}, count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
     host_ram_.watch(&gauge_);
@@ -192,7 +193,18 @@ D3d9HostDevice *LoaderHostApis::d3d9_device(uint32_t index)
 D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d12_device");
-    return index < count_ && d3d12_devices_[index].object().placed() ? &d3d12_devices_[index].object() : nullptr;
+    if (index >= count_) return nullptr;
+    D3d12HostDevice &device = d3d12_devices_[index].object();
+    if (device.placed()) return &device;
+    if (!d3d11_devices_[index].object().placed()) return nullptr;
+    constexpr uint32_t most_reopens = 8u;
+    const ThreadLockHold held(reopen_lock_);
+    if (device.placed()) return &device;
+    if (reopened_[index] >= most_reopens) return nullptr;
+    reopened_[index]++;
+    if (!device.open(d3d_runtime_, uuids_[index].raw())) return nullptr;
+    d3d11_devices_[index].object().pair(&device);
+    return &device;
 }
 
 SharedSurfaces *LoaderHostApis::surfaces(uint32_t index)

@@ -63,6 +63,7 @@ private:
     bool               removed() override;
     [[nodiscard]] bool remake() override;
 
+    DriverLog         &lines_;
     const D3dRuntime  *runtime_;
     DeviceUuid         uuid_;
     HostHeap           tenant_heap_;

@@ -17,7 +17,17 @@ HostDeviceRenewal::HostDeviceRenewal(BlockSource &blocks, DriverLog &lines)
 bool HostDeviceRenewal::admit(WakeSignal &wake)
 {
     AV_SCOPE("HostDeviceRenewal::admit");
-    return tenants_.join(wake) == Status::ok;
+    const Status joined = tenants_.join(wake);
+    if (joined != Status::ok)
+        LogLine(lines_)
+            .text("a session was refused by the device: status ")
+            .number(static_cast<uint32_t>(joined))
+            .text(", ")
+            .number(tenants_.count())
+            .text(" sessions on it, lost ")
+            .number(tenants_.lost() ? 1u : 0u)
+            .write();
+    return joined == Status::ok;
 }
 
 void HostDeviceRenewal::dismiss(WakeSignal &wake)

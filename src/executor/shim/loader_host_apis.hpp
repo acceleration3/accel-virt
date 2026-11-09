@@ -1,6 +1,7 @@
 #ifndef AV_LOADER_HOST_APIS_HPP
 #define AV_LOADER_HOST_APIS_HPP
 
+#include "device/shim/posix_lock.hpp"
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu_set.hpp"
 #include "executor/shim/compositor_device.hpp"
@@ -78,6 +79,8 @@ private:
     ProcMemoryGauge gauge_;
     HostRamLedger host_ram_;
     VramGate    vram_gate_;
+    PosixLock   reopen_lock_;
+    uint32_t    reopened_[HostGpuSet::max_gpus];
     uint32_t count_;
     bool     opened_;
 };
