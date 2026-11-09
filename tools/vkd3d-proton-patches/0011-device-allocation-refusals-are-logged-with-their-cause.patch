@@ -1,0 +1,38 @@
+From: accel-virt
+Subject: [PATCH] a refused or failed device allocation says which gate or driver call refused it, and how much was free
+
+accel-virt: the gate refusals were warnings the embedder never saw while the caller logged one generic error; they are errors now with the free and capped bytes, and a failing vkAllocateMemory logs its result.
+---
+--- a/libs/vkd3d/memory.c
++++ b/libs/vkd3d/memory.c
+@@ -1016,7 +1016,8 @@
+ 
+     if (host_gated && !vkd3d_vram_gate->take_host(memory_info->vram_account, size))
+     {
+-        WARN("System memory allocation of %"PRIu64" KiB refused: over the VM's host memory budget.\n", size / 1024);
++        ERR("System memory allocation of %"PRIu64" KiB refused: over the VM's host memory budget (%"PRIu64" MiB free).\n",
++                size / 1024, vkd3d_vram_gate->free_bytes(memory_info->vram_account) >> 20);
+         vkd3d_vram_refused = true;
+         if (rebar_budget && respect_budget)
+             pthread_mutex_unlock(&memory_info->budget_lock);
+@@ -1025,7 +1026,9 @@
+ 
+     if (vram_gated && !vkd3d_vram_gate->take(memory_info->vram_account, size))
+     {
+-        WARN("Device-local allocation of %"PRIu64" KiB refused: over the guest's video memory cap.\n", size / 1024);
++        ERR("Device-local allocation of %"PRIu64" KiB refused: over the guest's video memory cap (%"PRIu64" MiB free of %"PRIu64" MiB).\n",
++                size / 1024, vkd3d_vram_gate->free_bytes(memory_info->vram_account) >> 20,
++                vkd3d_vram_gate->cap(memory_info->vram_account) >> 20);
+         vkd3d_vram_refused = true;
+         if (rebar_budget && respect_budget)
+             pthread_mutex_unlock(&memory_info->budget_lock);
+@@ -1037,6 +1040,9 @@
+ 
+     vr = VK_CALL(vkAllocateMemory(device->vk_device, &allocate_info, NULL, &allocation->vk_memory));
+ 
++    if (vr != VK_SUCCESS)
++        ERR("vkAllocateMemory of %"PRIu64" KiB failed: %d.\n", size / 1024, vr);
++
+     if (vr != VK_SUCCESS && vram_gated)
+         vkd3d_vram_gate->give(memory_info->vram_account, size);
+ 
