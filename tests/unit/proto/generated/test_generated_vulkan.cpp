@@ -7,6 +7,8 @@
  * a string and an array in it, and a chain - so that a change in the emitter
  * that breaks the shape breaks a test rather than a guest (feature 063). */
 #include "harness/framework/test_registry.hpp"
+#include "proto/generated/vulkan/vk_command_extensions.h"
+#include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -270,3 +272,82 @@ TEST(generated_vulkan, a_required_handle_named_null_is_refused)
   sent.image = reinterpret_cast<VkImage>(std::uintptr_t{0x2000u});
   CHECK(decoded(av::vkproto::serialize_VkImageMemoryRequirementsInfo2, av::vkproto::deserialize_VkImageMemoryRequirementsInfo2, sent, received, block));
   CHECK(received.image == sent.image); }
+
+namespace {
+
+VkAccelerationStructureGeometryKHR triangles_geometry()
+{ VkAccelerationStructureGeometryKHR geometry = {};
+  geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+  geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+  geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+  geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+  geometry.geometry.triangles.vertexData.deviceAddress = 0x1000u;
+  geometry.geometry.triangles.vertexStride = 12u;
+  geometry.geometry.triangles.maxVertex = 5u;
+  geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+  return geometry; }
+
+}
+
+/* The union holds structures that begin with sType and pNext: a copy of it
+ * would hand the host a guest pointer. Only the member the geometry type names
+ * crosses, and its chain is walked like any other. */
+TEST(generated_vulkan, a_geometry_sends_the_member_its_type_names_and_no_pointer)
+{ av::vkproto::HandleIdentity handles;
+  VkBaseInStructure foreign = {};
+  foreign.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  VkAccelerationStructureGeometryKHR sent = triangles_geometry();
+  sent.geometry.triangles.pNext = &foreign;
+  std::uint8_t frame[512] = {};
+  WireWriter writer(frame, sizeof frame);
+  av::vkproto::serialize_VkAccelerationStructureGeometryKHR(writer, handles, sent);
+  CHECK_STATUS(writer.status(), av::Status::ok);
+
+  std::uint8_t block[arena_bytes];
+  WireArena arena(block, sizeof block);
+  WireReader reader(frame, writer.offset());
+  VkAccelerationStructureGeometryKHR received = {};
+  CHECK(av::vkproto::deserialize_VkAccelerationStructureGeometryKHR(reader, handles, &received, arena));
+  CHECK_EQ(received.geometryType, VK_GEOMETRY_TYPE_TRIANGLES_KHR);
+  CHECK(received.geometry.triangles.pNext == nullptr);
+  CHECK_EQ(received.geometry.triangles.vertexData.deviceAddress, VkDeviceAddress{0x1000u});
+  CHECK_EQ(received.geometry.triangles.maxVertex, 5u);
+  CHECK_EQ(received.flags, static_cast<VkGeometryFlagsKHR>(VK_GEOMETRY_OPAQUE_BIT_KHR));
+  CHECK_EQ(reader.remaining(), 0u); }
+
+TEST(generated_vulkan, a_geometry_of_an_unknown_type_is_refused)
+{ av::vkproto::HandleIdentity handles;
+  VkAccelerationStructureGeometryKHR sent = triangles_geometry();
+  std::uint8_t frame[512] = {};
+  WireWriter writer(frame, sizeof frame);
+  av::vkproto::serialize_VkAccelerationStructureGeometryKHR(writer, handles, sent);
+  const std::size_t whole = writer.offset();
+  VkAccelerationStructureGeometryKHR forged = triangles_geometry();
+  forged.geometryType = static_cast<VkGeometryTypeKHR>(0x7FFFFFFF);
+  std::uint8_t forged_frame[512] = {};
+  WireWriter forged_writer(forged_frame, sizeof forged_frame);
+  av::vkproto::serialize_VkAccelerationStructureGeometryKHR(forged_writer, handles, forged);
+
+  std::uint8_t block[arena_bytes];
+  WireArena arena(block, sizeof block);
+  WireReader reader(forged_frame, forged_writer.offset());
+  VkAccelerationStructureGeometryKHR received = {};
+  CHECK(!av::vkproto::deserialize_VkAccelerationStructureGeometryKHR(reader, handles, &received, arena));
+
+  for (std::size_t length = 0u; length < whole; length++) {
+      WireArena short_arena(block, sizeof block);
+      WireReader cut(frame, length);
+      VkAccelerationStructureGeometryKHR partial = {};
+      CHECK(!av::vkproto::deserialize_VkAccelerationStructureGeometryKHR(cut, handles, &partial, short_arena));
+  } }
+
+TEST(generated_vulkan, an_extension_command_names_the_extensions_it_needs_and_a_core_command_none)
+{ const av::vkproto::CommandExtensions structure =
+      av::vkproto::command_extensions(av::vkproto::kCmd_vkCreateAccelerationStructureKHR);
+  CHECK(structure.owner == av::vkproto::CommandOwner::device);
+  CHECK_EQ(structure.count, 1u);
+  CHECK_EQ(structure.slots[0], av::vkproto::device_extension_slot("VK_KHR_acceleration_structure"));
+  CHECK(structure.slots[0] != av::vkproto::kNoExtensionSlot);
+  CHECK(av::vkproto::command_extensions(av::vkproto::kCmd_vkCreateBuffer).owner == av::vkproto::CommandOwner::open);
+  CHECK(av::vkproto::command_extensions(0xFFFFFFFFu).owner == av::vkproto::CommandOwner::open);
+  CHECK_EQ(av::vkproto::device_extension_slot("VK_NOT_AN_EXTENSION"), av::vkproto::kNoExtensionSlot); }

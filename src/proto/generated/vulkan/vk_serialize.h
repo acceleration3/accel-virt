@@ -698,8 +698,6 @@ inline void serialize_VkAccelerationStructureGeometryTrianglesDataKHR(::av::Wire
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryTrianglesDataKHR(::av::WireReader&, const HandleTranslation&, VkAccelerationStructureGeometryTrianglesDataKHR*, ::av::WireArena&);
 inline void serialize_VkAccelerationStructureGeometryInstancesDataKHR(::av::WireWriter&, HandleTranslation&, const VkAccelerationStructureGeometryInstancesDataKHR&);
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryInstancesDataKHR(::av::WireReader&, const HandleTranslation&, VkAccelerationStructureGeometryInstancesDataKHR*, ::av::WireArena&);
-inline void serialize_VkAccelerationStructureGeometryDataKHR(::av::WireWriter&, const VkAccelerationStructureGeometryDataKHR&);
-[[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryDataKHR(::av::WireReader&, VkAccelerationStructureGeometryDataKHR*, ::av::WireArena&);
 inline void serialize_VkAccelerationStructureGeometryKHR(::av::WireWriter&, HandleTranslation&, const VkAccelerationStructureGeometryKHR&);
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryKHR(::av::WireReader&, const HandleTranslation&, VkAccelerationStructureGeometryKHR*, ::av::WireArena&);
 inline void serialize_VkAccelerationStructureGeometryLinearSweptSpheresDataNV(::av::WireWriter&, HandleTranslation&, const VkAccelerationStructureGeometryLinearSweptSpheresDataNV&);
@@ -2437,31 +2435,44 @@ inline void serialize_VkAccelerationStructureGeometryInstancesDataKHR(::av::Wire
     return true;
 }
 
-inline void serialize_VkAccelerationStructureGeometryDataKHR(::av::WireWriter& buf, const VkAccelerationStructureGeometryDataKHR& v) {
-    buf.write(&v, sizeof(v));
-}
-
-[[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryDataKHR(::av::WireReader& r, VkAccelerationStructureGeometryDataKHR* out, ::av::WireArena& arena) {
-    (void)arena;
-    return r.read(out, sizeof(*out));
-}
-
 inline void serialize_VkAccelerationStructureGeometryKHR(::av::WireWriter& buf, HandleTranslation& handles, const VkAccelerationStructureGeometryKHR& v) {
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, handles, v.pNext);
     buf.write_pod(v.geometryType);
-    serialize_VkAccelerationStructureGeometryDataKHR(buf, v.geometry);
+    switch (v.geometryType) {
+    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
+        serialize_VkAccelerationStructureGeometryTrianglesDataKHR(buf, handles, v.geometry.triangles);
+        break;
+    case VK_GEOMETRY_TYPE_AABBS_KHR:
+        serialize_VkAccelerationStructureGeometryAabbsDataKHR(buf, handles, v.geometry.aabbs);
+        break;
+    case VK_GEOMETRY_TYPE_INSTANCES_KHR:
+        serialize_VkAccelerationStructureGeometryInstancesDataKHR(buf, handles, v.geometry.instances);
+        break;
+    default:
+        break;
+    }
     buf.write_pod(v.flags);
 }
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryKHR(::av::WireReader& r, const HandleTranslation& handles, VkAccelerationStructureGeometryKHR* out, ::av::WireArena& arena) {
-    (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->geometryType)) { return false; }
-    if (!deserialize_VkAccelerationStructureGeometryDataKHR(r, &out->geometry, arena)) { return false; }
-    if (!r.read_pod(out->flags)) { return false; }
-    return true;
+    switch (out->geometryType) {
+    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
+        if (!deserialize_VkAccelerationStructureGeometryTrianglesDataKHR(r, handles, &out->geometry.triangles, arena)) { return false; }
+        break;
+    case VK_GEOMETRY_TYPE_AABBS_KHR:
+        if (!deserialize_VkAccelerationStructureGeometryAabbsDataKHR(r, handles, &out->geometry.aabbs, arena)) { return false; }
+        break;
+    case VK_GEOMETRY_TYPE_INSTANCES_KHR:
+        if (!deserialize_VkAccelerationStructureGeometryInstancesDataKHR(r, handles, &out->geometry.instances, arena)) { return false; }
+        break;
+    default:
+        return false;
+    }
+    return r.read_pod(out->flags);
 }
 
 inline void serialize_VkAccelerationStructureGeometryLinearSweptSpheresDataNV(::av::WireWriter& buf, HandleTranslation& handles, const VkAccelerationStructureGeometryLinearSweptSpheresDataNV& v) {

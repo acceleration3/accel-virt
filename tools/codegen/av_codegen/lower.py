@@ -186,8 +186,22 @@ def lower(root: ET.Element, profile: Profile,
 
     _withdraw_unbacked_extensions(reg, profile, implemented_extensions,
                                   extension_commands)
+    _record_command_extensions(reg, root)
 
     return reg
+
+
+def _record_command_extensions(reg: Registry, root: ET.Element) -> None:
+    listed: dict[str, list[tuple[str, str]]] = {}
+    for ext_name, info in parse.parse_extensions(root).items():
+        if info["supported"] == "disabled" or "vulkan" not in info["supported"].split(",") \
+                or not info["type"]:
+            continue
+        for command in info["commands"]:
+            listed.setdefault(command, []).append((ext_name, info["type"]))
+    for name, cmd in reg.commands.items():
+        found = set(listed.get(name, ())) | set(listed.get(cmd.alias_of or name, ()))
+        reg.command_extensions[name] = sorted(found)
 
 
 def _withdraw_unbacked_extensions(

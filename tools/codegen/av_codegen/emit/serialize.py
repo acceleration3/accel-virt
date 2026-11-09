@@ -747,6 +747,50 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
 
 
 BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
+    "VkAccelerationStructureGeometryKHR": (
+        [
+            "    buf.write_pod(v.sType);",
+            "    serialize_pnext_chain(buf, handles, v.pNext);",
+            "    buf.write_pod(v.geometryType);",
+            "    switch (v.geometryType) {",
+            "    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:",
+            "        serialize_VkAccelerationStructureGeometryTrianglesDataKHR(buf, handles, v.geometry.triangles);",
+            "        break;",
+            "    case VK_GEOMETRY_TYPE_AABBS_KHR:",
+            "        serialize_VkAccelerationStructureGeometryAabbsDataKHR(buf, handles, v.geometry.aabbs);",
+            "        break;",
+            "    case VK_GEOMETRY_TYPE_INSTANCES_KHR:",
+            "        serialize_VkAccelerationStructureGeometryInstancesDataKHR(buf, handles, v.geometry.instances);",
+            "        break;",
+            "    default:",
+            "        break;",
+            "    }",
+            "    buf.write_pod(v.flags);",
+        ],
+        [
+            "    if (!r.read_pod(out->sType)) { return false; }",
+            "    if (!deserialize_pnext_chain(r, handles, "
+            "reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
+            "    if (!r.read_pod(out->geometryType)) { return false; }",
+            "    switch (out->geometryType) {",
+            "    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:",
+            "        if (!deserialize_VkAccelerationStructureGeometryTrianglesDataKHR("
+            "r, handles, &out->geometry.triangles, arena)) { return false; }",
+            "        break;",
+            "    case VK_GEOMETRY_TYPE_AABBS_KHR:",
+            "        if (!deserialize_VkAccelerationStructureGeometryAabbsDataKHR("
+            "r, handles, &out->geometry.aabbs, arena)) { return false; }",
+            "        break;",
+            "    case VK_GEOMETRY_TYPE_INSTANCES_KHR:",
+            "        if (!deserialize_VkAccelerationStructureGeometryInstancesDataKHR("
+            "r, handles, &out->geometry.instances, arena)) { return false; }",
+            "        break;",
+            "    default:",
+            "        return false;",
+            "    }",
+            "    return r.read_pod(out->flags);",
+        ],
+    ),
     "VkCopyMemoryToImageInfo": (
         [
             "    buf.write_pod(v.sType);",
@@ -858,6 +902,16 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
 }
 
 
+DISCRIMINATED_UNIONS = frozenset({"VkAccelerationStructureGeometryDataKHR"})
+
+
+def _chain_bearing_union(reg: Registry, s: Struct) -> bool:
+    return s.is_union and any(
+        m.type.base in reg.structs and reg.structs[m.type.base].members
+        and reg.structs[m.type.base].members[0].name == "sType"
+        for m in s.members)
+
+
 def _is_address_union(s: Struct) -> bool:
    return s.is_union and {m.name for m in s.members} == {"deviceAddress", "hostAddress"}
 
@@ -893,6 +947,11 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
             "}",
             "",
         ]
+    if s.name in DISCRIMINATED_UNIONS:
+        return []
+    if _chain_bearing_union(reg, s):
+        raise SystemExit(f"union {s.name} holds structures with sType and pNext: "
+                         "it needs a discriminated serializer (DISCRIMINATED_UNIONS)")
     if _is_address_union(s):
         return [
             _serializer_head(reg, s.name),
@@ -1162,6 +1221,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
             "::av::WireArena&);"
         )
         for n in reg.struct_order:
+            if n in DISCRIMINATED_UNIONS:
+                continue
             carried = n in carriers(reg)
             header.append(
                 f"inline void serialize_{n}(::av::WireWriter&, "

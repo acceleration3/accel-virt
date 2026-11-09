@@ -62,5 +62,21 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     decode_one<VkInstanceCreateInfo>(data, size, [](av::WireReader &r, VkInstanceCreateInfo *out, av::WireArena &a) {
         return av::vkproto::deserialize_VkInstanceCreateInfo(r, out, a);
     });
+    {
+        alignas(16) unsigned char block[arena_bytes];
+        av::WireArena arena(block, sizeof block);
+        av::WireReader reader(data, size);
+        av::vkproto::HandleIdentity handles;
+        VkAccelerationStructureGeometryKHR geometry = {};
+        if (av::vkproto::deserialize_VkAccelerationStructureGeometryKHR(reader, handles, &geometry, arena)) {
+            const DecodedPointer ours(block, sizeof block);
+            ours.must_be_ours_or_null(geometry.pNext);
+            if (geometry.geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
+                ours.must_be_ours_or_null(geometry.geometry.triangles.pNext);
+            if (geometry.geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) ours.must_be_ours_or_null(geometry.geometry.aabbs.pNext);
+            if (geometry.geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR)
+                ours.must_be_ours_or_null(geometry.geometry.instances.pNext);
+        }
+    }
     return 0;
 }
