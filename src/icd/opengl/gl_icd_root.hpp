@@ -107,6 +107,7 @@ private:
     enum class Shown { refused, nothing, handed };
 
     Shown show_frame(void *dc);
+    void  show_front(GuestGlContext *context);
     Shown present_frame(void *dc, bool paced);
     bool  admits(GuestGlContext &context);
     uint64_t take_pending(uint32_t thread);

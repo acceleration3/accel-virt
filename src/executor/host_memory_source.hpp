@@ -46,6 +46,7 @@ public:
     uint32_t             live() const;
     void                 reserve_vram(uint32_t mib);
     void                 use_host_ram(ByteLedger *ledger);
+    void                 use_vram_ledger(ByteLedger *ledger);
     uint64_t             host_ram_held() const;
     VramPolicy           vram_policy() const;
 
@@ -83,6 +84,7 @@ private:
     GuestMemoryTypes             vulkan_;
     VramPolicy                   vram_;
     VramAccount                  host_ram_;
+    VramAccount                  device_ram_;
     MemoryReuse                  reuse_;
 
     friend struct HostMemorySourceProbe;

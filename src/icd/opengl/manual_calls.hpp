@@ -20,7 +20,7 @@ public:
         gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u, gl_invalid_operation = 0x0502u,
         gl_read_only = 0x88B8u, gl_write_only = 0x88B9u, gl_read_write = 0x88BAu, gl_dynamic_storage_bit = 0x0100u,
         gl_extensions = 0x1F03u, gl_num_extensions = 0x821Du, gl_debug_callback_function = 0x8244u, gl_debug_callback_user_param = 0x8245u,
-        gl_vertex_attrib_array_pointer = 0x8645u, gl_buffer_map_pointer = 0x88BDu, gl_uniform = 0x8E17u,
+        gl_vertex_attrib_array_pointer = 0x8645u, gl_buffer_map_pointer = 0x88BDu, gl_uniform = 0x92E1u,
         gl_type = 0x92FAu, gl_invalid_index = 0xFFFFFFFFu, gl_texture_width = 0x1000u, gl_texture_height = 0x1001u,
         gl_texture_depth = 0x8071u, gl_texture_compressed_image_size = 0x86A0u,
     };

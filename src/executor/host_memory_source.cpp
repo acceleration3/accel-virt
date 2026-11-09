@@ -14,7 +14,7 @@ static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
     : exporter_(exporter), memories_(blocks), aliases_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
-      visible_(0u), vulkan_(), vram_(), host_ram_(), reuse_()
+      visible_(0u), vulkan_(), vram_(), host_ram_(), device_ram_(), reuse_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -25,6 +25,7 @@ HostMemorySource::~HostMemorySource()
     memories_.for_each([this](const SourceMemory &memory) { exporter_.free(memory.exported()); });
     memories_.destroy_all();
     static_cast<void>(host_ram_.close());
+    static_cast<void>(device_ram_.close());
 }
 
 void HostMemorySource::learn()
@@ -129,14 +130,19 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     ExportedMemory exported;
     uint32_t       type = HostMemoryRequest::memory_types;
     uint64_t       charged = 0u;
+    bool           charged_device = false;
     for (uint32_t choice = 0u; choice < count && type == HostMemoryRequest::memory_types; choice++) {
         const bool system = system_type(types[choice]);
         if (system && !host_ram_.take(size)) continue;
+        if (!system && !device_ram_.take(size)) continue;
         if (exporter_.allocate(types[choice], size, exported) == Status::ok) {
             type = types[choice];
-            charged = system ? size : 0u;
+            charged = size;
+            charged_device = !system;
         } else if (system) {
             host_ram_.give(size);
+        } else {
+            device_ram_.give(size);
         }
     }
     if (type == HostMemoryRequest::memory_types) return Status::no_memory;
@@ -150,11 +156,12 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     if (!shared.hold_copy(exported.fd()) ||
         memories_.create(made, domain, key, type, caching, exported) != Status::ok) {
         exporter_.free(exported);
-        host_ram_.give(charged);
+        if (charged_device) device_ram_.give(charged);
+        else host_ram_.give(charged);
         return Status::no_memory;
     }
     made->bind(*this);
-    made->charge(charged);
+    made->charge(charged, charged_device);
     memory.fd = shared.take();
     memory.caching = caching;
     memory.size = exported.size();
@@ -218,7 +225,8 @@ void HostMemorySource::let_go(SourceMemory &memory)
     if (!memory.release()) return;
     exporter_.free(memory.exported());
     if (!system_type(memory.memory_type())) reuse_.freed(memory.memory_type(), memory.domain());
-    host_ram_.give(memory.charged());
+    if (memory.charged_device()) device_ram_.give(memory.charged());
+    else host_ram_.give(memory.charged());
     static_cast<void>(memories_.destroy(&memory));
 }
 
@@ -301,6 +309,13 @@ void HostMemorySource::reserve_vram(uint32_t mib)
     AV_SCOPE("HostMemorySource::reserve_vram");
     const ThreadLockHold held(lock_);
     vram_ = VramPolicy(mib);
+}
+
+void HostMemorySource::use_vram_ledger(ByteLedger *ledger)
+{
+    AV_SCOPE("HostMemorySource::use_vram_ledger");
+    const ThreadLockHold held(lock_);
+    if (!device_ram_.bound_to(ledger)) device_ram_.bind(ledger);
 }
 
 void HostMemorySource::use_host_ram(ByteLedger *ledger)

@@ -23,7 +23,8 @@ public:
     uint32_t              caching() const;
     uint64_t              size() const;
     uint64_t              charged() const;
-    void                  charge(uint64_t bytes);
+    void                  charge(uint64_t bytes, bool device = false);
+    bool                  charged_device() const;
     uint8_t              *pointer() const;
     uint8_t              *at(uint64_t offset, uint64_t bytes) const;
     const ExportedMemory &exported() const;
@@ -48,6 +49,7 @@ private:
     uint32_t       references_;
     HostMemorySource *owner_;
     uint64_t       charged_;
+    bool           charged_device_;
 };
 
 }

@@ -1,6 +1,7 @@
 #ifndef AV_LOADER_HOST_APIS_HPP
 #define AV_LOADER_HOST_APIS_HPP
 
+#include "executor/shim/vulkan_vram_budget.hpp"
 #include "device/shim/posix_lock.hpp"
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu_set.hpp"
@@ -75,6 +76,7 @@ private:
     ObjectStorage<SharedSurfaces> surfaces_[HostGpuSet::max_gpus];
     ObjectStorage<HostShares>  shares_[HostGpuSet::max_gpus];
     VramLedger  ledgers_[HostGpuSet::max_gpus];
+    VulkanVramBudget budgets_[HostGpuSet::max_gpus];
     ClFreedMemory cl_freed_[HostGpuSet::max_gpus];
     ProcMemoryGauge gauge_;
     HostRamLedger host_ram_;

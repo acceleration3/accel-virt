@@ -77,6 +77,8 @@ void LoaderHostApis::enumerate()
             if ((memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u)
                 local += memory.memoryHeaps[heap].size;
         ledgers_[i].learn(local);
+        budgets_[i].bind(devices[i]);
+        ledgers_[i].follow(&budgets_[i]);
         if (opencl_devices_[i].find(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
         if (compositors_[i].open(uuids_[i].raw()))
             static_cast<void>(sources_[i].construct(exporters_[i].object(), heap_));
