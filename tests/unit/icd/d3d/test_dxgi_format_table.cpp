@@ -30,9 +30,6 @@ constexpr std::uint32_t ddi_logic_op = 0x2000u;
 constexpr std::uint32_t ddi_uav_reads = 0x20000u;
 constexpr std::uint32_t ddi_display = 0x200000u;
 constexpr std::uint32_t ddi_multiplane_overlay = 0x8000u;
-constexpr std::uint32_t ddi_displayable = 0x100000u;
-constexpr std::uint32_t ddi_video_processor_output = 0x40u;
-constexpr std::uint32_t ddi_video_processor_input = 0x80u;
 
 constexpr std::uint32_t rgba32_float = 2u;
 constexpr std::uint32_t rgb32_typeless = 5u, rgb32_float = 6u, rgb32_uint = 7u;
@@ -330,16 +327,14 @@ TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_multisample_render_target, 0u); }
 
-TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
+TEST(dxgi_format_table, the_video_formats_are_neither_overlay_planes_nor_displayable)
 { Table table;
   constexpr std::uint32_t nv12 = 103u, yuy2 = 107u;
   table.record(nv12, api_sample, 0u);
+  table.record(yuy2, api_sample, 0u);
   table.settle();
-  CHECK((table.format_support(nv12) & ddi_multiplane_overlay) != 0u);
-  CHECK((table.format_support(nv12) & ddi_display) != 0u);
-  CHECK((table.format_support(nv12) & ddi_displayable) != 0u);
-  CHECK((table.format_support(nv12) & ddi_video_processor_input) != 0u);
-  CHECK((table.format_support(nv12) & ddi_video_processor_output) != 0u);
+  CHECK_EQ(table.format_support(nv12) & ddi_multiplane_overlay, 0u);
+  CHECK_EQ(table.format_support(nv12) & ddi_display, 0u);
   CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u);
   CHECK_EQ(table.format_support(yuy2) & ddi_display, 0u); }
 
