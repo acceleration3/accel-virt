@@ -501,7 +501,7 @@ TEST(gl_external_objects, a_created_name_is_an_object_before_it_is_imported)
   CHECK(!one.objects().holds(SharedObjectKind::memory, memory));
   CHECK(one.objects().invariants_hold()); }
 
-TEST(gl_external_objects, a_parameter_this_path_cannot_keep_is_refused_at_the_import)
+TEST(gl_external_objects, a_dedicated_memory_object_imports_like_any_other)
 { Process       one;
   std::uint32_t name = 0u;
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
@@ -514,21 +514,12 @@ TEST(gl_external_objects, a_parameter_this_path_cannot_keep_is_refused_at_the_im
   CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, &read),
            GlExternalObjects::gl_no_error);
   CHECK_EQ(read, 1);
-  const std::uint32_t sends = one.wire().sends();
-  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
-                                GlExternalObjects::opaque_win32, one.handle()),
-           GlExternalObjects::gl_invalid_operation);
-  CHECK_EQ(one.wire().sends(), sends);
-  CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
-  CHECK_EQ(one.log().holding("avgl: a memory object asked for dedicated or protected memory"), 1u);
-
-  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, 0),
-           GlExternalObjects::gl_no_error);
   const Answer made(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(made.bytes(), SharedObjectAnswer::encoded_size);
   CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), static_cast<std::uint32_t>(host_name));
   CHECK(one.objects().invariants_hold()); }
 
 TEST(gl_external_objects, protected_memory_is_refused_at_the_import_too)

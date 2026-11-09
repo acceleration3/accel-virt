@@ -121,9 +121,8 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint3
     }
     GlSharedObjectRow *const row = row_of(memory, name);
     if (row == nullptr || row->made_ != 0u) return gl_invalid_value;
-    if (row->dedicated_ || row->protected_) {
-        log_.write("a memory object asked for dedicated or protected memory, which a shared "
-                   "object cannot be");
+    if (row->protected_) {
+        log_.write("a memory object asked for protected memory, which a shared object cannot be");
         return gl_invalid_operation;
     }
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));

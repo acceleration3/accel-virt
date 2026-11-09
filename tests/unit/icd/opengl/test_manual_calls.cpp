@@ -1279,6 +1279,8 @@ TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
   calls.get_memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, &read);
   CHECK_EQ(context.take_error(), 0u);
   CHECK_EQ(read, 1);
+  calls.memory_object_parameter(memory, av::glicd::GlExternalObjects::protected_memory, &dedicated);
+  CHECK_EQ(context.take_error(), 0u);
   calls.import_memory_win32(memory, 4096u, av::glicd::GlExternalObjects::opaque_win32,
                             openable_handle(rig));
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
