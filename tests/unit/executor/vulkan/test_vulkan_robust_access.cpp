@@ -382,3 +382,19 @@ TEST(vulkan_robust_access, a_device_naming_an_extension_that_hands_the_driver_gu
            static_cast<int>(VK_ERROR_EXTENSION_NOT_PRESENT));
   CHECK(device == VK_NULL_HANDLE);
   backend.shut_down(); }
+
+TEST(vulkan_robust_access, an_extension_command_naming_a_handle_the_host_never_made_is_left_to_the_decoder)
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "vulkan: ");
+  av::VulkanBackend backend(lines);
+  std::uint8_t     frame[16] = {};
+  const std::uint64_t unknown = 0x999u;
+  std::memcpy(frame, &unknown, sizeof unknown);
+  std::uint8_t block[256];
+  av::WireArena arena(block, sizeof block);
+  std::uint8_t reply[16] = {};
+  av::WireWriter answer(reply, sizeof reply);
+  av::WireReader payload(frame, sizeof frame);
+  CHECK(!backend.run(av::vkproto::kCmd_vkCreateShadersEXT, payload, answer, arena));
+  CHECK(!backend.lost());
+  backend.shut_down(); }
