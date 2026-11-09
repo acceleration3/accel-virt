@@ -131,3 +131,29 @@ TEST(cl_property_list, a_narrow_list_is_read_and_laid_out_in_its_own_width)
   CHECK_EQ(out[3], 7u);
   CHECK_EQ(out[4], 0u);
   CHECK(list.invariants_hold()); }
+
+TEST(cl_property_list, a_device_handle_list_runs_to_its_terminator_and_the_pairs_go_on_after_it)
+{ ClPropertyList list;
+  const std::uint64_t one[] = {ClPropertyList::device_handle_list, 0xD1u, 0u, 0x2063u, 0xAA00u, 0u};
+  CHECK(list.read(one));
+  CHECK_EQ(list.pairs(), 2u);
+  CHECK_EQ(list.name_at(0u), ClPropertyList::device_handle_list);
+  CHECK_EQ(list.value_at(0u), 0xD1u);
+  CHECK_EQ(list.name_at(1u), 0x2063u);
+  CHECK_EQ(list.value_at(1u), 0xAA00u);
+
+  const std::uint64_t two[] = {ClPropertyList::device_handle_list, 0xD1u, 0xD2u, 0u, 0x2063u, 0xBB00u, 0u};
+  CHECK(list.read(two));
+  CHECK_EQ(list.pairs(), 2u);
+  CHECK_EQ(list.value_at(1u), 0xBB00u);
+
+  const std::uint64_t none[] = {ClPropertyList::device_handle_list, 0u, 0x2063u, 0xCC00u, 0u};
+  CHECK(list.read(none));
+  CHECK_EQ(list.pairs(), 2u);
+  CHECK_EQ(list.value_at(1u), 0xCC00u);
+
+  std::uint64_t endless[ClPropertyList::most_list_values + 8u] = {ClPropertyList::device_handle_list};
+  for (std::uint32_t index = 1u; index < ClPropertyList::most_list_values + 8u; index++) endless[index] = 0xD0u;
+  CHECK(!list.read(endless));
+  CHECK_EQ(list.pairs(), 0u);
+  CHECK(list.invariants_hold()); }

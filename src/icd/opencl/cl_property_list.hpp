@@ -14,6 +14,8 @@ struct ClPropertyListProbe;
 class ClPropertyList {
 public:
     static constexpr uint32_t max_pairs = 32u;
+    static constexpr uint64_t device_handle_list = 0x2051u;
+    static constexpr uint32_t most_list_values = 64u;
 
     ClPropertyList();
     ClPropertyList(const ClPropertyList &) = delete;
@@ -49,20 +51,31 @@ bool ClPropertyList::read(const Property *list)
     pairs_ = 0u;
     repeated_ = false;
     if (list == nullptr) return true;
-    while (list[pairs_ * 2u] != 0) {
+    uint32_t at = 0u;
+    while (list[at] != 0) {
         if (pairs_ == max_pairs) {
             pairs_ = 0u;
             return false;
         }
         uint64_t name = 0u;
         uint64_t value = 0u;
-        __builtin_memcpy(&name, &list[pairs_ * 2u], sizeof(Property));
-        __builtin_memcpy(&value, &list[pairs_ * 2u + 1u], sizeof(Property));
+        __builtin_memcpy(&name, &list[at], sizeof(Property));
+        __builtin_memcpy(&value, &list[at + 1u], sizeof(Property));
         for (uint32_t earlier = 0u; earlier < pairs_; ++earlier)
             if (names_[earlier] == name) repeated_ = true;
         names_[pairs_] = name;
         values_[pairs_] = value;
         ++pairs_;
+        at += 2u;
+        if (name != device_handle_list) continue;
+        uint32_t listed = 0u;
+        while (list[at - 1u + listed] != 0) {
+            if (++listed > most_list_values) {
+                pairs_ = 0u;
+                return false;
+            }
+        }
+        at += listed;
     }
     return true;
 }
