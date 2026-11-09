@@ -1,4 +1,5 @@
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
+#include "executor/d3d/stream_output_declaration.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d12_pipeline_job.hpp"
@@ -180,18 +181,17 @@ bool D3d12PipelineBuilder::stream_output(const d3d12proto::StreamOutDeclaration 
     AV_SCOPE("D3d12PipelineBuilder::stream_output");
     out = {};
     if (stream_out_count == 0u) return true;
-    if (stream_out == nullptr || stream_out_count > D3d12PipelineJob::max_stream_outputs ||
-        stride_count > D3d12PipelineJob::max_strides || (stride_count != 0u && strides == nullptr))
-        return false;
+    const StreamOutputDeclaration<d3d12proto::StreamOutDeclaration> declaration(stream_out, stream_out_count, strides,
+                                                                                stride_count, rasterized_stream);
+    if (!declaration.holds()) return false;
     const DxbcContainer names(nullptr, 0u);
     D3D12_SO_DECLARATION_ENTRY entries[D3d12PipelineJob::max_stream_outputs] = {};
     for (uint32_t index = 0u; index < stream_out_count; index++) {
         const d3d12proto::StreamOutDeclaration &from = stream_out[index];
-        const uint32_t mask = from.mask & 0xfu;
         entries[index].Stream = from.stream;
         entries[index].OutputSlot = static_cast<BYTE>(from.output_slot);
-        entries[index].StartComponent = mask == 0u ? 0u : static_cast<BYTE>(__builtin_ctz(mask));
-        entries[index].ComponentCount = static_cast<BYTE>(__builtin_popcount(mask));
+        entries[index].StartComponent = static_cast<BYTE>(declaration.start_component(index));
+        entries[index].ComponentCount = static_cast<BYTE>(declaration.component_count(index));
         if (from.register_index == no_register) continue;
         d3dproto::SignatureEntry named = {};
         for (uint32_t entry = 0u; entry < signature_count; entry++) {
@@ -207,7 +207,7 @@ bool D3d12PipelineBuilder::stream_output(const d3d12proto::StreamOutDeclaration 
         entries[index].SemanticIndex = semantic_index;
     }
     out = job.keep_stream_output(entries, stream_out_count, strides, stride_count,
-                                 rasterized_stream == no_register ? D3D12_SO_NO_RASTERIZED_STREAM : rasterized_stream);
+                                 declaration.rasterized() == no_register ? D3D12_SO_NO_RASTERIZED_STREAM : declaration.rasterized());
     return true;
 }
 

@@ -1563,7 +1563,8 @@ TEST(vulkan_backend_device, an_image_made_for_the_source_keeps_the_types_the_sou
 TEST(vulkan_backend_device, a_create_info_query_with_its_create_info_left_out_is_refused)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i);
+      const char *const maintenance[] = {"VK_KHR_maintenance5"};
+      GuestDevice made(host, i, 1u, maintenance);
       if (made.device() == 0u) continue;
       BackendTransport wire(made.backend());
       const VkDevice device = as_handle<VkDevice>(made.device());

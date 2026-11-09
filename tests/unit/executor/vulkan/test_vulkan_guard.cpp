@@ -51,6 +51,13 @@ public:
         committed_on = on;
         commits++;
     }
+    void commit_timeline(std::uint64_t mark, std::uint64_t on, std::uint64_t value) override
+    {
+        committed = mark;
+        committed_on = on;
+        committed_value = value;
+        commits++;
+    }
     void cancel(std::uint64_t) override
     {
         cancels++;
@@ -99,6 +106,7 @@ public:
     std::uint64_t reserved_for = 0u;
     std::uint64_t committed = 0u;
     std::uint64_t committed_on = 0u;
+    std::uint64_t committed_value = 0u;
     std::uint64_t waited_through = 0u;
     std::uint32_t commits = 0u;
     std::uint32_t cancels = 0u;
@@ -1041,3 +1049,16 @@ TEST(vulkan_guard, a_wait_for_several_marks_asks_for_exactly_those_marks_and_one
   CHECK(rig.guard.quiesce_marks(some, 2u, device));
   CHECK_EQ(rig.progress.waited_marks, 2u);
   CHECK_EQ(rig.progress.waits, 1u); }
+
+TEST(vulkan_guard, sparse_bound_completes_a_mark_on_the_fence_or_on_the_timeline_value_it_signals)
+{ Rig rig;
+  const std::uint64_t fenced = rig.guard.reserve(device);
+  rig.guard.sparse_bound(fenced, queue, 0u);
+  CHECK_EQ(rig.progress.committed, fenced);
+  CHECK_EQ(rig.progress.committed_on, queue);
+  CHECK_EQ(rig.progress.committed_value, 0u);
+  const std::uint64_t timed = rig.guard.reserve(device);
+  rig.guard.sparse_bound(timed, queue, 7u);
+  CHECK_EQ(rig.progress.committed, timed);
+  CHECK_EQ(rig.progress.committed_value, 7u);
+  CHECK_EQ(rig.progress.commits, 2u); }

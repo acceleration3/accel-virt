@@ -5,13 +5,14 @@
 namespace av {
 
 VulkanTimelineSubmit::VulkanTimelineSubmit(BlockSource &blocks)
-    : submits_(blocks, Pool::non_paged), submits2_(blocks, Pool::non_paged), semaphores_(blocks, Pool::non_paged),
+    : submits_(blocks, Pool::non_paged), binds_(blocks, Pool::non_paged), submits2_(blocks, Pool::non_paged), semaphores_(blocks, Pool::non_paged),
       values_(blocks, Pool::non_paged), waits_(blocks, Pool::non_paged), infos_(blocks, Pool::non_paged), timeline_{}
 {
     AV_SCOPE("VulkanTimelineSubmit::VulkanTimelineSubmit");
 }
 
-bool VulkanTimelineSubmit::signalled(const VkSubmitInfo &last, VkSemaphore semaphore, uint64_t value)
+template <typename Info>
+bool VulkanTimelineSubmit::signalled(const Info &last, VkSemaphore semaphore, uint64_t value)
 {
     AV_SCOPE("VulkanTimelineSubmit::signalled");
     semaphores_.truncate(0u);
@@ -33,16 +34,18 @@ bool VulkanTimelineSubmit::signalled(const VkSubmitInfo &last, VkSemaphore semap
     return true;
 }
 
-const VkSubmitInfo *VulkanTimelineSubmit::append(const VkSubmitInfo *submits, uint32_t count, VkSemaphore semaphore,
-                                                 uint64_t value, uint32_t &appended)
+template <typename Info>
+const Info *VulkanTimelineSubmit::chained(GrowableArray<Info> &into, const Info *items, uint32_t count,
+                                          VkStructureType type, VkSemaphore semaphore, uint64_t value,
+                                          uint32_t &appended)
 {
-    AV_SCOPE("VulkanTimelineSubmit::append");
-    submits_.truncate(0u);
-    VkSubmitInfo last = {};
-    last.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    AV_SCOPE("VulkanTimelineSubmit::chained");
+    into.truncate(0u);
+    Info last = {};
+    last.sType = type;
     for (uint32_t at = 0u; at + 1u < count; at++)
-        if (submits_.append(submits[at]) != Status::ok) return nullptr;
-    if (count != 0u) last = submits[count - 1u];
+        if (into.append(items[at]) != Status::ok) return nullptr;
+    if (count != 0u) last = items[count - 1u];
     if (!signalled(last, semaphore, value)) return nullptr;
     const VkTimelineSemaphoreSubmitInfo *guest = nullptr;
     for (auto *link = static_cast<const VkBaseInStructure *>(last.pNext); link != nullptr; link = link->pNext)
@@ -64,9 +67,23 @@ const VkSubmitInfo *VulkanTimelineSubmit::append(const VkSubmitInfo *submits, ui
     }
     last.signalSemaphoreCount = semaphores_.size();
     last.pSignalSemaphores = semaphores_.begin();
-    if (submits_.append(last) != Status::ok) return nullptr;
-    appended = submits_.size();
-    return submits_.begin();
+    if (into.append(last) != Status::ok) return nullptr;
+    appended = into.size();
+    return into.begin();
+}
+
+const VkSubmitInfo *VulkanTimelineSubmit::append(const VkSubmitInfo *submits, uint32_t count, VkSemaphore semaphore,
+                                                 uint64_t value, uint32_t &appended)
+{
+    AV_SCOPE("VulkanTimelineSubmit::append");
+    return chained(submits_, submits, count, VK_STRUCTURE_TYPE_SUBMIT_INFO, semaphore, value, appended);
+}
+
+const VkBindSparseInfo *VulkanTimelineSubmit::append(const VkBindSparseInfo *binds, uint32_t count,
+                                                     VkSemaphore semaphore, uint64_t value, uint32_t &appended)
+{
+    AV_SCOPE("VulkanTimelineSubmit::append");
+    return chained(binds_, binds, count, VK_STRUCTURE_TYPE_BIND_SPARSE_INFO, semaphore, value, appended);
 }
 
 const VkSubmitInfo2 *VulkanTimelineSubmit::append(const VkSubmitInfo2 *submits, uint32_t count, VkSemaphore semaphore,

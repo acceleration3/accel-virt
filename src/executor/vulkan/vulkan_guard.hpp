@@ -51,6 +51,7 @@ public:
                                      uint32_t count, uint64_t value = 0u);
     void                   submitted(uint64_t mark, uint64_t device, uint64_t queue, const VkSubmitInfo2 *submits,
                                      uint32_t count, uint64_t value = 0u);
+    void                   sparse_bound(uint64_t mark, uint64_t queue, uint64_t value);
     bool                   timeline(uint64_t device, uint64_t queue, VkSemaphore &semaphore, uint64_t &value);
     bool                   timelined(uint64_t device) const;
     void               held(uint64_t mark, uint64_t device, const VkSubmitInfo *submits, uint32_t count);

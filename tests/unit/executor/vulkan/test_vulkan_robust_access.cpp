@@ -1,4 +1,5 @@
 #include "core/log/driver_log.hpp"
+#include "executor/vulkan/vulkan_robust_access.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -133,7 +134,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(VkPhysicalDevice, VkPhys
     }
 }
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance, const char *) { return nullptr; }
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance, const char *name)
+{ if (std::strcmp(name, "vkGetPhysicalDeviceFeatures2KHR") == 0)
+      return reinterpret_cast<PFN_vkVoidFunction>(&vkGetPhysicalDeviceFeatures2);
+  return nullptr; }
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice, const char *) { return nullptr; }
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties *p) { *p = {}; }
 VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice, const VkAllocationCallbacks *) {}
@@ -267,3 +271,36 @@ TEST(vulkan_robust_access, a_command_of_an_extension_the_device_did_not_enable_l
   CHECK(backend.run(av::vkproto::kCmd_vkCreateShadersEXT, refused, answer, arena));
   CHECK(backend.lost());
   backend.shut_down(); }
+
+TEST(vulkan_robust_access, on_vkGetPhysicalDeviceFeatures2KHR_answers_capture_replay_as_unsupported_too)
+{ VkPhysicalDeviceAccelerationStructureFeaturesKHR structure = {};
+  structure.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+  VkPhysicalDeviceFeatures2 features = {};
+  features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  features.pNext = &structure;
+  av::RecordingLog sink;
+  av::DriverLog    lines(sink, "vulkan: ");
+  av::VulkanBackend backend(lines);
+  structure.accelerationStructureCaptureReplay = VK_TRUE;
+  backend.on_vkGetPhysicalDeviceFeatures2KHR(reinterpret_cast<VkPhysicalDevice>(std::uintptr_t{0x200}), &features);
+  CHECK_EQ(structure.accelerationStructureCaptureReplay, VK_FALSE);
+  backend.shut_down(); }
+
+TEST(vulkan_robust_access, hide_capture_replay_counts_what_it_switched_off_and_leaves_the_rest)
+{ VkPhysicalDeviceVulkan12Features v12 = {};
+  v12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+  v12.bufferDeviceAddress = VK_TRUE;
+  v12.bufferDeviceAddressCaptureReplay = VK_TRUE;
+  VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor = {};
+  descriptor.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+  descriptor.descriptorBuffer = VK_TRUE;
+  v12.pNext = &descriptor;
+  av::VulkanRobustAccess access;
+  access.hide_capture_replay(&v12);
+  CHECK_EQ(access.hidden(), 1u);
+  CHECK_EQ(v12.bufferDeviceAddress, VK_TRUE);
+  CHECK_EQ(descriptor.descriptorBuffer, VK_TRUE);
+  access.hide_capture_replay(&v12);
+  CHECK_EQ(access.hidden(), 1u);
+  access.hide_capture_replay(nullptr);
+  CHECK_EQ(access.hidden(), 1u); }

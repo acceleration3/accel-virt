@@ -299,6 +299,7 @@ private:
 
     [[nodiscard]] Status gather(const VkSubmitInfo *submits, uint32_t count, VulkanSubmitSet &set) const;
     [[nodiscard]] Status gather(const VkSubmitInfo2 *submits, uint32_t count, VulkanSubmitSet &set) const;
+    [[nodiscard]] Status gather(const VkBindSparseInfo *binds, uint32_t count, VulkanSubmitSet &set) const;
     template <typename Submit>
     Hold hold_back(VkQueue queue, uint64_t device, uint64_t mark, const Submit *submits, uint32_t count);
     bool events_unset(uint64_t device, const VulkanSubmitSet &set);

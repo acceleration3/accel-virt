@@ -20,6 +20,7 @@
 #include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
+#include "executor/d3d/stream_output_declaration.hpp"
 #include "proto/d3d/buffer_slice_support.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
@@ -1085,14 +1086,16 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
         if (stream_out_count == 0u) {
             result = device->CreateGeometryShader(storage, size, nullptr, &out);
         } else {
+            const StreamOutputDeclaration<d3dproto::StreamOutEntry> declaration(stream_out, stream_out_count, strides,
+                                                                                stride_count, rasterized_stream);
+            if (!declaration.holds()) return false;
             D3D11_SO_DECLARATION_ENTRY entries[128] = {};
             for (uint32_t index = 0u; index < stream_out_count; index++) {
                 const d3dproto::StreamOutEntry &entry = stream_out[index];
                 entries[index].Stream = entry.stream;
                 entries[index].OutputSlot = static_cast<BYTE>(entry.output_slot);
-                const uint32_t mask = entry.mask & 0xfu;
-                entries[index].StartComponent = mask == 0u ? 0u : static_cast<BYTE>(__builtin_ctz(mask));
-                entries[index].ComponentCount = static_cast<BYTE>(__builtin_popcount(mask));
+                entries[index].StartComponent = static_cast<BYTE>(declaration.start_component(index));
+                entries[index].ComponentCount = static_cast<BYTE>(declaration.component_count(index));
                 if (entry.register_index == no_stream) continue;
                 d3dproto::SignatureEntry named = {};
                 for (uint32_t output = 0u; output < output_count; output++)

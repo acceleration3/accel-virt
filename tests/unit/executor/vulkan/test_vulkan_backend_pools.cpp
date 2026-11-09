@@ -67,6 +67,7 @@ struct FakeDriver {
     std::uint32_t memory_frees = 0u;
     std::uint64_t freed_memory = 0u;
     std::uint32_t device_destroys = 0u;
+    std::uint32_t sparse_binds = 0u;
 };
 
 FakeDriver driver;
@@ -206,6 +207,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkWaitForFences(VkDevice, uint32_t, const VkFence
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(VkQueue, uint32_t, const VkSubmitInfo *, VkFence)
 { return VK_SUCCESS; }
 
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueBindSparse(VkQueue, uint32_t, const VkBindSparseInfo *, VkFence)
+{ driver.sparse_binds++;
+  return VK_SUCCESS; }
+
 VKAPI_ATTR VkResult VKAPI_CALL vkDeviceWaitIdle(VkDevice)
 { driver.idles++;
   return VK_SUCCESS; }
@@ -283,6 +288,21 @@ TEST(vulkan_backend_pools, a_descriptor_pool_destroyed_with_a_submitted_set_it_n
   CHECK_EQ(driver.pool_destroys, 0u);
   rig.gpu_finishes();
   CHECK_EQ(driver.pool_destroys, 1u); }
+
+TEST(vulkan_backend_pools, a_sparse_bind_is_tracked_and_the_submits_after_it_still_complete)
+{ Rig rig;
+  VkBindSparseInfo bind = {};
+  bind.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+  CHECK_EQ(static_cast<int>(rig.backend().on_vkQueueBindSparse(as_handle<VkQueue>(queue), 1u, &bind, VK_NULL_HANDLE)),
+           static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(driver.sparse_binds, 1u);
+  rig.record(cb, set);
+  rig.submit(cb);
+  rig.backend().on_vkDestroyDescriptorPool(rig.host_device(), as_handle<VkDescriptorPool>(descriptor_pool), nullptr);
+  CHECK_EQ(driver.pool_destroys, 0u);
+  rig.gpu_finishes();
+  CHECK_EQ(driver.pool_destroys, 1u);
+  CHECK(!rig.backend().lost()); }
 
 TEST(vulkan_backend_pools, a_command_pool_destroyed_with_a_submitted_secondary_it_never_freed_is_destroyed_once_the_gpu_is_past_it)
 { Rig rig;

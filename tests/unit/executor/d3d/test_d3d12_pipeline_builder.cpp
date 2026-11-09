@@ -86,3 +86,18 @@ TEST(d3d12_pipeline_builder, a_stream_output_declaration_that_does_not_fit_is_re
   CHECK(!builder.stream_output(declared, av::D3d12PipelineJob::max_stream_outputs + 1u, strides, 1u, 0u, nullptr, 0u, job, made));
   CHECK(!builder.stream_output(declared, 1u, strides, 5u, 0u, nullptr, 0u, job, made));
   CHECK(!builder.stream_output(declared, 1u, nullptr, 1u, 0u, nullptr, 0u, job, made)); }
+
+TEST(d3d12_pipeline_builder, a_stream_output_buffer_slot_or_stream_the_host_arrays_cannot_hold_is_refused)
+{ D3d12PipelineBuilder builder(objects);
+  av::D3d12PipelineJob job;
+  job.bind(objects_heap);
+  const std::uint32_t        strides[1] = {16u};
+  const StreamOutDeclaration far_slot[1] = {{0u, 200u, 0u, 0xFu}};
+  const StreamOutDeclaration far_stream[1] = {{9u, 0u, 0u, 0xFu}};
+  const StreamOutDeclaration fine[1] = {{0u, 0u, 0u, 0xFu}};
+  D3D12_STREAM_OUTPUT_DESC   made = {};
+  CHECK(!builder.stream_output(far_slot, 1u, strides, 1u, 0xFFFFFFFFu, nullptr, 0u, job, made));
+  CHECK(!builder.stream_output(far_stream, 1u, strides, 1u, 0xFFFFFFFFu, nullptr, 0u, job, made));
+  CHECK(!builder.stream_output(fine, 1u, strides, 1u, 77u, nullptr, 0u, job, made));
+  CHECK(builder.stream_output(fine, 1u, strides, 1u, 3u, nullptr, 0u, job, made));
+  CHECK_EQ(made.RasterizedStream, 3u); }

@@ -92,6 +92,20 @@ Status VulkanBackend::gather(const VkSubmitInfo2 *submits, uint32_t count, Vulka
     return gathered;
 }
 
+Status VulkanBackend::gather(const VkBindSparseInfo *binds, uint32_t count, VulkanSubmitSet &set) const
+{
+    AV_SCOPE("VulkanBackend::gather");
+    Status gathered = Status::ok;
+    for (uint32_t at = 0u; at < count && gathered == Status::ok; at++) {
+        const VkBindSparseInfo &bind = binds[at];
+        for (uint32_t index = 0u; index < bind.waitSemaphoreCount && gathered == Status::ok; index++)
+            gathered = set.add_wait(number(bind.pWaitSemaphores[index]));
+        for (uint32_t index = 0u; index < bind.signalSemaphoreCount && gathered == Status::ok; index++)
+            gathered = set.add_signal(number(bind.pSignalSemaphores[index]));
+    }
+    return gathered;
+}
+
 bool VulkanBackend::events_unset(uint64_t device, const VulkanSubmitSet &set)
 {
     AV_SCOPE("VulkanBackend::events_unset");
@@ -115,7 +129,7 @@ VulkanBackend::Hold VulkanBackend::hold_back(VkQueue queue, uint64_t device, uin
         lost_ = true;
         return Hold::refused;
     }
-    guard_.held(mark, device, submits, count);
+    if constexpr (!__is_same(Submit, VkBindSparseInfo)) guard_.held(mark, device, submits, count);
     return Hold::parked;
 }
 
@@ -231,13 +245,25 @@ VkResult VulkanBackend::on_vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCou
     const uint64_t device = handles_.parent_of(number(queue));
     const uint64_t mark = guard_.reserve(device);
     if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    const VkResult result = RealVulkanDispatch::on_vkQueueBindSparse(queue, bindInfoCount, pBindInfo, fence);
+    const Hold hold = hold_back(queue, device, mark, pBindInfo, bindInfoCount);
+    if (hold != Hold::proceed) {
+        if (hold == Hold::parked) return VK_SUCCESS;
+        guard_.cancel(mark);
+        return VK_ERROR_DEVICE_LOST;
+    }
+    Stamp<VkBindSparseInfo> sent;
+    if (!stamp(queue, device, pBindInfo, bindInfoCount, sent)) {
+        guard_.cancel(mark);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    const VkResult result = RealVulkanDispatch::on_vkQueueBindSparse(queue, sent.count_, sent.sent_, fence);
     last_submit_ = result;
     if (result != VK_SUCCESS) {
         guard_.cancel(mark);
         return result;
     }
-    guard_.submitted(mark, device, number(queue), static_cast<const VkSubmitInfo *>(nullptr), 0u);
+    guard_.sparse_bound(mark, number(queue), sent.value_);
+    note_fence(fence, sent.semaphore_, sent.value_);
     return result;
 }
 

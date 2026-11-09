@@ -318,6 +318,13 @@ void VulkanGuard::submitted(uint64_t mark, uint64_t device, uint64_t queue, cons
     held(mark, device, submits, count);
 }
 
+void VulkanGuard::sparse_bound(uint64_t mark, uint64_t queue, uint64_t value)
+{
+    AV_SCOPE("VulkanGuard::sparse_bound");
+    if (value != 0u) progress_.commit_timeline(mark, queue, value);
+    else progress_.commit(mark, queue);
+}
+
 bool VulkanGuard::timeline(uint64_t device, uint64_t queue, VkSemaphore &semaphore, uint64_t &value)
 {
     AV_SCOPE("VulkanGuard::timeline");
