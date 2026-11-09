@@ -2,6 +2,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "guest/transport/host_allocation.hpp"
+#include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
@@ -17,6 +18,7 @@ constexpr uint32_t heap_shared = 0x1u;
 constexpr uint32_t deny_buffers = 0x4u;
 constexpr uint32_t deny_rt_ds_textures = 0x40u;
 constexpr uint32_t deny_non_rt_ds_textures = 0x80u;
+constexpr uint32_t row_major_alignment = 256u;
 constexpr uint32_t allow_render_target = 0x1u;
 constexpr uint32_t allow_depth_stencil = 0x2u;
 constexpr uint32_t allow_unordered_access = 0x4u;
@@ -422,8 +424,15 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     if (opened.pPrivateDriverData == nullptr ||
         described.decode(static_cast<const uint8_t *>(opened.pPrivateDriverData), opened.PrivateDriverDataSize) !=
             Status::ok ||
-        described.kind() != AllocationKind::cross_adapter || !described.cpu_visible() || described.layout().height() != 1u ||
-        described.layout().format() != 0u) {
+        described.kind() != AllocationKind::cross_adapter || !described.cpu_visible()) {
+        unsupported("pfnOpenHeapAndResource of a shared heap");
+        return E_INVALIDARG;
+    }
+    const SurfaceLayout &surface = described.layout();
+    const bool           rows = surface.height() == 1u && surface.format() == 0u;
+    D3d9PresentFormat    presented(0u);
+    if (!rows && (!surface.is_surface() || !presented.take_ddi(surface.format()) || surface.pitch() % row_major_alignment != 0u ||
+                  surface.bytes() > described.size())) {
         unsupported("pfnOpenHeapAndResource of a shared heap");
         return E_INVALIDARG;
     }
@@ -464,7 +473,13 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     spanning.SampleDesc.Count = 1u;
     spanning.Layout = D3D12DDI_TL_ROW_MAJOR;
     spanning.Flags = D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE;
-    return make_resource(spanning, nullptr, heap, 0u, resource);
+    const HRESULT made = make_resource(spanning, nullptr, heap, 0u, resource);
+    if (FAILED(made) || rows) return made;
+    resource.row_pitch = surface.pitch();
+    resource.width = surface.width();
+    resource.height = surface.height();
+    resource.format = presented.dxgi();
+    return made;
 }
 
 void D3d12Device::give_back(const ResourceRecord &resource)

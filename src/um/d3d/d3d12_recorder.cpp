@@ -223,6 +223,17 @@ CopyLocation D3d12Recorder::location(const D3D12DDIARG_BUFFER_PLACEMENT &placeme
     AV_SCOPE("D3d12Recorder::location");
     CopyLocation made = {};
     made.resource = device_.id_of(placement.BaseAddress.UMD.hResource.pDrvPrivate);
+    const ResourceRecord *const record = static_cast<const ResourceRecord *>(placement.BaseAddress.UMD.hResource.pDrvPrivate);
+    if (record != nullptr && record->row_pitch != 0u && layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE &&
+        placement.BaseAddress.UMD.Offset == 0u) {
+        made.type = location_footprint;
+        made.format = record->format;
+        made.width = static_cast<uint32_t>(record->width);
+        made.height = record->height;
+        made.depth = 1u;
+        made.row_pitch = record->row_pitch;
+        return made;
+    }
     if (layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE) {
         made.type = location_subresource;
         made.subresource = static_cast<uint32_t>(placement.BaseAddress.UMD.Offset);
@@ -268,6 +279,23 @@ VOID D3d12Recorder::copy_texture_region(D3D12DDI_HCOMMANDLIST handle, const D3D1
 VOID D3d12Recorder::resource_copy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE destination, D3D12DDI_HRESOURCE source)
 {
     AV_SCOPE("D3d12Recorder::resource_copy");
+    const ResourceRecord *const facade = static_cast<const ResourceRecord *>(destination.pDrvPrivate);
+    if (facade != nullptr && facade->row_pitch != 0u) {
+        CopyLocation to = {};
+        to.resource = device_.id_of(destination.pDrvPrivate);
+        to.type = location_footprint;
+        to.format = facade->format;
+        to.width = static_cast<uint32_t>(facade->width);
+        to.height = facade->height;
+        to.depth = 1u;
+        to.row_pitch = facade->row_pitch;
+        CopyLocation from = {};
+        from.resource = device_.id_of(source.pDrvPrivate);
+        from.type = location_subresource;
+        sent(av_d3d12_CopyTextureRegion12(device_.wire(), list(handle), to, 0u, 0u, 0u, from, 0u, Box{}),
+             "CopyTextureRegion12");
+        return;
+    }
     sent(av_d3d12_CopyResource12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
                                   device_.id_of(source.pDrvPrivate)),
          "CopyResource12");
@@ -499,6 +527,16 @@ VOID D3d12Recorder::barrier(D3D12DDI_HCOMMANDLIST handle, UINT32 count, const D3
                 to.sync_after = static_cast<uint32_t>(g.SyncAfter);
                 to.access_before = static_cast<uint32_t>(g.AccessBefore);
                 to.access_after = static_cast<uint32_t>(g.AccessAfter);
+            } else if (from.Type == D3D12DDI_BARRIER_TYPE_TEXTURE &&
+                       static_cast<const ResourceRecord *>(from.TextureBarrier.hResource.pDrvPrivate) != nullptr &&
+                       static_cast<const ResourceRecord *>(from.TextureBarrier.hResource.pDrvPrivate)->row_pitch != 0u) {
+                const D3D12DDI_TEXTURE_BARRIER_0088 &t = from.TextureBarrier;
+                to.type = barrier_buffer;
+                to.sync_before = static_cast<uint32_t>(t.SyncBefore);
+                to.sync_after = static_cast<uint32_t>(t.SyncAfter);
+                to.access_before = static_cast<uint32_t>(t.AccessBefore);
+                to.access_after = static_cast<uint32_t>(t.AccessAfter);
+                to.resource = device_.id_of(t.hResource.pDrvPrivate);
             } else if (from.Type == D3D12DDI_BARRIER_TYPE_TEXTURE) {
                 const D3D12DDI_TEXTURE_BARRIER_0088 &t = from.TextureBarrier;
                 to.sync_before = static_cast<uint32_t>(t.SyncBefore);
