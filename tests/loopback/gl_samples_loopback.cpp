@@ -8,6 +8,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_adapter_order.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
@@ -47,7 +48,7 @@ public:
           lines_(memory_, log_, "avgl: "), opengl32_(threads_), ready_(kmt),
           presents_(memory_, present_thread_, handed_, shown_, present_lock_, ready_, surface_, chains_, lines_),
           root_(memory_, kmt, lock_, send_lock_, slice_lock_, lines_, surface_, threads_, opengl32_, presents_,
-                av::glicd::gl_icd_binding)
+                av::glicd::gl_icd_binding, order_)
     {
         presents_.refuse();
         surface_.add_dc(&dc_, &window_, window_side, window_side);
@@ -75,6 +76,7 @@ private:
     av::CountedWakeSignal    shown_;
     av::glicd::BatchReady     ready_;
     av::glicd::GlPresentQueue presents_;
+    av::ScriptedAdapterOrder  order_;
     av::glicd::GlIcdRoot      root_;
     int                       dc_ = 0;
     int                       window_ = 0;

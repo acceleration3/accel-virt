@@ -159,10 +159,11 @@ bool D3d12Session::on_SetFrontAndBackStencilRef12(uint32_t id, uint32_t front, u
 bool D3d12Session::on_SetShadingRate12(uint32_t id, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1)
 {
     AV_SCOPE("D3d12Session::on_SetShadingRate12");
-    const d3d12proto::Caps12 &caps = device_->capabilities().caps();
     const D3d12ListCast<ID3D12GraphicsCommandList5> shading(list(id));
+    if (shading.get() == nullptr) return false;
+    const d3d12proto::Caps12 &caps = device_->capabilities().caps();
     const D3d12ShadingRate rate(base_rate, combiner0, combiner1);
-    if (shading.get() == nullptr || !rate.holds(caps.vrs_tier, caps.vrs_additional_rates != 0u, caps.vrs_sum_combiner != 0u)) {
+    if (!rate.holds(caps.vrs_tier, caps.vrs_additional_rates != 0u, caps.vrs_sum_combiner != 0u)) {
         LogLine(lines_).text("SetShadingRate12 on list ").number(id).text(" with a rate or combiner the host does not offer").write();
         return false;
     }
