@@ -203,10 +203,10 @@ ID3D12GraphicsCommandList7 : public ID3D12GraphicsCommandList6 {
 };
 __CRT_UUID_DECL(ID3D12GraphicsCommandList7, 0xdd171223, 0x8b61, 0x4769, 0x90, 0xe3, 0x16, 0x0c, 0xcd, 0xe4, 0xe2, 0xc1);
 
-MIDL_INTERFACE("7013c015-d161-4b63-a08c-238552dd8acc")
+MIDL_INTERFACE("ee936ef9-599d-4d28-938e-23c4ad05ce51")
 ID3D12GraphicsCommandList8 : public ID3D12GraphicsCommandList7 {
     virtual void STDMETHODCALLTYPE OMSetFrontAndBackStencilRef(UINT front, UINT back) = 0;
 };
-__CRT_UUID_DECL(ID3D12GraphicsCommandList8, 0x7013c015, 0xd161, 0x4b63, 0xa0, 0x8c, 0x23, 0x85, 0x52, 0xdd, 0x8a, 0xcc);
+__CRT_UUID_DECL(ID3D12GraphicsCommandList8, 0xee936ef9, 0x599d, 0x4d28, 0x93, 0x8e, 0x23, 0xc4, 0xad, 0x05, 0xce, 0x51);
 
 #endif
