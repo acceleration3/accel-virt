@@ -1,0 +1,34 @@
+From: accel-virt
+Subject: [PATCH] tessellation: tess factors declared as separate elements index the builtin from the first element's row
+
+A hull or domain shader converted from DXBC declares every tessellation factor as its own element with the register row it holds, so the inside factors start at row 4 or 5. Later elements of a kind were offset by their absolute start row; they are now offset by the distance from the first element of that kind, so a quad's second inside factor reaches gl_TessLevelInner[1].
+---
+diff --git a/dxil_converter.cpp b/dxil_converter.cpp
+--- a/dxil_converter.cpp
++++ b/dxil_converter.cpp
+@@ -4599,6 +4599,8 @@
+ 	    execution_model == spv::ExecutionModelTessellationEvaluation ? spv::StorageClassInput : spv::StorageClassOutput;
+ 
+ 	unsigned num_broken_user_rows = 0;
++	unsigned outer_factor_base_row = 0;
++	unsigned inner_factor_base_row = 0;
+ 
+ 	for (unsigned i = 0; i < patch_node->getNumOperands(); i++)
+ 	{
+@@ -4641,10 +4643,15 @@
+ 				meta = {};
+ 				meta.id = spirv_module.get_builtin_shader_input(builtin);
+ 				meta.component_type = actual_element_type;
+-				meta.semantic_offset = start_row;
++				meta.semantic_offset = start_row -
++				                       (system_value == DXIL::Semantic::TessFactor ? outer_factor_base_row : inner_factor_base_row);
+ 				meta.semantic = system_value;
+ 				continue;
+ 			}
++			if (system_value == DXIL::Semantic::TessFactor)
++				outer_factor_base_row = start_row;
++			else
++				inner_factor_base_row = start_row;
+ 		}
+ 
+ 		// Application can emit these in ViewInstancing, in which case it's just an offset.

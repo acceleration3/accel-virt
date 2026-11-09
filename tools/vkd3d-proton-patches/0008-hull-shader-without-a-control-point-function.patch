@@ -1,0 +1,20 @@
+From: accel-virt
+Subject: [PATCH] dxil: a hull shader with a null control point function has no entry point name and still compiles
+
+A hull shader converted from DXBC can leave its control point function null, so the parsed blob lists no entry point. The name only picks compile quirks: an empty name is used and the converter takes its pass-through control point path.
+---
+diff --git a/libs/vkd3d-shader/dxil.c b/libs/vkd3d-shader/dxil.c
+--- a/libs/vkd3d-shader/dxil.c
++++ b/libs/vkd3d-shader/dxil.c
+@@ -1318,10 +1318,7 @@
+     }
+ 
+     if (dxil_spv_parsed_blob_get_entry_point_demangled_name(blob, 0, &quirk_entry) != DXIL_SPV_SUCCESS)
+-    {
+-        ret = VKD3D_ERROR_INVALID_SHADER;
+-        goto end;
+-    }
++        quirk_entry = "";
+ 
+     quirks = vkd3d_shader_compile_arguments_select_quirks(compiler_args, hash, quirk_entry);
+     if (quirks & VKD3D_SHADER_QUIRK_FORCE_COMPUTE_BARRIER)
