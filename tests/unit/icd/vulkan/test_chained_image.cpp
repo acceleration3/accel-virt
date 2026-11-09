@@ -77,9 +77,9 @@ TEST(chained_image, a_blue_first_frame_opens_a_blue_first_top_down_slot_made_as_
 { ChainedRig rig;
   ChainedImage &chained = rig.chained();
   CHECK(!chained.opened());
-  CHECK(chained.slot() == VK_NULL_HANDLE);
+  CHECK(chained.slot(0u) == VK_NULL_HANDLE);
   CHECK(chained.invariants_hold());
-  CHECK(chained.open(window(), luid, VK_FORMAT_B8G8R8A8_SRGB, extent));
+  CHECK(chained.open(window(), luid, VK_FORMAT_B8G8R8A8_SRGB, extent, 1u));
   CHECK(chained.opened());
   CHECK(chained.invariants_hold());
   CHECK_EQ(rig.chains().opens(), 1u);
@@ -94,7 +94,7 @@ TEST(chained_image, a_blue_first_frame_opens_a_blue_first_top_down_slot_made_as_
   CHECK_EQ(u64_at(rig.wire().last_payload(), 0u), ScriptedWindowChains::first_id);
   CHECK_EQ(u64_at(rig.wire().last_payload(), 16u), host_id);
   CHECK_EQ(u64_at(rig.wire().last_payload(), 24u), slot_bytes);
-  const ScriptedVulkanDevice::Described made = rig.host().described(chained.slot());
+  const ScriptedVulkanDevice::Described made = rig.host().described(chained.slot(0u));
   CHECK_EQ(made.format, VK_FORMAT_B8G8R8A8_UNORM);
   CHECK_EQ(made.flags, VkImageCreateFlags{VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT});
   CHECK_EQ(made.tiling, VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT);
@@ -105,31 +105,47 @@ TEST(chained_image, a_blue_first_frame_opens_a_blue_first_top_down_slot_made_as_
   CHECK((made.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0u);
   CHECK(made.bound == reinterpret_cast<VkDeviceMemory>(opened_memory));
   CHECK_EQ(rig.host().images(), 1u);
-  CHECK(!chained.open(window(), luid, VK_FORMAT_B8G8R8A8_SRGB, extent));
+  CHECK(!chained.open(window(), luid, VK_FORMAT_B8G8R8A8_SRGB, extent, 1u));
   CHECK_EQ(rig.chains().opens(), 1u);
   chained.close();
   CHECK_EQ(rig.host().images(), 0u); }
+
+TEST(chained_image, a_chain_of_several_slots_makes_an_image_over_each_slot_s_memory)
+{ ChainedRig rig;
+  ChainedImage &chained = rig.chained();
+  CHECK(chained.open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 2u));
+  CHECK_EQ(rig.chains().last_slots(), 2u);
+  CHECK_EQ(rig.host().images(), 2u);
+  CHECK(chained.slot(0u) != VK_NULL_HANDLE);
+  CHECK(chained.slot(1u) != VK_NULL_HANDLE);
+  CHECK(chained.slot(0u) != chained.slot(1u));
+  CHECK(chained.slot(2u) == VK_NULL_HANDLE);
+  CHECK(chained.slot(99u) == VK_NULL_HANDLE);
+  CHECK(chained.invariants_hold());
+  chained.close();
+  CHECK_EQ(rig.host().images(), 0u);
+  CHECK(!chained.opened()); }
 
 TEST(chained_image, a_red_first_frame_opens_a_red_first_top_down_slot)
 { const VkFormat formats[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB};
   for (const VkFormat format : formats) {
       ChainedRig rig;
-      CHECK(rig.chained().open(window(), luid, format, extent));
+      CHECK(rig.chained().open(window(), luid, format, extent, 1u));
       CHECK(rig.chains().last_layout() == SlotLayout::rgba_top_down);
-      CHECK_EQ(rig.host().described(rig.chained().slot()).format, VK_FORMAT_R8G8B8A8_UNORM);
+      CHECK_EQ(rig.host().described(rig.chained().slot(0u)).format, VK_FORMAT_R8G8B8A8_UNORM);
   }
   ChainedRig blue;
-  CHECK(blue.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(blue.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   CHECK(blue.chains().last_layout() == SlotLayout::bgra_top_down); }
 
 TEST(chained_image, a_frame_no_chain_takes_is_refused_before_the_device_is_asked)
 { ChainedRig rig;
-  CHECK(!rig.chained().open(window(), luid, VK_FORMAT_R16G16B16A16_SFLOAT, extent));
+  CHECK(!rig.chained().open(window(), luid, VK_FORMAT_R16G16B16A16_SFLOAT, extent, 1u));
   CHECK_EQ(rig.chains().opens(), 0u);
-  CHECK(!rig.chained().open(nullptr, luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(!rig.chained().open(nullptr, luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   CHECK_EQ(rig.chains().opens(), 0u);
   rig.chains().refuse_opens(true);
-  CHECK(!rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(!rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   CHECK_EQ(rig.chains().opens(), 1u);
   CHECK_EQ(rig.wire().sends(), 0u);
   CHECK(!rig.chained().opened());
@@ -140,7 +156,7 @@ TEST(chained_image, a_frame_no_chain_takes_is_refused_before_the_device_is_asked
 TEST(chained_image, a_slot_that_cannot_be_opened_or_made_an_image_leaves_nothing_behind)
 { ChainedRig refused;
   answer(refused.wire(), SharedObjectAnswer::unknown_object, 0u);
-  CHECK(!refused.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(!refused.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   CHECK_EQ(refused.wire().sends(), 1u);
   CHECK_EQ(refused.chains().closes(), 1u);
   CHECK(refused.chains().last_closed() == window());
@@ -151,7 +167,7 @@ TEST(chained_image, a_slot_that_cannot_be_opened_or_made_an_image_leaves_nothing
   for (const char *const step : steps) {
       ChainedRig rig;
       rig.host().refuse(step, 1u, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-      CHECK(!rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+      CHECK(!rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
       CHECK(!rig.chained().opened());
       CHECK_EQ(rig.host().images(), 0u);
       CHECK_EQ(rig.wire().sends(), 2u);
@@ -166,7 +182,7 @@ TEST(chained_image, the_slot_is_shown_through_the_window_s_chain)
   av::icd::ChainSlots &slots = ChainedImageProbe::slots(rig.chained());
   CHECK(!slots.present(0u));
   CHECK_EQ(rig.chains().presents(), 0u);
-  CHECK(rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   CHECK(slots.present(0u));
   CHECK_EQ(rig.chains().presents(), 1u);
   CHECK_EQ(rig.chains().last_slot(), 0u);
@@ -177,10 +193,10 @@ TEST(chained_image, the_slot_is_shown_through_the_window_s_chain)
 
 TEST(chained_image, a_release_gives_the_slot_back_and_a_close_the_chain_as_well)
 { ChainedRig rig;
-  CHECK(rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   rig.chained().release();
   CHECK(!rig.chained().opened());
-  CHECK(rig.chained().slot() == VK_NULL_HANDLE);
+  CHECK(rig.chained().slot(0u) == VK_NULL_HANDLE);
   CHECK_EQ(rig.host().images(), 0u);
   CHECK_EQ(rig.wire().last_command(), CommandHeader::release_shared_object_id);
   CHECK_EQ(u64_at(rig.wire().last_payload(), 24u), slot_bytes);
@@ -197,23 +213,23 @@ TEST(chained_image, a_release_gives_the_slot_back_and_a_close_the_chain_as_well)
 
 TEST(chained_image, its_invariants_refuse_an_image_without_memory_and_memory_without_its_identity_size_or_window)
 { ChainedRig unbacked;
-  CHECK(unbacked.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(unbacked.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   ChainedImageProbe::slots(unbacked.chained()).release(unbacked.wire());
   CHECK(!unbacked.chained().invariants_hold());
   unbacked.chained().close();
   CHECK(unbacked.chained().invariants_hold());
 
   ChainedRig nameless;
-  CHECK(nameless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(nameless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   ChainSlotsProbe::forget_identity(ChainedImageProbe::slots(nameless.chained()));
   CHECK(!nameless.chained().invariants_hold());
 
   ChainedRig sizeless;
-  CHECK(sizeless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(sizeless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   ChainSlotsProbe::forget_bytes(ChainedImageProbe::slots(sizeless.chained()));
   CHECK(!sizeless.chained().invariants_hold());
 
   ChainedRig windowless;
-  CHECK(windowless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
+  CHECK(windowless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent, 1u));
   ChainSlotsProbe::forget_window(ChainedImageProbe::slots(windowless.chained()));
   CHECK(!windowless.chained().invariants_hold()); }

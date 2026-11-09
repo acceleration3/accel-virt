@@ -25,16 +25,17 @@ public:
     ChainedImage(const ChainedImage &) = delete;
     ChainedImage &operator=(const ChainedImage &) = delete;
 
-    [[nodiscard]] bool open(void *window, uint64_t luid, VkFormat format, VkExtent2D extent);
+    [[nodiscard]] bool open(void *window, uint64_t luid, VkFormat format, VkExtent2D extent, uint32_t count);
     bool               opened() const;
-    VkImage            slot() const;
+    VkImage            slot(uint32_t index) const;
     void               release();
     void               close();
 
     bool invariants_hold() const;
 
 private:
-    [[nodiscard]] bool make_image(const SlotFormat &slot, VkExtent2D extent);
+    [[nodiscard]] bool make_image(const SlotFormat &slot, VkExtent2D extent, uint32_t index);
+    void               destroy_images();
 
     EntryLookup     &entries_;
     VkDevice         device_;
@@ -42,7 +43,7 @@ private:
     WindowChains    &chains_;
     ChainSlots       slots_;
     ClientTransport &wire_;
-    VkImage          image_;
+    VkImage          images_[ChainSlots::max_slots];
 
     friend struct ChainedImageProbe;
 };

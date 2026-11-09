@@ -54,7 +54,7 @@ struct SwapchainProbe {
     static void miscount(Swapchain &chain) { chain.count_ = PresentDevice::max_images + 1u; }
     static void forget_image(Swapchain &chain) { PresentDeviceProbe::forget_image(chain.device_); }
     static void undercount(Swapchain &chain) { chain.count_ = 1u; }
-    static VkImage slot(Swapchain &chain) { return chain.chained_.slot(); }
+    static VkImage slot(Swapchain &chain) { return chain.chained_.slot(0u); }
     static void lose_slot(Swapchain &chain) { chain.chained_.release(); }
 };
 
@@ -508,6 +508,7 @@ TEST(swapchain, a_window_with_a_chain_is_shown_the_frame_copied_into_its_slot_no
       SwapchainRig rig;
       rig.chains().refuse_opens(false);
       rig.device().shared_object(0u, 0x7700u);
+      rig.device().shared_object(0u, 0x7710u);
       Swapchain &chain = rig.chain();
       VkSwapchainCreateInfoKHR info = create_info();
       info.imageFormat = format;
@@ -518,7 +519,7 @@ TEST(swapchain, a_window_with_a_chain_is_shown_the_frame_copied_into_its_slot_no
       CHECK_EQ(rig.chains().last_luid(), rig.connection().luid());
       const VkImage slot = SwapchainProbe::slot(chain);
       CHECK(slot != VK_NULL_HANDLE);
-      CHECK_EQ(rig.host().images(), images + 1u);
+      CHECK_EQ(rig.host().images(), images + 2u);
       CHECK_EQ(rig.host().mappings(), 0u);
       CHECK_EQ(rig.memory().live_allocations(), 0u);
       std::uint32_t index = 0u;
@@ -544,6 +545,7 @@ TEST(swapchain, a_frame_the_chain_refuses_is_said_and_a_failed_copy_is_the_devic
 { SwapchainRig rig;
   rig.chains().refuse_opens(false);
   rig.device().shared_object(0u, 0x7700u);
+  rig.device().shared_object(0u, 0x7710u);
   Swapchain &chain = rig.chain();
   CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
   std::uint32_t index = 0u;
@@ -565,14 +567,16 @@ TEST(swapchain, a_retired_swapchain_gives_its_slot_back_and_leaves_the_chain_to_
 { SwapchainRig rig;
   rig.chains().refuse_opens(false);
   rig.device().shared_object(0u, 0x7700u);
+  rig.device().shared_object(0u, 0x7710u);
   Swapchain &chain = rig.chain();
   CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
   std::uint32_t index = 0u;
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
   const std::uint32_t before = rig.host().images();
   rig.device().shared_object(0u, 0u);
+  rig.device().shared_object(0u, 0u);
   chain.retire();
-  CHECK_EQ(rig.host().images(), before - 1u);
+  CHECK_EQ(rig.host().images(), before - 2u);
   CHECK(chain.invariants_hold());
   const VkSemaphore waits[] = {reinterpret_cast<VkSemaphore>(0x900u)};
   const std::uint32_t submits = rig.host().submits();
@@ -582,6 +586,7 @@ TEST(swapchain, a_retired_swapchain_gives_its_slot_back_and_leaves_the_chain_to_
   CHECK_EQ(rig.host().image_copies(), 0u);
   CHECK_EQ(rig.chains().presents(), 0u);
   rig.device().shared_object(0u, 0x7701u);
+  rig.device().shared_object(0u, 0x7711u);
   CHECK_EQ(rig.initialize(rig.other(), create_info()), VK_SUCCESS);
   CHECK_EQ(rig.chains().opens(), 2u);
   CHECK(SwapchainProbe::slot(rig.other()) != VK_NULL_HANDLE);
@@ -599,6 +604,7 @@ TEST(swapchain, its_invariants_refuse_a_chained_swapchain_without_its_slot)
 { SwapchainRig rig;
   rig.chains().refuse_opens(false);
   rig.device().shared_object(0u, 0x7700u);
+  rig.device().shared_object(0u, 0x7710u);
   CHECK_EQ(rig.initialize(rig.chain(), create_info()), VK_SUCCESS);
   CHECK(rig.chain().invariants_hold());
   SwapchainProbe::lose_slot(rig.chain());
@@ -665,6 +671,7 @@ TEST(swapchain, a_present_for_a_chain_that_lost_its_slot_is_out_of_date_or_the_e
 { SwapchainRig rig;
   rig.chains().refuse_opens(false);
   rig.device().shared_object(0u, 0x7700u);
+  rig.device().shared_object(0u, 0x7710u);
   Swapchain &chain = rig.chain();
   CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
   std::uint32_t index = 0u;
@@ -677,25 +684,22 @@ TEST(swapchain, a_present_for_a_chain_that_lost_its_slot_is_out_of_date_or_the_e
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
   CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_OUT_OF_DATE_KHR); }
 
-TEST(swapchain, a_queued_present_into_a_chain_slot_waits_for_the_slot_and_skips_when_there_is_none)
+TEST(swapchain, a_queued_present_takes_the_second_chain_slot_while_the_first_is_queued)
 { SwapchainRig rig(true);
   rig.chains().refuse_opens(false);
   rig.device().shared_object(0u, 0x7700u);
+  rig.device().shared_object(0u, 0x7710u);
   Swapchain &chain = rig.chain();
   CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
   std::uint32_t first = 9u;
   std::uint32_t second = 9u;
+  std::uint32_t third = 9u;
   CHECK_EQ(chain.acquire(0u, first), VK_SUCCESS);
   CHECK_EQ(chain.acquire(0u, second), VK_SUCCESS);
   CHECK_EQ(chain.present(rig.host().queue(), first, 0u, nullptr), VK_SUCCESS);
-  CHECK_EQ(rig.presents().queued(), 1u);
-  const std::uint32_t copies = rig.host().image_copies();
   CHECK_EQ(chain.present(rig.host().queue(), second, 0u, nullptr), VK_SUCCESS);
-  CHECK_EQ(rig.host().image_copies(), copies);
-  CHECK_EQ(rig.presents().queued(), 1u);
-  std::uint32_t again = 9u;
-  CHECK_EQ(chain.acquire(0u, again), VK_SUCCESS);
-  CHECK_EQ(again, second);
+  CHECK_EQ(rig.presents().queued(), 2u);
+  CHECK_EQ(chain.acquire(0u, third), VK_NOT_READY);
   CHECK(chain.invariants_hold()); }
 
 TEST(swapchain, a_queued_present_whose_copy_fails_frees_its_image_and_answers_the_error)
@@ -769,6 +773,7 @@ TEST(swapchain, its_invariants_refuse_a_pacing_and_a_chained_image_that_are_unso
   { SwapchainRig rig;
     rig.chains().refuse_opens(false);
     rig.device().shared_object(0u, 0x7700u);
+    rig.device().shared_object(0u, 0x7710u);
     CHECK_EQ(rig.initialize(rig.chain(), create_info()), VK_SUCCESS);
     CHECK(rig.chain().invariants_hold());
     SwapchainProbe::unsound_chained_image(rig.chain());

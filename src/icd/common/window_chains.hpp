@@ -20,6 +20,7 @@ public:
     virtual bool open(void *window, uint64_t luid, uint32_t width, uint32_t height, SlotLayout layout,
                       uint32_t slots, uint64_t *ids, uint64_t *bytes) = 0;
     virtual bool present(void *window, uint32_t slot) = 0;
+    virtual bool settled(void *window, uint32_t slot) = 0;
     virtual void close(void *window) = 0;
 
 protected:

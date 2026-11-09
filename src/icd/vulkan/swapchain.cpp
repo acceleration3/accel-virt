@@ -68,7 +68,7 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
 VkResult Swapchain::make_destination(void *window, VkFormat format, VkExtent2D extent)
 {
     AV_SCOPE("Swapchain::make_destination");
-    through_chain_ = chained_.open(window, luid_, format, extent);
+    through_chain_ = chained_.open(window, luid_, format, extent, PresentDevice::slots);
     if (through_chain_) return device_.make_commands();
     return device_.make_readback(uint64_t{extent.width} * extent.height * pixel_bytes);
 }
@@ -199,7 +199,7 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
 VkResult Swapchain::hand_over(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits)
 {
     AV_SCOPE("Swapchain::hand_over");
-    const uint32_t slots = through_chain_ ? 1u : PresentDevice::slots;
+    const uint32_t slots = PresentDevice::slots;
     const uint32_t slot = presents_.free_slot(*this, slots, slots);
     if (slot == slots) {
         give(index, Holder::none);
@@ -303,7 +303,7 @@ uint32_t Swapchain::flush_held()
     const bool holding = held_index_ != no_image;
     presents_.release();
     if (!holding) return 0u;
-    const uint32_t slots = through_chain_ ? 1u : PresentDevice::slots;
+    const uint32_t slots = PresentDevice::slots;
     const bool open = window_state() == VK_SUCCESS && (!through_chain_ || chained_.opened());
     const uint32_t slot = open ? presents_.try_slot(*this, slots, slots) : slots;
     if (open && slot == slots) return pacing_.next_admit_milliseconds();
@@ -339,7 +339,7 @@ VkResult Swapchain::copy(VkQueue queue, uint32_t index, uint32_t wait_count, con
 {
     AV_SCOPE("Swapchain::copy");
     const VkImage image = device_.made(index).image_;
-    if (through_chain_) return device_.copy_into(queue, image, chained_.slot(), extent_, wait_count, waits, slot);
+    if (through_chain_) return device_.copy_into(queue, image, chained_.slot(slot), extent_, wait_count, waits, slot);
     return device_.copy(queue, image, extent_, wait_count, waits, slot);
 }
 

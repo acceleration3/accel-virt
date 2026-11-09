@@ -364,6 +364,44 @@ TEST(window_present_queue, a_slot_is_reclaimed_from_the_owners_queued_frames_wit
   CHECK_EQ(rig.shown.waits(), 0u);
   CHECK(rig.queue.invariants_hold()); }
 
+TEST(window_present_queue, a_slot_stays_taken_until_the_chain_has_finished_copying_it)
+{ Rig rig;
+  rig.chains.refuse_opens(false);
+  std::uint64_t ids[2] = {}, sizes[2] = {};
+  CHECK(rig.chains.open(&rig.window, 1u, 4u, 2u, av::icd::SlotLayout::rgba_bottom_up, 2u, ids, sizes));
+  CHECK(rig.queue.start());
+  const Frame chained(rig.owner, 0u, nullptr, Frame::Rows::bgra_bottom_up, 4u, 2u, &rig.window, Mark{});
+  rig.chains.hold_copies(true);
+  CHECK(rig.queue.hand(chained));
+  CHECK(rig.thread.step());
+  CHECK_EQ(rig.chains.presents(), 1u);
+  CHECK_EQ(rig.owner.finished(), 1u);
+  CHECK_EQ(rig.queue.shown_frames(), 1u);
+  CHECK_EQ(rig.queue.try_slot(rig.owner, 1u, 1u), 1u);
+  CHECK_EQ(rig.queue.try_slot(rig.owner, 2u, 2u), 1u);
+  CHECK(rig.queue.invariants_hold());
+  rig.chains.hold_copies(false);
+  CHECK_EQ(rig.queue.try_slot(rig.owner, 1u, 1u), 0u);
+  CHECK_EQ(rig.queue.queued(), 0u);
+  CHECK_EQ(rig.shown.waits(), 0u);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, a_slot_still_being_copied_is_not_reclaimed_and_is_let_go_when_its_owner_settles)
+{ Rig rig;
+  rig.chains.refuse_opens(false);
+  std::uint64_t ids[2] = {}, sizes[2] = {};
+  CHECK(rig.chains.open(&rig.window, 1u, 4u, 2u, av::icd::SlotLayout::rgba_bottom_up, 2u, ids, sizes));
+  CHECK(rig.queue.start());
+  rig.chains.hold_copies(true);
+  CHECK(rig.queue.hand(Frame(rig.owner, 0u, nullptr, Frame::Rows::bgra_bottom_up, 4u, 2u, &rig.window, Mark{})));
+  CHECK(rig.thread.step());
+  CHECK_EQ(rig.queue.reclaim_slot(rig.owner, 1u, 1u), 1u);
+  CHECK_EQ(rig.queue.dropped_frames(), 1u);
+  CHECK_EQ(rig.queue.queued(), 1u);
+  rig.queue.settle(rig.owner);
+  CHECK_EQ(rig.queue.queued(), 0u);
+  CHECK(rig.queue.invariants_hold()); }
+
 TEST(window_present_queue, a_slot_nobody_can_give_up_is_a_dropped_frame)
 { Rig rig;
   CHECK(rig.queue.start());
