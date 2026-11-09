@@ -1,4 +1,6 @@
 #include "executor/vulkan/vulkan_backend.hpp"
+
+#include "core/log/log_line.hpp"
 #include "executor/vulkan/low_priority_queues.hpp"
 #include "executor/vulkan/vulkan_robust_access.hpp"
 #include "executor/vulkan/vulkan_timeline_feature.hpp"
@@ -929,12 +931,18 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
     }
     VkMemoryAllocateInfo allocate = *pAllocateInfo;
     allocate.memoryTypeIndex = types_.host_type(pAllocateInfo->memoryTypeIndex);
-    if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) {
+        LogLine(lines_).text("a memory allocation names guest memory type ").number(pAllocateInfo->memoryTypeIndex).text(" the host has no type for").write();
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
     const uint32_t heap = types_.heap_of(pAllocateInfo->memoryTypeIndex);
-    if (!vram_.admit(heap, pAllocateInfo->allocationSize))
+    if (!vram_.admit(heap, pAllocateInfo->allocationSize)) {
+        LogLine(lines_).text("a memory allocation of ").number(pAllocateInfo->allocationSize).text(" bytes in heap ").number(heap).text(" refused by the ").text(vram_.system(heap) ? "host memory" : "video memory").text(" budget").write();
         return vram_.system(heap) ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
     const VkResult made = RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
     if (made != VK_SUCCESS) {
+        LogLine(lines_).text("the host driver refused an allocation of ").number(pAllocateInfo->allocationSize).text(" bytes in host type ").number(allocate.memoryTypeIndex).text(": ").number(static_cast<uint64_t>(static_cast<int64_t>(made))).write();
         vram_.refund(heap, pAllocateInfo->allocationSize);
         return made;
     }
@@ -970,13 +978,26 @@ bool VulkanBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &
     AV_SCOPE("VulkanBackend::adopt");
     handle = 0u;
     if (role.is_arena() || adopting_ == nullptr || !memory_import_) return false;
-    OwnedFd  descriptor;
     uint64_t made = 0u;
-    if (!memory.share(descriptor)) return false;
-    const uint32_t type = import_type(memory, descriptor.fd());
-    if (type == max_memory_types ||
-        !adopting_->memory().import_dmabuf(descriptor, memory.size(), type, made))
-        return false;
+    uint32_t preferred = max_memory_types;
+    uint32_t listed = 0u;
+    {
+        OwnedFd probe;
+        if (!memory.share(probe)) return false;
+        preferred = import_type(memory, probe.fd());
+        listed = adopting_->memory().dmabuf_types(probe.fd());
+    }
+    bool imported = false;
+    for (uint32_t pass = 0u; pass < 3u && !imported; pass++) {
+        for (uint32_t type = 0u; type < max_memory_types && !imported; type++) {
+            const bool wanted = pass == 0u ? type == preferred : pass == 1u ? (listed & (1u << type)) != 0u : true;
+            if (!wanted || (pass != 0u && type == preferred)) continue;
+            OwnedFd descriptor;
+            if (!memory.share(descriptor)) return false;
+            imported = adopting_->memory().import_dmabuf(descriptor, memory.size(), type, made);
+        }
+    }
+    if (!imported) return false;
     if (!kept_on(*adopting_, made)) {
         adopting_->memory().release(made);
         return false;
