@@ -14,11 +14,12 @@ namespace {
 constexpr uint32_t level_11_0 = 0xb000u;
 constexpr uint32_t level_11_1 = 0xb100u;
 constexpr uint32_t level_12_0 = 0xc000u;
+constexpr uint32_t level_12_1 = 0xc100u;
 constexpr uint32_t binding_tier_12_0 = 2u;
 constexpr uint32_t tiled_tier_12_0 = 2u;
 constexpr uint32_t most_tiled_tier = 2u;
 constexpr uint32_t api_model_6_0 = 0x60u;
-constexpr uint32_t api_model_6_5 = 0x65u;
+constexpr uint32_t api_model_6_8 = 0x68u;
 constexpr uint32_t ddi_model_5_1 = 0x50015u;
 constexpr uint32_t ddi_model_6_0 = 0x60005u;
 constexpr uint32_t ddi_model_step = 0x10u;
@@ -81,6 +82,10 @@ UINT D3d12HostCaps::format_support(DXGI_FORMAT format) const
 uint32_t D3d12HostCaps::pipeline_level() const
 {
     AV_SCOPE("D3d12HostCaps::pipeline_level");
+    if (caps_.feature_level >= level_12_1 && caps_.conservative_rasterization_tier >= 1u && caps_.rovs != 0u &&
+        caps_.resource_binding_tier >= binding_tier_12_0 && tiled_tier() >= tiled_tier_12_0 &&
+        caps_.typed_uav_load_additional_formats != 0u && caps_.vp_rt_array_without_gs != 0u)
+        return D3D12DDI_3DPIPELINELEVEL_12_1;
     if (caps_.feature_level >= level_12_0 && caps_.resource_binding_tier >= binding_tier_12_0 &&
         tiled_tier() >= tiled_tier_12_0 && caps_.typed_uav_load_additional_formats != 0u)
         return D3D12DDI_3DPIPELINELEVEL_12_0;
@@ -106,6 +111,10 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     AV_SCOPE("D3d12HostCaps::options");
     D3D12DDI_D3D12_OPTIONS_DATA_0089 answer = {};
     answer.ResourceBindingTier = static_cast<D3D12DDI_RESOURCE_BINDING_TIER>(caps_.resource_binding_tier);
+    answer.ConservativeRasterizationTier =
+        static_cast<D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER>(caps_.conservative_rasterization_tier);
+    answer.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation = caps_.vp_rt_array_without_gs != 0u;
+    answer.BarycentricsSupported = caps_.barycentrics != 0u;
     answer.ResourceHeapTier = static_cast<D3D12DDI_RESOURCE_HEAP_TIER>(caps_.resource_heap_tier);
     answer.TiledResourcesTier = static_cast<D3D12DDI_TILED_RESOURCES_TIER>(tiled_tier());
     answer.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
@@ -117,6 +126,12 @@ HRESULT D3d12HostCaps::shader(void *data, UINT bytes) const
 {
     AV_SCOPE("D3d12HostCaps::shader");
     D3D12DDI_SHADER_CAPS_0084 answer = {};
+    answer.MinPrecision = static_cast<D3D12DDI_SHADER_MIN_PRECISION>(caps_.min_precision);
+    answer.ShaderSpecifiedStencilRef = caps_.ps_stencil_ref != 0u;
+    answer.ROVs = caps_.rovs != 0u;
+    answer.Native16BitOps = caps_.native_16bit_ops != 0u;
+    answer.AtomicInt64OnTypedResource = caps_.atomic_int64_typed != 0u;
+    answer.AtomicInt64OnGroupShared = caps_.atomic_int64_group_shared != 0u;
     answer.DoubleOps = caps_.double_ops != 0u;
     answer.TypedUAVLoadAdditionalFormats = caps_.typed_uav_load_additional_formats != 0u;
     answer.WaveOps = caps_.wave_ops != 0u;
@@ -133,7 +148,7 @@ HRESULT D3d12HostCaps::shader_models(void *data, UINT bytes) const
     if (data == nullptr || bytes < sizeof(D3D12DDI_D3D12_SHADER_MODELS_DATA_0011)) return E_INVALIDARG;
     const auto &asked = *static_cast<const D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 *>(data);
     if (asked.pNumShaderModelsSupported == nullptr) return E_INVALIDARG;
-    const uint32_t highest = caps_.shader_model < api_model_6_5 ? caps_.shader_model : api_model_6_5;
+    const uint32_t highest = caps_.shader_model < api_model_6_8 ? caps_.shader_model : api_model_6_8;
     const UINT     models = highest >= api_model_6_0 ? 2u + (highest - api_model_6_0) : 1u;
     if (asked.pShaderModelsSupported == nullptr) {
         *asked.pNumShaderModelsSupported = models;
@@ -232,9 +247,20 @@ HRESULT D3d12HostCaps::answer_options(const D3D12DDIARG_GETCAPS &args) const
     AV_SCOPE("D3d12HostCaps::answer_options");
     const UINT bytes = args.DataSize;
     switch (static_cast<UINT>(args.Type)) {
+    case D3D12DDICAPS_TYPE_OPTIONS_0093: {
+        D3D12DDI_OPTIONS_DATA_0093 answer = {};
+        answer.AdvancedTextureOpsSupported = caps_.advanced_texture_ops != 0u;
+        answer.WriteableMSAATexturesSupported = caps_.writeable_msaa_textures != 0u;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    case D3D12DDICAPS_TYPE_SHADER_MODEL_6_8_OPTIONS_0110: {
+        D3D12DDI_SHADER_MODEL_6_8_OPTIONS_0110 answer = {};
+        answer.SampleCmpGradientAndBiasSupported = caps_.sample_cmp_gradient_bias != 0u;
+        answer.ExtendedCommandInfoSupported = caps_.extended_command_info != 0u;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
     case D3D12DDICAPS_TYPE_OPTIONS_0090:
     case D3D12DDICAPS_TYPE_OPTIONS_0091:
-    case D3D12DDICAPS_TYPE_OPTIONS_0093:
     case D3D12DDICAPS_TYPE_OPTIONS_0098:
     case D3D12DDICAPS_TYPE_OPTIONS_0101:
     case D3D12DDICAPS_TYPE_OPTIONS_0109:
@@ -243,7 +269,6 @@ HRESULT D3d12HostCaps::answer_options(const D3D12DDIARG_GETCAPS &args) const
     case D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS:
     case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPE_COUNT:
     case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPES:
-    case D3D12DDICAPS_TYPE_SHADER_MODEL_6_8_OPTIONS_0110:
     case D3D12DDI_FEATURE_HARDWARE_COPY_106:
     case D3D12DDICAPS_TYPE_SWIZZLE_PATTERN:
     case D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN:

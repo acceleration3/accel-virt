@@ -9,8 +9,41 @@ namespace av {
 namespace {
 
 constexpr uint32_t level_12_2 = 0xc200u;
-constexpr uint32_t shader_model_6_6 = 0x66u;
+constexpr uint32_t shader_model_6_8 = 0x68u;
+constexpr int      feature_options9 = 37;
+constexpr int      feature_options14 = 59;
+constexpr int      feature_options21 = 61;
 constexpr uint32_t descriptor_heap_types = 4u;
+
+struct Options9 {
+    BOOL mesh_shader_pipeline_stats;
+    BOOL mesh_shader_full_range_render_target_array_index;
+    BOOL atomic_int64_on_typed_resource;
+    BOOL atomic_int64_on_group_shared;
+    BOOL derivatives_in_mesh_and_amplification_shaders;
+    int  wave_mma_tier;
+};
+
+struct Options14 {
+    BOOL advanced_texture_ops;
+    BOOL writeable_msaa_textures;
+    BOOL independent_front_and_back_stencil_ref_mask;
+};
+
+struct Options21 {
+    int  work_graphs_tier;
+    int  execute_indirect_tier;
+    BOOL sample_cmp_gradient_and_bias;
+    BOOL extended_command_info;
+};
+
+template <typename Options>
+bool ask(ID3D12Device &device, int feature, Options &answer)
+{
+    AV_SCOPE("ask");
+    answer = Options{};
+    return SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(feature), &answer, sizeof(answer)));
+}
 
 }
 
@@ -38,7 +71,7 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &levels, sizeof(levels))))
         caps_.feature_level = static_cast<uint32_t>(levels.MaxSupportedFeatureLevel);
     D3D12_FEATURE_DATA_SHADER_MODEL model = {};
-    model.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(shader_model_6_6);
+    model.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(shader_model_6_8);
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model))))
         caps_.shader_model = static_cast<uint32_t>(model.HighestShaderModel);
     D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
@@ -53,6 +86,31 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
         caps_.rovs = options.ROVsSupported ? 1u : 0u;
         caps_.double_ops = options.DoublePrecisionFloatShaderOps ? 1u : 0u;
         caps_.output_merger_logic_op = options.OutputMergerLogicOp ? 1u : 0u;
+        caps_.min_precision = static_cast<uint32_t>(options.MinPrecisionSupport);
+        caps_.ps_stencil_ref = options.PSSpecifiedStencilRefSupported ? 1u : 0u;
+        caps_.vp_rt_array_without_gs =
+            options.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation ? 1u : 0u;
+    }
+    D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3))))
+        caps_.barycentrics = options3.BarycentricsSupported ? 1u : 0u;
+    D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4))))
+        caps_.native_16bit_ops = options4.Native16BitShaderOpsSupported ? 1u : 0u;
+    Options9 options9;
+    if (ask(device, feature_options9, options9)) {
+        caps_.atomic_int64_typed = options9.atomic_int64_on_typed_resource ? 1u : 0u;
+        caps_.atomic_int64_group_shared = options9.atomic_int64_on_group_shared ? 1u : 0u;
+    }
+    Options14 options14;
+    if (ask(device, feature_options14, options14)) {
+        caps_.advanced_texture_ops = options14.advanced_texture_ops ? 1u : 0u;
+        caps_.writeable_msaa_textures = options14.writeable_msaa_textures ? 1u : 0u;
+    }
+    Options21 options21;
+    if (ask(device, feature_options21, options21)) {
+        caps_.sample_cmp_gradient_bias = options21.sample_cmp_gradient_and_bias ? 1u : 0u;
+        caps_.extended_command_info = options21.extended_command_info ? 1u : 0u;
     }
     D3D12_FEATURE_DATA_D3D12_OPTIONS1 waves = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &waves, sizeof(waves)))) {
