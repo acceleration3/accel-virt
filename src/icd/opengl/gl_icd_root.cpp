@@ -84,6 +84,19 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_multitexture", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_clip_control", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_shader_draw_parameters", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_texture_compression_s3tc", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_texture_compression_dxt1", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_texture_filter_anisotropic", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_texture_sRGB_decode", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_texture_compression_bptc", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_texture_compression_rgtc", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_ES3_compatibility", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_KHR_shader_subgroup", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_shader_ballot", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_shader_viewport_layer_array", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_AMD_vertex_shader_layer", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_fragment_shader_interlock", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_shader_image_load_formatted", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {
