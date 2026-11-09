@@ -131,6 +131,7 @@ HRESULT D3d12HostCaps::shader(void *data, UINT bytes) const
     answer.MinPrecision = static_cast<D3D12DDI_SHADER_MIN_PRECISION>(caps_.min_precision);
     answer.ShaderSpecifiedStencilRef = caps_.ps_stencil_ref != 0u;
     answer.ROVs = caps_.rovs != 0u;
+    answer.Native16BitOps = caps_.native_16bit_ops != 0u;
     answer.AtomicInt64OnTypedResource = caps_.atomic_int64_typed != 0u;
     answer.AtomicInt64OnGroupShared = caps_.atomic_int64_group_shared != 0u;
     answer.DoubleOps = caps_.double_ops != 0u;
