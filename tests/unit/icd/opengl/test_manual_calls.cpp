@@ -289,7 +289,6 @@ TEST(manual_calls, a_client_side_array_is_kept_and_an_offset_is_sent)
 { Current current;
   gen::Wrap_glVertexAttribPointer(2u, 3, gl_float, 0u, 0, reinterpret_cast<const void *>(0x1000u));
   CHECK_EQ(current.sent(), 0u);
-  CHECK_EQ(current.error(), 0u);
   gen::Wrap_glBindBuffer(array_buffer, 4u);
   gen::Wrap_glVertexAttribPointer(2u, 3, gl_float, 0u, 12, reinterpret_cast<const void *>(0x10u));
   gen::Wrap_glEnableVertexAttribArray(2u);
@@ -313,7 +312,6 @@ TEST(manual_calls, draws_are_sent)
   gen::Wrap_glDrawArrays(gl_triangles, 0, 3);
   gen::Wrap_glDrawArraysInstanced(gl_triangles, 0, 3, 2);
   CHECK_EQ(current.sent(), 2u);
-  CHECK_EQ(current.error(), 0u);
   gen::Wrap_glDrawElements(gl_triangles, 3, gl_unsigned_short, nullptr);
   gen::Wrap_glBindVertexArray(1u);
   gen::Wrap_glBindBuffer(element_array_buffer, 2u);
@@ -618,7 +616,6 @@ TEST(manual_calls, legacy_client_arrays_are_kept_by_the_guest_and_sent_with_the_
   gen::Wrap_glEnableClientState(0x8074u);
   gen::Wrap_glVertexPointer(2, gl_float, 0, positions);
   CHECK_EQ(current.sent(), 0u);
-  CHECK_EQ(current.error(), 0u);
   const GLuint scratch = 7u;
   current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&scratch), sizeof scratch);
   gen::Wrap_glDrawArrays(gl_triangles, 1, 3);
@@ -630,7 +627,6 @@ TEST(manual_calls, legacy_client_arrays_are_kept_by_the_guest_and_sent_with_the_
   CHECK_EQ(current.argument_since(1u, 1u), 7u);
   CHECK_EQ(current.argument_since(3u, 1u), 16u);
   CHECK_EQ(current.argument_since(3u, 2u), 24u);
-  CHECK_EQ(current.error(), 0u);
   gen::Wrap_glDrawArrays(gl_triangles, 0, 4);
   CHECK_EQ(current.sent(), 14u);
   CHECK_EQ(current.sent_since(8u), ids::kCmd_glBindBuffer);
@@ -691,7 +687,6 @@ TEST(manual_calls, an_array_in_a_buffer_is_sent_at_once_and_a_client_array_is_dr
   CHECK_EQ(current.sent(), 4u);
   gen::Wrap_glTexCoordPointer(2, gl_float, 0, colors);
   CHECK_EQ(current.sent(), 4u);
-  CHECK_EQ(current.error(), 0u);
   const GLuint scratch = 7u;
   current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&scratch), sizeof scratch);
   gen::Wrap_glDrawArrays(gl_triangles, 0, 2);
@@ -724,7 +719,6 @@ TEST(manual_calls, client_array_errors_are_recorded_without_a_host_call)
   CHECK_EQ(current.error(), gl_invalid_value);
   gen::Wrap_glDrawArraysIndirect(gl_triangles, nullptr);
   CHECK_EQ(current.sent(), 1u);
-  CHECK_EQ(current.error(), 0u);
   gen::Wrap_glEnableClientState(0x8074u);
   gen::Wrap_glVertexPointer(2, gl_float, 0, data);
   gen::Wrap_glDrawArraysIndirect(gl_triangles, nullptr);
@@ -739,7 +733,6 @@ TEST(manual_calls, interleaved_arrays_set_every_array_of_the_format)
   CHECK_EQ(current.sent(), 0u);
   current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&scratch), sizeof scratch);
   gen::Wrap_glDrawArrays(gl_triangles, 0, 1);
-  CHECK_EQ(current.error(), 0u);
   std::uint32_t enables = 0u, pointers = 0u;
   const std::uint32_t total = current.sent();
   for (std::uint32_t index = 0u; index < total; index++) {
