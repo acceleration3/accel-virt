@@ -737,6 +737,34 @@ bool av_d3d12_DispatchMesh12(::av::ClientTransport& t, uint32_t list, uint32_t x
     return t.send_async(kCmd_DispatchMesh12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_SetShadingRate12(::av::ClientTransport& t, uint32_t list, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1) {
+    AV_SCOPE("av_d3d12_SetShadingRate12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(base_rate);
+    b.write_pod<uint32_t>(combiner0);
+    b.write_pod<uint32_t>(combiner1);
+    return t.send_async(kCmd_SetShadingRate12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_SetShadingRateImage12(::av::ClientTransport& t, uint32_t list, uint32_t image) {
+    AV_SCOPE("av_d3d12_SetShadingRateImage12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(image);
+    return t.send_async(kCmd_SetShadingRateImage12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_Barrier12(::av::ClientTransport& t, uint32_t list, uint32_t count, const LayoutBarrier* barriers) {
+    AV_SCOPE("av_d3d12_Barrier12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(count);
+    if (count > 128u || (count != 0u && barriers == nullptr)) return abandon(t);
+    if (count != 0u) b.write(barriers, sizeof(*barriers) * count);
+    return t.send_async(kCmd_Barrier12, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d12_CopyBufferRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes) {
     AV_SCOPE("av_d3d12_CopyBufferRegion12");
     ::av::WireWriter b = t.request_writer();

@@ -136,6 +136,14 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_Dispatch12(::av::ClientTransport& t, uint32_t list, uint32_t x, uint32_t y, uint32_t z);
 // Runs the mesh pipeline set on `list` over x by y by z groups; the host refuses counts past its dispatch limit.
 [[nodiscard]] bool av_d3d12_DispatchMesh12(::av::ClientTransport& t, uint32_t list, uint32_t x, uint32_t y, uint32_t z);
+// The base shading rate (D3D12_SHADING_RATE) and the two combiners (D3D12_SHADING_RATE_COMBINER) that merge it
+// with the pipeline's per-primitive rate and then the shading rate image's for the draws after.
+[[nodiscard]] bool av_d3d12_SetShadingRate12(::av::ClientTransport& t, uint32_t list, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1);
+// The R8_UINT texture whose texels give the rate of each tile for the draws after; 0 unbinds it.
+[[nodiscard]] bool av_d3d12_SetShadingRateImage12(::av::ClientTransport& t, uint32_t list, uint32_t image);
+// Enhanced barriers: type 0 global, 1 texture (the layouts and subresource range of `resource`, flag 1 discards),
+// 2 buffer. Texture barriers apply only to a resource that no legacy transition has named, and the other way round.
+[[nodiscard]] bool av_d3d12_Barrier12(::av::ClientTransport& t, uint32_t list, uint32_t count, const LayoutBarrier* barriers);
 [[nodiscard]] bool av_d3d12_CopyBufferRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes);
 [[nodiscard]] bool av_d3d12_CopyTextureRegion12(::av::ClientTransport& t, uint32_t list, const CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const CopyLocation& source, uint32_t has_box, const Box& box);
 [[nodiscard]] bool av_d3d12_CopyResource12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t source);

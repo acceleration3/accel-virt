@@ -102,6 +102,21 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
     D3D12_FEATURE_DATA_D3D12_OPTIONS2 options2 = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS2, &options2, sizeof(options2))))
         caps_.depth_bounds = options2.DepthBoundsTestSupported ? 1u : 0u;
+    d3d12new::Options6 options6 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(d3d12new::feature_options6), &options6, sizeof(options6)))) {
+        caps_.vrs_tier = static_cast<uint32_t>(options6.variable_shading_rate_tier);
+        caps_.vrs_additional_rates = options6.additional_shading_rates ? 1u : 0u;
+        caps_.vrs_tile_size = options6.shading_rate_image_tile_size;
+        caps_.vrs_per_primitive_viewport = options6.per_primitive_shading_rate_with_viewport_indexing ? 1u : 0u;
+    }
+    d3d12new::Options12 options12 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(d3d12new::feature_options12), &options12, sizeof(options12)))) {
+        caps_.enhanced_barriers = options12.enhanced_barriers ? 1u : 0u;
+        caps_.relaxed_format_casting = options12.relaxed_format_casting ? 1u : 0u;
+    }
+    d3d12new::Options10 options10 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(d3d12new::feature_options10), &options10, sizeof(options10))))
+        caps_.vrs_sum_combiner = options10.sum_combiner ? 1u : 0u;
     d3d12new::Options7 options7 = {};
     if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(d3d12new::feature_options7), &options7, sizeof(options7))))
         caps_.mesh_shader_tier = static_cast<uint32_t>(options7.mesh_shader_tier);

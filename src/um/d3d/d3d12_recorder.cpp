@@ -23,6 +23,7 @@ constexpr uint32_t barrier_transition = 0u;
 constexpr uint32_t barrier_aliasing = 1u;
 constexpr uint32_t barrier_uav = 2u;
 constexpr uint32_t most_barriers = 128u;
+constexpr uint32_t barrier_buffer = 2u;
 constexpr uint32_t most_views = 16u;
 constexpr uint32_t most_sample_positions = 64u;
 constexpr uint32_t most_stream_outputs = 4u;
@@ -411,6 +412,23 @@ VOID D3d12Recorder::set_predication(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESO
          "SetPredication12");
 }
 
+VOID D3d12Recorder::rs_set_shading_rate(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_SHADING_RATE_0062 rate,
+                                        const D3D12DDI_SHADING_RATE_COMBINER_0062 *combiners)
+{
+    AV_SCOPE("D3d12Recorder::rs_set_shading_rate");
+    const uint32_t first = combiners == nullptr ? 0u : static_cast<uint32_t>(combiners[0]);
+    const uint32_t second = combiners == nullptr ? 0u : static_cast<uint32_t>(combiners[1]);
+    sent(av_d3d12_SetShadingRate12(device_.wire(), list(handle), static_cast<uint32_t>(rate), first, second),
+         "SetShadingRate12");
+}
+
+VOID D3d12Recorder::rs_set_shading_rate_image(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE image)
+{
+    AV_SCOPE("D3d12Recorder::rs_set_shading_rate_image");
+    const uint32_t named = image.pDrvPrivate == nullptr ? 0u : device_.id_of(image.pDrvPrivate);
+    sent(av_d3d12_SetShadingRateImage12(device_.wire(), list(handle), named), "SetShadingRateImage12");
+}
+
 VOID D3d12Recorder::so_set_targets(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
                                    const D3D12DDI_STREAM_OUTPUT_BUFFER_VIEW *views)
 {
@@ -460,6 +478,53 @@ VOID D3d12Recorder::resource_barrier(D3D12DDI_HCOMMANDLIST handle, UINT count,
             }
         }
         sent(av_d3d12_ResourceBarrier12(device_.wire(), list(handle), taken, batch), "ResourceBarrier12");
+    }
+}
+
+VOID D3d12Recorder::barrier(D3D12DDI_HCOMMANDLIST handle, UINT32 count, const D3D12DDIARG_BARRIER_0094 *barriers)
+{
+    AV_SCOPE("D3d12Recorder::barrier");
+    icd::Pieces pieces(barriers == nullptr ? 0u : count, most_barriers);
+    while (pieces.next()) {
+        LayoutBarrier batch[most_barriers] = {};
+        uint32_t      taken = 0u;
+        for (UINT index = 0u; index < static_cast<UINT>(pieces.count()); index++) {
+            const D3D12DDIARG_BARRIER_0094 &from = barriers[pieces.offset() + index];
+            if (static_cast<uint32_t>(from.Type) > barrier_buffer) continue;
+            LayoutBarrier &to = batch[taken++];
+            to.type = static_cast<uint32_t>(from.Type);
+            if (from.Type == D3D12DDI_BARRIER_TYPE_GLOBAL) {
+                const D3D12DDI_GLOBAL_BARRIER_0088 &g = from.GlobalBarrier;
+                to.sync_before = static_cast<uint32_t>(g.SyncBefore);
+                to.sync_after = static_cast<uint32_t>(g.SyncAfter);
+                to.access_before = static_cast<uint32_t>(g.AccessBefore);
+                to.access_after = static_cast<uint32_t>(g.AccessAfter);
+            } else if (from.Type == D3D12DDI_BARRIER_TYPE_TEXTURE) {
+                const D3D12DDI_TEXTURE_BARRIER_0088 &t = from.TextureBarrier;
+                to.sync_before = static_cast<uint32_t>(t.SyncBefore);
+                to.sync_after = static_cast<uint32_t>(t.SyncAfter);
+                to.access_before = static_cast<uint32_t>(t.AccessBefore);
+                to.access_after = static_cast<uint32_t>(t.AccessAfter);
+                to.layout_before = static_cast<uint32_t>(t.LayoutBefore);
+                to.layout_after = static_cast<uint32_t>(t.LayoutAfter);
+                to.resource = device_.id_of(t.hResource.pDrvPrivate);
+                to.flags = static_cast<uint32_t>(t.Flags);
+                to.first_mip = t.Subresources.IndexOrFirstMipLevel;
+                to.mip_count = t.Subresources.NumMipLevels;
+                to.first_slice = t.Subresources.FirstArraySlice;
+                to.slice_count = t.Subresources.NumArraySlices;
+                to.first_plane = t.Subresources.FirstPlane;
+                to.plane_count = t.Subresources.NumPlanes;
+            } else {
+                const D3D12DDI_BUFFER_BARRIER_0088 &b = from.BufferBarrier;
+                to.sync_before = static_cast<uint32_t>(b.SyncBefore);
+                to.sync_after = static_cast<uint32_t>(b.SyncAfter);
+                to.access_before = static_cast<uint32_t>(b.AccessBefore);
+                to.access_after = static_cast<uint32_t>(b.AccessAfter);
+                to.resource = device_.id_of(b.hResource.pDrvPrivate);
+            }
+        }
+        if (taken != 0u) sent(av_d3d12_Barrier12(device_.wire(), list(handle), taken, batch), "Barrier12");
     }
 }
 

@@ -611,16 +611,16 @@ extern "C" VOID APIENTRY avumd_d3d12l_DispatchRays(D3D12DDI_HCOMMANDLIST handle,
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_RSSetShadingRate(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_SHADING_RATE_0062 a1, const D3D12DDI_SHADING_RATE_COMBINER_0062 * a2)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.rs_set_shading_rate(handle, a1, a2); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("RSSetShadingRate", handle, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_RSSetShadingRateImage(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE a1)
-{ static_cast<void>(handle); static_cast<void>(a1); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.rs_set_shading_rate_image(handle, a1); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("RSSetShadingRateImage", handle, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_DispatchMesh(D3D12DDI_HCOMMANDLIST handle, UINT a1, UINT a2, UINT a3)
 { D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.dispatch_mesh(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("DispatchMesh", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_Barrier(D3D12DDI_HCOMMANDLIST handle, UINT32 a1, const D3D12DDIARG_BARRIER_0094 * a2)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.barrier(handle, a1, a2); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("Barrier", handle, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_OmSetAlphaBlendFactor(D3D12DDI_HCOMMANDLIST handle, FLOAT a1)
 { static_cast<void>(handle); static_cast<void>(a1); }

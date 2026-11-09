@@ -109,6 +109,7 @@ public:
     bool on_UpdateTileMappings12(uint32_t queue, uint32_t resource, uint32_t region_count, const d3d12proto::TileRegion* regions, uint32_t heap, uint32_t range_count, const d3d12proto::TileRange* ranges, uint32_t flags) override;
     bool on_CopyTileMappings12(uint32_t queue, uint32_t destination, const d3d12proto::TileCoordinate& destination_start, uint32_t source, const d3d12proto::TileCoordinate& source_start, const d3d12proto::TileSize& size, uint32_t flags) override;
     bool on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count) override;
+    bool on_Barrier12(uint32_t list, uint32_t count, const d3d12proto::LayoutBarrier* barriers) override;
     bool on_ResourceBarrier12(uint32_t list, uint32_t count, const d3d12proto::Barrier* barriers) override;
     bool on_SetPipelineState12(uint32_t list, uint32_t pipeline) override;
     bool on_SetRootSignature12(uint32_t list, uint32_t compute, uint32_t root) override;
@@ -141,6 +142,8 @@ public:
     bool on_ClearUnorderedAccessViewUint12(uint32_t list, const d3d12proto::DescriptorRef& gpu_view, const d3d12proto::DescriptorRef& cpu_view, uint32_t resource, const d3d12proto::Uint4& values, uint32_t rect_count, const d3d12proto::Rect* rects) override;
     bool on_ClearUnorderedAccessViewFloat12(uint32_t list, const d3d12proto::DescriptorRef& gpu_view, const d3d12proto::DescriptorRef& cpu_view, uint32_t resource, const d3d12proto::Float4& values, uint32_t rect_count, const d3d12proto::Rect* rects) override;
     bool on_ExecuteBundle12(uint32_t list, uint32_t bundle) override;
+    bool on_SetShadingRate12(uint32_t list, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1) override;
+    bool on_SetShadingRateImage12(uint32_t list, uint32_t image) override;
     bool on_SetDepthBounds12(uint32_t list, float minimum, float maximum) override;
     bool on_SetPredication12(uint32_t list, uint32_t buffer, uint64_t offset, uint32_t op) override;
     bool on_SetStreamOutputTargets12(uint32_t list, uint32_t start, uint32_t count, const d3d12proto::StreamOutputView* views) override;

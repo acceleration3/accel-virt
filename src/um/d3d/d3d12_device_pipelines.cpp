@@ -302,7 +302,7 @@ VOID D3d12Device::create_geometry_shader_with_stream_output(
 SIZE_T D3d12Device::calc_private_shader_size(const D3D12DDIARG_CREATE_SHADER_0026 *args)
 {
     AV_SCOPE("D3d12Device::calc_private_shader_size");
-    return args == nullptr ? sizeof(ShaderRecord) : shader_bytes(*args, false);
+    return args == nullptr ? sizeof(ShaderRecord) : shader_bytes(*args, ShaderIo::standard);
 }
 
 SIZE_T D3d12Device::calc_private_tessellation_shader_size(const D3D12DDIARG_CREATE_SHADER_0026 *args)

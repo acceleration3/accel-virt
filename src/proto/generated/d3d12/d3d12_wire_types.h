@@ -311,6 +311,27 @@ struct GraphicsState {
 static_assert(sizeof(GraphicsState) == 552, "GraphicsState crosses as 552 bytes");
 static_assert(__is_trivially_copyable(GraphicsState), "GraphicsState is plain data");
 
+struct LayoutBarrier {
+    uint32_t type;
+    uint32_t flags;
+    uint32_t sync_before;
+    uint32_t sync_after;
+    uint32_t access_before;
+    uint32_t access_after;
+    uint32_t layout_before;
+    uint32_t layout_after;
+    uint32_t resource;
+    uint32_t first_mip;
+    uint32_t mip_count;
+    uint32_t first_slice;
+    uint32_t slice_count;
+    uint32_t first_plane;
+    uint32_t plane_count;
+    uint32_t reserved;
+};
+static_assert(sizeof(LayoutBarrier) == 64, "LayoutBarrier crosses as 64 bytes");
+static_assert(__is_trivially_copyable(LayoutBarrier), "LayoutBarrier is plain data");
+
 struct Barrier {
     uint32_t type;
     uint32_t flags;
@@ -423,8 +444,15 @@ struct Caps12 {
     uint32_t depth_bounds;
     uint32_t view_instancing_tier;
     uint32_t mesh_shader_tier;
+    uint32_t vrs_tier;
+    uint32_t vrs_additional_rates;
+    uint32_t vrs_tile_size;
+    uint32_t vrs_per_primitive_viewport;
+    uint32_t vrs_sum_combiner;
+    uint32_t enhanced_barriers;
+    uint32_t relaxed_format_casting;
 };
-static_assert(sizeof(Caps12) == 144, "Caps12 crosses as 144 bytes");
+static_assert(sizeof(Caps12) == 172, "Caps12 crosses as 172 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto

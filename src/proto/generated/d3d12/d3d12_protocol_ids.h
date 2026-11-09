@@ -90,5 +90,8 @@ inline constexpr uint32_t kCmd_ClearUnorderedAccessViewUint12 = 0x00041529;
 inline constexpr uint32_t kCmd_ClearUnorderedAccessViewFloat12 = 0x0004152a;
 inline constexpr uint32_t kCmd_ExecuteBundle12 = 0x0004152b;
 inline constexpr uint32_t kCmd_DispatchMesh12 = 0x0004152c;
+inline constexpr uint32_t kCmd_SetShadingRate12 = 0x0004152d;
+inline constexpr uint32_t kCmd_SetShadingRateImage12 = 0x0004152e;
+inline constexpr uint32_t kCmd_Barrier12 = 0x0004152f;
 
 }  // namespace av::d3d12proto

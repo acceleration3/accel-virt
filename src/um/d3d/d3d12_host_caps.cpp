@@ -20,6 +20,7 @@ constexpr uint32_t binding_tier_12_0 = 2u;
 constexpr uint32_t tiled_tier_12_0 = 2u;
 constexpr uint32_t most_tiled_tier = 2u;
 constexpr uint32_t most_view_instancing_tier = 3u;
+constexpr uint32_t most_vrs_tier = 1u;
 constexpr uint32_t mesh_tier_1 = 10u;
 constexpr uint32_t api_model_6_0 = 0x60u;
 constexpr uint32_t api_model_6_8 = 0x68u;
@@ -126,6 +127,14 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     answer.DepthBoundsTestSupported = caps_.depth_bounds != 0u;
     answer.ViewInstancingTier = static_cast<D3D12DDI_VIEW_INSTANCING_TIER>(
         caps_.view_instancing_tier < most_view_instancing_tier ? caps_.view_instancing_tier : most_view_instancing_tier);
+    const uint32_t shading_tier = caps_.vrs_tier < most_vrs_tier ? caps_.vrs_tier : most_vrs_tier;
+    answer.VariableShadingRateTier = static_cast<D3D12DDI_VARIABLE_SHADING_RATE_TIER>(shading_tier);
+    answer.AdditionalShadingRatesSupported = shading_tier >= 2u && caps_.vrs_additional_rates != 0u;
+    answer.PerPrimitiveShadingRateSupportedWithViewportIndexing =
+        shading_tier >= 2u && caps_.vrs_per_primitive_viewport != 0u;
+    answer.ShadingRateImageTileSize = shading_tier >= 2u ? caps_.vrs_tile_size : 0u;
+    answer.VariableRateShadingSumCombinerSupported = shading_tier >= 2u && caps_.vrs_sum_combiner != 0u;
+    answer.EnhancedBarriersSupported = caps_.enhanced_barriers != 0u;
     answer.MeshShaderTier = caps_.mesh_shader_tier >= mesh_tier_1 ? D3D12DDI_MESH_SHADER_TIER_1
                                                                   : D3D12DDI_MESH_SHADER_TIER_NOT_SUPPORTED;
     return fill(data, bytes, &answer, sizeof(answer));

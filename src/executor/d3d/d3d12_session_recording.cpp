@@ -1,4 +1,5 @@
 #include "executor/d3d/d3d12_session.hpp"
+#include "executor/d3d/d3d12_layout_barrier.hpp"
 #include "executor/d3d/d3d12_list_cast.hpp"
 
 #include "core/log/log_line.hpp"
@@ -53,6 +54,11 @@ bool D3d12Session::on_ResourceBarrier12(uint32_t id, uint32_t count, const d3d12
         made[index].Flags = static_cast<D3D12_RESOURCE_BARRIER_FLAGS>(barrier.flags);
         if (barrier.type == barrier_transition) {
             if (resource == nullptr) return false;
+            if (resource->GetDesc().Dimension != D3D12_RESOURCE_DIMENSION_BUFFER &&
+                !D3d12LayoutBarrier::claim(resource, D3d12LayoutBarrier::Mode::legacy)) {
+                LogLine(lines_).text("ResourceBarrier12 on list ").number(id).text(" moves a texture that layout barriers already name").write();
+                return false;
+            }
             made[index].Transition = {resource, barrier.subresource, static_cast<D3D12_RESOURCE_STATES>(barrier.before),
                                       static_cast<D3D12_RESOURCE_STATES>(barrier.after)};
         } else if (barrier.type == barrier_aliasing) {
@@ -64,6 +70,64 @@ bool D3d12Session::on_ResourceBarrier12(uint32_t id, uint32_t count, const d3d12
         }
     }
     if (count != 0u) recorded->ResourceBarrier(count, made);
+    return true;
+}
+
+bool D3d12Session::on_Barrier12(uint32_t id, uint32_t count, const d3d12proto::LayoutBarrier *barriers)
+{
+    AV_SCOPE("D3d12Session::on_Barrier12");
+    const D3d12ListCast<ID3D12GraphicsCommandList7> enhanced(list(id));
+    if (enhanced.get() == nullptr || count > most_barriers || device_->capabilities().caps().enhanced_barriers == 0u)
+        return false;
+    d3d12new::GlobalBarrier  globals[most_barriers] = {};
+    d3d12new::TextureBarrier textures[most_barriers] = {};
+    d3d12new::BufferBarrier  buffers[most_barriers] = {};
+    d3d12new::BarrierGroup   groups[most_barriers] = {};
+    uint32_t                 group_count = 0u;
+    for (uint32_t index = 0u; index < count; index++) {
+        const d3d12proto::LayoutBarrier &from = barriers[index];
+        const D3d12LayoutBarrier         checked(from);
+        ID3D12Resource *const resource =
+            from.resource == 0u ? nullptr : objects_.find_as<ID3D12Resource>(from.resource, D3dObjectKind::resource12);
+        if (!checked.holds() || (from.resource != 0u && (resource == nullptr || !retain_resource(id, from.resource)))) {
+            LogLine(lines_).text("Barrier12 on list ").number(id).text(" with a barrier that does not hold: type ")
+                .number(from.type).text(" sync ").number(from.sync_before).text("/").number(from.sync_after)
+                .text(" access ").number(from.access_before).text("/").number(from.access_after).text(" layout ")
+                .number(from.layout_before).text("/").number(from.layout_after).text(" flags ").number(from.flags)
+                .text(" planes ").number(from.plane_count).write();
+            return false;
+        }
+        const void *entry = nullptr;
+        if (from.type == 0u) {
+            globals[index] = {from.sync_before, from.sync_after, from.access_before, from.access_after};
+            entry = &globals[index];
+        } else if (from.type == 2u) {
+            if (resource->GetDesc().Dimension != D3D12_RESOURCE_DIMENSION_BUFFER) return false;
+            buffers[index] = {from.sync_before, from.sync_after, from.access_before, from.access_after, resource};
+            entry = &buffers[index];
+        } else {
+            const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+            const uint32_t planes = D3d12LayoutBarrier::planes_of(static_cast<uint32_t>(desc.Format));
+            if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ||
+                !checked.fits(desc.Dimension, desc.DepthOrArraySize, desc.MipLevels, planes) ||
+                !D3d12LayoutBarrier::claim(resource, D3d12LayoutBarrier::Mode::layout)) {
+                LogLine(lines_).text("Barrier12 on list ").number(id).text(" names a texture it cannot move by layout").write();
+                return false;
+            }
+            textures[index] = {from.sync_before, from.sync_after, from.access_before, from.access_after, D3d12LayoutBarrier::api_layout(from.layout_before),
+                               D3d12LayoutBarrier::api_layout(from.layout_after), resource,
+                               {from.first_mip, from.mip_count, from.first_slice, from.slice_count, from.first_plane,
+                                from.plane_count},
+                               from.flags};
+            entry = &textures[index];
+        }
+        if (group_count != 0u && groups[group_count - 1u].type == from.type) {
+            groups[group_count - 1u].count++;
+        } else {
+            groups[group_count++] = {from.type, 1u, entry};
+        }
+    }
+    if (count != 0u) enhanced.get()->Barrier(group_count, groups);
     return true;
 }
 

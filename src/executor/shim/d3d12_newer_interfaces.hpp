@@ -32,6 +32,7 @@ constexpr int subobject_depth_stencil2 = 26;
 
 constexpr int feature_options6 = 30;
 constexpr int feature_options7 = 32;
+constexpr int feature_options10 = 39;
 constexpr int feature_options12 = 41;
 
 struct ViewInstanceLocation {
@@ -74,6 +75,48 @@ struct StreamDesc {
     void  *stream;
 };
 
+struct BarrierSubresourceRange {
+    UINT index_or_first_mip;
+    UINT mip_count;
+    UINT first_slice;
+    UINT slice_count;
+    UINT first_plane;
+    UINT plane_count;
+};
+
+struct GlobalBarrier {
+    UINT sync_before;
+    UINT sync_after;
+    UINT access_before;
+    UINT access_after;
+};
+
+struct TextureBarrier {
+    UINT                     sync_before;
+    UINT                     sync_after;
+    UINT                     access_before;
+    UINT                     access_after;
+    UINT                     layout_before;
+    UINT                     layout_after;
+    ID3D12Resource          *resource;
+    BarrierSubresourceRange  subresources;
+    UINT                     flags;
+};
+
+struct BufferBarrier {
+    UINT            sync_before;
+    UINT            sync_after;
+    UINT            access_before;
+    UINT            access_after;
+    ID3D12Resource *resource;
+};
+
+struct BarrierGroup {
+    UINT type;
+    UINT count;
+    const void *barriers;
+};
+
 struct Options6 {
     BOOL additional_shading_rates;
     BOOL per_primitive_shading_rate_with_viewport_indexing;
@@ -85,6 +128,11 @@ struct Options6 {
 struct Options7 {
     int mesh_shader_tier;
     int sampler_feedback_tier;
+};
+
+struct Options10 {
+    BOOL sum_combiner;
+    BOOL mesh_shader_per_primitive_shading_rate;
 };
 
 struct Options12 {
@@ -134,5 +182,11 @@ ID3D12GraphicsCommandList6 : public ID3D12GraphicsCommandList5 {
     virtual void STDMETHODCALLTYPE DispatchMesh(UINT x, UINT y, UINT z) = 0;
 };
 __CRT_UUID_DECL(ID3D12GraphicsCommandList6, 0xc3827890, 0xe548, 0x4cfa, 0x96, 0xcf, 0x56, 0x89, 0xa9, 0x37, 0x0f, 0x80);
+
+MIDL_INTERFACE("dd171223-8b61-4769-90e3-160ccde4e2c1")
+ID3D12GraphicsCommandList7 : public ID3D12GraphicsCommandList6 {
+    virtual void STDMETHODCALLTYPE Barrier(UINT group_count, const av::d3d12new::BarrierGroup *groups) = 0;
+};
+__CRT_UUID_DECL(ID3D12GraphicsCommandList7, 0xdd171223, 0x8b61, 0x4769, 0x90, 0xe3, 0x16, 0x0c, 0xcd, 0xe4, 0xe2, 0xc1);
 
 #endif

@@ -4,6 +4,8 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d12_copy_formats.hpp"
 #include "executor/d3d/d3d12_list_cast.hpp"
+#include "executor/d3d/d3d12_shading_rate.hpp"
+#include "executor/shim/d3d12_host_device.hpp"
 #include "executor/d3d/d3d12_subresource_extent.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
@@ -142,6 +144,39 @@ bool D3d12Session::on_SetDepthBounds12(uint32_t id, float minimum, float maximum
     const D3d12ListCast<ID3D12GraphicsCommandList1> extended(list(id));
     if (extended.get() == nullptr || !(minimum >= 0.0f) || !(maximum <= 1.0f) || minimum > maximum) return false;
     extended.get()->OMSetDepthBounds(minimum, maximum);
+    return true;
+}
+
+bool D3d12Session::on_SetShadingRate12(uint32_t id, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1)
+{
+    AV_SCOPE("D3d12Session::on_SetShadingRate12");
+    const d3d12proto::Caps12 &caps = device_->capabilities().caps();
+    const D3d12ListCast<ID3D12GraphicsCommandList5> shading(list(id));
+    const D3d12ShadingRate rate(base_rate, combiner0, combiner1);
+    if (shading.get() == nullptr || !rate.holds(caps.vrs_tier, caps.vrs_additional_rates != 0u, caps.vrs_sum_combiner != 0u)) {
+        LogLine(lines_).text("SetShadingRate12 on list ").number(id).text(" with a rate or combiner the host does not offer").write();
+        return false;
+    }
+    const UINT combiners[2] = {combiner0, combiner1};
+    shading.get()->RSSetShadingRate(base_rate, combiners);
+    return true;
+}
+
+bool D3d12Session::on_SetShadingRateImage12(uint32_t id, uint32_t image)
+{
+    AV_SCOPE("D3d12Session::on_SetShadingRateImage12");
+    const D3d12ListCast<ID3D12GraphicsCommandList5> shading(list(id));
+    ID3D12Resource *const resource =
+        image == 0u ? nullptr : objects_.find_as<ID3D12Resource>(image, D3dObjectKind::resource12);
+    if (shading.get() == nullptr || device_->capabilities().caps().vrs_tier < 2u || (image != 0u && resource == nullptr))
+        return false;
+    if (resource != nullptr) {
+        const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+        if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || desc.Format != DXGI_FORMAT_R8_UINT ||
+            desc.SampleDesc.Count != 1u || !retain_resource(id, image))
+            return false;
+    }
+    shading.get()->RSSetShadingRateImage(resource);
     return true;
 }
 

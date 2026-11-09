@@ -1237,6 +1237,59 @@ static bool decode_DispatchMesh12(ServerDispatch& s, ::av::WireReader& r, ::av::
     return true;
 }
 
+static bool decode_SetShadingRate12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetShadingRate12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t base_rate{};
+    if (!r.read_pod(base_rate)) return false;
+    uint32_t combiner0{};
+    if (!r.read_pod(combiner0)) return false;
+    uint32_t combiner1{};
+    if (!r.read_pod(combiner1)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetShadingRate12(list, base_rate, combiner0, combiner1)) return false;
+    return true;
+}
+
+static bool decode_SetShadingRateImage12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetShadingRateImage12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t image{};
+    if (!r.read_pod(image)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetShadingRateImage12(list, image)) return false;
+    return true;
+}
+
+static bool decode_Barrier12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:Barrier12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t count{};
+    if (!r.read_pod(count)) return false;
+    if (count > 128u) return false;
+    LayoutBarrier* barriers = nullptr;
+    if (count != 0u) {
+        barriers = arena.allocate<LayoutBarrier>(count);
+        if (barriers == nullptr) return false;
+        if (!r.read(barriers, sizeof(LayoutBarrier) * count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_Barrier12(list, count, barriers)) return false;
+    return true;
+}
+
 static bool decode_CopyBufferRegion12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CopyBufferRegion12");
     (void)s;
@@ -1774,6 +1827,9 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_DrawIndexedInstanced12:
         case kCmd_Dispatch12:
         case kCmd_DispatchMesh12:
+        case kCmd_SetShadingRate12:
+        case kCmd_SetShadingRateImage12:
+        case kCmd_Barrier12:
         case kCmd_CopyBufferRegion12:
         case kCmd_CopyTextureRegion12:
         case kCmd_CopyResource12:
@@ -1863,6 +1919,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_DrawIndexedInstanced12: return decode_DrawIndexedInstanced12(s, r, reply, arena);
         case kCmd_Dispatch12: return decode_Dispatch12(s, r, reply, arena);
         case kCmd_DispatchMesh12: return decode_DispatchMesh12(s, r, reply, arena);
+        case kCmd_SetShadingRate12: return decode_SetShadingRate12(s, r, reply, arena);
+        case kCmd_SetShadingRateImage12: return decode_SetShadingRateImage12(s, r, reply, arena);
+        case kCmd_Barrier12: return decode_Barrier12(s, r, reply, arena);
         case kCmd_CopyBufferRegion12: return decode_CopyBufferRegion12(s, r, reply, arena);
         case kCmd_CopyTextureRegion12: return decode_CopyTextureRegion12(s, r, reply, arena);
         case kCmd_CopyResource12: return decode_CopyResource12(s, r, reply, arena);

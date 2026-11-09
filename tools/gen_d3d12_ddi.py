@@ -87,7 +87,8 @@ IMPLEMENTED = {
         "pfnPresent", "pfnCopyTiles", "pfnResourceResolveSubresourceRegion", "pfnSetSamplePositions",
         "pfnWriteBufferImmediate", "pfnSetViewInstanceMask", "pfnOMSetDepthBounds", "pfnSetPredication",
         "pfnSOSetTargets", "pfnClearUnorderedAccessViewUint", "pfnClearUnorderedAccessViewFloat",
-        "pfnExecuteBundle", "pfnAtomicCopyBufferRegion", "pfnDispatchMesh",
+        "pfnExecuteBundle", "pfnAtomicCopyBufferRegion", "pfnDispatchMesh", "pfnRSSetShadingRate",
+        "pfnRSSetShadingRateImage", "pfnBarrier",
     },
 }
 

@@ -87,6 +87,9 @@ public:
     virtual bool on_DrawIndexedInstanced12(uint32_t list, uint32_t index_count, uint32_t instance_count, uint32_t start_index, int32_t base_vertex, uint32_t start_instance) = 0;
     virtual bool on_Dispatch12(uint32_t list, uint32_t x, uint32_t y, uint32_t z) = 0;
     virtual bool on_DispatchMesh12(uint32_t list, uint32_t x, uint32_t y, uint32_t z) = 0;
+    virtual bool on_SetShadingRate12(uint32_t list, uint32_t base_rate, uint32_t combiner0, uint32_t combiner1) = 0;
+    virtual bool on_SetShadingRateImage12(uint32_t list, uint32_t image) = 0;
+    virtual bool on_Barrier12(uint32_t list, uint32_t count, const LayoutBarrier* barriers) = 0;
     virtual bool on_CopyBufferRegion12(uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes) = 0;
     virtual bool on_CopyTextureRegion12(uint32_t list, const CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const CopyLocation& source, uint32_t has_box, const Box& box) = 0;
     virtual bool on_CopyResource12(uint32_t list, uint32_t destination, uint32_t source) = 0;

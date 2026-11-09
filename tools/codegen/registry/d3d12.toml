@@ -100,6 +100,11 @@ fields = ["u32 alpha_to_coverage", "u32 independent_blend", "RenderTargetBlend t
           "u32 dsv_format", "u32 sample_count", "u32 sample_quality", "u32 flags",
           "u32 view_instance_count", "u32 view_instancing_flags", "ViewInstanceLocation view_instances[4]"]
 
+[structs.LayoutBarrier]
+fields = ["u32 type", "u32 flags", "u32 sync_before", "u32 sync_after", "u32 access_before", "u32 access_after",
+          "u32 layout_before", "u32 layout_after", "u32 resource", "u32 first_mip", "u32 mip_count", "u32 first_slice",
+          "u32 slice_count", "u32 first_plane", "u32 plane_count", "u32 reserved"]
+
 [structs.Barrier]
 fields = ["u32 type", "u32 flags", "u32 resource", "u32 subresource", "u32 before", "u32 after",
           "u32 resource_after", "u32 reserved"]
@@ -137,7 +142,9 @@ fields = ["u32 layout", "u32 feature_level", "u32 shader_model", "u32 resource_b
           "u32 atomic_int64_group_shared", "u32 barycentrics", "u32 vp_rt_array_without_gs",
           "u32 advanced_texture_ops", "u32 writeable_msaa_textures", "u32 sample_cmp_gradient_bias",
           "u32 extended_command_info",
-          "u32 depth_bounds", "u32 view_instancing_tier", "u32 mesh_shader_tier"]
+          "u32 depth_bounds", "u32 view_instancing_tier", "u32 mesh_shader_tier",
+          "u32 vrs_tier", "u32 vrs_additional_rates", "u32 vrs_tile_size", "u32 vrs_per_primitive_viewport",
+          "u32 vrs_sum_combiner", "u32 enhanced_barriers", "u32 relaxed_format_casting"]
 
 [[command]]
 name = "OpenDevice12"
@@ -516,6 +523,26 @@ name = "DispatchMesh12"
 id = 0x152c
 doc = "Runs the mesh pipeline set on `list` over x by y by z groups; the host refuses counts past its dispatch limit."
 params = ["u32 list", "u32 x", "u32 y", "u32 z"]
+
+[[command]]
+name = "SetShadingRate12"
+id = 0x152d
+doc = """The base shading rate (D3D12_SHADING_RATE) and the two combiners (D3D12_SHADING_RATE_COMBINER) that merge it
+with the pipeline's per-primitive rate and then the shading rate image's for the draws after."""
+params = ["u32 list", "u32 base_rate", "u32 combiner0", "u32 combiner1"]
+
+[[command]]
+name = "SetShadingRateImage12"
+id = 0x152e
+doc = "The R8_UINT texture whose texels give the rate of each tile for the draws after; 0 unbinds it."
+params = ["u32 list", "u32 image"]
+
+[[command]]
+name = "Barrier12"
+id = 0x152f
+doc = """Enhanced barriers: type 0 global, 1 texture (the layouts and subresource range of `resource`, flag 1 discards),
+2 buffer. Texture barriers apply only to a resource that no legacy transition has named, and the other way round."""
+params = ["u32 list", "u32 count", "LayoutBarrier barriers[count] max 128"]
 
 [[command]]
 name = "CopyBufferRegion12"
