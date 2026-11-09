@@ -500,8 +500,12 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult)
     }
     if (!joined_) {
         constexpr uint32_t renew_wait_ms = 2000u;
-        if (!device_->renew(renew_wait_ms) || !device_->admit(tenant_)) {
+        if (!device_->renew(renew_wait_ms)) {
             hresult = static_cast<uint32_t>(DXGI_ERROR_DEVICE_REMOVED);
+            return true;
+        }
+        if (!device_->admit(tenant_)) {
+            hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
             return true;
         }
         joined_ = true;
