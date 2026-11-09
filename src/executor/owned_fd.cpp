@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace av {
@@ -71,6 +72,21 @@ int OwnedFd::take()
     const int taken = fd_;
     fd_ = -1;
     return taken;
+}
+
+OwnedFdIdentity OwnedFd::identity() const
+{
+    AV_SCOPE("OwnedFd::identity");
+    struct stat found = {};
+    if (fd_ < 0 || fstat(fd_, &found) != 0) return OwnedFdIdentity();
+    return OwnedFdIdentity(static_cast<uint64_t>(found.st_dev), static_cast<uint64_t>(found.st_ino));
+}
+
+void OwnedFd::settle_failed_import(const OwnedFdIdentity &before)
+{
+    AV_SCOPE("OwnedFd::settle_failed_import");
+    if (fd_ < 0 || !before.known()) return;
+    if (!identity().same(before)) fd_ = -1;
 }
 
 void OwnedFd::close()

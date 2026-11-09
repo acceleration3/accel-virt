@@ -130,7 +130,9 @@ bool VulkanMemoryImport::import_shared_semaphore(int fd, uint64_t &semaphore)
                                                 VK_SEMAPHORE_TYPE_TIMELINE, 0u};
     VkSemaphore made = VK_NULL_HANDLE;
     if (!table_.create_semaphore(&timeline, made)) return false;
+    const OwnedFdIdentity before = copy.identity();
     if (!table_.import_semaphore_fd(made, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, copy.fd())) {
+        copy.settle_failed_import(before);
         table_.destroy_semaphore(made);
         return false;
     }
@@ -154,7 +156,11 @@ bool VulkanMemoryImport::import_semaphore_payload(int fd, uint64_t semaphore)
     OwnedFd copy;
     if (semaphore == 0u || !copy.hold_copy(fd)) return false;
     const auto into = reinterpret_cast<VkSemaphore>(semaphore);
-    if (!table_.import_semaphore_fd(into, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, copy.fd())) return false;
+    const OwnedFdIdentity before = copy.identity();
+    if (!table_.import_semaphore_fd(into, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, copy.fd())) {
+        copy.settle_failed_import(before);
+        return false;
+    }
     static_cast<void>(copy.take());
     return true;
 }

@@ -5,6 +5,23 @@
 
 namespace av {
 
+class OwnedFdIdentity {
+public:
+    OwnedFdIdentity() : device_(0u), inode_(0u), known_(false) {}
+    OwnedFdIdentity(uint64_t device, uint64_t inode) : device_(device), inode_(inode), known_(true) {}
+
+    bool known() const { return known_; }
+    bool same(const OwnedFdIdentity &other) const
+    {
+        return known_ && other.known_ && device_ == other.device_ && inode_ == other.inode_;
+    }
+
+private:
+    uint64_t device_;
+    uint64_t inode_;
+    bool     known_;
+};
+
 class OwnedFd {
 public:
     OwnedFd();
@@ -23,6 +40,8 @@ public:
     bool               held() const;
     int                take();
     void               close();
+    OwnedFdIdentity    identity() const;
+    void               settle_failed_import(const OwnedFdIdentity &before);
 
 private:
     int fd_;

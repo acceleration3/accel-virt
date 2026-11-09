@@ -126,8 +126,10 @@ bool GlHostImport::import_with(int fd, uint64_t size, GLint dedicated, uint32_t 
     create_memory_objects_(1, &made);
     static_cast<void>(errors_.clear());
     memory_parameter_(made, dedicated_memory_object, &dedicated);
+    const OwnedFdIdentity before = taken.identity();
     import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken.fd());
     if (!errors_.clear()) {
+        taken.settle_failed_import(before);
         delete_memory_objects_(1, &made);
         static_cast<void>(errors_.clear());
         return false;
@@ -145,8 +147,10 @@ bool GlHostImport::import_semaphore(int fd, uint32_t &name)
     GLuint made = 0u;
     gen_semaphores_(1, &made);
     static_cast<void>(errors_.clear());
+    const OwnedFdIdentity before = taken.identity();
     import_semaphore_fd_(made, handle_type_opaque_fd, taken.fd());
     if (!errors_.clear()) {
+        taken.settle_failed_import(before);
         delete_semaphores_(1, &made);
         static_cast<void>(errors_.clear());
         return false;

@@ -39,7 +39,9 @@ bool VulkanTimeline::import_fd(const VulkanDeviceTable &table, OwnedFd &descript
                                              VK_SEMAPHORE_TYPE_TIMELINE, 0u};
     if (made() || !table.create_semaphore(&typed, semaphore_)) return false;
     table_ = &table;
+    const OwnedFdIdentity before = descriptor.identity();
     if (!table.import_semaphore_fd(semaphore_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, descriptor.fd())) {
+        descriptor.settle_failed_import(before);
         release();
         return false;
     }

@@ -306,8 +306,10 @@ bool VulkanDeviceTable::import_memory(OwnedFd &descriptor, VkExternalMemoryHandl
     const VkImportMemoryFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, next, handle,
                                               descriptor.fd()};
     const VkMemoryAllocateInfo    info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &imported, size, type};
+    const OwnedFdIdentity         before = descriptor.identity();
     if (allocate_(device_, &info, nullptr, &memory) != VK_SUCCESS) {
         memory = VK_NULL_HANDLE;
+        descriptor.settle_failed_import(before);
         return false;
     }
     static_cast<void>(descriptor.take());
