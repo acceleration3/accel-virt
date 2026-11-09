@@ -16,6 +16,7 @@
 #include "executor/vulkan/vulkan_parked_submits.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
 #include "executor/vulkan/vulkan_queue_families.hpp"
+#include "executor/vulkan/vulkan_robust_access.hpp"
 #include "executor/vulkan/vulkan_submit_progress.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/host_object_registry.hpp"
@@ -221,6 +222,9 @@ public:
     void     on_vkUpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies) override;
     VkResult on_vkQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence) override;
     VkResult on_vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2 *pSubmits, VkFence fence) override;
+    void     on_vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 *pFeatures) override;
+    void     on_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 *pFeatures) override;
+    VkResult on_vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo *pBindInfo, VkFence fence) override;
 
     VkResult on_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo,
                                  int *pFd) override;
@@ -321,6 +325,7 @@ private:
     uint64_t device_of_buffer(uint64_t handle) const;
     bool     reusable(VkCommandBuffer commandBuffer);
     bool     queue_admits(uint32_t command_id, const WireReader &payload) const;
+    bool     extension_admits(uint32_t command_id, const WireReader &payload) const;
     bool     family_flags(VkDevice device, uint32_t family, uint32_t &flags);
     bool     template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device);
     bool     resolved(const VulkanTemplates::Reference &reference, uint64_t &handle) const;
@@ -392,7 +397,9 @@ private:
     VulkanTimelineSubmit timeline_submit_;
     VulkanFenceTargets   fence_targets_;
     mutable VulkanGuard guard_;
+    VulkanRobustAccess robust_;
     uint64_t parent_;
+    uint64_t created_extensions_;
     uint64_t ran_;
     bool     lost_;
     bool     devices_leaked_;

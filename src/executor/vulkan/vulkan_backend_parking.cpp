@@ -224,6 +224,23 @@ VkResult VulkanBackend::on_vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount
     return result;
 }
 
+VkResult VulkanBackend::on_vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo *pBindInfo,
+                                             VkFence fence)
+{
+    AV_SCOPE("VulkanBackend::on_vkQueueBindSparse");
+    const uint64_t device = handles_.parent_of(number(queue));
+    const uint64_t mark = guard_.reserve(device);
+    if (mark == 0u) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const VkResult result = RealVulkanDispatch::on_vkQueueBindSparse(queue, bindInfoCount, pBindInfo, fence);
+    last_submit_ = result;
+    if (result != VK_SUCCESS) {
+        guard_.cancel(mark);
+        return result;
+    }
+    guard_.submitted(mark, device, number(queue), static_cast<const VkSubmitInfo *>(nullptr), 0u);
+    return result;
+}
+
 VkResult VulkanBackend::on_vkSetEvent(VkDevice device, VkEvent event)
 {
     AV_SCOPE("VulkanBackend::on_vkSetEvent");

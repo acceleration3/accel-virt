@@ -4,7 +4,7 @@
 
 namespace av {
 
-VulkanRobustAccess::VulkanRobustAccess() : features_{}
+VulkanRobustAccess::VulkanRobustAccess() : features_{}, hidden_(0u)
 {
     AV_SCOPE("VulkanRobustAccess::VulkanRobustAccess");
 }
@@ -17,9 +17,65 @@ bool VulkanRobustAccess::robust_features(VkPhysicalDeviceFeatures &features, con
     return true;
 }
 
+void VulkanRobustAccess::hide_capture_replay(const void *chain)
+{
+    AV_SCOPE("VulkanRobustAccess::hide_capture_replay");
+    for (auto *link = static_cast<const VkBaseInStructure *>(chain); link != nullptr; link = link->pNext) {
+        switch (link->sType) {
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+            hide(const_cast<VkPhysicalDeviceVulkan12Features *>(reinterpret_cast<const VkPhysicalDeviceVulkan12Features *>(link))
+                     ->bufferDeviceAddressCaptureReplay);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
+            hide(const_cast<VkPhysicalDeviceBufferDeviceAddressFeatures *>(
+                     reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures *>(link))
+                     ->bufferDeviceAddressCaptureReplay);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT:
+            hide(const_cast<VkPhysicalDeviceBufferDeviceAddressFeaturesEXT *>(
+                     reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeaturesEXT *>(link))
+                     ->bufferDeviceAddressCaptureReplay);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR:
+            hide(const_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(
+                     reinterpret_cast<const VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(link))
+                     ->accelerationStructureCaptureReplay);
+            break;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR: {
+            auto *features = const_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR *>(
+                reinterpret_cast<const VkPhysicalDeviceRayTracingPipelineFeaturesKHR *>(link));
+            hide(features->rayTracingPipelineShaderGroupHandleCaptureReplay);
+            hide(features->rayTracingPipelineShaderGroupHandleCaptureReplayMixed);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT:
+            hide(const_cast<VkPhysicalDeviceDescriptorBufferFeaturesEXT *>(
+                     reinterpret_cast<const VkPhysicalDeviceDescriptorBufferFeaturesEXT *>(link))
+                     ->descriptorBufferCaptureReplay);
+            break;
+        default: break;
+        }
+    }
+}
+
+uint32_t VulkanRobustAccess::hidden() const
+{
+    AV_SCOPE("VulkanRobustAccess::hidden");
+    return hidden_;
+}
+
+void VulkanRobustAccess::hide(VkBool32 &feature)
+{
+    AV_SCOPE("VulkanRobustAccess::hide");
+    if (feature == VK_FALSE) return;
+    feature = VK_FALSE;
+    hidden_++;
+}
+
 bool VulkanRobustAccess::apply(VkPhysicalDevice physical, VkDeviceCreateInfo &create)
 {
     AV_SCOPE("VulkanRobustAccess::apply");
+    hide_capture_replay(create.pNext);
     VkPhysicalDeviceFeatures offered = {};
     ::vkGetPhysicalDeviceFeatures(physical, &offered);
     bool applied = false;

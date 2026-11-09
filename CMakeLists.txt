@@ -54,6 +54,7 @@ file(GLOB_RECURSE AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
 set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_extensions.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_command_names.cpp

@@ -15,6 +15,7 @@
 #include "executor/import_table.hpp"
 #include "executor/owned_fd.hpp"
 #include "proto/vulkan/descriptor_template_layout.hpp"
+#include "proto/generated/vulkan/vk_command_extensions.h"
 #include "proto/generated/vulkan/vk_command_names.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
 #include "proto/wire/wire_reader.hpp"
@@ -35,6 +36,19 @@ constexpr VulkanObjectKind object_kind(vkproto::HandleKind kind)
     case vkproto::HandleKind::command_buffer: return VulkanObjectKind::command_buffer;
     default: return VulkanObjectKind::other;
     }
+}
+
+template <typename Slot>
+uint64_t extension_mask(const char *const *names, uint32_t count, Slot slot_of)
+{
+    AV_SCOPE("extension_mask");
+    uint64_t mask = 0u;
+    for (uint32_t i = 0; names != nullptr && i < count; ++i) {
+        if (names[i] == nullptr) continue;
+        const uint16_t slot = slot_of(names[i]);
+        if (slot != vkproto::kNoExtensionSlot) mask |= uint64_t{1} << slot;
+    }
+    return mask;
 }
 
 bool enables(const VkDeviceCreateInfo *create, const char *name)
@@ -62,7 +76,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
       frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), vram_(blocks), progress_(blocks),
-      timeline_submit_(blocks), fence_targets_(blocks), guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
+      timeline_submit_(blocks), fence_targets_(blocks), guard_(blocks, *this, progress_), robust_(), parent_(0u), created_extensions_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -138,7 +152,10 @@ bool VulkanBackend::room_for(uint64_t handles)
 void VulkanBackend::made(vkproto::HandleKind kind, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::made");
-    keep(handle, object_kind(kind), kind == vkproto::HandleKind::command_buffer ? families_.flags_of(parent_) : 0u);
+    const bool extended = kind == vkproto::HandleKind::instance || kind == vkproto::HandleKind::device;
+    keep(handle, object_kind(kind),
+         kind == vkproto::HandleKind::command_buffer ? families_.flags_of(parent_) : extended ? created_extensions_ : 0u);
+    if (extended) created_extensions_ = 0u;
 }
 
 bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t &handle) const
@@ -252,6 +269,8 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
     if (pCreateInfo->pApplicationInfo != nullptr && pCreateInfo->pApplicationInfo->apiVersion != 0u &&
         pCreateInfo->pApplicationInfo->apiVersion < lowest_api_version)
         return VK_ERROR_INCOMPATIBLE_DRIVER;
+    created_extensions_ = extension_mask(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount,
+                                         [](const char *name) { return vkproto::instance_extension_slot(name); });
     VkInstanceCreateInfo create = *pCreateInfo;
     if (enable_identity(create) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     adopt_host_version(create);
@@ -349,6 +368,11 @@ bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         lost_ = true;
         return true;
     }
+    if (!extension_admits(command_id, payload)) {
+        lines_.note_hex("a command whose extension its device or instance did not enable, id", command_id, 8u);
+        lost_ = true;
+        return true;
+    }
     if (!recording) parked_.service();
     if (lost_) return true;
     guard_.begin_frame(recording);
@@ -374,6 +398,23 @@ bool VulkanBackend::queue_admits(uint32_t command_id, const WireReader &payload)
     if (!peek.read_pod(buffer)) return true;
     const uint64_t *const flags = handles_.find(buffer, VulkanObjectKind::command_buffer);
     return flags == nullptr || (*flags & queues) != 0u;
+}
+
+bool VulkanBackend::extension_admits(uint32_t command_id, const WireReader &payload) const
+{
+    AV_SCOPE("VulkanBackend::extension_admits");
+    const vkproto::CommandExtensions needed = vkproto::command_extensions(command_id);
+    if (needed.owner == vkproto::CommandOwner::open) return true;
+    WireReader peek = payload;
+    uint64_t   at = 0u;
+    if (!peek.read_pod(at)) return true;
+    const VulkanObjectKind owner =
+        needed.owner == vkproto::CommandOwner::device ? VulkanObjectKind::device : VulkanObjectKind::instance;
+    while (at != 0u && handles_.find(at, owner) == nullptr) at = handles_.parent_of(at);
+    if (at == 0u) return true;
+    uint64_t wanted = 0u;
+    for (uint16_t i = 0; i < needed.count; ++i) wanted |= uint64_t{1} << needed.slots[i];
+    return (*handles_.find(at, owner) & wanted) != 0u;
 }
 
 bool VulkanBackend::family_flags(VkDevice device, uint32_t family, uint32_t &flags)
@@ -433,14 +474,29 @@ VkResult VulkanBackend::create_lowered(VkPhysicalDevice physicalDevice, const Vk
     return result;
 }
 
+void VulkanBackend::on_vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 *pFeatures)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceFeatures2");
+    RealVulkanDispatch::on_vkGetPhysicalDeviceFeatures2(physicalDevice, pFeatures);
+    robust_.hide_capture_replay(pFeatures->pNext);
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 *pFeatures)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceFeatures2KHR");
+    RealVulkanDispatch::on_vkGetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
+    robust_.hide_capture_replay(pFeatures->pNext);
+}
+
 VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                           const VkDeviceCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *, VkDevice *pDevice)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDevice");
-    VulkanRobustAccess    robust;
+    created_extensions_ = extension_mask(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount,
+                                         [](const char *name) { return vkproto::device_extension_slot(name); });
     VkDeviceCreateInfo    guarded = *pCreateInfo;
-    static_cast<void>(robust.apply(physicalDevice, guarded));
+    static_cast<void>(robust_.apply(physicalDevice, guarded));
     pCreateInfo = &guarded;
     VulkanTimelineFeature timeline;
     VkDeviceCreateInfo    timed = *pCreateInfo;
