@@ -3,6 +3,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
+#include "executor/gpu_work_window.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "executor/d3d/d3d12_allocator_marks.hpp"
 #include "executor/d3d/d3d12_block_heaps.hpp"
@@ -232,6 +233,7 @@ private:
     WatchedBlocks         &blocks_;
     D3d12AddressMap        addresses_;
     D3d12QueueProgress     progress_;
+    GpuWorkWindow          work_window_;
     D3d12BlockHeaps        block_heaps_;
     D3d12ObjectHolds       holds_;
     D3d12DescriptorHolds   descriptors_;

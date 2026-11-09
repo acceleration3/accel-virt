@@ -10,6 +10,7 @@
 #include "executor/d3d/guest_devices.hpp"
 #include "executor/d3d/queue_drain.hpp"
 #include "executor/d3d/watched_blocks.hpp"
+#include "executor/gpu_work_window.hpp"
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
 #include "executor/budgeted_heap.hpp"
@@ -205,6 +206,8 @@ private:
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
     ID3D11Texture2D         *lent_texture(const D3D11_TEXTURE2D_DESC &texture, uint64_t memory, uint32_t row_pitch);
     void                     counted(ID3D11Resource *destination);
+    void                     pace(uint64_t bytes);
+    static uint64_t          copy_bytes(ID3D11Resource *resource, const D3D11_BOX *box);
     bool                     update_in_pieces(ID3D11Resource *resource, uint32_t subresource, const D3D11_BOX &whole,
                                               const DxgiFormatLayout &layout, uint32_t row_pitch, uint32_t depth_pitch,
                                               uint32_t copy_flags, const uint8_t *data);
@@ -258,6 +261,7 @@ private:
     uint64_t                missed_key_;
     D3dBatchCounter         batches_;
     QueueDrain              queue_drain_;
+    GpuWorkWindow           work_window_;
     uint64_t                submitted_;
     bool                    drained_;
     bool                    predication_refusal_noted_;

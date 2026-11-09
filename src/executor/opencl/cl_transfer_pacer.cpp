@@ -4,7 +4,7 @@
 
 namespace av {
 
-ClTransferPacer::ClTransferPacer() : gathered_(0u), previous_(nullptr)
+ClTransferPacer::ClTransferPacer() : window_(), previous_(nullptr)
 {
     AV_SCOPE("ClTransferPacer::ClTransferPacer");
 }
@@ -18,14 +18,14 @@ ClTransferPacer::~ClTransferPacer()
 void ClTransferPacer::transferred(cl_command_queue queue, uint64_t bytes)
 {
     AV_SCOPE("ClTransferPacer::transferred");
-    gathered_ += bytes;
-    if (gathered_ >= window_bytes) settle(queue);
+    window_.add(bytes);
+    if (window_.full()) settle(queue);
 }
 
 void ClTransferPacer::settle(cl_command_queue queue)
 {
     AV_SCOPE("ClTransferPacer::settle");
-    gathered_ = 0u;
+    window_.forget();
     cl_event marker = nullptr;
     if (::clEnqueueMarkerWithWaitList(queue, 0u, nullptr, &marker) != CL_SUCCESS) marker = nullptr;
     static_cast<void>(::clFlush(queue));
@@ -39,7 +39,7 @@ void ClTransferPacer::settle(cl_command_queue queue)
 void ClTransferPacer::stop()
 {
     AV_SCOPE("ClTransferPacer::stop");
-    gathered_ = 0u;
+    window_.forget();
     if (previous_ != nullptr) static_cast<void>(::clReleaseEvent(previous_));
     previous_ = nullptr;
 }

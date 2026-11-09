@@ -464,6 +464,7 @@ bool D3d12Session::on_CopyBufferRegion12(uint32_t id, uint32_t destination, uint
         return false;
     if (!retain_resource(id, destination) || !retain_resource(id, source)) return false;
     recorded->CopyBufferRegion(to, destination_offset, from, source_offset, bytes);
+    work_window_.add(bytes);
     return true;
 }
 
@@ -488,6 +489,8 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
     if (!copy_bounds_hold(destination, to, written) || !copy_bounds_hold(source, from, extent.read())) return false;
     if (!copy_formats_hold(destination, source, to, from)) return false;
     if (!retain_resource(id, destination.resource) || !retain_resource(id, source.resource)) return false;
+    work_window_.add(uint64_t{written.right - written.left} * (written.bottom - written.top) *
+                     (written.back - written.front) * 4u);
     const bool                      into_footprint = destination.type == copy_footprint;
     const bool                      from_footprint = source.type == copy_footprint;
     const d3d12proto::CopyLocation &placed = into_footprint ? destination : source;
@@ -612,6 +615,13 @@ bool D3d12Session::on_CopyResource12(uint32_t id, uint32_t destination, uint32_t
     }
     if (!retain_resource(id, destination) || !retain_resource(id, source)) return false;
     recorded->CopyResource(to, from);
+    {
+        const D3D12_RESOURCE_DESC whole = from->GetDesc();
+        const uint64_t texels = whole.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER
+                                    ? whole.Width
+                                    : whole.Width * whole.Height * whole.DepthOrArraySize * 4u;
+        work_window_.add(texels);
+    }
     return true;
 }
 

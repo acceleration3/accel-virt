@@ -187,6 +187,7 @@ void D3dBackend::shut_down()
     shares_ = nullptr;
     imports_ = nullptr;
     queue_drain_.forget();
+    work_window_.forget();
     submitted_ = 0u;
     drained_ = false;
 }
@@ -1703,6 +1704,7 @@ bool D3dBackend::on_CopyResource(uint32_t destination, uint32_t source)
     if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER) static_cast<ID3D11Buffer *>(to)->GetDesc(&whole);
     if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER || !copy_buffer_in_pieces(to, 0u, from, 0u, whole.ByteWidth, 0u))
         device11_->context()->CopyResource(to, from);
+    pace(copy_bytes(from, nullptr));
     counted(to);
     return true;
 }
@@ -1728,6 +1730,7 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
         const uint32_t right = has_box != 0u ? box.right : source_desc.ByteWidth;
         if (right > left && right <= source_desc.ByteWidth &&
             copy_buffer_in_pieces(to, x, from, left, right - left, copy_flags)) {
+            pace(right - left);
             counted(to);
             return true;
         }
@@ -1735,6 +1738,7 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     device11_->context()->CopySubresourceRegion1(to, destination_subresource, x, y, z, from, source_subresource,
                                                  has_box != 0u ? &region : nullptr,
                                                  copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+    pace(copy_bytes(from, has_box != 0u ? &region : nullptr));
     counted(to);
     return true;
 }
@@ -1783,6 +1787,45 @@ bool D3dBackend::on_BltResource(uint32_t destination, uint32_t destination_subre
                                                 0u, nullptr);
     counted(to);
     return true;
+}
+
+uint64_t D3dBackend::copy_bytes(ID3D11Resource *resource, const D3D11_BOX *box)
+{
+    AV_SCOPE("D3dBackend::copy_bytes");
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    resource->GetType(&dimension);
+    if (box != nullptr) {
+        const uint64_t width = box->right > box->left ? box->right - box->left : 0u;
+        if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER) return width;
+        const uint64_t height = box->bottom > box->top ? box->bottom - box->top : 0u;
+        const uint64_t depth = box->back > box->front ? box->back - box->front : 0u;
+        return width * height * depth * 4u;
+    }
+    if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER) {
+        D3D11_BUFFER_DESC desc = {};
+        static_cast<ID3D11Buffer *>(resource)->GetDesc(&desc);
+        return desc.ByteWidth;
+    }
+    if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D) {
+        D3D11_TEXTURE2D_DESC desc = {};
+        static_cast<ID3D11Texture2D *>(resource)->GetDesc(&desc);
+        return uint64_t{desc.Width} * desc.Height * desc.ArraySize * 4u;
+    }
+    if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE3D) {
+        D3D11_TEXTURE3D_DESC desc = {};
+        static_cast<ID3D11Texture3D *>(resource)->GetDesc(&desc);
+        return uint64_t{desc.Width} * desc.Height * desc.Depth * 4u;
+    }
+    return 0u;
+}
+
+void D3dBackend::pace(uint64_t bytes)
+{
+    AV_SCOPE("D3dBackend::pace");
+    work_window_.add(bytes);
+    if (!work_window_.full()) return;
+    device11_->context()->Flush();
+    static_cast<void>(work_window_.settle(device11_->vulkan()));
 }
 
 void D3dBackend::counted(ID3D11Resource *destination)

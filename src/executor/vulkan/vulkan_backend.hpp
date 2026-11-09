@@ -10,6 +10,7 @@
 #include "executor/vulkan/vram_budget.hpp"
 #include "executor/vulkan/vulkan_fence_targets.hpp"
 #include "executor/vulkan/vulkan_fence_watch.hpp"
+#include "executor/gpu_work_window.hpp"
 #include "executor/vulkan/vulkan_guard.hpp"
 #include "executor/vulkan/vulkan_host_waits.hpp"
 #include "executor/vulkan/vulkan_park_host.hpp"
@@ -111,6 +112,19 @@ public:
     VkResult on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                               VkFence fence) override;
     VkResult on_vkSetEvent(VkDevice device, VkEvent event) override;
+    void     on_vkCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer,
+                                uint32_t regionCount, const VkBufferCopy *pRegions) override;
+    void     on_vkCmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset,
+                                VkDeviceSize size, uint32_t data) override;
+    void     on_vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout,
+                               VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount,
+                               const VkImageCopy *pRegions) override;
+    void     on_vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage,
+                                       VkImageLayout dstImageLayout, uint32_t regionCount,
+                                       const VkBufferImageCopy *pRegions) override;
+    void     on_vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout,
+                                       VkBuffer dstBuffer, uint32_t regionCount,
+                                       const VkBufferImageCopy *pRegions) override;
     void     on_vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent *pEvents,
                                 VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
                                 uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers,
@@ -305,6 +319,7 @@ private:
     bool events_unset(uint64_t device, const VulkanSubmitSet &set);
     bool host_settable(const VkDependencyInfo &dependency) const;
     void note_waits(VkCommandBuffer commandBuffer, uint32_t count, const VkEvent *events);
+    void pace_window(uint64_t mark, uint64_t device);
     void wait_events2(VkCommandBuffer commandBuffer, uint32_t count, const VkEvent *events,
                       const VkDependencyInfo *dependencies);
     void forget_waits_under(uint64_t pool);
@@ -391,6 +406,7 @@ private:
     bool                 framed_;
     bool                 replaying_;
     VkResult             last_submit_;
+    GpuWorkWindow        work_window_;
     DriverLog           &lines_;
     VulkanFenceWatch     fence_watch_;
     SpirvValidator       spirv_;

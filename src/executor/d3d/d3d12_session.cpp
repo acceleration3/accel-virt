@@ -1078,7 +1078,13 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
         if (allocators_.submitted(lists[index], stamp) != Status::ok) return false;
     }
     on->ExecuteCommandLists(count, executed);
-    if (progress_.signal(queue, on)) return true;
+    if (progress_.signal(queue, on)) {
+        if (work_window_.full()) {
+            const uint64_t before = work_window_.roll(progress_.marked());
+            if (before != 0u) static_cast<void>(wait_for(before));
+        }
+        return true;
+    }
     LogLine(lines_).text("the progress of queue ").number(queue).text(" is not followed after its lists ran; the device is removed").write();
     if (removed_ == 0u) removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
     static_cast<void>(drain());
