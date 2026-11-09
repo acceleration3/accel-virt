@@ -433,6 +433,7 @@ def _lower_command(cmd_el: ET.Element, cmd_name: str,
                 len_expr=len_expr,
                 direction=direction,
                 inner_len=profile.inner_lens.get(f"{cmd_name}.{pname}"),
+                stride=p_el.get("stride"),
             )
         )
 

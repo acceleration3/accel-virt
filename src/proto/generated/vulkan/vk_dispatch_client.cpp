@@ -6592,12 +6592,30 @@ void av_vkCmdDrawMultiEXT(::av::ClientTransport& t, HandleTranslation& handles, 
     serialize_VkCommandBuffer(payload, handles, commandBuffer);
     payload.write_pod(drawCount);
     for (uint32_t av_i = 0; av_i < static_cast<uint32_t>(drawCount); ++av_i) {
-        serialize_VkMultiDrawInfoEXT(payload, pVertexInfo[av_i]);
+        serialize_VkMultiDrawInfoEXT(payload, (*reinterpret_cast<const VkMultiDrawInfoEXT*>(reinterpret_cast<const uint8_t*>(pVertexInfo) + static_cast<size_t>(av_i) * stride)));
     }
     payload.write_pod(instanceCount);
     payload.write_pod(firstInstance);
-    payload.write_pod(stride);
+    (void)stride;  // the array is sent packed
     if (t.send_async(::av::vkproto::kCmd_vkCmdDrawMultiEXT, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
+void av_vkCmdDrawMultiIndexedEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset) {
+    AV_SCOPE("av_vkCmdDrawMultiIndexedEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkCommandBuffer(payload, handles, commandBuffer);
+    payload.write_pod(drawCount);
+    for (uint32_t av_i = 0; av_i < static_cast<uint32_t>(drawCount); ++av_i) {
+        serialize_VkMultiDrawIndexedInfoEXT(payload, (*reinterpret_cast<const VkMultiDrawIndexedInfoEXT*>(reinterpret_cast<const uint8_t*>(pIndexInfo) + static_cast<size_t>(av_i) * stride)));
+    }
+    payload.write_pod(instanceCount);
+    payload.write_pod(firstInstance);
+    (void)stride;  // the array is sent packed
+    payload.write_pod<uint8_t>(pVertexOffset != nullptr ? 1 : 0);
+    if (pVertexOffset != nullptr) { payload.write_pod(*pVertexOffset); }
+    if (t.send_async(::av::vkproto::kCmd_vkCmdDrawMultiIndexedEXT, payload) != ::av::TransportResult::ok) {
         return;
     }
 }

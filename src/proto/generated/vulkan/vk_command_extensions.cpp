@@ -131,18 +131,19 @@ constexpr Row kRows[] = {
     {0x000101A8u, CommandOwner::device, 152u, 1u},
     {0x000101A9u, CommandOwner::device, 153u, 1u},
     {0x000101AAu, CommandOwner::device, 154u, 1u},
-    {0x000101ACu, CommandOwner::device, 155u, 1u},
-    {0x000101ADu, CommandOwner::device, 156u, 1u},
-    {0x000101AEu, CommandOwner::device, 157u, 1u},
-    {0x000101AFu, CommandOwner::device, 158u, 1u},
-    {0x000101B0u, CommandOwner::device, 159u, 1u},
-    {0x000101B1u, CommandOwner::device, 160u, 1u},
-    {0x000101B2u, CommandOwner::device, 161u, 1u},
-    {0x000101B3u, CommandOwner::device, 162u, 1u},
-    {0x000101B4u, CommandOwner::device, 163u, 1u},
-    {0x000101B5u, CommandOwner::device, 164u, 1u},
-    {0x000101BAu, CommandOwner::device, 165u, 1u},
-    {0x000101BBu, CommandOwner::device, 166u, 1u},
+    {0x000101ABu, CommandOwner::device, 155u, 1u},
+    {0x000101ACu, CommandOwner::device, 156u, 1u},
+    {0x000101ADu, CommandOwner::device, 157u, 1u},
+    {0x000101AEu, CommandOwner::device, 158u, 1u},
+    {0x000101AFu, CommandOwner::device, 159u, 1u},
+    {0x000101B0u, CommandOwner::device, 160u, 1u},
+    {0x000101B1u, CommandOwner::device, 161u, 1u},
+    {0x000101B2u, CommandOwner::device, 162u, 1u},
+    {0x000101B3u, CommandOwner::device, 163u, 1u},
+    {0x000101B4u, CommandOwner::device, 164u, 1u},
+    {0x000101B5u, CommandOwner::device, 165u, 1u},
+    {0x000101BAu, CommandOwner::device, 166u, 1u},
+    {0x000101BBu, CommandOwner::device, 167u, 1u},
 };
 
 constexpr uint16_t kSlots[] = {
@@ -155,8 +156,8 @@ constexpr uint16_t kSlots[] = {
     47u, 21u, 21u, 21u, 10u, 10u, 21u, 10u, 21u, 28u, 47u, 18u, 28u, 21u, 28u, 18u,
     21u, 21u, 28u, 28u, 21u, 10u, 11u, 47u, 47u, 47u, 18u, 10u, 21u, 2u, 24u, 33u,
     33u, 42u, 44u, 44u, 42u, 42u, 44u, 44u, 42u, 44u, 19u, 19u, 19u, 19u, 19u, 19u,
-    15u, 34u, 35u, 35u, 36u, 34u, 36u, 0u, 43u, 43u, 14u, 43u, 43u, 43u, 5u, 43u,
-    16u, 46u, 1u, 1u, 24u, 17u, 17u,
+    15u, 34u, 35u, 35u, 36u, 34u, 36u, 0u, 43u, 43u, 14u, 14u, 43u, 43u, 43u, 5u,
+    43u, 16u, 46u, 1u, 1u, 24u, 17u, 17u,
 };
 
 constexpr const char* kDeviceNames[] = {

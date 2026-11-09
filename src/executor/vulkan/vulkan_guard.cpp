@@ -25,7 +25,8 @@ bool holdable(vkproto::HandleKind kind)
     case vkproto::HandleKind::pipeline_layout:
     case vkproto::HandleKind::query_pool:
     case vkproto::HandleKind::render_pass:
-    case vkproto::HandleKind::sampler: return true;
+    case vkproto::HandleKind::sampler:
+    case vkproto::HandleKind::shader_ext: return true;
     default: return false;
     }
 }

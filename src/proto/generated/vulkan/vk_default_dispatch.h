@@ -696,6 +696,7 @@ public:
     void on_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(VkCommandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT*) override {}
     void on_vkCmdBindDescriptorSets2KHR(VkCommandBuffer, const VkBindDescriptorSetsInfo*) override {}
     void on_vkCmdDrawMultiEXT(VkCommandBuffer, uint32_t, const VkMultiDrawInfoEXT*, uint32_t, uint32_t, uint32_t) override {}
+    void on_vkCmdDrawMultiIndexedEXT(VkCommandBuffer, uint32_t, const VkMultiDrawIndexedInfoEXT*, uint32_t, uint32_t, uint32_t, const int32_t*) override {}
     void on_vkCmdPushConstants2KHR(VkCommandBuffer, const VkPushConstantsInfo*) override {}
     void on_vkCmdPushDescriptorSet2KHR(VkCommandBuffer, const VkPushDescriptorSetInfo*) override {}
     void on_vkCmdPushDescriptorSetWithTemplate2KHR(VkCommandBuffer, const VkPushDescriptorSetWithTemplateInfo*) override {}

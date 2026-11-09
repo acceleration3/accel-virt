@@ -414,6 +414,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000101A8u: return "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT";
         case 0x000101A9u: return "vkCmdBindDescriptorSets2KHR";
         case 0x000101AAu: return "vkCmdDrawMultiEXT";
+        case 0x000101ABu: return "vkCmdDrawMultiIndexedEXT";
         case 0x000101ACu: return "vkCmdPushConstants2KHR";
         case 0x000101ADu: return "vkCmdPushDescriptorSet2KHR";
         case 0x000101AEu: return "vkCmdPushDescriptorSetWithTemplate2KHR";
@@ -830,6 +831,7 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case 0x000101A8u:
         case 0x000101A9u:
         case 0x000101AAu:
+        case 0x000101ABu:
         case 0x000101ACu:
         case 0x000101ADu:
         case 0x000101AEu:
@@ -1034,6 +1036,7 @@ uint32_t command_queues(uint32_t cmd_id) noexcept {
         case 0x000101A8u: return 0x3u;
         case 0x000101A9u: return 0x3u;
         case 0x000101AAu: return 0x1u;
+        case 0x000101ABu: return 0x1u;
         case 0x000101ACu: return 0x3u;
         case 0x000101ADu: return 0x3u;
         case 0x000101AEu: return 0x3u;

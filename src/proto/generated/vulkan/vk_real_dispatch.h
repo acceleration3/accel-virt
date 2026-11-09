@@ -1904,6 +1904,15 @@ public:
         }
         pfn_vkCmdDrawMultiEXT_(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
     }
+    void on_vkCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset) override {
+        if (pfn_vkCmdDrawMultiIndexedEXT_ == nullptr) {
+            pfn_vkCmdDrawMultiIndexedEXT_ = reinterpret_cast<PFN_vkCmdDrawMultiIndexedEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdDrawMultiIndexedEXT"));
+        }
+        if (pfn_vkCmdDrawMultiIndexedEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdDrawMultiIndexedEXT_(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
+    }
     void on_vkCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo) override {
         if (pfn_vkCmdPushConstants2KHR_ == nullptr) {
             pfn_vkCmdPushConstants2KHR_ = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(::vkGetInstanceProcAddr(instance_, "vkCmdPushConstants2KHR"));
@@ -2159,6 +2168,7 @@ private:
     PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT pfn_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT_ = nullptr;
     PFN_vkCmdBindDescriptorSets2KHR pfn_vkCmdBindDescriptorSets2KHR_ = nullptr;
     PFN_vkCmdDrawMultiEXT pfn_vkCmdDrawMultiEXT_ = nullptr;
+    PFN_vkCmdDrawMultiIndexedEXT pfn_vkCmdDrawMultiIndexedEXT_ = nullptr;
     PFN_vkCmdPushConstants2KHR pfn_vkCmdPushConstants2KHR_ = nullptr;
     PFN_vkCmdPushDescriptorSet2KHR pfn_vkCmdPushDescriptorSet2KHR_ = nullptr;
     PFN_vkCmdPushDescriptorSetWithTemplate2KHR pfn_vkCmdPushDescriptorSetWithTemplate2KHR_ = nullptr;

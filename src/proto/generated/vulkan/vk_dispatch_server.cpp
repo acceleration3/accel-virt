@@ -6688,7 +6688,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pVertexInfo_storage_count = 0;
         uint32_t instanceCount{};
         uint32_t firstInstance{};
-        uint32_t stride{};
+        uint32_t stride = sizeof(VkMultiDrawInfoEXT);
         if (!deserialize_VkCommandBuffer(r, s, commandBuffer)) return false;
         if (!r.read_pod(drawCount)) return false;
         pVertexInfo_storage_count = static_cast<size_t>(drawCount);
@@ -6702,8 +6702,37 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         if (!r.read_pod(instanceCount)) return false;
         if (!r.read_pod(firstInstance)) return false;
-        if (!r.read_pod(stride)) return false;
         s.on_vkCmdDrawMultiEXT(commandBuffer, drawCount, pVertexInfo_storage, instanceCount, firstInstance, stride);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdDrawMultiIndexedEXT: {
+        AV_SCOPE("server:vkCmdDrawMultiIndexedEXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        uint32_t drawCount{};
+        VkMultiDrawIndexedInfoEXT* pIndexInfo_storage = nullptr;
+        size_t pIndexInfo_storage_count = 0;
+        uint32_t instanceCount{};
+        uint32_t firstInstance{};
+        uint32_t stride = sizeof(VkMultiDrawIndexedInfoEXT);
+        int32_t pVertexOffset_value{};
+        uint8_t pVertexOffset_present = 0;
+        if (!deserialize_VkCommandBuffer(r, s, commandBuffer)) return false;
+        if (!r.read_pod(drawCount)) return false;
+        pIndexInfo_storage_count = static_cast<size_t>(drawCount);
+        if (pIndexInfo_storage_count != 0) {
+            pIndexInfo_storage = arena.allocate<VkMultiDrawIndexedInfoEXT>(pIndexInfo_storage_count);
+            if (pIndexInfo_storage == nullptr) return false;
+            for (size_t av_z = 0; av_z < pIndexInfo_storage_count; ++av_z) { pIndexInfo_storage[av_z] = {}; }
+        }
+        for (size_t av_i = 0; av_i < pIndexInfo_storage_count; ++av_i) {
+            if (!deserialize_VkMultiDrawIndexedInfoEXT(r, &pIndexInfo_storage[av_i], arena)) return false;
+        }
+        if (!r.read_pod(instanceCount)) return false;
+        if (!r.read_pod(firstInstance)) return false;
+        if (!r.read_pod(pVertexOffset_present)) return false;
+        if (pVertexOffset_present > 1) return false;
+        if (pVertexOffset_present != 0 && !r.read_pod(pVertexOffset_value)) return false;
+        s.on_vkCmdDrawMultiIndexedEXT(commandBuffer, drawCount, pIndexInfo_storage, instanceCount, firstInstance, stride, pVertexOffset_present != 0 ? &pVertexOffset_value : nullptr);
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdPushConstants2KHR: {

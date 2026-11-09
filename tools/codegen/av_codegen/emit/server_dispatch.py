@@ -244,6 +244,17 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             else:
                 decode_lines.append(f"    if (!r.read_pod({p.name})) return false;")
             call_args.append(p.name)
+        elif kind == "in_stride":
+            array = classify.stride_array(cmd.params, p)
+            decl_lines.append(f"    {p.type.cpp()} {p.name} = sizeof({array.type.base});")
+            call_args.append(p.name)
+        elif kind == "in_pod_ptr":
+            decl_lines.append(f"    {p.type.base} {p.name}_value{{}};")
+            decl_lines.append(f"    uint8_t {p.name}_present = 0;")
+            decode_lines.append(f"    if (!r.read_pod({p.name}_present)) return false;")
+            decode_lines.append(f"    if ({p.name}_present > 1) return false;")
+            decode_lines.append(f"    if ({p.name}_present != 0 && !r.read_pod({p.name}_value)) return false;")
+            call_args.append(f"{p.name}_present != 0 ? &{p.name}_value : nullptr")
         elif kind == "in_string":
             decl_lines.append(f"    const char* {p.name} = nullptr;")
             decode_lines.append("    {")

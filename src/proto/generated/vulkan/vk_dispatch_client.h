@@ -408,6 +408,7 @@ void av_vkAntiLagUpdateAMD(::av::ClientTransport& t, HandleTranslation& handles,
 void av_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo);
 void av_vkCmdBindDescriptorSets2KHR(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo* pBindDescriptorSetsInfo);
 void av_vkCmdDrawMultiEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride);
+void av_vkCmdDrawMultiIndexedEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset);
 void av_vkCmdPushConstants2KHR(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo);
 void av_vkCmdPushDescriptorSet2KHR(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkPushDescriptorSetInfo* pPushDescriptorSetInfo);
 void av_vkCmdPushDescriptorSetWithTemplate2KHR(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo);

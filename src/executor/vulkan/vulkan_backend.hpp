@@ -6,6 +6,7 @@
 #include "executor/vulkan/guest_device.hpp"
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/monotonic_clock.hpp"
+#include "executor/vulkan/issued_binaries.hpp"
 #include "executor/vulkan/spirv_validator.hpp"
 #include "executor/vulkan/vram_budget.hpp"
 #include "executor/vulkan/vulkan_fence_targets.hpp"
@@ -212,6 +213,18 @@ public:
                                                  VkAccelerationStructureKHR *pAccelerationStructure) override;
     void     on_vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure,
                                                   const VkAllocationCallbacks *pAllocator) override;
+    VkResult on_vkCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
+                                   const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders) override;
+    VkResult on_vkGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t *pDataSize, void *pData) override;
+    void     on_vkDestroyShaderEXT(VkDevice device, VkShaderEXT shader, const VkAllocationCallbacks *pAllocator) override;
+    VkResult on_vkCreatePipelineBinariesKHR(VkDevice device, const VkPipelineBinaryCreateInfoKHR *pCreateInfo,
+                                            const VkAllocationCallbacks *pAllocator,
+                                            VkPipelineBinaryHandlesInfoKHR *pBinaries) override;
+    VkResult on_vkGetPipelineBinaryDataKHR(VkDevice device, const VkPipelineBinaryDataInfoKHR *pInfo,
+                                           VkPipelineBinaryKeyKHR *pPipelineBinaryKey, size_t *pPipelineBinaryDataSize,
+                                           void *pPipelineBinaryData) override;
+    VkResult on_vkGetPipelineKeyKHR(VkDevice device, const VkPipelineCreateInfoKHR *pPipelineCreateInfo,
+                                    VkPipelineBinaryKeyKHR *pPipelineKey) override;
     void     on_vkDestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks *pAllocator) override;
     void     on_vkDestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks *pAllocator) override;
     void     on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks *pAllocator) override;
@@ -370,6 +383,7 @@ private:
     VkPhysicalDevice bound_device(VkInstance instance);
     VkResult         shader_verdict(VkDevice device, const uint32_t *code, size_t bytes);
     VkResult         stage_verdicts(VkDevice device, const VkPipelineShaderStageCreateInfo *stages, uint32_t count);
+    VkResult         pipeline_verdicts(VkDevice device, const VkPipelineCreateInfoKHR *info);
 
     static constexpr uint32_t lowest_api_version = 1u << 22;
 
@@ -410,6 +424,7 @@ private:
     DriverLog           &lines_;
     VulkanFenceWatch     fence_watch_;
     SpirvValidator       spirv_;
+    IssuedBinaries       issued_;
     VramBudget           vram_;
     VulkanSubmitProgress progress_;
     VulkanTimelineSubmit timeline_submit_;

@@ -67,6 +67,11 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append(f"payload.write_pod<uint64_t>({p.name});")
             else:
                 lines.append(f"payload.write_pod({p.name});")
+        elif kind == "in_stride":
+            lines.append(f"(void){p.name};  // the array is sent packed")
+        elif kind == "in_pod_ptr":
+            lines.append(f"payload.write_pod<uint8_t>({p.name} != nullptr ? 1 : 0);")
+            lines.append(f"if ({p.name} != nullptr) {{ payload.write_pod(*{p.name}); }}")
         elif kind == "out_handle":
             pass
         elif kind == "in_string":
@@ -83,10 +88,17 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_struct_ptr":
             lines.append(f"{serialize.serialize_call(reg, p.type.base, 'payload', f'*{p.name}')};")
         elif kind in ("in_handle_array", "in_struct_array", "in_pod_array"):
+            element = f"{p.name}[av_i]"
+            if p.stride is not None:
+                element = (
+                    f"(*reinterpret_cast<const {p.type.base}*>("
+                    f"reinterpret_cast<const uint8_t*>({p.name}) + "
+                    f"static_cast<size_t>(av_i) * {p.stride}))"
+                )
             elem_line = (
-                f"    payload.write_pod({p.name}[av_i]);"
+                f"    payload.write_pod({element});"
                 if kind == "in_pod_array"
-                else f"    {serialize.serialize_call(reg, p.type.base, 'payload', f'{p.name}[av_i]')};"
+                else f"    {serialize.serialize_call(reg, p.type.base, 'payload', element)};"
             )
             nullable = bool(p.optional_levels) and p.optional_levels[0]
             pad = ""

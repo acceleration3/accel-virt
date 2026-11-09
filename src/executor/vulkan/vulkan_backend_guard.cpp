@@ -75,6 +75,9 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
         RealVulkanDispatch::on_vkDestroyAccelerationStructureKHR(made_by, reinterpret_cast<VkAccelerationStructureKHR>(handle),
                                                                 nullptr);
         return;
+    case VulkanDestroyKind::shader:
+        RealVulkanDispatch::on_vkDestroyShaderEXT(made_by, reinterpret_cast<VkShaderEXT>(handle), nullptr);
+        return;
     case VulkanDestroyKind::imported_memory: {
         GuestDevice *const owner = device_of(device);
         if (owner != nullptr) owner->memory().release(handle);

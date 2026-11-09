@@ -57,7 +57,7 @@ uint64_t extension_mask(const char *const *names, uint32_t count, Slot slot_of)
 constexpr const char *const withheld_extensions[] = {
     "VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query",
     "VK_KHR_ray_tracing_maintenance1", "VK_EXT_pipeline_library_group_handles", "VK_KHR_deferred_host_operations",
-    "VK_EXT_shader_object", "VK_KHR_pipeline_binary", "VK_EXT_host_image_copy", "VK_EXT_descriptor_buffer",
+    "VK_EXT_host_image_copy", "VK_EXT_descriptor_buffer",
     "VK_EXT_device_generated_commands"};
 
 bool names_withheld(const char *const *names, uint32_t count)
@@ -93,7 +93,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
-      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), vram_(blocks), progress_(blocks),
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), issued_(), vram_(blocks), progress_(blocks),
       timeline_submit_(blocks), fence_targets_(blocks), guard_(blocks, *this, progress_), robust_(), parent_(0u), created_extensions_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");

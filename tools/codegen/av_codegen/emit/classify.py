@@ -113,9 +113,20 @@ def template_sibling(params: list[Param] | None) -> str | None:
     return None
 
 
+def stride_array(params: list[Param] | None, p: Param) -> Param | None:
+    if params is None or p.type.pointer_depth != 0:
+        return None
+    for other in params:
+        if other.stride == p.name:
+            return other
+    return None
+
+
 def classify(reg: Registry, p: Param, params: list[Param] | None = None) -> str:
     if is_alloc_callbacks(p):
         return "in_null"
+    if stride_array(params, p) is not None:
+        return "in_stride"
     if p.direction == "in" and p.type.base in reg.handles and p.type.pointer_depth == 0:
         return "in_handle"
     if p.direction == "in" and p.type.fixed_dim is not None and p.type.pointer_depth == 0:
@@ -155,6 +166,16 @@ def classify(reg: Registry, p: Param, params: list[Param] | None = None) -> str:
         return "in_struct_array2" if p.type.base in reg.structs else "in_pod_array2"
     if p.direction == "in" and p.type.base in reg.structs and p.type.pointer_depth == 1:
         return "in_struct_ptr"
+    if (
+        p.direction == "in"
+        and p.type.pointer_depth == 1
+        and not p.len_expr
+        and p.type.base not in reg.handles
+        and p.type.base not in ("void", "char")
+        and bool(p.optional_levels)
+        and p.optional_levels[0]
+    ):
+        return "in_pod_ptr"
     if (
         p.direction == "out"
         and p.type.pointer_depth == 1

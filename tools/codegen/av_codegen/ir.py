@@ -43,6 +43,7 @@ class Param:
     null_refused: bool = False
     inner_len: str | None = None
     direction: str = "in"
+    stride: str | None = None
 
 
 @dataclass

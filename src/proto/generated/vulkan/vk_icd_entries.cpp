@@ -2286,6 +2286,11 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdDrawMultiEXT(VkCommandBuffer commandBuffer,
     ::av::vkproto::av_vkCmdDrawMultiEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
 }
 
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset) {
+    AV_SCOPE("vkCmdDrawMultiIndexedEXT");
+    ::av::vkproto::av_vkCmdDrawMultiIndexedEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
+}
+
 VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo) {
     AV_SCOPE("vkCmdPushConstants2KHR");
     ::av::vkproto::av_vkCmdPushConstants2KHR(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, pPushConstantsInfo);
@@ -2368,7 +2373,7 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleIdentifierEXT(VkDevice device, 
 }
 
 namespace {
-const Entry kWrapperTable[410] = {
+const Entry kWrapperTable[411] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance), DispatchLevel::instance },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice), DispatchLevel::device },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue), DispatchLevel::device },
@@ -2764,6 +2769,7 @@ const Entry kWrapperTable[410] = {
     Entry{ "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT), DispatchLevel::device },
     Entry{ "vkCmdBindDescriptorSets2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindDescriptorSets2KHR), DispatchLevel::device },
     Entry{ "vkCmdDrawMultiEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdDrawMultiEXT), DispatchLevel::device },
+    Entry{ "vkCmdDrawMultiIndexedEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdDrawMultiIndexedEXT), DispatchLevel::device },
     Entry{ "vkCmdPushConstants2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushConstants2KHR), DispatchLevel::device },
     Entry{ "vkCmdPushDescriptorSet2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushDescriptorSet2KHR), DispatchLevel::device },
     Entry{ "vkCmdPushDescriptorSetWithTemplate2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushDescriptorSetWithTemplate2KHR), DispatchLevel::device },
@@ -2789,6 +2795,6 @@ const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
 size_t EntryTable::size() const noexcept { return count_; }
 
-EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 410u}; }
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 411u}; }
 
 }  // namespace av::vkicd::generated

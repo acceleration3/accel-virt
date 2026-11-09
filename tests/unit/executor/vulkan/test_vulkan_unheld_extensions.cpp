@@ -20,7 +20,7 @@ TEST(vulkan_unheld_extensions, no_extension_that_makes_a_handle_the_guard_cannot
   CHECK(!advertised("VK_NV_device_generated_commands"));
   CHECK(!advertised("VK_NV_device_generated_commands_compute")); }
 
-TEST(vulkan_unheld_extensions, shader_objects_and_pipeline_binaries_are_on_the_wire_and_the_host_refuses_a_device_naming_them)
+TEST(vulkan_unheld_extensions, shader_objects_and_pipeline_binaries_are_advertised_because_the_host_checks_every_binary_and_holds_every_shader)
 { CHECK(advertised("VK_EXT_shader_object"));
   CHECK(advertised("VK_KHR_pipeline_binary")); }
 

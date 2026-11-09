@@ -103,6 +103,7 @@ include = [
     "VK_EXT_primitive_topology_list_restart",
     "VK_EXT_depth_clip_control",
     "VK_EXT_image_2d_view_of_3d",
+    "VK_EXT_blend_operation_advanced",
     "VK_EXT_shader_atomic_float",
     "VK_EXT_shader_atomic_float2",
     "VK_KHR_shader_clock",

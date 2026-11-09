@@ -402,6 +402,7 @@ enum CmdId : uint32_t {
     kCmd_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT = 0x000101A8u,
     kCmd_vkCmdBindDescriptorSets2KHR = 0x000101A9u,
     kCmd_vkCmdDrawMultiEXT = 0x000101AAu,
+    kCmd_vkCmdDrawMultiIndexedEXT = 0x000101ABu,
     kCmd_vkCmdPushConstants2KHR = 0x000101ACu,
     kCmd_vkCmdPushDescriptorSet2KHR = 0x000101ADu,
     kCmd_vkCmdPushDescriptorSetWithTemplate2KHR = 0x000101AEu,

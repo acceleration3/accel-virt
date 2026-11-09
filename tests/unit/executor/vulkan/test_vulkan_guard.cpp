@@ -265,6 +265,8 @@ TEST(vulkan_guard, a_command_asks_for_a_handle_s_parent_and_device_only_where_th
   CHECK(pooled_set.reference_ && pooled_set.parent_ && !pooled_set.device_);
   const Needs secondary_buffer = rig.guard.needs(HandleKind::command_buffer, secondary);
   CHECK(secondary_buffer.reference_ && secondary_buffer.parent_ && !secondary_buffer.device_);
+  const Needs shader = rig.guard.needs(HandleKind::shader_ext, 0x4242u);
+  CHECK(shader.reference_ && !shader.parent_ && !shader.device_);
   const Needs unheld = rig.guard.needs(HandleKind::device_memory, memory);
   CHECK(!unheld.reference_ && !unheld.parent_ && !unheld.device_);
   rig.guard.begin_frame(false);
