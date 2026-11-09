@@ -364,6 +364,10 @@ TEST(d3d12_session_extended_lists, stream_output_targets_that_leave_their_buffer
   CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
   view = {0x1000u, 16u, 0u};
   CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
+  view = {guest_address + 2u, 16u, 0u};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
+  view = {guest_address, 64u, guest_address + 6u};
+  CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 1u, &view));
   StreamOutputView many[5] = {};
   CHECK(!scene.session().on_SetStreamOutputTargets12(list, 0u, 5u, many));
   CHECK(!scene.session().on_SetStreamOutputTargets12(list, 3u, 2u, many));

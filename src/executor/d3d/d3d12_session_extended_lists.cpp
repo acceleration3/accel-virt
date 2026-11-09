@@ -177,7 +177,8 @@ bool D3d12Session::on_SetStreamOutputTargets12(uint32_t id, uint32_t start, uint
         if (view.address == 0u) continue;
         const uint64_t host = addresses_.translate(view.address, view.size);
         const uint64_t filled = view.filled_address == 0u ? 0u : addresses_.translate(view.filled_address, counter_bytes);
-        if (host == 0u || view.size == 0u || (view.filled_address != 0u && filled == 0u) ||
+        if (host == 0u || view.size == 0u || host % counter_bytes != 0u || filled % counter_bytes != 0u ||
+            (view.filled_address != 0u && filled == 0u) ||
             !retain_address(id, view.address) || (view.filled_address != 0u && !retain_address(id, view.filled_address)))
             return false;
         made[index] = {host, view.size, filled};
