@@ -12,6 +12,7 @@
 #include "um/common/gdi_window_surface.hpp"
 #include "um/common/windows_service_thread.hpp"
 #include "um/common/windows_thread_wake.hpp"
+#include "um/opengl/dxgi_adapter_order.hpp"
 #include "um/opengl/loaded_opengl32.hpp"
 #include "um/opengl/tls_thread_slot.hpp"
 #include "um/trace/process_trace.hpp"
@@ -55,6 +56,7 @@ private:
         GdiWindowSurface  surface;
         TlsThreadSlot     slot;
         LoadedOpengl32    opengl32;
+        DxgiAdapterOrder  order;
         SrwLock              chains_lock;
         DxgiWindowChains     chains;
         SrwLock              present_lock;

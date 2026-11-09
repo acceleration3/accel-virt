@@ -115,10 +115,10 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
                      ThreadLock &slice_lock, KeyedLog &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
-                     GlPresentQueue &presents, GlIcdBinding &binding)
+                     GlPresentQueue &presents, GlIcdBinding &binding, AdapterOrder &order)
     : lock_(lock), lines_(log), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
-      query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
+      query_(formats_), windows_(memory), currents_(slot), preferred_(kmt, order), adapter_chosen_(false), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
       contexts_(memory, connection_, lock, send_lock, slice_lock, lines_, extensions_, shared_handles_),
@@ -241,6 +241,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
         previous->flush();
     }
     if (context->state() == GuestGlContext::State::created) {
+        choose_adapter(dc);
         const Status made = make_chain(*context);
         if (made != Status::ok) {
             fail(made_error(made));
@@ -427,6 +428,14 @@ void GlIcdRoot::show_front(GuestGlContext *context)
         static_cast<void>(show_frame(context->current_dc()));
 }
 
+void GlIcdRoot::choose_adapter(void *dc)
+{
+    AV_SCOPE("GlIcdRoot::choose_adapter");
+    if (adapter_chosen_) return;
+    adapter_chosen_ = true;
+    connection_.prefer(preferred_.choose(dc));
+}
+
 void GlIcdRoot::finish_current()
 {
     AV_SCOPE("GlIcdRoot::finish_current");
@@ -488,6 +497,7 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     Status         created = Status::ok;
     {
         const ThreadLockHold locked(lock_);
+        choose_adapter(dc);
         created = contexts_.create(format, options, handle);
     }
     if (created != Status::ok) {
@@ -779,7 +789,10 @@ GuestGlContext *GlIcdRoot::shared_context(void *share, uint64_t &handle)
     const ThreadLockHold release(lock_);
     GuestGlContext *const target = contexts_.resolve(found);
     if (target == nullptr) return nullptr;
-    if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;
+    if (target->state() == GuestGlContext::State::created) {
+        choose_adapter(nullptr);
+        if (make_chain(*target) != Status::ok) return nullptr;
+    }
     if (!target->shareable()) return nullptr;
     handle = found;
     return target;

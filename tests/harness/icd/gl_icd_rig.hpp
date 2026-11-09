@@ -9,6 +9,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_adapter_order.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
@@ -41,6 +42,7 @@ public:
     ScriptedWindowSurface &surface();
     ScriptedThreadSlot    &threads();
     FakeOpengl32          &opengl32();
+    ScriptedAdapterOrder  &order();
     glicd::GlIcdRoot      &root();
     glicd::GlPresentQueue &presents();
     ScriptedThread        &present_thread();
@@ -70,6 +72,7 @@ private:
     ScriptedWindowChains  chains_;
     ScriptedThreadSlot    threads_;
     FakeOpengl32          opengl32_;
+    ScriptedAdapterOrder  order_;
     RecordingThreadLock   present_lock_;
     ScriptedThread        present_thread_;
     CountedWakeSignal     handed_;

@@ -11,6 +11,7 @@
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/manual_calls.hpp"
 #include "icd/opengl/pixel_format_query.hpp"
+#include "icd/opengl/preferred_adapter.hpp"
 #include "icd/opengl/pixel_format_table.hpp"
 #include "icd/opengl/window_table.hpp"
 
@@ -34,6 +35,7 @@ class WindowSurface;
 
 namespace av::glicd {
 
+class AdapterOrder;
 class SystemOpengl;
 class ThreadSlot;
 struct GlIcdRootProbe;
@@ -54,7 +56,7 @@ public:
 
     GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &slice_lock, KeyedLog &log,
               icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentQueue &presents,
-              GlIcdBinding &binding);
+              GlIcdBinding &binding, AdapterOrder &order);
     ~GlIcdRoot();
     GlIcdRoot(const GlIcdRoot &) = delete;
     GlIcdRoot &operator=(const GlIcdRoot &) = delete;
@@ -108,6 +110,7 @@ private:
 
     Shown show_frame(void *dc);
     void  show_front(GuestGlContext *context);
+    void  choose_adapter(void *dc);
     Shown present_frame(void *dc, bool paced);
     bool  admits(GuestGlContext &context);
     uint64_t take_pending(uint32_t thread);
@@ -133,6 +136,8 @@ private:
     PixelFormatQuery  query_;
     WindowTable       windows_;
     CurrentContexts   currents_;
+    PreferredAdapter  preferred_;
+    bool              adapter_chosen_;
     icd::IcdConnection      connection_;
     GlExtensionPolicy extensions_;
     icd::SharedHandles shared_handles_;

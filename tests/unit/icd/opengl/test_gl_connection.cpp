@@ -259,3 +259,20 @@ TEST(gl_connection, invariants_fail_for_every_link_when_a_lost_generation_and_th
   CHECK(rig.connection().invariants_hold());
   rig.connection().release(*old_link);
   rig.connection().release(*fresh); }
+
+TEST(gl_connection, a_preferred_luid_picks_the_adapter_before_the_first_acquire_and_is_ignored_after)
+{ GlContextRig rig;
+  av::icd::IcdConnection &connection = rig.connection();
+  rig.kmt().add_adapter(av::PciIdentity(av::PciIdentity::virtio_vendor, 0x1050u, av::PciIdentity::virtio_vendor,
+                                        0x5256u), 3200u);
+  rig.kmt().set_adapter_luid(0u, 0x31u);
+  rig.kmt().set_adapter_luid(1u, 0x32u);
+  connection.prefer(0x32u);
+  DeviceLink *link = nullptr;
+  CHECK_STATUS(connection.acquire(link), Status::ok);
+  std::uint64_t luid = 0u;
+  CHECK_STATUS(rig.kmt().adapter_luid(connection.adapter(), luid), Status::ok);
+  CHECK_EQ(luid, 0x32u);
+  connection.prefer(0x31u);
+  connection.release(*link);
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }

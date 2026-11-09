@@ -11,6 +11,12 @@ IcdConnection::IcdConnection(BlockSource &memory, Kmt &kmt, uint64_t luid)
     AV_SCOPE("IcdConnection::IcdConnection");
 }
 
+void IcdConnection::prefer(uint64_t luid)
+{
+    AV_SCOPE("IcdConnection::prefer");
+    if (!search_.found()) luid_ = luid;
+}
+
 Status IcdConnection::acquire(DeviceLink *&link)
 {
     AV_SCOPE("IcdConnection::acquire");

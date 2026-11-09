@@ -24,6 +24,7 @@ public:
 
     [[nodiscard]] Status acquire(DeviceLink *&link);
     void                 release(DeviceLink &link);
+    void                 prefer(uint64_t luid);
     uint32_t             adapter() const;
     uint32_t             users() const;
     void                 report(StateWriter &writer) const;

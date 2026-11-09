@@ -14,6 +14,7 @@
 #include "harness/icd/opengl32_gl_entry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_adapter_order.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
@@ -87,11 +88,11 @@ class GlProcess {
 public:
     explicit GlProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), present_lock_(trace_, 'P'), lines_(memory_, log_, "avgl: "),
-          slice_lock_(trace_, 'L'), opengl32_(threads_),
+          slice_lock_(trace_, 'L'), opengl32_(threads_), order_(),
           ready_(kmt),
           presents_(memory_, present_thread_, handed_, shown_, present_lock_, ready_, surface_, chains_, lines_),
           root_(memory_, kmt, lock_, send_lock_, slice_lock_, lines_, surface_, threads_, opengl32_, presents_,
-                av::glicd::gl_icd_binding)
+                av::glicd::gl_icd_binding, order_)
     {
         presents_.refuse();
         surface_.add_dc(&dc_, &window_, window_side, window_side);
@@ -116,6 +117,7 @@ private:
     av::ScriptedWindowChains chains_;
     ScriptedThreadSlot    threads_;
     FakeOpengl32          opengl32_;
+    av::ScriptedAdapterOrder order_;
     av::ScriptedThread       present_thread_;
     av::CountedWakeSignal    handed_;
     av::CountedWakeSignal    shown_;
