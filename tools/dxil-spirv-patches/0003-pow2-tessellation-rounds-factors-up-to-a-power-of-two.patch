@@ -1,0 +1,74 @@
+From: accel-virt
+Subject: [PATCH] tessellation: power of two partitioning rounds every factor up to a power of two
+
+Vulkan has no power of two spacing, so the hull shader was converted with integer spacing and a factor of 5.3 gave six segments where D3D gives eight. The factor stores to gl_TessLevelOuter and gl_TessLevelInner now round up to a power of two first (at least one), exactly, by carrying the mantissa into the exponent.
+---
+diff --git a/dxil_converter.cpp b/dxil_converter.cpp
+--- a/dxil_converter.cpp
++++ b/dxil_converter.cpp
+@@ -7065,7 +7065,7 @@
+ 			break;
+ 
+ 		case DXIL::TessellatorPartitioning::Pow2:
+-			LOGE("Emulating Pow2 spacing as Integer.\n");
++			execution_mode_meta.pow2_tess_partitioning = true;
+ 			builder.addExecutionMode(func, spv::ExecutionModeSpacingEqual);
+ 			break;
+ 
+diff --git a/opcodes/converter_impl.hpp b/opcodes/converter_impl.hpp
+--- a/opcodes/converter_impl.hpp
++++ b/opcodes/converter_impl.hpp
+@@ -358,6 +358,7 @@
+ 		unsigned primitive_index_dimension = 0;
+ 		unsigned gs_stream_active_mask = 0;
+ 		llvm::Function *patch_constant_function = nullptr;
++		bool pow2_tess_partitioning = false;
+ 		spv::Id patch_lowering_array_var_id = 0;
+ 		unsigned workgroup_threads[3] = {};
+ 		bool native_16bit_operations = false;
+diff --git a/opcodes/dxil/dxil_tessellation.cpp b/opcodes/dxil/dxil_tessellation.cpp
+--- a/opcodes/dxil/dxil_tessellation.cpp
++++ b/opcodes/dxil/dxil_tessellation.cpp
+@@ -118,6 +118,42 @@
+ 	// Tess factors are for some reason classified as inputs
+ 	spv::BuiltIn builtin = { };
+ 
++	if (impl.execution_mode_meta.pow2_tess_partitioning &&
++	    impl.spirv_module.query_builtin_shader_input(meta.id, &builtin) &&
++	    (builtin == spv::BuiltInTessLevelInner || builtin == spv::BuiltInTessLevelOuter) &&
++	    storage_type->isFloatingPointTy() && !type_is_64bit(storage_type) && !type_is_16bit(storage_type))
++	{
++		if (!impl.glsl_std450_ext)
++			impl.glsl_std450_ext = builder.import("GLSL.std.450");
++
++		auto *clamp_op = impl.allocate(spv::OpExtInst, impl.get_type_id(storage_type));
++		clamp_op->add_id(impl.glsl_std450_ext);
++		clamp_op->add_literal(GLSLstd450::GLSLstd450NMax);
++		clamp_op->add_id(store_value);
++		clamp_op->add_id(builder.makeFloatConstant(1.0f));
++		impl.add(clamp_op);
++
++		auto *bits_op = impl.allocate(spv::OpBitcast, builder.makeUintType(32));
++		bits_op->add_id(clamp_op->id);
++		impl.add(bits_op);
++
++		auto *carry_op = impl.allocate(spv::OpIAdd, builder.makeUintType(32));
++		carry_op->add_id(bits_op->id);
++		carry_op->add_id(builder.makeUintConstant(0x7fffffu));
++		impl.add(carry_op);
++
++		auto *mask_op = impl.allocate(spv::OpBitwiseAnd, builder.makeUintType(32));
++		mask_op->add_id(carry_op->id);
++		mask_op->add_id(builder.makeUintConstant(0x7f800000u));
++		impl.add(mask_op);
++
++		auto *rounded_op = impl.allocate(spv::OpBitcast, impl.get_type_id(storage_type));
++		rounded_op->add_id(mask_op->id);
++		impl.add(rounded_op);
++
++		store_value = rounded_op->id;
++	}
++
+ 	if (impl.options.max_tess_factor &&
+ 	    impl.spirv_module.query_builtin_shader_input(meta.id, &builtin) &&
+ 	    (builtin == spv::BuiltInTessLevelInner || builtin == spv::BuiltInTessLevelOuter) &&
