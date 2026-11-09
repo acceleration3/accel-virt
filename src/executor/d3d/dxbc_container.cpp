@@ -30,6 +30,7 @@ constexpr uint32_t no_register = 0xffffffffu;
 constexpr uint32_t entry_bytes = 32u;
 constexpr uint32_t full_mask = 0xfu;
 constexpr uint32_t dxbc_version = 1u;
+const char *const register_reference = "$register";
 
 const char *const system_names[] = {"AV",
                                     "SV_Position",
@@ -134,6 +135,15 @@ const char *DxbcContainer::semantic_of(const d3dproto::SignatureEntry &entry, bo
     if (sv == name_clip_distance || sv == name_cull_distance) index = 0u;
     if (sv < sizeof(system_names) / sizeof(system_names[0])) return system_names[sv];
     return "AV";
+}
+
+const char *DxbcContainer::stream_output_name(const d3dproto::SignatureEntry &entry, uint32_t &index) const
+{
+    AV_SCOPE("DxbcContainer::stream_output_name");
+    const char *const name = semantic_of(entry, false, index);
+    if (__builtin_strcmp(name, "AV") != 0) return name;
+    index = entry.register_index;
+    return register_reference;
 }
 
 bool DxbcContainer::add_signature(Role role, const d3dproto::SignatureEntry *entries, uint32_t count,

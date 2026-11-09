@@ -1,0 +1,31 @@
+From: accel-virt
+Subject: [PATCH] stream output: a declaration entry named $register selects the DXIL output by its register
+
+The semantic names of a DXIL program the embedder never parsed are unknown to it, so an entry named "$register" holds the output register in SemanticIndex and matches the element declared at that start row. Entries without a name no longer reach the string comparison.
+---
+diff --git a/libs/vkd3d-shader/dxil.c b/libs/vkd3d-shader/dxil.c
+--- a/libs/vkd3d-shader/dxil.c
++++ b/libs/vkd3d-shader/dxil.c
+@@ -334,6 +334,7 @@
+     const struct vkd3d_shader_transform_feedback_element *xfb_element;
+     unsigned int buffer_offsets[D3D12_SO_BUFFER_SLOT_COUNT];
+     unsigned int i, stride;
++    bool matches;
+ 
+     memset(buffer_offsets, 0, sizeof(buffer_offsets));
+     xfb_element = NULL;
+@@ -343,7 +344,13 @@
+         const struct vkd3d_shader_transform_feedback_element *e = &xfb_info->elements[i];
+ 
+         /* TODO: Stream index matching? */
+-        if (!ascii_strcasecmp(e->semantic_name, d3d_output->semantic) && e->semantic_index == d3d_output->semantic_index)
++        if (e->semantic_name && !strcmp(e->semantic_name, "$register"))
++            matches = e->semantic_index == d3d_output->start_row;
++        else
++            matches = e->semantic_name && !ascii_strcasecmp(e->semantic_name, d3d_output->semantic) &&
++                    e->semantic_index == d3d_output->semantic_index;
++
++        if (matches)
+         {
+             xfb_element = e;
+             break;

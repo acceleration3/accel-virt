@@ -1,0 +1,51 @@
+From: accel-virt
+Subject: [PATCH] stream output: the converter tells the remapper the output register of the element it is declaring
+
+A hull, vertex, domain or geometry shader converted from DXBC keeps its semantic names in metadata the embedder cannot see, so a stream output declaration can only name the register. The stream output remapper receives start_row beside the semantic.
+---
+diff --git a/dxil_converter.hpp b/dxil_converter.hpp
+--- a/dxil_converter.hpp
++++ b/dxil_converter.hpp
+@@ -192,6 +192,7 @@
+ {
+ 	const char *semantic;
+ 	unsigned semantic_index;
++	unsigned start_row;
+ };
+ 
+ struct VulkanStreamOutput
+diff --git a/dxil_spirv_c.cpp b/dxil_spirv_c.cpp
+--- a/dxil_spirv_c.cpp
++++ b/dxil_spirv_c.cpp
+@@ -239,7 +239,7 @@
+ 
+ 	bool remap_stream_output(const D3DStreamOutput &d3d_output, VulkanStreamOutput &vk_output) override
+ 	{
+-		dxil_spv_d3d_stream_output c_output = { d3d_output.semantic, d3d_output.semantic_index };
++		dxil_spv_d3d_stream_output c_output = { d3d_output.semantic, d3d_output.semantic_index, d3d_output.start_row };
+ 		dxil_spv_vulkan_stream_output c_vk_output = {};
+ 
+ 		if (output_remapper)
+diff --git a/dxil_spirv_c.h b/dxil_spirv_c.h
+--- a/dxil_spirv_c.h
++++ b/dxil_spirv_c.h
+@@ -114,6 +114,7 @@
+ {
+ 	const char *semantic;
+ 	unsigned semantic_index;
++	unsigned start_row;
+ } dxil_spv_d3d_stream_output;
+ 
+ typedef struct dxil_spv_vulkan_stream_output
+diff --git a/dxil_converter.cpp b/dxil_converter.cpp
+--- a/dxil_converter.cpp
++++ b/dxil_converter.cpp
+@@ -4939,7 +4939,7 @@
+ 			if (resource_mapping_iface)
+ 			{
+ 				VulkanStreamOutput vk_output = {};
+-				if (!resource_mapping_iface->remap_stream_output({ semantic_name.c_str(), semantic_index }, vk_output))
++				if (!resource_mapping_iface->remap_stream_output({ semantic_name.c_str(), semantic_index, start_row }, vk_output))
+ 					return false;
+ 
+ 				if (vk_output.enable)

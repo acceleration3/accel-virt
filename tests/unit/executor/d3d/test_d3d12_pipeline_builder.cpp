@@ -10,6 +10,7 @@
 #include "fixtures/d3d12/fill_cs.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::D3d12PipelineBuilder;
 using namespace av::d3d12proto;
@@ -66,7 +67,13 @@ TEST(d3d12_pipeline_builder, a_stream_output_declaration_becomes_the_pipeline_s_
   CHECK_EQ(made.pSODeclaration[1].StartComponent, 1u);
   CHECK_EQ(made.pSODeclaration[1].ComponentCount, 2u);
   CHECK_EQ(made.pSODeclaration[1].OutputSlot, 1u);
-  CHECK(made.pSODeclaration[0].SemanticName != nullptr); }
+  CHECK(made.pSODeclaration[0].SemanticName != nullptr);
+  const StreamOutDeclaration user_declared[1] = {{0u, 0u, 2u, 0x7u}};
+  const SignatureEntry       user_outputs[1] = {{10u, 0u, 2u, 0x7u, 3u, 0u, 0u, 0u}};
+  D3D12_STREAM_OUTPUT_DESC   by_register = {};
+  CHECK(builder.stream_output(user_declared, 1u, strides, 1u, 0xFFFFFFFFu, user_outputs, 1u, job, by_register));
+  CHECK(std::strcmp(by_register.pSODeclaration[0].SemanticName, "$register") == 0);
+  CHECK_EQ(by_register.pSODeclaration[0].SemanticIndex, 2u); }
 
 TEST(d3d12_pipeline_builder, no_stream_output_declared_leaves_the_pipeline_without_one)
 { D3d12PipelineBuilder builder(objects);

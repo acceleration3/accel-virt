@@ -22,6 +22,7 @@ public:
     size_t             finish();
 
     const char *semantic_of(const d3dproto::SignatureEntry &entry, bool pixel_output, uint32_t &index) const;
+    const char *stream_output_name(const d3dproto::SignatureEntry &entry, uint32_t &index) const;
 
 private:
     static constexpr uint32_t max_chunks = 6u;

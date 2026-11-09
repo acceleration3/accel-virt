@@ -184,6 +184,22 @@ TEST(dxbc_container_semantic_of, names_system_values_render_targets_depth_and_te
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
   } }
 
+TEST(dxbc_container_stream_output_name, system_values_keep_their_names_and_user_outputs_are_named_by_their_register)
+{ std::uint8_t buffer[64] = {};
+  const DxbcContainer container(buffer, sizeof buffer);
+  SignatureEntry position = {};
+  position.system_value = 1u;
+  position.register_index = 0u;
+  position.mask = 0xFu;
+  std::uint32_t index = 0xABCDu;
+  CHECK(std::strcmp(container.stream_output_name(position, index), "SV_Position") == 0);
+  CHECK_EQ(index, 0u);
+  SignatureEntry user = {};
+  user.register_index = 3u;
+  user.mask = 0x7u;
+  CHECK(std::strcmp(container.stream_output_name(user, index), "$register") == 0);
+  CHECK_EQ(index, 3u); }
+
 TEST(dxbc_container_add_signature, numbers_distances_and_writes_the_container_s_system_values)
 { std::uint8_t buffer[4096] = {};
   DxbcContainer container(buffer, sizeof buffer);

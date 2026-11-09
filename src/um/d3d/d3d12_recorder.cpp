@@ -410,11 +410,11 @@ VOID D3d12Recorder::so_set_targets(D3D12DDI_HCOMMANDLIST handle, UINT start, UIN
 {
     AV_SCOPE("D3d12Recorder::so_set_targets");
     StreamOutputView made[most_stream_outputs] = {};
-    if (views == nullptr ? count != 0u : count > most_stream_outputs) {
+    if (count > most_stream_outputs) {
         device_.lost("stream output targets that name more buffers than a pipeline writes");
         return;
     }
-    for (UINT index = 0u; index < count; index++)
+    for (UINT index = 0u; views != nullptr && index < count; index++)
         made[index] = StreamOutputView{views[index].BufferLocation, views[index].SizeInBytes,
                                        views[index].BufferFilledSizeLocation};
     sent(av_d3d12_SetStreamOutputTargets12(device_.wire(), list(handle), start, count, made),

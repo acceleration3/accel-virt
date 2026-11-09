@@ -206,7 +206,7 @@ bool D3d12PipelineBuilder::stream_output(const d3d12proto::StreamOutDeclaration 
         }
         if (!found) return false;
         uint32_t semantic_index = 0u;
-        entries[index].SemanticName = names.semantic_of(named, false, semantic_index);
+        entries[index].SemanticName = names.stream_output_name(named, semantic_index);
         entries[index].SemanticIndex = semantic_index;
     }
     out = job.keep_stream_output(entries, stream_out_count, strides, stride_count,
