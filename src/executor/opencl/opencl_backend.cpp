@@ -774,6 +774,7 @@ void OpenClBackend::stop_pacing()
     marker_ = nullptr;
     paced_queue_ = nullptr;
     pacer_ = KernelPacer();
+    transfers_.stop();
 }
 
 uint64_t OpenClBackend::ran() const
@@ -1111,8 +1112,11 @@ cl_int OpenClBackend::on_clEnqueueCopyBuffer(cl_command_queue command_queue, cl_
     if (!ClBufferBounds::range_inside(src_buffer, src_offset, size) ||
         !ClBufferBounds::range_inside(dst_buffer, dst_offset, size))
         return CL_INVALID_VALUE;
-    return RealDispatch::on_clEnqueueCopyBuffer(command_queue, src_buffer, dst_buffer, src_offset, dst_offset, size,
-                                                num_events_in_wait_list, event_wait_list, event);
+    const cl_int enqueued = RealDispatch::on_clEnqueueCopyBuffer(command_queue, src_buffer, dst_buffer, src_offset,
+                                                                  dst_offset, size, num_events_in_wait_list,
+                                                                  event_wait_list, event);
+    if (enqueued == CL_SUCCESS) transfers_.transferred(command_queue, size);
+    return enqueued;
 }
 
 cl_int OpenClBackend::on_clEnqueueCopyBufferRect(cl_command_queue command_queue, cl_mem src_buffer, cl_mem dst_buffer,
@@ -1126,9 +1130,11 @@ cl_int OpenClBackend::on_clEnqueueCopyBufferRect(cl_command_queue command_queue,
     if (!ClBufferBounds::rect_inside(src_buffer, src_origin, region, src_row_pitch, src_slice_pitch) ||
         !ClBufferBounds::rect_inside(dst_buffer, dst_origin, region, dst_row_pitch, dst_slice_pitch))
         return CL_INVALID_VALUE;
-    return RealDispatch::on_clEnqueueCopyBufferRect(command_queue, src_buffer, dst_buffer, src_origin, dst_origin,
-                                                    region, src_row_pitch, src_slice_pitch, dst_row_pitch,
-                                                    dst_slice_pitch, num_events_in_wait_list, event_wait_list, event);
+    const cl_int enqueued = RealDispatch::on_clEnqueueCopyBufferRect(
+        command_queue, src_buffer, dst_buffer, src_origin, dst_origin, region, src_row_pitch, src_slice_pitch,
+        dst_row_pitch, dst_slice_pitch, num_events_in_wait_list, event_wait_list, event);
+    if (enqueued == CL_SUCCESS) transfers_.transferred(command_queue, region[0] * region[1] * region[2]);
+    return enqueued;
 }
 
 cl_int OpenClBackend::on_clEnqueueFillBuffer(cl_command_queue command_queue, cl_mem buffer, const void *pattern,
@@ -1138,8 +1144,11 @@ cl_int OpenClBackend::on_clEnqueueFillBuffer(cl_command_queue command_queue, cl_
 {
     AV_SCOPE("OpenClBackend::on_clEnqueueFillBuffer");
     if (pattern == nullptr || !ClBufferBounds::range_inside(buffer, offset, size)) return CL_INVALID_VALUE;
-    return RealDispatch::on_clEnqueueFillBuffer(command_queue, buffer, pattern, pattern_size, offset, size,
-                                                num_events_in_wait_list, event_wait_list, event);
+    const cl_int enqueued = RealDispatch::on_clEnqueueFillBuffer(command_queue, buffer, pattern, pattern_size, offset,
+                                                                  size, num_events_in_wait_list, event_wait_list,
+                                                                  event);
+    if (enqueued == CL_SUCCESS) transfers_.transferred(command_queue, size);
+    return enqueued;
 }
 
 cl_sampler OpenClBackend::on_clCreateSamplerWithProperties(cl_context context,

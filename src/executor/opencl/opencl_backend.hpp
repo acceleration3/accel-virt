@@ -13,6 +13,7 @@
 #include "executor/opencl/spirv_argument_kinds.hpp"
 #include "executor/opencl/cl_bounced_rect.hpp"
 #include "executor/opencl/cl_read_ahead.hpp"
+#include "executor/opencl/cl_transfer_pacer.hpp"
 #include "executor/opencl/copied_gl_sharing.hpp"
 #include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/guest_region.hpp"
@@ -296,6 +297,7 @@ private:
     ClQueueWait      queue_wait_;
     ClFreshBytes     fresh_;
     KernelPacer      pacer_;
+    ClTransferPacer  transfers_;
     void            *paced_queue_;
     void            *marker_;
     uint64_t       ran_;
