@@ -30,6 +30,7 @@ constexpr uint32_t ddi_a2b10g10r10 = 31u;
 constexpr uint32_t ddi_a8b8g8r8 = 32u;
 constexpr uint32_t ddi_a16b16g16r16f = 113u;
 constexpr uint32_t ddi_nv12 = FourCc('N', 'V', '1', '2').value();
+constexpr uint32_t nv12 = 103u, p010 = 104u, p016 = 105u, opaque_420 = 106u;
 constexpr uint32_t ddi_yuy2 = FourCc('Y', 'U', 'Y', '2').value();
 
 constexpr uint32_t vk_r8_unorm = 9u;
@@ -323,6 +324,13 @@ uint32_t DxgiFormat::element_height() const
 {
     AV_SCOPE("DxgiFormat::element_height");
     return row_.shape == Shape::block ? block_side : 1u;
+}
+
+uint32_t DxgiFormat::planar_sample_bytes() const
+{
+    AV_SCOPE("DxgiFormat::planar_sample_bytes");
+    if (format_ == nv12 || format_ == opaque_420) return 1u;
+    return format_ == p010 || format_ == p016 ? 2u : 0u;
 }
 
 uint32_t DxgiFormat::family() const

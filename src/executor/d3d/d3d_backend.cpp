@@ -1847,6 +1847,7 @@ bool D3dBackend::update_in_pieces(ID3D11Resource *resource, uint32_t subresource
                                   uint32_t copy_flags, const uint8_t *data)
 {
     AV_SCOPE("D3dBackend::update_in_pieces");
+    if (layout.planar()) return false;
     D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
     resource->GetType(&dimension);
     const bool     buffer = dimension == D3D11_RESOURCE_DIMENSION_BUFFER;

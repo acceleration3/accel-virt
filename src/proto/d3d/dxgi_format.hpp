@@ -18,6 +18,7 @@ public:
     uint32_t element_bytes() const;
     uint32_t element_width() const;
     uint32_t element_height() const;
+    uint32_t planar_sample_bytes() const;
 
     uint32_t family() const;
     bool     typeless() const;

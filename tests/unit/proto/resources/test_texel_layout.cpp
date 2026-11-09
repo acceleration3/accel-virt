@@ -78,3 +78,19 @@ TEST(texel_layout, a_texel_starts_where_its_element_does)
   const TexelLayout word(4u, 1u, 1u);
   CHECK_EQ(word.offset_of(9u, 6u, 256u), 6u * 256u + 36u);
   CHECK_EQ(word.offset_of(0u, 70000u, 70000u), 70000ull * 70000ull); }
+
+TEST(texel_layout, a_planar_video_format_counts_its_chroma_rows)
+{ const DxgiFormatLayout nv12(103u);
+  CHECK(nv12.planar());
+  CHECK_EQ(nv12.element_bytes(), 0u);
+  CHECK_EQ(nv12.row_bytes(128u), 128u);
+  CHECK_EQ(nv12.copied_row_bytes(128u), 128u);
+  CHECK_EQ(nv12.rows(128u), 192u);
+  CHECK_EQ(nv12.rows(5u), 8u);
+  const DxgiFormatLayout p010(104u);
+  CHECK_EQ(p010.row_bytes(128u), 256u);
+  CHECK_EQ(p010.rows(128u), 192u);
+  CHECK(!DxgiFormatLayout(dxgi_yuy2).planar());
+  CHECK(!DxgiFormatLayout(dxgi_bc1).planar());
+  const DxgiFormatLayout again = nv12;
+  CHECK_EQ(again.rows(128u), 192u); }

@@ -226,3 +226,12 @@ TEST(dxgi_format, a_scanout_is_copied_out_in_its_32_bit_colour_formats)
       scanned++;
   }
   CHECK_EQ(scanned, 3u); }
+
+TEST(dxgi_format, only_the_planar_video_formats_have_a_sample_size)
+{ CHECK_EQ(DxgiFormat(103u).planar_sample_bytes(), 1u);
+  CHECK_EQ(DxgiFormat(104u).planar_sample_bytes(), 2u);
+  CHECK_EQ(DxgiFormat(105u).planar_sample_bytes(), 2u);
+  CHECK_EQ(DxgiFormat(106u).planar_sample_bytes(), 1u);
+  CHECK_EQ(DxgiFormat(107u).planar_sample_bytes(), 0u);
+  CHECK_EQ(DxgiFormat(87u).planar_sample_bytes(), 0u);
+  CHECK_EQ(DxgiFormat(0u).planar_sample_bytes(), 0u); }

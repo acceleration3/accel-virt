@@ -318,7 +318,8 @@ void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, c
                                        static_cast<uint32_t>(box->front), static_cast<uint32_t>(box->right),
                                        static_cast<uint32_t>(box->bottom), static_cast<uint32_t>(box->back)};
     const DxgiFormatLayout format(resource.format);
-    const bool             bytes = resource.dimension == D3D10DDIRESOURCE_BUFFER || format.element_bytes() == 0u;
+    const bool             bytes =
+        resource.dimension == D3D10DDIRESOURCE_BUFFER || (format.element_bytes() == 0u && !format.planar());
     const TexelLayout      layout = bytes ? TexelLayout(1u, 1u, 1u) : TexelLayout(format);
     const d3d::TextureUpload upload(layout, region, row_pitch, depth_pitch, piece_bytes(), wire());
     if (upload.bytes() == 0u) return;
