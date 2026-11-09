@@ -109,6 +109,7 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     answer.ResourceHeapTier = static_cast<D3D12DDI_RESOURCE_HEAP_TIER>(caps_.resource_heap_tier);
     answer.TiledResourcesTier = static_cast<D3D12DDI_TILED_RESOURCES_TIER>(tiled_tier());
     answer.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
+    answer.OutputMergerLogicOp = caps_.output_merger_logic_op != 0u;
     return fill(data, bytes, &answer, sizeof(answer));
 }
 

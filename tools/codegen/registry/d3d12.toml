@@ -124,7 +124,7 @@ fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", 
           "u32 rovs", "u32 max_gpu_va_bits_per_resource", "u32 max_gpu_va_bits_per_process",
           "u32 descriptor_sizes[4]",
           "u32 double_ops", "u32 int64_ops", "u32 wave_ops", "u32 wave_lane_min", "u32 wave_lane_max",
-          "u32 total_lanes", "u32 reserved"]
+          "u32 total_lanes", "u32 output_merger_logic_op"]
 
 [[command]]
 name = "OpenDevice12"

@@ -384,7 +384,7 @@ struct Caps12 {
     uint32_t wave_lane_min;
     uint32_t wave_lane_max;
     uint32_t total_lanes;
-    uint32_t reserved;
+    uint32_t output_merger_logic_op;
 };
 static_assert(sizeof(Caps12) == 84, "Caps12 crosses as 84 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
