@@ -157,7 +157,7 @@ bool D3d12Session::on_SetShadingRate12(uint32_t id, uint32_t base_rate, uint32_t
         LogLine(lines_).text("SetShadingRate12 on list ").number(id).text(" with a rate or combiner the host does not offer").write();
         return false;
     }
-    const UINT combiners[2] = {combiner0, combiner1};
+    const UINT combiners[2] = {caps.vrs_tier >= 2u ? combiner0 : 0u, caps.vrs_tier >= 2u ? combiner1 : 0u};
     shading.get()->RSSetShadingRate(base_rate, combiners);
     return true;
 }

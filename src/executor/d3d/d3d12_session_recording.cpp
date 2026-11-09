@@ -54,9 +54,15 @@ bool D3d12Session::on_ResourceBarrier12(uint32_t id, uint32_t count, const d3d12
         made[index].Flags = static_cast<D3D12_RESOURCE_BARRIER_FLAGS>(barrier.flags);
         if (barrier.type == barrier_transition) {
             if (resource == nullptr) return false;
-            if (resource->GetDesc().Dimension != D3D12_RESOURCE_DIMENSION_BUFFER &&
-                !D3d12LayoutBarrier::claim(resource, D3d12LayoutBarrier::Mode::legacy)) {
-                LogLine(lines_).text("ResourceBarrier12 on list ").number(id).text(" moves a texture that layout barriers already name").write();
+            const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+            d3d12proto::LayoutBarrier index_only = {};
+            index_only.resource = barrier.resource;
+            index_only.first_mip = barrier.subresource;
+            const bool buffer = desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER;
+            if (buffer ? (barrier.subresource != 0u && barrier.subresource != 0xFFFFFFFFu)
+                       : !D3d12LayoutBarrier(index_only).fits(desc.Dimension, desc.DepthOrArraySize, desc.MipLevels,
+                                                              D3d12LayoutBarrier::planes_of(static_cast<uint32_t>(desc.Format)))) {
+                LogLine(lines_).text("ResourceBarrier12 on list ").number(id).text(" names a subresource the resource does not have").write();
                 return false;
             }
             made[index].Transition = {resource, barrier.subresource, static_cast<D3D12_RESOURCE_STATES>(barrier.before),
@@ -109,8 +115,7 @@ bool D3d12Session::on_Barrier12(uint32_t id, uint32_t count, const d3d12proto::L
             const D3D12_RESOURCE_DESC desc = resource->GetDesc();
             const uint32_t planes = D3d12LayoutBarrier::planes_of(static_cast<uint32_t>(desc.Format));
             if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ||
-                !checked.fits(desc.Dimension, desc.DepthOrArraySize, desc.MipLevels, planes) ||
-                !D3d12LayoutBarrier::claim(resource, D3d12LayoutBarrier::Mode::layout)) {
+                !checked.fits(desc.Dimension, desc.DepthOrArraySize, desc.MipLevels, planes)) {
                 LogLine(lines_).text("Barrier12 on list ").number(id).text(" names a texture it cannot move by layout").write();
                 return false;
             }

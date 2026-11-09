@@ -14,7 +14,7 @@ D3d12IndirectSignature::D3d12IndirectSignature(const d3d12proto::IndirectArgumen
     AV_SCOPE("D3d12IndirectSignature::D3d12IndirectSignature");
 }
 
-bool D3d12IndirectSignature::holds(const D3d12RootLayout *root) const
+bool D3d12IndirectSignature::holds(const D3d12RootLayout *root, bool mesh_shaders) const
 {
     AV_SCOPE("D3d12IndirectSignature::holds");
     if (count_ == 0u || count_ > max_arguments || stride_ == 0u || stride_ > max_stride || stride_ % word_bytes != 0u)
@@ -23,6 +23,9 @@ bool D3d12IndirectSignature::holds(const D3d12RootLayout *root) const
     for (uint32_t index = 0u; index < count_; index++) {
         const uint64_t taken = bytes_of(arguments_[index], root);
         if (taken == 0u) return false;
+        const uint32_t type = arguments_[index].type;
+        const bool     action = type == draw || type == draw_indexed || type == dispatch || type == dispatch_mesh;
+        if ((action && index + 1u != count_) || (type == dispatch_mesh && !mesh_shaders)) return false;
         bytes += taken;
     }
     return bytes <= stride_;

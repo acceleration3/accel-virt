@@ -91,6 +91,9 @@ TEST(d3d12_layout_barrier, a_subresource_range_must_lie_inside_the_texture)
   CHECK(D3d12LayoutBarrier(barrier).fits(3u, 1u, 1u, 2u));
   barrier = texture();
   barrier.slice_count = 0u;
+  barrier.plane_count = 0u;
+  CHECK(D3d12LayoutBarrier(barrier).fits(3u, 1u, 1u, 1u));
+  barrier.first_slice = 1u;
   CHECK(!D3d12LayoutBarrier(barrier).fits(3u, 1u, 1u, 1u));
   barrier = texture();
   barrier.first_mip = 0xFFFFFFFFu;

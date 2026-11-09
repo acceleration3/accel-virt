@@ -20,7 +20,7 @@ public:
 
     D3d12IndirectSignature(const d3d12proto::IndirectArgument *arguments, uint32_t count, uint32_t stride);
 
-    bool                    holds(const D3d12RootLayout *root) const;
+    bool                    holds(const D3d12RootLayout *root, bool mesh_shaders = false) const;
     ID3D12CommandSignature *make(ID3D12Device *device, ID3D12RootSignature *root) const;
 
 private:

@@ -263,6 +263,13 @@ TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
   CHECK(!session.on_DrawInstanced12(list, 3u, 1u, 0u, 0u));
   CHECK(!session.on_DrawIndexedInstanced12(list, 3u, 1u, 0u, 0, 0u));
   CHECK(!session.on_Dispatch12(list, 1u, 1u, 1u));
+  CHECK(!session.on_DispatchMesh12(list, 1u, 1u, 1u));
+  CHECK(!session.on_DispatchMesh12(list, 65536u, 1u, 1u));
+  CHECK(!session.on_DispatchMesh12(list, 65535u, 65535u, 2u));
+  const av::d3d12proto::LayoutBarrier global = {};
+  CHECK(!session.on_Barrier12(list, 1u, &global));
+  CHECK(!session.on_SetShadingRate12(list, 0u, 0u, 0u));
+  CHECK(!session.on_SetShadingRateImage12(list, 0u));
   CHECK(!session.on_CopyBufferRegion12(list, 1u, 0u, 2u, 0u, 16u));
   CHECK(!session.on_CopyTextureRegion12(list, location, 0u, 0u, 0u, location, 0u, box));
   CHECK(!session.on_CopyResource12(list, 1u, 2u));

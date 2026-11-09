@@ -21,5 +21,5 @@ TEST(d3d12_shading_rate, combiners_past_the_five_are_refused_and_the_sum_needs_i
   CHECK(!D3d12ShadingRate(0u, 4u, 0u).holds(2u, true, false));
   CHECK(D3d12ShadingRate(0u, 4u, 4u).holds(2u, true, true));
   CHECK(D3d12ShadingRate(0u, 1u, 3u).holds(2u, false, false));
-  CHECK(!D3d12ShadingRate(0u, 1u, 0u).holds(1u, false, false));
+  CHECK(D3d12ShadingRate(0u, 1u, 0u).holds(1u, false, false));
   CHECK(!D3d12ShadingRate(0u, 0u, 0u).holds(0u, true, true)); }

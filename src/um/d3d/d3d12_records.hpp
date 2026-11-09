@@ -61,7 +61,9 @@ struct ResourceRecord {
     uint32_t      packed_mips;
     uint32_t      packed_tiles;
     uint32_t      row_pitch;
-    uint32_t      row_pad;
+    uint32_t      surface_width;
+    uint32_t      surface_height;
+    uint32_t      surface_format;
 };
 
 struct DescriptorHeapRecord {

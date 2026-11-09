@@ -26,12 +26,12 @@ bool D3d12ShadingRate::holds(uint32_t tier, bool additional_rates, bool sum_comb
 {
     AV_SCOPE("D3d12ShadingRate::holds");
     if (tier == 0u) return false;
+    static_cast<void>(sizeof combiners_);
     const bool plain = base_ == rate_1x1 || base_ == rate_1x2 || base_ == rate_2x1 || base_ == rate_2x2;
     const bool extra = base_ == rate_2x4 || base_ == rate_4x2 || base_ == rate_4x4;
     if (!plain && !(extra && additional_rates)) return false;
     for (const uint32_t combiner : combiners_) {
         if (combiner > combiner_sum || (combiner == combiner_sum && !sum_combiner)) return false;
-        if (tier < 2u && combiner != 0u) return false;
     }
     return true;
 }

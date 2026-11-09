@@ -69,10 +69,12 @@ TEST(d3d12_indirect_signature, a_stride_that_is_no_command_s_is_refused)
   CHECK(!holds(draws, 1u, D3d12IndirectSignature::max_stride + 4u, nullptr));
   CHECK(!holds(draws, 0u, 16u, nullptr));
   IndirectArgument many[D3d12IndirectSignature::max_arguments + 1u] = {};
-  for (IndirectArgument &each : many) each = {draw, 0u, 0u, 0u};
-  CHECK(holds(many, D3d12IndirectSignature::max_arguments, 1024u, nullptr));
+  const D3d12RootLayout root = rooted();
+  for (IndirectArgument &each : many) each = {constant, 0u, 0u, 1u};
+  many[D3d12IndirectSignature::max_arguments - 1u] = {draw, 0u, 0u, 0u};
+  CHECK(holds(many, D3d12IndirectSignature::max_arguments, 1024u, &root));
   many[D3d12IndirectSignature::max_arguments] = {draw, 0u, 0u, 0u};
-  CHECK(!holds(many, D3d12IndirectSignature::max_arguments + 1u, 1024u, nullptr)); }
+  CHECK(!holds(many, D3d12IndirectSignature::max_arguments + 1u, 1024u, &root)); }
 
 TEST(d3d12_indirect_signature, an_argument_type_the_driver_does_not_report_is_refused)
 { const D3d12RootLayout root = rooted();
@@ -103,9 +105,14 @@ TEST(d3d12_indirect_signature, a_root_argument_that_names_no_parameter_of_its_ki
 
 TEST(d3d12_indirect_signature, a_mesh_dispatch_is_three_words_and_ray_dispatch_or_incrementing_constants_are_refused)
 { const IndirectArgument meshes[] = {{dispatch_mesh, 0u, 0u, 0u}};
-  CHECK(holds(meshes, 1u, 12u, nullptr));
+  CHECK(!holds(meshes, 1u, 12u, nullptr));
+  CHECK(D3d12IndirectSignature(meshes, 1u, 12u).holds(nullptr, true));
   CHECK(!holds(meshes, 1u, 8u, nullptr));
   const IndirectArgument rays[] = {{dispatch_rays, 0u, 0u, 0u}};
   CHECK(!holds(rays, 1u, 64u, nullptr));
   const IndirectArgument counting[] = {{incrementing_constant, 0u, 0u, 0u}};
   CHECK(!holds(counting, 1u, 64u, nullptr)); }
+
+TEST(d3d12_indirect_signature, an_action_that_is_not_the_last_argument_is_refused)
+{ const IndirectArgument misplaced[] = {{draw, 0u, 0u, 0u}, {dispatch, 0u, 0u, 0u}};
+  CHECK(!holds(misplaced, 2u, 64u, nullptr)); }

@@ -3,6 +3,8 @@
 
 #include "executor/shim/d3d12_newer_interfaces.hpp"
 
+#include <stddef.h>
+
 namespace av {
 
 template <int Type, typename Value>
@@ -10,6 +12,12 @@ struct alignas(void *) D3d12Subobject {
     int   type = Type;
     Value value = {};
 };
+
+using D3d12UintSubobject = D3d12Subobject<0, UINT>;
+static_assert(sizeof(D3d12UintSubobject) == sizeof(void *) && offsetof(D3d12UintSubobject, value) == 4u);
+static_assert(sizeof(D3d12Subobject<0, ID3D12RootSignature *>) == 2u * sizeof(void *));
+static_assert(sizeof(D3d12Subobject<0, D3D12_SHADER_BYTECODE>) == 3u * sizeof(void *));
+static_assert(sizeof(d3d12new::DepthStencil2) == 60u && sizeof(d3d12new::RenderTargetFormats) == 36u);
 
 struct D3d12GraphicsStream {
     D3d12Subobject<d3d12new::subobject_root_signature, ID3D12RootSignature *> root;

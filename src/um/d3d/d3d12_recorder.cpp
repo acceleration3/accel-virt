@@ -227,9 +227,9 @@ CopyLocation D3d12Recorder::location(const D3D12DDIARG_BUFFER_PLACEMENT &placeme
     if (record != nullptr && record->row_pitch != 0u && layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE &&
         placement.BaseAddress.UMD.Offset == 0u) {
         made.type = location_footprint;
-        made.format = record->format;
-        made.width = static_cast<uint32_t>(record->width);
-        made.height = record->height;
+        made.format = record->surface_format;
+        made.width = record->surface_width;
+        made.height = record->surface_height;
         made.depth = 1u;
         made.row_pitch = record->row_pitch;
         return made;
@@ -266,6 +266,12 @@ VOID D3d12Recorder::copy_texture_region(D3D12DDI_HCOMMANDLIST handle, const D3D1
 {
     AV_SCOPE("D3d12Recorder::copy_texture_region");
     if (destination == nullptr || source == nullptr) return;
+    const auto *const source_record = static_cast<const ResourceRecord *>(source->BaseAddress.UMD.hResource.pDrvPrivate);
+    const auto *const target_record = static_cast<const ResourceRecord *>(destination->BaseAddress.UMD.hResource.pDrvPrivate);
+    if ((source_record != nullptr && source_record->row_pitch != 0u) ||
+        (target_record != nullptr && target_record->row_pitch != 0u &&
+         (destination_layout.Layout != D3D12DDI_RL_SELECT_SUBRESOURCE || destination->BaseAddress.UMD.Offset != 0u)))
+        return;
     Box region = {};
     if (box != nullptr)
         region = Box{static_cast<uint32_t>(box->Left),  static_cast<uint32_t>(box->Top),
@@ -284,9 +290,9 @@ VOID D3d12Recorder::resource_copy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
         CopyLocation to = {};
         to.resource = device_.id_of(destination.pDrvPrivate);
         to.type = location_footprint;
-        to.format = facade->format;
-        to.width = static_cast<uint32_t>(facade->width);
-        to.height = facade->height;
+        to.format = facade->surface_format;
+        to.width = facade->surface_width;
+        to.height = facade->surface_height;
         to.depth = 1u;
         to.row_pitch = facade->row_pitch;
         CopyLocation from = {};

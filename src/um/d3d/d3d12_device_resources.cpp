@@ -476,9 +476,9 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     const HRESULT made = make_resource(spanning, nullptr, heap, 0u, resource);
     if (FAILED(made) || rows) return made;
     resource.row_pitch = surface.pitch();
-    resource.width = surface.width();
-    resource.height = surface.height();
-    resource.format = presented.dxgi();
+    resource.surface_width = surface.width();
+    resource.surface_height = surface.height();
+    resource.surface_format = presented.dxgi();
     return made;
 }
 

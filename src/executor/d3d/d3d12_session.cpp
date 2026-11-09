@@ -881,7 +881,7 @@ bool D3d12Session::on_CreateCommandSignature12(uint32_t signature, uint32_t root
     D3d12RootLayout layout;
     if (device_ == nullptr || (root != 0u && (rooted == nullptr || !layout.read(rooted)))) return false;
     const D3d12IndirectSignature made(arguments, argument_count, byte_stride);
-    if (!made.holds(rooted != nullptr ? &layout : nullptr)) return false;
+    if (!made.holds(rooted != nullptr ? &layout : nullptr, device_->capabilities().caps().mesh_shader_tier != 0u)) return false;
     return kept(signature, D3dObjectKind::command_signature12, made.make(device_->device(), rooted));
 }
 

@@ -29,7 +29,6 @@ constexpr uint32_t layout_copy_dest = 8u;
 constexpr uint32_t flag_discard = 1u;
 constexpr uint32_t all_subresources = 0xFFFFFFFFu;
 constexpr uint32_t most_planes = 2u;
-constexpr GUID     mode_guid = {0x7a1b9d12u, 0x4c3eu, 0x4f60u, {0x9d, 0x2a, 0x61, 0x0b, 0x58, 0xa7, 0xe4, 0x13}};
 
 bool sync_holds(uint32_t sync)
 {
@@ -77,8 +76,10 @@ bool D3d12LayoutBarrier::fits(uint32_t dimension, uint32_t array_size, uint32_t 
     const d3d12proto::LayoutBarrier &b = barrier_;
     const uint64_t slices = dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1u : array_size;
     if (b.mip_count == 0u) return b.first_mip == all_subresources || b.first_mip < uint64_t{mips} * slices * planes;
-    return uint64_t{b.first_mip} + b.mip_count <= mips && uint64_t{b.first_slice} + b.slice_count <= slices &&
-           b.slice_count != 0u && uint64_t{b.first_plane} + b.plane_count <= planes && b.plane_count != 0u;
+    const uint64_t slice_count = b.slice_count == 0u ? 1u : b.slice_count;
+    const uint64_t plane_count = b.plane_count == 0u ? 1u : b.plane_count;
+    return uint64_t{b.first_mip} + b.mip_count <= mips && uint64_t{b.first_slice} + slice_count <= slices &&
+           uint64_t{b.first_plane} + plane_count <= planes;
 }
 
 uint32_t D3d12LayoutBarrier::api_layout(uint32_t layout)
@@ -106,17 +107,6 @@ uint32_t D3d12LayoutBarrier::planes_of(uint32_t format)
     if (format == r32g8x24_typeless || format == d32_float_s8x24 || format == r24g8_typeless || format == d24_unorm_s8)
         return 2u;
     return format >= first_planar_video && format <= last_planar_video ? 2u : 1u;
-}
-
-bool D3d12LayoutBarrier::claim(ID3D12Resource *resource, Mode mode)
-{
-    AV_SCOPE("D3d12LayoutBarrier::claim");
-    uint32_t held = 0u;
-    UINT     size = sizeof held;
-    if (SUCCEEDED(resource->GetPrivateData(mode_guid, &size, &held)) && size == sizeof held)
-        return held == static_cast<uint32_t>(mode);
-    const uint32_t wanted = static_cast<uint32_t>(mode);
-    return SUCCEEDED(resource->SetPrivateData(mode_guid, sizeof wanted, &wanted));
 }
 
 }
