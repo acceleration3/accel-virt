@@ -69,7 +69,7 @@ EXCLUDE = {
                              "WindowsOverlayEntry in src/um and by ScriptedOverlay in tests/harness, and "
                              "exercised through every overlay probe test",
     "src/guest/transport/release_route.hpp": "how a release record reaches the kernel, implemented by "
-                             "CrossAdapterWaits in src/um and exercised through every cross-adapter wait test",
+                             "PacketRelease in src/um and exercised through every packet release test",
     "src/icd/common/calling_thread.hpp": "the thread a call runs on, implemented by ThreadSlot and by "
                              "WindowsCallingThread in src/um, and exercised through every ICD root test",
     "src/icd/common/completion_probe.hpp": "what a wait polls to learn a host object completed, implemented by "

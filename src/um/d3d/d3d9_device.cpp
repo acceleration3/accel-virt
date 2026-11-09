@@ -52,7 +52,7 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
     : session_(session), memory_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), adapter_(adapter), caller_(), call_mutex_(), lock_(call_mutex_, caller_), channel_(),
-      present_order_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
+      present_order_(), packets_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(), clock_(), allocations_(kernel_, lines_, clock_), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
@@ -80,6 +80,7 @@ D3d9Device::~D3d9Device()
         channel_.destroy();
     }
     if (readback_ != nullptr) memory_.release(readback_);
+    if (packets_.constructed()) packets_.destroy();
     if (present_order_.constructed()) present_order_.destroy();
     if (joined) session_.leave();
     kernel_.destroy_context(context_);
@@ -98,11 +99,13 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     const HRESULT joined = session_.join(kmt_adapter);
     if (FAILED(joined)) return joined;
     static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
+    static_cast<void>(packets_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport(), session_.lock(), lines_, context_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u;
     if (!channel_.object().open9(hresult) || hresult != 0u) {
         lines_.write("the host made no Direct3D 9 device");
         channel_.destroy();
+        packets_.destroy();
         present_order_.destroy();
         const bool exhausted = session_.exhausted();
         session_.leave();

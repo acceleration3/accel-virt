@@ -22,7 +22,7 @@
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/present_order.hpp"
 #include "um/d3d/allocation_lender.hpp"
-#include "um/d3d/cross_adapter_waits.hpp"
+#include "um/d3d/packet_release.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
@@ -214,7 +214,7 @@ private:
     ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;
     ObjectStorage<d3d::PresentOrder> present_order_;
-    ObjectStorage<d3d::CrossAdapterWaits> waits_;
+    ObjectStorage<d3d::PacketRelease> packets_;
     uint32_t  feature_level_;
     GrowableArray<ResourceRecord *> guest_surfaces_;
     icd::OnceLatch  guest_lock_refused_;

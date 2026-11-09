@@ -37,7 +37,7 @@ D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog
                          d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows)
     : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), lender_(session), clock_(), allocations_(kernel_, lines_, clock_),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), caller_(), call_mutex_(), calls_(call_mutex_, caller_), recording_(),
-      recorded_(), context_(nullptr), present_order_(), waits_(), feature_level_(0u),
+      recorded_(), context_(nullptr), present_order_(), packets_(), feature_level_(0u),
       guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
       trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
@@ -59,7 +59,7 @@ D3d11Device::~D3d11Device()
         static_cast<void>(channel_.object().flush());
         channel_.destroy();
     }
-    if (waits_.constructed()) waits_.destroy();
+    if (packets_.constructed()) packets_.destroy();
     if (present_order_.constructed()) present_order_.destroy();
     if (joined) session_.shared_memory().reclaim();
     if (joined) session_.leave();
@@ -82,13 +82,13 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     const HRESULT joined = session_.join(adapter);
     if (FAILED(joined)) return joined;
     static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
-    static_cast<void>(waits_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport(), session_.lock(), lines_, context_));
+    static_cast<void>(packets_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport(), session_.lock(), lines_, context_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
     if (!channel_.object().open(feature_level_, hresult, made) || hresult != 0u) {
         lines_.write("the host made no Direct3D 11 device");
         channel_.destroy();
-        waits_.destroy();
+        packets_.destroy();
         present_order_.destroy();
         const bool exhausted = session_.exhausted();
         session_.leave();

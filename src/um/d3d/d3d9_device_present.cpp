@@ -114,7 +114,14 @@ HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
 HRESULT D3d9Device::publish_presented(D3d9Resource &resource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::publish_presented");
-    if (resource.allocation_resource != nullptr && resource.shared_key != 0u) return show_primary(resource, index);
+    if (resource.allocation_resource != nullptr && resource.shared_key != 0u) {
+        if (!packets_.constructed()) return show_primary(resource, index);
+        packets_.object().engage();
+        packets_.object().writing(resource.allocation);
+        const HRESULT shown = show_primary(resource, index);
+        packets_.object().writing(0u);
+        return shown;
+    }
     return publish_point(resource, index);
 }
 

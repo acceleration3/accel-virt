@@ -38,7 +38,7 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
         lines_.write("the device took no cross-adapter texture's pages");
         return E_OUTOFMEMORY;
     }
-    if (across && waits_.constructed()) waits_.object().shares();
+    if (across && packets_.constructed()) packets_.object().engage();
     resource.shared_key = surface.key();
     resource.allocation = allocation;
     resource.allocation_owned = 1u;
@@ -449,7 +449,7 @@ bool D3d11Device::open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG
         set_error(E_OUTOFMEMORY);
         return true;
     }
-    if (waits_.constructed()) waits_.object().shares();
+    if (packets_.constructed()) packets_.object().engage();
     d3dproto::ResourceDesc desc = {};
     desc.dimension = resource.dimension;
     desc.width = resource.width;
