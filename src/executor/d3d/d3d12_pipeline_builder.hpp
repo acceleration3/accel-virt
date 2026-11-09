@@ -9,6 +9,7 @@
 struct ID3D12RootSignature;
 struct D3D12_SHADER_BYTECODE;
 struct D3D12_INPUT_ELEMENT_DESC;
+struct D3D12_STREAM_OUTPUT_DESC;
 
 namespace av {
 
@@ -31,7 +32,13 @@ public:
     [[nodiscard]] bool graphics(uint32_t id, uint32_t root, const d3d12proto::GraphicsState &state,
                                 const d3d12proto::InputElement *elements, uint32_t element_count,
                                 const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
+                                const d3d12proto::StreamOutDeclaration *stream_out, uint32_t stream_out_count,
+                                const uint32_t *strides, uint32_t stride_count, uint32_t rasterized_stream,
                                 const uint8_t *const *code, const uint64_t *code_size, D3d12PipelineJob &job) const;
+    [[nodiscard]] bool stream_output(const d3d12proto::StreamOutDeclaration *stream_out, uint32_t stream_out_count,
+                                     const uint32_t *strides, uint32_t stride_count, uint32_t rasterized_stream,
+                                     const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
+                                     D3d12PipelineJob &job, D3D12_STREAM_OUTPUT_DESC &out) const;
     [[nodiscard]] bool compute(uint32_t id, uint32_t root, const uint8_t *code, uint64_t code_size,
                                D3d12PipelineJob &job) const;
 

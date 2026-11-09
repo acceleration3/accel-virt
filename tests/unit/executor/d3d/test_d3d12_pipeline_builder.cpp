@@ -27,7 +27,7 @@ TEST(d3d12_pipeline_builder, an_unbound_builder_makes_nothing)
   CHECK(builder.root_signature(0u, nullptr, 0u, nullptr, 0u, nullptr, 0u) == nullptr);
   const std::uint8_t *code[D3d12PipelineBuilder::stage_count] = {};
   const std::uint64_t sizes[D3d12PipelineBuilder::stage_count] = {};
-  CHECK(!builder.graphics(2u, 1u, GraphicsState{}, nullptr, 0u, nullptr, 0u, code, sizes, job));
+  CHECK(!builder.graphics(2u, 1u, GraphicsState{}, nullptr, 0u, nullptr, 0u, nullptr, 0u, nullptr, 0u, 0xFFFFFFFFu, code, sizes, job));
   CHECK(!builder.compute(2u, 1u, reinterpret_cast<const std::uint8_t *>(fill_cs::program), fill_cs::program_bytes,
                          job)); }
 
@@ -44,5 +44,45 @@ TEST(d3d12_pipeline_builder, a_device_vkd3d_proton_never_opened_or_a_root_it_nev
                          job));
   const std::uint8_t *code[D3d12PipelineBuilder::stage_count] = {};
   const std::uint64_t sizes[D3d12PipelineBuilder::stage_count] = {};
-  CHECK(!builder.graphics(2u, 1u, GraphicsState{}, nullptr, 0u, nullptr, 0u, code, sizes, job));
+  CHECK(!builder.graphics(2u, 1u, GraphicsState{}, nullptr, 0u, nullptr, 0u, nullptr, 0u, nullptr, 0u, 0xFFFFFFFFu, code, sizes, job));
   builder.bind(nullptr); }
+
+TEST(d3d12_pipeline_builder, a_stream_output_declaration_becomes_the_pipeline_s_stream_output)
+{ D3d12PipelineBuilder builder(objects);
+  av::D3d12PipelineJob job;
+  job.bind(objects_heap);
+  const StreamOutDeclaration declared[2] = {{0u, 0u, 0u, 0xFu}, {0u, 1u, 1u, 0x6u}};
+  const std::uint32_t        strides[2] = {16u, 8u};
+  D3D12_STREAM_OUTPUT_DESC   made = {};
+  CHECK(builder.stream_output(declared, 2u, strides, 2u, 0xFFFFFFFFu, nullptr, 0u, job, made));
+  CHECK_EQ(made.NumEntries, 2u);
+  CHECK_EQ(made.NumStrides, 2u);
+  CHECK_EQ(made.pBufferStrides[1], 8u);
+  CHECK_EQ(made.RasterizedStream, static_cast<UINT>(D3D12_SO_NO_RASTERIZED_STREAM));
+  CHECK_EQ(made.pSODeclaration[0].ComponentCount, 4u);
+  CHECK_EQ(made.pSODeclaration[1].StartComponent, 1u);
+  CHECK_EQ(made.pSODeclaration[1].ComponentCount, 2u);
+  CHECK_EQ(made.pSODeclaration[1].OutputSlot, 1u);
+  CHECK(made.pSODeclaration[0].SemanticName != nullptr); }
+
+TEST(d3d12_pipeline_builder, no_stream_output_declared_leaves_the_pipeline_without_one)
+{ D3d12PipelineBuilder builder(objects);
+  av::D3d12PipelineJob job;
+  job.bind(objects_heap);
+  D3D12_STREAM_OUTPUT_DESC made = {};
+  made.NumEntries = 7u;
+  CHECK(builder.stream_output(nullptr, 0u, nullptr, 0u, 0u, nullptr, 0u, job, made));
+  CHECK_EQ(made.NumEntries, 0u);
+  CHECK(made.pSODeclaration == nullptr); }
+
+TEST(d3d12_pipeline_builder, a_stream_output_declaration_that_does_not_fit_is_refused)
+{ D3d12PipelineBuilder builder(objects);
+  av::D3d12PipelineJob job;
+  job.bind(objects_heap);
+  const StreamOutDeclaration declared[1] = {{0u, 0u, 0u, 0xFu}};
+  const std::uint32_t        strides[5] = {16u, 16u, 16u, 16u, 16u};
+  D3D12_STREAM_OUTPUT_DESC   made = {};
+  CHECK(!builder.stream_output(nullptr, 1u, strides, 1u, 0u, nullptr, 0u, job, made));
+  CHECK(!builder.stream_output(declared, av::D3d12PipelineJob::max_stream_outputs + 1u, strides, 1u, 0u, nullptr, 0u, job, made));
+  CHECK(!builder.stream_output(declared, 1u, strides, 5u, 0u, nullptr, 0u, job, made));
+  CHECK(!builder.stream_output(declared, 1u, nullptr, 1u, 0u, nullptr, 0u, job, made)); }

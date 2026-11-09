@@ -888,7 +888,10 @@ bool D3d12Session::on_CreateCommandSignature12(uint32_t signature, uint32_t root
 bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const d3d12proto::GraphicsState &state,
                                                uint32_t element_count, const d3d12proto::InputElement *elements,
                                                uint32_t signature_count, const d3d12proto::SignatureEntry *signatures,
-                                               const uint8_t *vs, uint64_t vs_size, const uint8_t *hs,
+                                               uint32_t stream_out_count,
+                                               const d3d12proto::StreamOutDeclaration *stream_out,
+                                               uint32_t stride_count, const uint32_t *strides,
+                                               uint32_t rasterized_stream, const uint8_t *vs, uint64_t vs_size, const uint8_t *hs,
                                                uint64_t hs_size, const uint8_t *ds, uint64_t ds_size,
                                                const uint8_t *gs, uint64_t gs_size, const uint8_t *ps,
                                                uint64_t ps_size)
@@ -898,8 +901,8 @@ bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root,
     const uint64_t sizes[D3d12PipelineBuilder::stage_count] = {vs_size, hs_size, ds_size, gs_size, ps_size};
     D3d12PipelineJob *const job = vacant_job();
     if (job == nullptr) return false;
-    if (!pipelines_.graphics(pipeline, root, state, elements, element_count, signatures, signature_count, code, sizes,
-                             *job)) {
+    if (!pipelines_.graphics(pipeline, root, state, elements, element_count, signatures, signature_count, stream_out,
+                             stream_out_count, strides, stride_count, rasterized_stream, code, sizes, *job)) {
         job->clear();
         return false;
     }

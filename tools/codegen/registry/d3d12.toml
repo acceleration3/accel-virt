@@ -65,6 +65,9 @@ fields = ["u32 filter", "u32 address_u", "u32 address_v", "u32 address_w", "f32 
 fields = ["u32 set", "u32 system_value", "u32 register_index", "u32 mask", "u32 component_type",
           "u32 min_precision", "u32 stream", "u32 reserved"]
 
+[structs.StreamOutDeclaration]
+fields = ["u32 stream", "u32 output_slot", "u32 register_index", "u32 mask"]
+
 [structs.InputElement]
 fields = ["u32 input_slot", "u32 aligned_byte_offset", "u32 format", "u32 classification", "u32 step_rate",
           "u32 input_register"]
@@ -314,10 +317,14 @@ name = "CreateGraphicsPipeline12"
 id = 0x1301
 doc = """A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
 container, a DXIL program, or a DXBC token stream - and empty for a stage the pipeline does not have; the
-signatures are every stage's, as registers. The input layout names vertex shader input registers."""
+signatures are every stage's, as registers. The input layout names vertex shader input registers. The
+geometry shader's stream output declaration, if it has one, is stream_out with its buffer strides and the stream
+that is rasterized (0xFFFFFFFF for none)."""
 params = ["u32 pipeline", "u32 root", "GraphicsState state", "u32 element_count",
           "InputElement elements[element_count] max 32", "u32 signature_count",
-          "SignatureEntry signatures[signature_count] max 1024", "bytes vs", "bytes hs", "bytes ds", "bytes gs",
+          "SignatureEntry signatures[signature_count] max 1024", "u32 stream_out_count",
+          "StreamOutDeclaration stream_out[stream_out_count] max 128", "u32 stride_count",
+          "u32 strides[stride_count] max 4", "u32 rasterized_stream", "bytes vs", "bytes hs", "bytes ds", "bytes gs",
           "bytes ps"]
 
 [[command]]

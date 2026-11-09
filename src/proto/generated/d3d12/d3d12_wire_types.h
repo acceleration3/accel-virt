@@ -204,6 +204,15 @@ struct SignatureEntry {
 static_assert(sizeof(SignatureEntry) == 32, "SignatureEntry crosses as 32 bytes");
 static_assert(__is_trivially_copyable(SignatureEntry), "SignatureEntry is plain data");
 
+struct StreamOutDeclaration {
+    uint32_t stream;
+    uint32_t output_slot;
+    uint32_t register_index;
+    uint32_t mask;
+};
+static_assert(sizeof(StreamOutDeclaration) == 16, "StreamOutDeclaration crosses as 16 bytes");
+static_assert(__is_trivially_copyable(StreamOutDeclaration), "StreamOutDeclaration is plain data");
+
 struct InputElement {
     uint32_t input_slot;
     uint32_t aligned_byte_offset;

@@ -372,7 +372,7 @@ bool av_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signat
     return t.send_async(kCmd_CreateCommandSignature12, b) == ::av::TransportResult::ok;
 }
 
-bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size) {
+bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, uint32_t stream_out_count, const StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size) {
     AV_SCOPE("av_d3d12_CreateGraphicsPipeline12");
     const uint64_t blob_sizes[] = {vs_size > inline_bytes ? vs_size : 0u, hs_size > inline_bytes ? hs_size : 0u, ds_size > inline_bytes ? ds_size : 0u, gs_size > inline_bytes ? gs_size : 0u, ps_size > inline_bytes ? ps_size : 0u};
     ::av::WireWriter b = (blob_sizes[0] | blob_sizes[1] | blob_sizes[2] | blob_sizes[3] | blob_sizes[4]) != 0u ? t.request_writer_with_room(blob_sizes, 5u) : t.request_writer();
@@ -385,6 +385,13 @@ bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeli
     b.write_pod<uint32_t>(signature_count);
     if (signature_count > 1024u || (signature_count != 0u && signatures == nullptr)) return abandon(t);
     if (signature_count != 0u) b.write(signatures, sizeof(*signatures) * signature_count);
+    b.write_pod<uint32_t>(stream_out_count);
+    if (stream_out_count > 128u || (stream_out_count != 0u && stream_out == nullptr)) return abandon(t);
+    if (stream_out_count != 0u) b.write(stream_out, sizeof(*stream_out) * stream_out_count);
+    b.write_pod<uint32_t>(stride_count);
+    if (stride_count > 4u || (stride_count != 0u && strides == nullptr)) return abandon(t);
+    if (stride_count != 0u) b.write(strides, sizeof(*strides) * stride_count);
+    b.write_pod<uint32_t>(rasterized_stream);
     if (!put_bytes(t, b, vs, vs_size)) return abandon(t);
     if (!put_bytes(t, b, hs, hs_size)) return abandon(t);
     if (!put_bytes(t, b, ds, ds_size)) return abandon(t);

@@ -6,7 +6,7 @@
 namespace av {
 
 D3d12PipelineJob::D3d12PipelineJob()
-    : memory_(nullptr, 0u), graphics_{}, compute_{}, elements_{}, root_(nullptr), made_(nullptr), id_(0u),
+    : memory_(nullptr, 0u), graphics_{}, compute_{}, elements_{}, stream_outputs_{}, strides_{}, root_(nullptr), made_(nullptr), id_(0u),
       graphics_described_(false)
 {
     AV_SCOPE("D3d12PipelineJob::D3d12PipelineJob");
@@ -39,6 +39,18 @@ const uint8_t *D3d12PipelineJob::keep(const uint8_t *bytes, uint64_t size)
     return kept;
 }
 
+D3D12_STREAM_OUTPUT_DESC D3d12PipelineJob::keep_stream_output(const D3D12_SO_DECLARATION_ENTRY *entries, uint32_t count,
+                                                              const uint32_t *strides, uint32_t stride_count,
+                                                              uint32_t rasterized)
+{
+    AV_SCOPE("D3d12PipelineJob::keep_stream_output");
+    const uint32_t kept = count < max_stream_outputs ? count : max_stream_outputs;
+    for (uint32_t index = 0u; index < kept; index++) stream_outputs_[index] = entries[index];
+    const uint32_t kept_strides = stride_count < max_strides ? stride_count : max_strides;
+    for (uint32_t index = 0u; index < kept_strides; index++) strides_[index] = strides[index];
+    return D3D12_STREAM_OUTPUT_DESC{stream_outputs_, kept, strides_, kept_strides, rasterized};
+}
+
 void D3d12PipelineJob::describe(uint32_t id, ID3D12RootSignature *root, const D3D12_GRAPHICS_PIPELINE_STATE_DESC &desc)
 {
     AV_SCOPE("D3d12PipelineJob::describe");
@@ -50,6 +62,10 @@ void D3d12PipelineJob::describe(uint32_t id, ID3D12RootSignature *root, const D3
     const UINT elements = desc.InputLayout.NumElements < max_elements ? desc.InputLayout.NumElements : max_elements;
     for (UINT index = 0u; index < elements; index++) elements_[index] = desc.InputLayout.pInputElementDescs[index];
     graphics_.InputLayout = {elements == 0u ? nullptr : elements_, elements};
+    if (desc.StreamOutput.NumEntries != 0u)
+        graphics_.StreamOutput = keep_stream_output(desc.StreamOutput.pSODeclaration, desc.StreamOutput.NumEntries,
+                                                    desc.StreamOutput.pBufferStrides, desc.StreamOutput.NumStrides,
+                                                    desc.StreamOutput.RasterizedStream);
     graphics_described_ = true;
 }
 

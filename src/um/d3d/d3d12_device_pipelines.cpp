@@ -23,6 +23,9 @@ constexpr uint32_t most_ranges = 512u;
 constexpr uint32_t most_samplers = 64u;
 constexpr uint32_t most_indirect_arguments = 16u;
 constexpr uint32_t most_signatures = 1024u;
+constexpr uint32_t most_stream_outputs = 128u;
+constexpr uint32_t most_strides = 4u;
+constexpr uint32_t no_rasterized_stream = 0xFFFFFFFFu;
 constexpr SIZE_T library_private_bytes = sizeof(uint64_t);
 
 uint32_t code_bytes(const UINT *code)
@@ -62,6 +65,12 @@ const d3d12proto::SignatureEntry *signatures_of(const ShaderRecord &shader)
     const size_t aligned = (shader.code_bytes + 7u) & ~size_t{7};
     return reinterpret_cast<const d3d12proto::SignatureEntry *>(reinterpret_cast<const uint8_t *>(&shader + 1) +
                                                                 aligned);
+}
+
+const d3d12proto::StreamOutDeclaration *stream_outputs_of(const ShaderRecord &shader)
+{
+    AV_SCOPE("stream_outputs_of");
+    return reinterpret_cast<const d3d12proto::StreamOutDeclaration *>(signatures_of(shader) + shader.signature_count);
 }
 
 bool argument_names_address(const D3D12DDI_INDIRECT_ARGUMENT_DESC &from)
@@ -247,6 +256,36 @@ void D3d12Device::make_shader(uint32_t stage, const D3D12DDIARG_CREATE_SHADER_00
                                 out + count);
     }
     shader.signature_count = count;
+}
+
+SIZE_T D3d12Device::calc_private_geometry_shader_with_stream_output(
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *args)
+{
+    AV_SCOPE("D3d12Device::calc_private_geometry_shader_with_stream_output");
+    if (args == nullptr) return sizeof(ShaderRecord);
+    const UINT declared = args->NumEntries < most_stream_outputs ? args->NumEntries : most_stream_outputs;
+    return shader_bytes(args->CreateShader, false) + declared * sizeof(d3d12proto::StreamOutDeclaration);
+}
+
+VOID D3d12Device::create_geometry_shader_with_stream_output(
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *args, D3D12DDI_HSHADER handle)
+{
+    AV_SCOPE("D3d12Device::create_geometry_shader_with_stream_output");
+    if (args == nullptr) return;
+    make_shader(stage_geometry, args->CreateShader, false, handle);
+    ShaderRecord &shader = *static_cast<ShaderRecord *>(handle.pDrvPrivate);
+    const UINT declared = args->NumEntries < most_stream_outputs ? args->NumEntries : most_stream_outputs;
+    d3d12proto::StreamOutDeclaration *const out = const_cast<d3d12proto::StreamOutDeclaration *>(stream_outputs_of(shader));
+    for (UINT index = 0u; args->pOutputStreamDecl != nullptr && index < declared; index++) {
+        const D3D12DDIARG_STREAM_OUTPUT_DECLARATION_ENTRY &from = args->pOutputStreamDecl[index];
+        out[index] = d3d12proto::StreamOutDeclaration{from.Stream, from.OutputSlot, from.RegisterIndex,
+                                                      static_cast<uint32_t>(from.RegisterMask)};
+    }
+    shader.stream_out_count = args->pOutputStreamDecl == nullptr ? 0u : declared;
+    shader.stride_count = args->NumStrides < most_strides ? args->NumStrides : most_strides;
+    for (uint32_t index = 0u; args->BufferStridesInBytes != nullptr && index < shader.stride_count; index++)
+        shader.strides[index] = args->BufferStridesInBytes[index];
+    shader.rasterized_stream = args->RasterizedStream;
 }
 
 SIZE_T D3d12Device::calc_private_shader_size(const D3D12DDIARG_CREATE_SHADER_0026 *args)
@@ -516,13 +555,17 @@ HRESULT D3d12Device::create_pipeline_state(const D3D12DDIARG_CREATE_PIPELINE_STA
         const d3d12proto::SignatureEntry *const from = signatures_of(*stage);
         for (uint32_t index = 0u; index < stage->signature_count; index++) signatures[signature_count++] = from[index];
     }
+    const ShaderRecord *const streamed = stages[3];
+    const uint32_t            stream_outs = streamed == nullptr ? 0u : streamed->stream_out_count;
     d3d12proto::GraphicsState state = {};
     graphics_state(*args, state);
     const LayoutRecord *const layout = static_cast<const LayoutRecord *>(args->hElementLayout.pDrvPrivate);
     const uint32_t            elements = layout == nullptr ? 0u : layout->count;
     if (!sent(d3d12proto::av_d3d12_CreateGraphicsPipeline12(
                   wire(), pipeline.header.stamp.id(), root, state, elements, layout == nullptr ? nullptr : layout->elements,
-                  signature_count, signatures, code_of(stages[0]), code_size_of(stages[0]), code_of(stages[1]),
+                  signature_count, signatures, stream_outs, stream_outs == 0u ? nullptr : stream_outputs_of(*streamed),
+                  stream_outs == 0u ? 0u : streamed->stride_count, stream_outs == 0u ? nullptr : streamed->strides,
+                  stream_outs == 0u ? no_rasterized_stream : streamed->rasterized_stream, code_of(stages[0]), code_size_of(stages[0]), code_of(stages[1]),
                   code_size_of(stages[1]), code_of(stages[2]), code_size_of(stages[2]), code_of(stages[3]),
                   code_size_of(stages[3]), code_of(stages[4]), code_size_of(stages[4])),
               "CreateGraphicsPipeline12"))

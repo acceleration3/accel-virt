@@ -84,7 +84,10 @@ struct ShaderRecord {
     uint32_t     stage;
     uint32_t     code_bytes;
     uint32_t     signature_count;
-    uint32_t     reserved;
+    uint32_t     stream_out_count;
+    uint32_t     stride_count;
+    uint32_t     rasterized_stream;
+    uint32_t     strides[4];
 };
 
 struct BlendRecord {

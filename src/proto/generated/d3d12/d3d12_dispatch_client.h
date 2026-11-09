@@ -84,8 +84,10 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments);
 // A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
 // container, a DXIL program, or a DXBC token stream - and empty for a stage the pipeline does not have; the
-// signatures are every stage's, as registers. The input layout names vertex shader input registers.
-[[nodiscard]] bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size);
+// signatures are every stage's, as registers. The input layout names vertex shader input registers. The
+// geometry shader's stream output declaration, if it has one, is stream_out with its buffer strides and the stream
+// that is rasterized (0xFFFFFFFF for none).
+[[nodiscard]] bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, uint32_t stream_out_count, const StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size);
 [[nodiscard]] bool av_d3d12_CreateComputePipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const void* cs, uint64_t cs_size);
 [[nodiscard]] bool av_d3d12_CreateCommandQueue12(::av::ClientTransport& t, uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags);
 [[nodiscard]] bool av_d3d12_CreateCommandAllocator12(::av::ClientTransport& t, uint32_t allocator, uint32_t type);

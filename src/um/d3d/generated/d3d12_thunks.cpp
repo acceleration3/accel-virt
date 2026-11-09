@@ -77,10 +77,10 @@ extern "C" VOID APIENTRY avumd_d3d12_CreateComputeShader(D3D12DDI_HDEVICE handle
 { D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); target.create_compute_shader(a1, a2); target.trace_call("CreateComputeShader", a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateGeometryShaderWithStreamOutput(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 * a1)
-{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateGeometryShaderWithStreamOutput"); return SIZE_T{}; }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); const SIZE_T answer = target.calc_private_geometry_shader_with_stream_output(a1); target.trace_call("CalcPrivateGeometryShaderWithStreamOutput", a1); return answer; }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateGeometryShaderWithStreamOutput(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 * a1, D3D12DDI_HSHADER a2)
-{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateGeometryShaderWithStreamOutput"); }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); target.create_geometry_shader_with_stream_output(a1, a2); target.trace_call("CreateGeometryShaderWithStreamOutput", a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateTessellationShaderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1)
 { D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); const SIZE_T answer = target.calc_private_tessellation_shader_size(a1); target.trace_call("CalcPrivateTessellationShaderSize", a1); return answer; }

@@ -278,7 +278,8 @@ void make_textured_pipeline(av::D3dLoopback &wire, std::uint32_t sample_count)
     std::uint32_t  count = 0u;
     for (const SignatureEntry &entry : textured_vs::signatures) signatures[count++] = entry;
     for (const SignatureEntry &entry : textured_ps::signatures) signatures[count++] = entry;
-    CHECK(av_d3d12_CreateGraphicsPipeline12(wire, pipeline, root, state, 0u, nullptr, count, signatures,
+    CHECK(av_d3d12_CreateGraphicsPipeline12(wire, pipeline, root, state, 0u, nullptr, count, signatures, 0u,
+                                             nullptr, 0u, nullptr, 0xFFFFFFFFu,
                                              textured_vs::program, textured_vs::program_bytes, nullptr, 0u, nullptr,
                                              0u, nullptr, 0u, textured_ps::program, textured_ps::program_bytes));
 }

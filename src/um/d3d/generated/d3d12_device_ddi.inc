@@ -21,6 +21,8 @@ VOID create_vertex_shader(const D3D12DDIARG_CREATE_SHADER_0026 *, D3D12DDI_HSHAD
 VOID create_pixel_shader(const D3D12DDIARG_CREATE_SHADER_0026 *, D3D12DDI_HSHADER);
 VOID create_geometry_shader(const D3D12DDIARG_CREATE_SHADER_0026 *, D3D12DDI_HSHADER);
 VOID create_compute_shader(const D3D12DDIARG_CREATE_SHADER_0026 *, D3D12DDI_HSHADER);
+SIZE_T calc_private_geometry_shader_with_stream_output(const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *);
+VOID create_geometry_shader_with_stream_output(const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *, D3D12DDI_HSHADER);
 SIZE_T calc_private_tessellation_shader_size(const D3D12DDIARG_CREATE_SHADER_0026 *);
 VOID create_hull_shader(const D3D12DDIARG_CREATE_SHADER_0026 *, D3D12DDI_HSHADER);
 VOID create_domain_shader(const D3D12DDIARG_CREATE_SHADER_0026 *, D3D12DDI_HSHADER);

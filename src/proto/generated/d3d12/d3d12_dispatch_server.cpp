@@ -552,6 +552,26 @@ static bool decode_CreateGraphicsPipeline12(ServerDispatch& s, ::av::WireReader&
         if (signatures == nullptr) return false;
         if (!r.read(signatures, sizeof(SignatureEntry) * signature_count)) return false;
     }
+    uint32_t stream_out_count{};
+    if (!r.read_pod(stream_out_count)) return false;
+    if (stream_out_count > 128u) return false;
+    StreamOutDeclaration* stream_out = nullptr;
+    if (stream_out_count != 0u) {
+        stream_out = arena.allocate<StreamOutDeclaration>(stream_out_count);
+        if (stream_out == nullptr) return false;
+        if (!r.read(stream_out, sizeof(StreamOutDeclaration) * stream_out_count)) return false;
+    }
+    uint32_t stride_count{};
+    if (!r.read_pod(stride_count)) return false;
+    if (stride_count > 4u) return false;
+    uint32_t* strides = nullptr;
+    if (stride_count != 0u) {
+        strides = arena.allocate<uint32_t>(stride_count);
+        if (strides == nullptr) return false;
+        if (!r.read(strides, sizeof(uint32_t) * stride_count)) return false;
+    }
+    uint32_t rasterized_stream{};
+    if (!r.read_pod(rasterized_stream)) return false;
     const uint8_t* vs = nullptr;
     uint64_t vs_size = 0u;
     if (!read_bytes(s, r, arena, vs, vs_size)) return false;
@@ -568,7 +588,7 @@ static bool decode_CreateGraphicsPipeline12(ServerDispatch& s, ::av::WireReader&
     uint64_t ps_size = 0u;
     if (!read_bytes(s, r, arena, ps, ps_size)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateGraphicsPipeline12(pipeline, root, state, element_count, elements, signature_count, signatures, vs, vs_size, hs, hs_size, ds, ds_size, gs, gs_size, ps, ps_size)) return false;
+    if (!s.on_CreateGraphicsPipeline12(pipeline, root, state, element_count, elements, signature_count, signatures, stream_out_count, stream_out, stride_count, strides, rasterized_stream, vs, vs_size, hs, hs_size, ds, ds_size, gs, gs_size, ps, ps_size)) return false;
     return true;
 }
 

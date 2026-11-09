@@ -24,6 +24,9 @@ constexpr uint32_t most_parameter_type = 4u;
 constexpr uint32_t most_range_type = 3u;
 constexpr uint32_t roles = 3u;
 constexpr uint32_t stage_vertex = 0u;
+constexpr uint32_t stage_geometry = 3u;
+constexpr uint32_t role_output = 1u;
+constexpr uint32_t no_register = 0xFFFFFFFFu;
 constexpr uint32_t stage_pixel = 4u;
 constexpr uint32_t dxil_magic = 0x4c495844u;
 constexpr uint32_t dxil_magic_at = 8u;
@@ -169,6 +172,45 @@ bool D3d12PipelineBuilder::container(uint32_t stage, const uint8_t *code, uint64
     return true;
 }
 
+bool D3d12PipelineBuilder::stream_output(const d3d12proto::StreamOutDeclaration *stream_out, uint32_t stream_out_count,
+                                         const uint32_t *strides, uint32_t stride_count, uint32_t rasterized_stream,
+                                         const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
+                                         D3d12PipelineJob &job, D3D12_STREAM_OUTPUT_DESC &out) const
+{
+    AV_SCOPE("D3d12PipelineBuilder::stream_output");
+    out = {};
+    if (stream_out_count == 0u) return true;
+    if (stream_out == nullptr || stream_out_count > D3d12PipelineJob::max_stream_outputs ||
+        stride_count > D3d12PipelineJob::max_strides || (stride_count != 0u && strides == nullptr))
+        return false;
+    const DxbcContainer names(nullptr, 0u);
+    D3D12_SO_DECLARATION_ENTRY entries[D3d12PipelineJob::max_stream_outputs] = {};
+    for (uint32_t index = 0u; index < stream_out_count; index++) {
+        const d3d12proto::StreamOutDeclaration &from = stream_out[index];
+        const uint32_t mask = from.mask & 0xfu;
+        entries[index].Stream = from.stream;
+        entries[index].OutputSlot = static_cast<BYTE>(from.output_slot);
+        entries[index].StartComponent = mask == 0u ? 0u : static_cast<BYTE>(__builtin_ctz(mask));
+        entries[index].ComponentCount = static_cast<BYTE>(__builtin_popcount(mask));
+        if (from.register_index == no_register) continue;
+        d3dproto::SignatureEntry named = {};
+        for (uint32_t entry = 0u; entry < signature_count; entry++) {
+            const d3d12proto::SignatureEntry &sig = signatures[entry];
+            if (sig.set != stage_geometry * roles + role_output || sig.register_index != from.register_index ||
+                sig.stream != from.stream)
+                continue;
+            named = d3dproto::SignatureEntry{sig.system_value, sig.register_index, sig.mask, sig.component_type,
+                                             sig.min_precision, sig.stream};
+        }
+        uint32_t semantic_index = 0u;
+        entries[index].SemanticName = names.semantic_of(named, false, semantic_index);
+        entries[index].SemanticIndex = semantic_index;
+    }
+    out = job.keep_stream_output(entries, stream_out_count, strides, stride_count,
+                                 rasterized_stream == no_register ? D3D12_SO_NO_RASTERIZED_STREAM : rasterized_stream);
+    return true;
+}
+
 bool D3d12PipelineBuilder::layout(const d3d12proto::InputElement *elements, uint32_t count,
                                   const D3D12_SHADER_BYTECODE &vertex, const d3d12proto::SignatureEntry *signatures,
                                   uint32_t signature_count, D3D12_INPUT_ELEMENT_DESC *out) const
@@ -217,6 +259,8 @@ bool D3d12PipelineBuilder::state_holds(const d3d12proto::GraphicsState &state) c
 bool D3d12PipelineBuilder::graphics(uint32_t id, uint32_t root, const d3d12proto::GraphicsState &state,
                                     const d3d12proto::InputElement *elements, uint32_t element_count,
                                     const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
+                                    const d3d12proto::StreamOutDeclaration *stream_out, uint32_t stream_out_count,
+                                    const uint32_t *strides, uint32_t stride_count, uint32_t rasterized_stream,
                                     const uint8_t *const *code, const uint64_t *code_size, D3d12PipelineJob &job) const
 {
     AV_SCOPE("D3d12PipelineBuilder::graphics");
@@ -239,6 +283,9 @@ bool D3d12PipelineBuilder::graphics(uint32_t id, uint32_t root, const d3d12proto
     desc.DS = stages[2];
     desc.GS = stages[3];
     desc.PS = stages[4];
+    if (!stream_output(stream_out, stream_out_count, strides, stride_count, rasterized_stream, signatures,
+                       signature_count, job, desc.StreamOutput))
+        return false;
     desc.BlendState.AlphaToCoverageEnable = state.alpha_to_coverage != 0u;
     desc.BlendState.IndependentBlendEnable = state.independent_blend != 0u;
     for (uint32_t target = 0u; target < 8u; target++) {
