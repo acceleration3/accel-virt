@@ -498,8 +498,7 @@ Status GuestGlContext::build()
     if (link_.acquire() != Status::ok) return Status::not_supported;
     GuestConnection &device = link_.device();
     const Status     opened = channel_.open(device, options_);
-    if (opened == Status::no_memory || opened == Status::no_space || opened == Status::too_large) return Status::no_memory;
-    if (opened != Status::ok) return opened == Status::invalid_parameter ? Status::invalid_parameter : Status::invalid_state;
+    if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
     if (slices_.enroll() != Status::ok) return Status::no_memory;
     static_cast<void>(pacing_.bind(device.kmt(), lines_, device.adapter(), device.device()));
     if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
