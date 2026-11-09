@@ -134,6 +134,8 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
         shading_tier >= 2u && caps_.vrs_per_primitive_viewport != 0u;
     answer.ShadingRateImageTileSize = shading_tier >= 2u ? caps_.vrs_tile_size : 0u;
     answer.VariableRateShadingSumCombinerSupported = shading_tier >= 2u && caps_.vrs_sum_combiner != 0u;
+    answer.WriteBufferImmediateQueueFlags = static_cast<D3D12DDI_COMMAND_QUEUE_FLAGS>(caps_.write_immediate_queues);
+    answer.CopyQueueTimestampQueriesSupported = caps_.copy_queue_timestamps != 0u;
     answer.EnhancedBarriersSupported = caps_.enhanced_barriers != 0u;
     answer.MeshShaderTier = caps_.mesh_shader_tier >= mesh_tier_1 ? D3D12DDI_MESH_SHADER_TIER_1
                                                                   : D3D12DDI_MESH_SHADER_TIER_NOT_SUPPORTED;
@@ -148,7 +150,7 @@ HRESULT D3d12HostCaps::shader(void *data, UINT bytes) const
     answer.ShaderSpecifiedStencilRef = caps_.ps_stencil_ref != 0u;
     answer.ROVs = caps_.rovs != 0u;
     answer.Native16BitOps = caps_.native_16bit_ops != 0u;
-    answer.AtomicInt64OnTypedResource = caps_.atomic_int64_typed != 0u;
+    answer.AtomicInt64OnTypedResource = false;
     answer.AtomicInt64OnGroupShared = caps_.atomic_int64_group_shared != 0u;
     answer.DoubleOps = caps_.double_ops != 0u;
     answer.TypedUAVLoadAdditionalFormats = caps_.typed_uav_load_additional_formats != 0u;

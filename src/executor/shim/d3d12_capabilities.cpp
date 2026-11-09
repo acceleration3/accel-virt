@@ -16,6 +16,12 @@ constexpr int      feature_options9 = 37;
 constexpr int      feature_options14 = 43;
 constexpr int      feature_options21 = 53;
 constexpr uint32_t descriptor_heap_types = 4u;
+constexpr uint32_t queue_list_direct = 1u;
+constexpr uint32_t queue_list_compute = 4u;
+constexpr uint32_t queue_list_copy = 8u;
+constexpr uint32_t queue_3d = 1u;
+constexpr uint32_t queue_compute = 2u;
+constexpr uint32_t queue_copy = 4u;
 
 struct Options9 {
     BOOL mesh_shader_pipeline_stats;
@@ -98,6 +104,11 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3)))) {
         caps_.barycentrics = options3.BarycentricsSupported ? 1u : 0u;
         caps_.view_instancing_tier = static_cast<uint32_t>(options3.ViewInstancingTier);
+        caps_.copy_queue_timestamps = options3.CopyQueueTimestampQueriesSupported ? 1u : 0u;
+        const uint32_t lists = static_cast<uint32_t>(options3.WriteBufferImmediateSupportFlags);
+        caps_.write_immediate_queues = ((lists & queue_list_direct) != 0u ? queue_3d : 0u) |
+                                       ((lists & queue_list_compute) != 0u ? queue_compute : 0u) |
+                                       ((lists & queue_list_copy) != 0u ? queue_copy : 0u);
     }
     D3D12_FEATURE_DATA_D3D12_OPTIONS2 options2 = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS2, &options2, sizeof(options2))))

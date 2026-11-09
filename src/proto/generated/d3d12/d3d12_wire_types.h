@@ -451,8 +451,10 @@ struct Caps12 {
     uint32_t vrs_sum_combiner;
     uint32_t enhanced_barriers;
     uint32_t relaxed_format_casting;
+    uint32_t write_immediate_queues;
+    uint32_t copy_queue_timestamps;
 };
-static_assert(sizeof(Caps12) == 172, "Caps12 crosses as 172 bytes");
+static_assert(sizeof(Caps12) == 180, "Caps12 crosses as 180 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto
