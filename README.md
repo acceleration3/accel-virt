@@ -129,8 +129,8 @@ renderer.
 | API | Guest path | Host path | What is offered |
 |---|---|---|---|
 | Desktop (DWM, GDI) | `avumd.dll` (Direct3D 11) | DXVK | composited on the host GPU, scanned out zero-copy, 60 fps |
-| Direct3D 11 | `d3d11.dll` → `avumd.dll` (`OpenAdapter10_2`, the D3D11 DDI at WDDM 3.2) | DXVK's `d3d11`, native | feature levels up to 12_1 |
-| Direct3D 12 | `D3D12Core.dll` → `avumd.dll` (`OpenAdapter12`) | vkd3d-proton, native and patched | what vkd3d-proton offers on the host GPU |
+| Direct3D 11 | `d3d11.dll` → `avumd.dll` (`OpenAdapter10_2`, the D3D11 DDI at WDDM 3.2) | DXVK's `d3d11`, native | feature levels up to 11_1; tiled resources, 12_0 and 12_1 are not exposed |
+| Direct3D 12 | `D3D12Core.dll` → `avumd.dll` (`OpenAdapter12`) | vkd3d-proton, native and patched | feature level up to 12_1 and shader model up to 6.8 when the host GPU has them; mesh and amplification shaders, variable rate shading, enhanced barriers, sampler feedback, ray tracing, work graphs, stream output and programmable sample positions are not yet exposed |
 | Vulkan | Khronos loader → `avvk.dll` | the host's Vulkan driver | Vulkan 1.3, with the host device's extensions under the ICD's extension policy |
 | OpenGL | `opengl32.dll` → `avgl.dll` | EGL + the host's GL | up to 4.6, core and compatibility profiles, WGL pixel formats and sharing |
 | OpenCL | Khronos loader → `avcl.dll` | the host's OpenCL | OpenCL 3.0, including SVM and `cl_khr_gl_sharing` |
