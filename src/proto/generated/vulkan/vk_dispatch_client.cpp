@@ -3384,6 +3384,9 @@ VkResult av_vkGetPipelineCacheData(::av::ClientTransport& t, HandleTranslation& 
         (pDataSize_answered != 0 && !r.read(pData, static_cast<size_t>(pDataSize_answered))))) {
         return VK_ERROR_DEVICE_LOST;
     }
+    if (pDataSize_answered > static_cast<uint64_t>(~size_t{0})) {
+        return VK_ERROR_DEVICE_LOST;
+    }
     *pDataSize = static_cast<size_t>(pDataSize_answered);
     return static_cast<VkResult>(result_code);
 }
@@ -5990,6 +5993,9 @@ VkResult av_vkGetShaderBinaryDataEXT(::av::ClientTransport& t, HandleTranslation
         (pDataSize_answered != 0 && !r.read(pData, static_cast<size_t>(pDataSize_answered))))) {
         return VK_ERROR_DEVICE_LOST;
     }
+    if (pDataSize_answered > static_cast<uint64_t>(~size_t{0})) {
+        return VK_ERROR_DEVICE_LOST;
+    }
     *pDataSize = static_cast<size_t>(pDataSize_answered);
     return static_cast<VkResult>(result_code);
 }
@@ -6248,6 +6254,9 @@ VkResult av_vkGetPipelineBinaryDataKHR(::av::ClientTransport& t, HandleTranslati
     }
     if (array_present && (pPipelineBinaryDataSize_answered > *pPipelineBinaryDataSize ||
         (pPipelineBinaryDataSize_answered != 0 && !r.read(pPipelineBinaryData, static_cast<size_t>(pPipelineBinaryDataSize_answered))))) {
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (pPipelineBinaryDataSize_answered > static_cast<uint64_t>(~size_t{0})) {
         return VK_ERROR_DEVICE_LOST;
     }
     *pPipelineBinaryDataSize = static_cast<size_t>(pPipelineBinaryDataSize_answered);

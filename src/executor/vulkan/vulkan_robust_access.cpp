@@ -37,10 +37,13 @@ void VulkanRobustAccess::hide_capture_replay(const void *chain)
                      ->bufferDeviceAddressCaptureReplay);
             break;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR:
-            hide(const_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(
-                     reinterpret_cast<const VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(link))
-                     ->accelerationStructureCaptureReplay);
+        {
+            auto *structure = const_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(
+                reinterpret_cast<const VkPhysicalDeviceAccelerationStructureFeaturesKHR *>(link));
+            hide(structure->accelerationStructureCaptureReplay);
+            hide(structure->accelerationStructureHostCommands);
             break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR: {
             auto *features = const_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR *>(
                 reinterpret_cast<const VkPhysicalDeviceRayTracingPipelineFeaturesKHR *>(link));

@@ -32,6 +32,8 @@
 
 #include <cstdint>
 #include <cstdio>
+#include "proto/d3d/caps12_layout.hpp"
+
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
@@ -157,6 +159,7 @@ void make_frame(av::D3dLoopback &wire)
     hresult = 1u;
     CHECK(av_d3d12_QueryCaps12(wire, &hresult, &caps, formats, sizeof formats, &formats_size));
     CHECK_EQ(hresult, 0u);
+    CHECK_EQ(caps.layout, av::caps12_layout);
     CHECK(caps.feature_level >= 0xb000u);
     CHECK(caps.descriptor_sizes[descriptors_rtv] != 0u);
     CHECK(formats_size != 0u);

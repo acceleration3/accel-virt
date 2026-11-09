@@ -62,7 +62,7 @@ TEST(passthrough_geometry_shader, a_triangle_is_read_whole_and_all_three_vertice
   const std::uint32_t expected[] = {
       0x00020040u, 35u,
       0x0100185Du, 0x0100285Cu,
-      0x0400005Fu, 0x002010F2u, 1u, 0u,
+      0x0400005Fu, 0x002010F2u, 3u, 0u,
       0x03000065u, 0x001020F2u, 0u,
       0x0200005Eu, 3u,
       0x06000036u, 0x001020F2u, 0u, 0x00201E46u, 0u, 0u,
@@ -92,3 +92,16 @@ TEST(passthrough_geometry_shader, an_adjacency_primitive_emits_the_vertices_its_
   CHECK_EQ(lines.bytes() + 7u * sizeof(std::uint32_t), triangles.bytes());
   CHECK_EQ(line_tokens[17u], 1u);
   CHECK_EQ(triangle_tokens[17u], 0u); }
+
+TEST(passthrough_geometry_shader, the_input_array_is_declared_as_large_as_the_primitive_it_reads)
+{ const PassthroughPrimitive classes[5] = {PassthroughPrimitive::point, PassthroughPrimitive::line,
+                                           PassthroughPrimitive::triangle, PassthroughPrimitive::line_adjacency,
+                                           PassthroughPrimitive::triangle_adjacency};
+  const std::uint32_t        vertices[5] = {1u, 2u, 3u, 4u, 6u};
+  for (std::uint32_t which = 0u; which < 5u; which++) {
+      PassthroughGeometryShader shader(classes[which]);
+      CHECK(shader.add(0u, 0xFu, 0u));
+      const std::uint32_t *const tokens = shader.tokens();
+      CHECK(tokens != nullptr);
+      if (tokens != nullptr) CHECK_EQ(tokens[6], vertices[which]);
+  } }

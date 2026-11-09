@@ -376,6 +376,7 @@ static_assert(sizeof(TileRange) == 12, "TileRange crosses as 12 bytes");
 static_assert(__is_trivially_copyable(TileRange), "TileRange is plain data");
 
 struct Caps12 {
+    uint32_t layout;
     uint32_t feature_level;
     uint32_t shader_model;
     uint32_t resource_binding_tier;
@@ -406,7 +407,7 @@ struct Caps12 {
     uint32_t sample_cmp_gradient_bias;
     uint32_t extended_command_info;
 };
-static_assert(sizeof(Caps12) == 128, "Caps12 crosses as 128 bytes");
+static_assert(sizeof(Caps12) == 132, "Caps12 crosses as 132 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto

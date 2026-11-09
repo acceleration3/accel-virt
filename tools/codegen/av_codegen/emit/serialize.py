@@ -747,6 +747,59 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
 
 
 BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
+    "VkAccelerationStructureBuildGeometryInfoKHR": (
+        [
+            "    buf.write_pod(v.sType);",
+            "    serialize_pnext_chain(buf, handles, v.pNext);",
+            "    buf.write_pod(v.type);",
+            "    buf.write_pod(v.flags);",
+            "    buf.write_pod(v.mode);",
+            "    serialize_VkAccelerationStructureKHR(buf, handles, v.srcAccelerationStructure);",
+            "    serialize_VkAccelerationStructureKHR(buf, handles, v.dstAccelerationStructure);",
+            "    buf.write_pod(v.geometryCount);",
+            "    const uint8_t present = (v.pGeometries != nullptr || v.ppGeometries != nullptr) ? 1 : 0;",
+            "    buf.write_pod(present);",
+            "    if (present) {",
+            "        for (uint32_t i = 0; i < v.geometryCount; ++i) {",
+            "            serialize_VkAccelerationStructureGeometryKHR(buf, handles, "
+            "v.pGeometries != nullptr ? v.pGeometries[i] : *v.ppGeometries[i]);",
+            "        }",
+            "    }",
+            "    serialize_VkDeviceOrHostAddressKHR(buf, v.scratchData);",
+        ],
+        [
+            "    constexpr uint32_t most_geometries = 1u << 16;",
+            "    if (!r.read_pod(out->sType)) { return false; }",
+            "    out->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;",
+            "    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
+            "    if (!r.read_pod(out->type)) { return false; }",
+            "    if (!r.read_pod(out->flags)) { return false; }",
+            "    if (!r.read_pod(out->mode)) { return false; }",
+            "    if (!deserialize_VkAccelerationStructureKHR(r, handles, out->srcAccelerationStructure)) { return false; }",
+            "    if (!deserialize_VkAccelerationStructureKHR(r, handles, out->dstAccelerationStructure)) { return false; }",
+            "    if (!r.read_pod(out->geometryCount)) { return false; }",
+            "    uint8_t present = 0;",
+            "    if (!r.read_pod(present)) { return false; }",
+            "    if (out->geometryCount > most_geometries) { return false; }",
+            "    if (out->geometryCount != 0 && !present) { return false; }",
+            "    if (out->type != VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR && "
+            "out->type != VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR && "
+            "out->type != VK_ACCELERATION_STRUCTURE_TYPE_GENERIC_KHR) { return false; }",
+            "    if (present && out->geometryCount != 0) {",
+            "        auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(out->geometryCount);",
+            "        if (arr == nullptr) { return false; }",
+            "        for (uint32_t i = 0; i < out->geometryCount; ++i) {",
+            "            if (!deserialize_VkAccelerationStructureGeometryKHR(r, handles, &arr[i], arena)) { return false; }",
+            "            const bool instances = arr[i].geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR;",
+            "            if (out->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR && !instances) { return false; }",
+            "            if (out->type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR && instances) { return false; }",
+            "        }",
+            "        if (out->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR && out->geometryCount != 1) { return false; }",
+            "        out->pGeometries = arr;",
+            "    }",
+            "    return deserialize_VkDeviceOrHostAddressKHR(r, &out->scratchData, arena);",
+        ],
+    ),
     "VkAccelerationStructureGeometryKHR": (
         [
             "    buf.write_pod(v.sType);",
@@ -769,6 +822,7 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
         ],
         [
             "    if (!r.read_pod(out->sType)) { return false; }",
+            "    out->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;",
             "    if (!deserialize_pnext_chain(r, handles, "
             "reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
             "    if (!r.read_pod(out->geometryType)) { return false; }",
@@ -776,14 +830,17 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
             "    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:",
             "        if (!deserialize_VkAccelerationStructureGeometryTrianglesDataKHR("
             "r, handles, &out->geometry.triangles, arena)) { return false; }",
+            "        out->geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;",
             "        break;",
             "    case VK_GEOMETRY_TYPE_AABBS_KHR:",
             "        if (!deserialize_VkAccelerationStructureGeometryAabbsDataKHR("
             "r, handles, &out->geometry.aabbs, arena)) { return false; }",
+            "        out->geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;",
             "        break;",
             "    case VK_GEOMETRY_TYPE_INSTANCES_KHR:",
             "        if (!deserialize_VkAccelerationStructureGeometryInstancesDataKHR("
             "r, handles, &out->geometry.instances, arena)) { return false; }",
+            "        out->geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;",
             "        break;",
             "    default:",
             "        return false;",

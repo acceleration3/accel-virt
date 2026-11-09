@@ -36,19 +36,21 @@ constexpr uint32_t opcode(uint32_t code, uint32_t length) { return code | (lengt
 }
 
 PassthroughGeometryShader::PassthroughGeometryShader(PassthroughPrimitive primitive)
-    : input_(point), output_(point), emitted_(1u), source_{0u, 0u, 0u}, masks_{}, names_{}, tokens_{}, count_(0u)
+    : input_(point), input_vertices_(1u), output_(point), emitted_(1u), source_{0u, 0u, 0u}, masks_{}, names_{}, tokens_{}, count_(0u)
 {
     AV_SCOPE("PassthroughGeometryShader::PassthroughGeometryShader");
     switch (primitive) {
     case PassthroughPrimitive::point: break;
     case PassthroughPrimitive::line:
         input_ = line;
+        input_vertices_ = 2u;
         output_ = line_strip;
         emitted_ = 2u;
         source_[1] = 1u;
         break;
     case PassthroughPrimitive::triangle:
         input_ = triangle;
+        input_vertices_ = 3u;
         output_ = triangle_strip;
         emitted_ = 3u;
         source_[1] = 1u;
@@ -56,6 +58,7 @@ PassthroughGeometryShader::PassthroughGeometryShader(PassthroughPrimitive primit
         break;
     case PassthroughPrimitive::line_adjacency:
         input_ = line_adjacency;
+        input_vertices_ = 4u;
         output_ = line_strip;
         emitted_ = 2u;
         source_[0] = 1u;
@@ -63,6 +66,7 @@ PassthroughGeometryShader::PassthroughGeometryShader(PassthroughPrimitive primit
         break;
     case PassthroughPrimitive::triangle_adjacency:
         input_ = triangle_adjacency;
+        input_vertices_ = 6u;
         output_ = triangle_strip;
         emitted_ = 3u;
         source_[1] = 2u;
@@ -126,7 +130,7 @@ void PassthroughGeometryShader::declare_input(uint32_t index)
     const bool named = names_[index] != 0u;
     put(opcode(named ? op_dcl_input_siv : op_dcl_input, named ? 5u : 4u));
     put(four_components | (masks_[index] << 4u) | type_input | two_indices);
-    put(1u);
+    put(input_vertices_);
     put(index);
     if (named) put(names_[index]);
 }

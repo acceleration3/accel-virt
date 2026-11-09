@@ -172,14 +172,16 @@ private:
 
     void set_shader(uint32_t stage, D3D10DDI_HSHADER shader);
     void bind_geometry_shader();
-    uint32_t passthrough_variant_id(const StreamPassthroughRecord &record) const;
+    void rebind_geometry_variant();
+    void forget_pipeline_mirrors();
+    uint32_t passthrough_variant_id() const;
     void set_constant_buffers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers,
                               const UINT *first, const UINT *counts);
     void set_shader_resources(uint32_t stage, UINT start, UINT count, const D3D10DDI_HSHADERRESOURCEVIEW *views);
     void set_samplers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HSAMPLER *samplers);
     void stream_vertex_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT &args, D3D10DDI_HSHADER shader,
                               const D3D11_1DDIARG_STAGE_IO_SIGNATURES &signatures);
-    void create_shader(uint32_t stage, const UINT *code, ObjectRecord &record_of,
+    bool create_shader(uint32_t stage, const UINT *code, ObjectRecord &record_of,
                        const D3D11_1DDIARG_SIGNATURE_ENTRY2 *inputs, UINT input_count,
                        const D3D11_1DDIARG_SIGNATURE_ENTRY2 *outputs, UINT output_count,
                        const D3D11_1DDIARG_SIGNATURE_ENTRY2 *patch, UINT patch_count,
@@ -227,8 +229,11 @@ private:
     icd::OnceLatch  follow_refused_;
     icd::OnceLatch  token_refused_;
     uint32_t        frame_;
-    void           *geometry_shader_;
+    StreamPassthroughRecord geometry_binding_;
+    bool            geometry_passthrough_;
+    uint32_t        geometry_sent_;
     uint32_t        topology_;
+    bool            query_short_noted_;
     d3d::D3dCallTrace &trace_;
     const d3d::SharedRowsRequest &rows_;
     uint32_t        context_number_;

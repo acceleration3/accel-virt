@@ -38,7 +38,7 @@ D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog
     : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), lender_(session), clock_(), allocations_(kernel_, lines_, clock_),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), caller_(), call_mutex_(), calls_(call_mutex_, caller_), recording_(),
       recorded_(), context_(nullptr), present_order_(), packets_(), feature_level_(0u),
-      guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u), geometry_shader_(nullptr), topology_(0u),
+      guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u), geometry_binding_{}, geometry_passthrough_(false), geometry_sent_(0u), topology_(0u), query_short_noted_(false),
       trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
     AV_SCOPE("D3d11Device::D3d11Device");
@@ -531,6 +531,7 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
         return;
     }
     const Status ran = wire().execute(list.commands, list.length);
+    forget_pipeline_mirrors();
     if (ran == Status::ok) return;
     LogLine(lines_)
         .text("a command list of ")
@@ -629,6 +630,7 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
         return;
     }
     D3d11Device   &context = d3d::DeviceBlock<D3d11Device>(args->hDeferredContext.pDrvPrivate).device();
+    context.forget_pipeline_mirrors();
     const size_t   bytes = context.wire().recorded_bytes();
     uint8_t *const commands = bytes == 0u ? nullptr : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     if (bytes != 0u && commands == nullptr) {

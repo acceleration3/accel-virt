@@ -206,6 +206,11 @@ VkResult VulkanBackend::on_vkCreateAccelerationStructureKHR(VkDevice device,
                                                             VkAccelerationStructureKHR *pAccelerationStructure)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateAccelerationStructureKHR");
+    if ((pCreateInfo->createFlags & VK_ACCELERATION_STRUCTURE_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR) != 0u ||
+        pCreateInfo->deviceAddress != 0u) {
+        lines_.write("an acceleration structure asked to be placed at a captured address; refused");
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     const VkResult made =
         RealVulkanDispatch::on_vkCreateAccelerationStructureKHR(device, pCreateInfo, nullptr, pAccelerationStructure);
     if (made != VK_SUCCESS ||

@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "proto/d3d/caps12_layout.hpp"
 #include "proto/d3d/dxgi_format.hpp"
 
 namespace av {
@@ -11,8 +12,8 @@ namespace {
 constexpr uint32_t level_12_2 = 0xc200u;
 constexpr uint32_t shader_model_6_8 = 0x68u;
 constexpr int      feature_options9 = 37;
-constexpr int      feature_options14 = 59;
-constexpr int      feature_options21 = 61;
+constexpr int      feature_options14 = 43;
+constexpr int      feature_options21 = 53;
 constexpr uint32_t descriptor_heap_types = 4u;
 
 struct Options9 {
@@ -56,6 +57,7 @@ void D3d12Capabilities::measure(ID3D12Device &device)
 {
     AV_SCOPE("D3d12Capabilities::measure");
     caps_ = d3d12proto::Caps12{};
+    caps_.layout = caps12_layout;
     measure_options(device);
     measure_formats(device);
 }

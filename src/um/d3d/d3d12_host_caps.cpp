@@ -4,6 +4,7 @@
 #include "icd/common/adapter_memory.hpp"
 #include "icd/d3d/caps_reply.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/d3d/caps12_layout.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
@@ -47,6 +48,7 @@ bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter
     if (!d3d12proto::av_d3d12_QueryCaps12(transport, &hresult, &caps_, rows, sizeof(rows), &answered) ||
         hresult != 0u)
         return false;
+    if (caps_.layout != caps12_layout) return false;
     formats_.learn(rows, static_cast<uint32_t>(answered / sizeof(rows[0])));
     icd::AdapterMemory memory(kmt, adapter);
     local_budget_ = memory.read() == Status::ok ? memory.budget(MemorySegmentGroup::local) : 0u;

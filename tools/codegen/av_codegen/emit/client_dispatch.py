@@ -190,6 +190,9 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append(f"    ({answered} != 0 && !r.read({arr.name}, static_cast<size_t>({answered}))))) {{")
                 lines.append(on_fail)
                 lines.append("}")
+                lines.append(f"if ({answered} > static_cast<uint64_t>(~size_t{{0}})) {{")
+                lines.append(on_fail)
+                lines.append("}")
                 lines.append(f"*{count.name} = static_cast<size_t>({answered});")
                 i += 2
                 continue

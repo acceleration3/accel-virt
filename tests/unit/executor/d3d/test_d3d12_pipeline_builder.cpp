@@ -53,8 +53,11 @@ TEST(d3d12_pipeline_builder, a_stream_output_declaration_becomes_the_pipeline_s_
   job.bind(objects_heap);
   const StreamOutDeclaration declared[2] = {{0u, 0u, 0u, 0xFu}, {0u, 1u, 1u, 0x6u}};
   const std::uint32_t        strides[2] = {16u, 8u};
+  const SignatureEntry       outputs[2] = {{10u, 1u, 0u, 0xFu, 3u, 0u, 0u, 0u}, {10u, 0u, 1u, 0xFu, 3u, 0u, 0u, 0u}};
   D3D12_STREAM_OUTPUT_DESC   made = {};
-  CHECK(builder.stream_output(declared, 2u, strides, 2u, 0xFFFFFFFFu, nullptr, 0u, job, made));
+  CHECK(builder.stream_output(declared, 2u, strides, 2u, 0xFFFFFFFFu, outputs, 2u, job, made));
+  D3D12_STREAM_OUTPUT_DESC   unmatched = {};
+  CHECK(!builder.stream_output(declared, 2u, strides, 2u, 0xFFFFFFFFu, nullptr, 0u, job, unmatched));
   CHECK_EQ(made.NumEntries, 2u);
   CHECK_EQ(made.NumStrides, 2u);
   CHECK_EQ(made.pBufferStrides[1], 8u);
@@ -99,5 +102,6 @@ TEST(d3d12_pipeline_builder, a_stream_output_buffer_slot_or_stream_the_host_arra
   CHECK(!builder.stream_output(far_slot, 1u, strides, 1u, 0xFFFFFFFFu, nullptr, 0u, job, made));
   CHECK(!builder.stream_output(far_stream, 1u, strides, 1u, 0xFFFFFFFFu, nullptr, 0u, job, made));
   CHECK(!builder.stream_output(fine, 1u, strides, 1u, 77u, nullptr, 0u, job, made));
-  CHECK(builder.stream_output(fine, 1u, strides, 1u, 3u, nullptr, 0u, job, made));
+  const SignatureEntry       outputs[1] = {{10u, 1u, 0u, 0xFu, 3u, 0u, 0u, 0u}};
+  CHECK(builder.stream_output(fine, 1u, strides, 1u, 3u, outputs, 1u, job, made));
   CHECK_EQ(made.RasterizedStream, 3u); }

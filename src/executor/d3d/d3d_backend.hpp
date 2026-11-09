@@ -260,6 +260,7 @@ private:
     QueueDrain              queue_drain_;
     uint64_t                submitted_;
     bool                    drained_;
+    bool                    predication_refusal_noted_;
     bool                    mark_refused_;
     bool                    show_refused_;
     bool                    lost_;

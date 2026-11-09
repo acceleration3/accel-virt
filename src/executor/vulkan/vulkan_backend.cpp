@@ -18,6 +18,7 @@
 #include "proto/generated/vulkan/vk_command_extensions.h"
 #include "proto/generated/vulkan/vk_command_names.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
+#include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -49,6 +50,21 @@ uint64_t extension_mask(const char *const *names, uint32_t count, Slot slot_of)
         if (slot != vkproto::kNoExtensionSlot) mask |= uint64_t{1} << slot;
     }
     return mask;
+}
+
+constexpr const char *const withheld_extensions[] = {
+    "VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query",
+    "VK_KHR_ray_tracing_maintenance1", "VK_EXT_pipeline_library_group_handles", "VK_KHR_deferred_host_operations",
+    "VK_EXT_shader_object", "VK_KHR_pipeline_binary", "VK_EXT_host_image_copy", "VK_EXT_descriptor_buffer",
+    "VK_EXT_device_generated_commands"};
+
+bool names_withheld(const char *const *names, uint32_t count)
+{
+    AV_SCOPE("names_withheld");
+    for (uint32_t index = 0u; names != nullptr && index < count; index++)
+        for (const char *const withheld : withheld_extensions)
+            if (names[index] != nullptr && __builtin_strcmp(names[index], withheld) == 0) return true;
+    return false;
 }
 
 bool enables(const VkDeviceCreateInfo *create, const char *name)
@@ -368,6 +384,11 @@ bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         lost_ = true;
         return true;
     }
+    if (command_refused(command_id)) {
+        lines_.note_hex("a command that hands the host driver a guest pointer or a captured address, id", command_id, 8u);
+        lost_ = true;
+        return true;
+    }
     if (!extension_admits(command_id, payload)) {
         lines_.note_hex("a command whose extension its device or instance did not enable, id", command_id, 8u);
         lost_ = true;
@@ -398,6 +419,23 @@ bool VulkanBackend::queue_admits(uint32_t command_id, const WireReader &payload)
     if (!peek.read_pod(buffer)) return true;
     const uint64_t *const flags = handles_.find(buffer, VulkanObjectKind::command_buffer);
     return flags == nullptr || (*flags & queues) != 0u;
+}
+
+bool VulkanBackend::command_refused(uint32_t command_id) const
+{
+    AV_SCOPE("VulkanBackend::command_refused");
+    switch (command_id) {
+    case vkproto::kCmd_vkBuildAccelerationStructuresKHR:
+    case vkproto::kCmd_vkCopyAccelerationStructureKHR:
+    case vkproto::kCmd_vkCopyAccelerationStructureToMemoryKHR:
+    case vkproto::kCmd_vkCopyMemoryToAccelerationStructureKHR:
+    case vkproto::kCmd_vkWriteAccelerationStructuresPropertiesKHR:
+    case vkproto::kCmd_vkGetBufferOpaqueCaptureAddress:
+    case vkproto::kCmd_vkGetBufferOpaqueCaptureAddressKHR:
+    case vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddress:
+    case vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddressKHR: return true;
+    default: return false;
+    }
 }
 
 bool VulkanBackend::extension_admits(uint32_t command_id, const WireReader &payload) const
@@ -493,6 +531,10 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                           const VkAllocationCallbacks *, VkDevice *pDevice)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDevice");
+    if (names_withheld(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount)) {
+        lines_.write("a device named an extension that hands the host driver guest-supplied addresses or binaries; refused");
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
     created_extensions_ = extension_mask(pCreateInfo->ppEnabledExtensionNames, pCreateInfo->enabledExtensionCount,
                                          [](const char *name) { return vkproto::device_extension_slot(name); });
     VkDeviceCreateInfo    guarded = *pCreateInfo;
@@ -620,6 +662,10 @@ VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateI
                                           const VkAllocationCallbacks *, VkBuffer *pBuffer)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateBuffer");
+    if ((pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) != 0u) {
+        lines_.write("a buffer asked to be placed at a captured address; refused");
+        return VK_ERROR_FEATURE_NOT_PRESENT;
+    }
     VkBufferCreateInfo               create = *pCreateInfo;
     VkExternalMemoryBufferCreateInfo external;
     for_source(device, create, external);
@@ -870,6 +916,17 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
 {
     AV_SCOPE("VulkanBackend::on_vkAllocateMemory");
     if (!imports_nothing(pAllocateInfo->pNext)) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    for (auto *node = static_cast<const VkBaseInStructure *>(pAllocateInfo->pNext); node != nullptr; node = node->pNext) {
+        const bool replays =
+            (node->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO &&
+             (reinterpret_cast<const VkMemoryAllocateFlagsInfo *>(node)->flags &
+              VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) != 0u) ||
+            (node->sType == VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO &&
+             reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfo *>(node)->opaqueCaptureAddress != 0u);
+        if (!replays) continue;
+        lines_.write("a memory allocation asked to be placed at a captured address; refused");
+        return VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS;
+    }
     VkMemoryAllocateInfo allocate = *pAllocateInfo;
     allocate.memoryTypeIndex = types_.host_type(pAllocateInfo->memoryTypeIndex);
     if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) return VK_ERROR_OUT_OF_DEVICE_MEMORY;

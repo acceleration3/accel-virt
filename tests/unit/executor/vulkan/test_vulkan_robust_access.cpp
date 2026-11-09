@@ -202,6 +202,7 @@ TEST(vulkan_robust_access, hide_capture_replay_switches_off_the_features_the_gue
   VkPhysicalDeviceAccelerationStructureFeaturesKHR structure = {};
   structure.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
   structure.accelerationStructureCaptureReplay = VK_TRUE;
+  structure.accelerationStructureHostCommands = VK_TRUE;
   structure.pNext = &pipeline;
   VkPhysicalDeviceBufferDeviceAddressFeaturesEXT ext = {};
   ext.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT;
@@ -219,6 +220,7 @@ TEST(vulkan_robust_access, hide_capture_replay_switches_off_the_features_the_gue
   CHECK_EQ(driver.address_replay, VK_FALSE);
   CHECK_EQ(driver.ext_address_replay, VK_FALSE);
   CHECK_EQ(driver.structure_replay, VK_FALSE);
+  CHECK_EQ(structure.accelerationStructureHostCommands, VK_FALSE);
   CHECK_EQ(driver.pipeline_replay, VK_FALSE);
   CHECK_EQ(driver.pipeline_mixed, VK_FALSE);
   CHECK_EQ(driver.descriptor_replay, VK_FALSE);
@@ -243,7 +245,7 @@ TEST(vulkan_robust_access, a_features_query_answers_capture_replay_as_unsupporte
   backend.shut_down(); }
 
 TEST(vulkan_robust_access, a_command_of_an_extension_the_device_did_not_enable_loses_the_session)
-{ const char *const names[] = {"VK_KHR_acceleration_structure"};
+{ const char *const names[] = {"VK_KHR_calibrated_timestamps"};
   VkDeviceCreateInfo info = plain_device();
   info.enabledExtensionCount = 1u;
   info.ppEnabledExtensionNames = names;
@@ -265,7 +267,7 @@ TEST(vulkan_robust_access, a_command_of_an_extension_the_device_did_not_enable_l
   std::uint8_t reply[16] = {};
   av::WireWriter answer(reply, sizeof reply);
   av::WireReader enabled(frame, sizeof frame);
-  CHECK(!backend.run(av::vkproto::kCmd_vkCreateAccelerationStructureKHR, enabled, answer, arena));
+  static_cast<void>(backend.run(av::vkproto::kCmd_vkGetCalibratedTimestampsKHR, enabled, answer, arena));
   CHECK(!backend.lost());
   av::WireReader refused(frame, sizeof frame);
   CHECK(backend.run(av::vkproto::kCmd_vkCreateShadersEXT, refused, answer, arena));
@@ -304,3 +306,79 @@ TEST(vulkan_robust_access, hide_capture_replay_counts_what_it_switched_off_and_l
   CHECK_EQ(access.hidden(), 1u);
   access.hide_capture_replay(nullptr);
   CHECK_EQ(access.hidden(), 1u); }
+
+TEST(vulkan_robust_access, the_host_commands_that_take_guest_pointers_and_the_captured_address_queries_lose_the_session)
+{ const std::uint32_t refused[] = {av::vkproto::kCmd_vkBuildAccelerationStructuresKHR,
+                                   av::vkproto::kCmd_vkCopyAccelerationStructureKHR,
+                                   av::vkproto::kCmd_vkCopyAccelerationStructureToMemoryKHR,
+                                   av::vkproto::kCmd_vkCopyMemoryToAccelerationStructureKHR,
+                                   av::vkproto::kCmd_vkWriteAccelerationStructuresPropertiesKHR,
+                                   av::vkproto::kCmd_vkGetBufferOpaqueCaptureAddress,
+                                   av::vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddressKHR};
+  for (const std::uint32_t command : refused) {
+      av::RecordingLog sink;
+      av::DriverLog    lines(sink, "vulkan: ");
+      av::VulkanBackend backend(lines);
+      std::uint8_t frame[16] = {};
+      std::uint8_t block[256];
+      av::WireArena arena(block, sizeof block);
+      std::uint8_t reply[16] = {};
+      av::WireWriter answer(reply, sizeof reply);
+      av::WireReader payload(frame, sizeof frame);
+      CHECK(backend.run(command, payload, answer, arena));
+      CHECK(backend.lost());
+      backend.shut_down();
+  } }
+
+TEST(vulkan_robust_access, a_buffer_memory_or_structure_asking_for_a_captured_address_is_refused)
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "vulkan: ");
+  av::VulkanBackend backend(lines);
+  const VkDevice device = reinterpret_cast<VkDevice>(std::uintptr_t{0x300});
+  VkBufferCreateInfo buffer = {};
+  buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer.flags = VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT;
+  VkBuffer made_buffer = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(backend.on_vkCreateBuffer(device, &buffer, nullptr, &made_buffer)),
+           static_cast<int>(VK_ERROR_FEATURE_NOT_PRESENT));
+  VkMemoryAllocateFlagsInfo flags = {};
+  flags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+  flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT;
+  VkMemoryAllocateInfo memory = {};
+  memory.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  memory.pNext = &flags;
+  VkDeviceMemory made_memory = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(backend.on_vkAllocateMemory(device, &memory, nullptr, &made_memory)),
+           static_cast<int>(VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS));
+  VkMemoryOpaqueCaptureAddressAllocateInfo placed = {};
+  placed.sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO;
+  placed.opaqueCaptureAddress = 0x1000u;
+  memory.pNext = &placed;
+  CHECK_EQ(static_cast<int>(backend.on_vkAllocateMemory(device, &memory, nullptr, &made_memory)),
+           static_cast<int>(VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS));
+  VkAccelerationStructureCreateInfoKHR structure = {};
+  structure.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+  structure.deviceAddress = 0x2000u;
+  VkAccelerationStructureKHR made_structure = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(backend.on_vkCreateAccelerationStructureKHR(device, &structure, nullptr, &made_structure)),
+           static_cast<int>(VK_ERROR_FEATURE_NOT_PRESENT));
+  structure.deviceAddress = 0u;
+  structure.createFlags = VK_ACCELERATION_STRUCTURE_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR;
+  CHECK_EQ(static_cast<int>(backend.on_vkCreateAccelerationStructureKHR(device, &structure, nullptr, &made_structure)),
+           static_cast<int>(VK_ERROR_FEATURE_NOT_PRESENT));
+  backend.shut_down(); }
+
+TEST(vulkan_robust_access, a_device_naming_an_extension_that_hands_the_driver_guest_addresses_is_refused)
+{ const char *const names[] = {"VK_KHR_acceleration_structure"};
+  VkDeviceCreateInfo info = plain_device();
+  info.enabledExtensionCount = 1u;
+  info.ppEnabledExtensionNames = names;
+  av::RecordingLog sink;
+  av::DriverLog    lines(sink, "vulkan: ");
+  av::VulkanBackend backend(lines);
+  VkDevice device = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(backend.on_vkCreateDevice(reinterpret_cast<VkPhysicalDevice>(std::uintptr_t{0x200}), &info,
+                                                      nullptr, &device)),
+           static_cast<int>(VK_ERROR_EXTENSION_NOT_PRESENT));
+  CHECK(device == VK_NULL_HANDLE);
+  backend.shut_down(); }

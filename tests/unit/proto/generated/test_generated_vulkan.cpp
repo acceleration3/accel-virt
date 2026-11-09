@@ -351,3 +351,94 @@ TEST(generated_vulkan, an_extension_command_names_the_extensions_it_needs_and_a_
   CHECK(av::vkproto::command_extensions(av::vkproto::kCmd_vkCreateBuffer).owner == av::vkproto::CommandOwner::open);
   CHECK(av::vkproto::command_extensions(0xFFFFFFFFu).owner == av::vkproto::CommandOwner::open);
   CHECK_EQ(av::vkproto::device_extension_slot("VK_NOT_AN_EXTENSION"), av::vkproto::kNoExtensionSlot); }
+
+namespace {
+
+struct BuildFrame {
+    std::uint8_t frame[1024] = {};
+    std::size_t  length = 0u;
+};
+
+BuildFrame sent_build(const VkAccelerationStructureBuildGeometryInfoKHR &info)
+{ av::vkproto::HandleIdentity handles;
+  BuildFrame sent;
+  WireWriter writer(sent.frame, sizeof sent.frame);
+  av::vkproto::serialize_VkAccelerationStructureBuildGeometryInfoKHR(writer, handles, info);
+  sent.length = writer.offset();
+  return sent; }
+
+bool decoded_build(const BuildFrame &sent, VkAccelerationStructureBuildGeometryInfoKHR &out)
+{ av::vkproto::HandleIdentity handles;
+  static std::uint8_t block[16384];
+  WireArena           arena(block, sizeof block);
+  WireReader          reader(sent.frame, sent.length);
+  out = {};
+  return av::vkproto::deserialize_VkAccelerationStructureBuildGeometryInfoKHR(reader, handles, &out, arena); }
+
+VkAccelerationStructureBuildGeometryInfoKHR bottom_level(const VkAccelerationStructureGeometryKHR *geometries,
+                                                         std::uint32_t count)
+{ VkAccelerationStructureBuildGeometryInfoKHR info = {};
+  info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+  info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  info.geometryCount = count;
+  info.pGeometries = geometries;
+  return info; }
+
+}
+
+TEST(generated_vulkan, a_build_whose_geometries_are_named_by_an_array_of_pointers_arrives_as_one_array)
+{ const VkAccelerationStructureGeometryKHR geometry = triangles_geometry();
+  const VkAccelerationStructureGeometryKHR *const pointers[2] = {&geometry, &geometry};
+  VkAccelerationStructureBuildGeometryInfoKHR info = bottom_level(nullptr, 2u);
+  info.ppGeometries = pointers;
+  const BuildFrame sent = sent_build(info);
+  VkAccelerationStructureBuildGeometryInfoKHR received = {};
+  CHECK(decoded_build(sent, received));
+  CHECK_EQ(received.geometryCount, 2u);
+  CHECK(received.pGeometries != nullptr);
+  CHECK(received.ppGeometries == nullptr);
+  if (received.pGeometries == nullptr) return;
+  CHECK_EQ(received.pGeometries[1].geometry.triangles.maxVertex, 5u); }
+
+TEST(generated_vulkan, a_build_that_counts_geometries_and_sends_none_is_refused)
+{ const VkAccelerationStructureGeometryKHR geometry = triangles_geometry();
+  VkAccelerationStructureBuildGeometryInfoKHR counted = bottom_level(nullptr, 3u);
+  VkAccelerationStructureBuildGeometryInfoKHR received = {};
+  CHECK(!decoded_build(sent_build(counted), received));
+  VkAccelerationStructureBuildGeometryInfoKHR empty = bottom_level(nullptr, 0u);
+  CHECK(decoded_build(sent_build(empty), received));
+  CHECK(received.pGeometries == nullptr);
+  BuildFrame forged = sent_build(bottom_level(&geometry, 1u));
+  std::uint32_t big = 1u << 20u;
+  std::size_t   at = 0u;
+  for (; at + 4u <= forged.length; at++) {
+      std::uint32_t seen = 0u;
+      std::memcpy(&seen, forged.frame + at, 4u);
+      if (seen == 1u && at > 8u) break;
+  }
+  std::memcpy(forged.frame + at, &big, 4u);
+  CHECK(!decoded_build(forged, received)); }
+
+TEST(generated_vulkan, a_build_whose_geometry_types_do_not_fit_its_level_is_refused)
+{ VkAccelerationStructureGeometryKHR instances = triangles_geometry();
+  instances.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+  instances.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+  const VkAccelerationStructureGeometryKHR triangles = triangles_geometry();
+  VkAccelerationStructureBuildGeometryInfoKHR received = {};
+  VkAccelerationStructureBuildGeometryInfoKHR bottom_with_instances = bottom_level(&instances, 1u);
+  CHECK(!decoded_build(sent_build(bottom_with_instances), received));
+  VkAccelerationStructureBuildGeometryInfoKHR top_with_triangles = bottom_level(&triangles, 1u);
+  top_with_triangles.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+  CHECK(!decoded_build(sent_build(top_with_triangles), received));
+  VkAccelerationStructureBuildGeometryInfoKHR top = bottom_level(&instances, 1u);
+  top.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+  CHECK(decoded_build(sent_build(top), received));
+  VkAccelerationStructureBuildGeometryInfoKHR two_tops = bottom_level(&instances, 1u);
+  two_tops.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+  const VkAccelerationStructureGeometryKHR pair[2] = {instances, instances};
+  two_tops.pGeometries = pair;
+  two_tops.geometryCount = 2u;
+  CHECK(!decoded_build(sent_build(two_tops), received));
+  VkAccelerationStructureBuildGeometryInfoKHR odd = bottom_level(&triangles, 1u);
+  odd.type = static_cast<VkAccelerationStructureTypeKHR>(0x7FFF);
+  CHECK(!decoded_build(sent_build(odd), received)); }

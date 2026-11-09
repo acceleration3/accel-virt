@@ -13,6 +13,7 @@ enum class CommandOwner : uint8_t { open, instance, device };
 inline constexpr uint32_t kDeviceExtensionSlots = 52u;
 inline constexpr uint32_t kInstanceExtensionSlots = 5u;
 inline constexpr uint16_t kNoExtensionSlot = 0xFFFFu;
+static_assert(kDeviceExtensionSlots <= 64u && kInstanceExtensionSlots <= 64u, "the enabled mask is 64 bits");
 
 struct CommandExtensions {
     CommandOwner owner;

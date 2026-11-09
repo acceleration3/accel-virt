@@ -3383,13 +3383,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (array_present) {
             uint64_t av_wide = 0;
             if (!r.read_pod(av_wide)) return false;
+            constexpr uint64_t av_most_blob = uint64_t{64} << 20;
+            if (av_wide > av_most_blob) av_wide = av_most_blob;
             pDataSize_local = static_cast<size_t>(av_wide);
-            if (static_cast<uint64_t>(pDataSize_local) != av_wide) return false;
             pDataSize_capacity = pDataSize_local;
-            if (pDataSize_local != 0) {
-                pData_storage = arena.allocate_chars(pDataSize_local);
-                if (pData_storage == nullptr) return false;
-            }
+            struct alignas(16) av_block16 { unsigned char bytes[16]; };
+            auto* av_blocks = arena.allocate<av_block16>((pDataSize_local + 15u) / 16u + 1u);
+            if (av_blocks == nullptr) return false;
+            pData_storage = reinterpret_cast<char*>(av_blocks);
         }
         VkResult result = s.on_vkGetPipelineCacheData(device, pipelineCache, &pDataSize_local, array_present ? static_cast<void*>(pData_storage) : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
@@ -6038,13 +6039,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (array_present) {
             uint64_t av_wide = 0;
             if (!r.read_pod(av_wide)) return false;
+            constexpr uint64_t av_most_blob = uint64_t{64} << 20;
+            if (av_wide > av_most_blob) av_wide = av_most_blob;
             pDataSize_local = static_cast<size_t>(av_wide);
-            if (static_cast<uint64_t>(pDataSize_local) != av_wide) return false;
             pDataSize_capacity = pDataSize_local;
-            if (pDataSize_local != 0) {
-                pData_storage = arena.allocate_chars(pDataSize_local);
-                if (pData_storage == nullptr) return false;
-            }
+            struct alignas(16) av_block16 { unsigned char bytes[16]; };
+            auto* av_blocks = arena.allocate<av_block16>((pDataSize_local + 15u) / 16u + 1u);
+            if (av_blocks == nullptr) return false;
+            pData_storage = reinterpret_cast<char*>(av_blocks);
         }
         VkResult result = s.on_vkGetShaderBinaryDataEXT(device, shader, &pDataSize_local, array_present ? static_cast<void*>(pData_storage) : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
@@ -6315,13 +6317,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (array_present) {
             uint64_t av_wide = 0;
             if (!r.read_pod(av_wide)) return false;
+            constexpr uint64_t av_most_blob = uint64_t{64} << 20;
+            if (av_wide > av_most_blob) av_wide = av_most_blob;
             pPipelineBinaryDataSize_local = static_cast<size_t>(av_wide);
-            if (static_cast<uint64_t>(pPipelineBinaryDataSize_local) != av_wide) return false;
             pPipelineBinaryDataSize_capacity = pPipelineBinaryDataSize_local;
-            if (pPipelineBinaryDataSize_local != 0) {
-                pPipelineBinaryData_storage = arena.allocate_chars(pPipelineBinaryDataSize_local);
-                if (pPipelineBinaryData_storage == nullptr) return false;
-            }
+            struct alignas(16) av_block16 { unsigned char bytes[16]; };
+            auto* av_blocks = arena.allocate<av_block16>((pPipelineBinaryDataSize_local + 15u) / 16u + 1u);
+            if (av_blocks == nullptr) return false;
+            pPipelineBinaryData_storage = reinterpret_cast<char*>(av_blocks);
         }
         VkResult result = s.on_vkGetPipelineBinaryDataKHR(device, &pInfo_local, &pPipelineBinaryKey_out, &pPipelineBinaryDataSize_local, array_present ? static_cast<void*>(pPipelineBinaryData_storage) : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));

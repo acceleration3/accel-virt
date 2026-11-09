@@ -327,6 +327,7 @@ private:
     bool     reusable(VkCommandBuffer commandBuffer);
     bool     queue_admits(uint32_t command_id, const WireReader &payload) const;
     bool     extension_admits(uint32_t command_id, const WireReader &payload) const;
+    bool     command_refused(uint32_t command_id) const;
     bool     family_flags(VkDevice device, uint32_t family, uint32_t &flags);
     bool     template_named(VkDescriptorUpdateTemplate made, const void *data, uint64_t set, uint64_t device);
     bool     resolved(const VulkanTemplates::Reference &reference, uint64_t &handle) const;

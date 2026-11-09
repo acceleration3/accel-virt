@@ -2250,23 +2250,20 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
     serialize_VkAccelerationStructureKHR(buf, handles, v.srcAccelerationStructure);
     serialize_VkAccelerationStructureKHR(buf, handles, v.dstAccelerationStructure);
     buf.write_pod(v.geometryCount);
-    {
-        const uint8_t present = v.pGeometries != nullptr ? 1 : 0;
-        buf.write_pod(present);
-        if (present) {
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.geometryCount)); ++i) {
-                serialize_VkAccelerationStructureGeometryKHR(buf, handles, v.pGeometries[i]);
-            }
+    const uint8_t present = (v.pGeometries != nullptr || v.ppGeometries != nullptr) ? 1 : 0;
+    buf.write_pod(present);
+    if (present) {
+        for (uint32_t i = 0; i < v.geometryCount; ++i) {
+            serialize_VkAccelerationStructureGeometryKHR(buf, handles, v.pGeometries != nullptr ? v.pGeometries[i] : *v.ppGeometries[i]);
         }
     }
-    // TODO: unhandled member shape 'unknown_ptr' for 'ppGeometries' (const VkAccelerationStructureGeometryKHR**)
-    (void)v.ppGeometries;
     serialize_VkDeviceOrHostAddressKHR(buf, v.scratchData);
 }
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireReader& r, const HandleTranslation& handles, VkAccelerationStructureBuildGeometryInfoKHR* out, ::av::WireArena& arena) {
-    (void)arena;
+    constexpr uint32_t most_geometries = 1u << 16;
     if (!r.read_pod(out->sType)) { return false; }
+    out->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->type)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
@@ -2274,24 +2271,24 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
     if (!deserialize_VkAccelerationStructureKHR(r, handles, out->srcAccelerationStructure)) { return false; }
     if (!deserialize_VkAccelerationStructureKHR(r, handles, out->dstAccelerationStructure)) { return false; }
     if (!r.read_pod(out->geometryCount)) { return false; }
-    {
-        uint8_t present = 0;
-        if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->geometryCount) == 0) {
-            out->pGeometries = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(static_cast<size_t>(as_number(out->geometryCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->geometryCount)); ++i) {
-                if (!deserialize_VkAccelerationStructureGeometryKHR(r, handles, &arr[i], arena)) { return false; }
-            }
-            out->pGeometries = arr;
+    uint8_t present = 0;
+    if (!r.read_pod(present)) { return false; }
+    if (out->geometryCount > most_geometries) { return false; }
+    if (out->geometryCount != 0 && !present) { return false; }
+    if (out->type != VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR && out->type != VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR && out->type != VK_ACCELERATION_STRUCTURE_TYPE_GENERIC_KHR) { return false; }
+    if (present && out->geometryCount != 0) {
+        auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(out->geometryCount);
+        if (arr == nullptr) { return false; }
+        for (uint32_t i = 0; i < out->geometryCount; ++i) {
+            if (!deserialize_VkAccelerationStructureGeometryKHR(r, handles, &arr[i], arena)) { return false; }
+            const bool instances = arr[i].geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR;
+            if (out->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR && !instances) { return false; }
+            if (out->type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR && instances) { return false; }
         }
+        if (out->type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR && out->geometryCount != 1) { return false; }
+        out->pGeometries = arr;
     }
-    // TODO: unhandled member shape 'unknown_ptr' for 'ppGeometries' (const VkAccelerationStructureGeometryKHR**)
-    (void)out->ppGeometries;
-    if (!deserialize_VkDeviceOrHostAddressKHR(r, &out->scratchData, arena)) { return false; }
-    return true;
+    return deserialize_VkDeviceOrHostAddressKHR(r, &out->scratchData, arena);
 }
 
 inline void serialize_VkAccelerationStructureBuildRangeInfoKHR(::av::WireWriter& buf, const VkAccelerationStructureBuildRangeInfoKHR& v) {
@@ -2457,17 +2454,21 @@ inline void serialize_VkAccelerationStructureGeometryKHR(::av::WireWriter& buf, 
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureGeometryKHR(::av::WireReader& r, const HandleTranslation& handles, VkAccelerationStructureGeometryKHR* out, ::av::WireArena& arena) {
     if (!r.read_pod(out->sType)) { return false; }
+    out->sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
     if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->geometryType)) { return false; }
     switch (out->geometryType) {
     case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
         if (!deserialize_VkAccelerationStructureGeometryTrianglesDataKHR(r, handles, &out->geometry.triangles, arena)) { return false; }
+        out->geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
         break;
     case VK_GEOMETRY_TYPE_AABBS_KHR:
         if (!deserialize_VkAccelerationStructureGeometryAabbsDataKHR(r, handles, &out->geometry.aabbs, arena)) { return false; }
+        out->geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
         break;
     case VK_GEOMETRY_TYPE_INSTANCES_KHR:
         if (!deserialize_VkAccelerationStructureGeometryInstancesDataKHR(r, handles, &out->geometry.instances, arena)) { return false; }
+        out->geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
         break;
     default:
         return false;

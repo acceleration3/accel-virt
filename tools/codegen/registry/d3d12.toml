@@ -122,7 +122,7 @@ fields = ["TileCoordinate start", "TileSize size"]
 fields = ["u32 flags", "u32 heap_offset", "u32 tiles"]
 
 [structs.Caps12]
-fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
+fields = ["u32 layout", "u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
           "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
           "u32 rovs", "u32 max_gpu_va_bits_per_resource", "u32 max_gpu_va_bits_per_process",
           "u32 descriptor_sizes[4]",

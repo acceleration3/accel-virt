@@ -125,7 +125,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       region_(guest_, lines_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
       d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
-      missed_key_(0u), batches_(), queue_drain_(), submitted_(0u), drained_(false), mark_refused_(false), show_refused_(false), lost_(false)
+      missed_key_(0u), batches_(), queue_drain_(), submitted_(0u), drained_(false), predication_refusal_noted_(false), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -1098,10 +1098,14 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
                 entries[index].ComponentCount = static_cast<BYTE>(declaration.component_count(index));
                 if (entry.register_index == no_stream) continue;
                 d3dproto::SignatureEntry named = {};
+                bool                     found = false;
                 for (uint32_t output = 0u; output < output_count; output++)
                     if (outputs[output].register_index == entry.register_index &&
-                        outputs[output].stream == entry.stream)
+                        outputs[output].stream == entry.stream) {
                         named = outputs[output];
+                        found = true;
+                    }
+                if (!found) return false;
                 uint32_t semantic = 0u;
                 entries[index].SemanticName = container.semantic_of(named, false, semantic);
                 entries[index].SemanticIndex = semantic;
@@ -1514,8 +1518,13 @@ bool D3dBackend::on_SetPredication(uint32_t query, uint32_t value)
     if (!ready() || (query != 0u && found == nullptr)) return false;
     ID3D11Predicate *predicate = nullptr;
     if (found != nullptr &&
-        FAILED(found->QueryInterface(__uuidof(ID3D11Predicate), reinterpret_cast<void **>(&predicate))))
+        FAILED(found->QueryInterface(__uuidof(ID3D11Predicate), reinterpret_cast<void **>(&predicate)))) {
         predicate = nullptr;
+        if (!predication_refusal_noted_) {
+            predication_refusal_noted_ = true;
+            lines_.write("a predication by a query the host cannot predicate with was cleared");
+        }
+    }
     device11_->context()->SetPredication(predicate, value != 0u);
     if (predicate != nullptr) predicate->Release();
     return true;

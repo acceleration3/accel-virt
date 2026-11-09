@@ -34,6 +34,10 @@ def _slots(reg: Registry, kind: str) -> list[str]:
 def emit(reg: Registry, out_dir: Path) -> None:
     device = _slots(reg, "device")
     instance = _slots(reg, "instance")
+    most_slots = 64
+    for kind, names in (("device", device), ("instance", instance)):
+        if len(names) > most_slots:
+            raise SystemExit(f"{len(names)} {kind} extensions need a slot each, and the enabled mask is {most_slots} bits")
     slot_of = {("device", n): i for i, n in enumerate(device)}
     slot_of.update({("instance", n): i for i, n in enumerate(instance)})
 
@@ -61,6 +65,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         f"inline constexpr uint32_t kDeviceExtensionSlots = {len(device)}u;",
         f"inline constexpr uint32_t kInstanceExtensionSlots = {len(instance)}u;",
         "inline constexpr uint16_t kNoExtensionSlot = 0xFFFFu;",
+        "static_assert(kDeviceExtensionSlots <= 64u && kInstanceExtensionSlots <= 64u, \"the enabled mask is 64 bits\");",
         "",
         "struct CommandExtensions {",
         "    CommandOwner owner;",

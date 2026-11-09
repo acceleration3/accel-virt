@@ -194,6 +194,7 @@ bool D3d12PipelineBuilder::stream_output(const d3d12proto::StreamOutDeclaration 
         entries[index].ComponentCount = static_cast<BYTE>(declaration.component_count(index));
         if (from.register_index == no_register) continue;
         d3dproto::SignatureEntry named = {};
+        bool                     found = false;
         for (uint32_t entry = 0u; entry < signature_count; entry++) {
             const d3d12proto::SignatureEntry &sig = signatures[entry];
             if (sig.set != stage_geometry * roles + role_output || sig.register_index != from.register_index ||
@@ -201,7 +202,9 @@ bool D3d12PipelineBuilder::stream_output(const d3d12proto::StreamOutDeclaration 
                 continue;
             named = d3dproto::SignatureEntry{sig.system_value, sig.register_index, sig.mask, sig.component_type,
                                              sig.min_precision, sig.stream};
+            found = true;
         }
+        if (!found) return false;
         uint32_t semantic_index = 0u;
         entries[index].SemanticName = names.semantic_of(named, false, semantic_index);
         entries[index].SemanticIndex = semantic_index;

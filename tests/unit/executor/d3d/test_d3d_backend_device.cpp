@@ -301,7 +301,9 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
     CHECK_EQ(wire.refused(), 0u);
 }
 
-TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_shader_wrote)
+namespace {
+
+void stream_vertices_as(av::d3d::PassthroughPrimitive primitive, std::uint32_t topology)
 {
     av::ExecutorLogRig rig;
     av::LoaderHostApis apis(rig.log);
@@ -315,7 +317,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     make_triangle(wire);
-    av::d3d::PassthroughGeometryShader shader(av::d3d::PassthroughPrimitive::point);
+    av::d3d::PassthroughGeometryShader shader(primitive);
     for (std::uint32_t index = 0u; index < triangle_vs::outputs_count; index++)
         CHECK(shader.add(triangle_vs::outputs[index].register_index, triangle_vs::outputs[index].mask,
                          triangle_vs::outputs[index].system_value));
@@ -332,7 +334,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     buffer.bind_flags = 0x10u;
     CHECK(av_d3d_CreateResource(wire, out, buffer, 0u, 0u, 0u));
     bind_triangle(wire);
-    CHECK(av_d3d_SetTopology(wire, 1u));
+    CHECK(av_d3d_SetTopology(wire, topology));
     CHECK(av_d3d_SetShader(wire, stage_geometry, gs));
     const StreamOutTarget target = {out, 0u};
     CHECK(av_d3d_SetStreamOutTargets(wire, 1u, &target));
@@ -356,6 +358,17 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     CHECK_EQ(wrong, 0u);
     CHECK_EQ(wire.refused(), 0u);
 }
+
+}
+
+TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_shader_wrote)
+{ stream_vertices_as(av::d3d::PassthroughPrimitive::point, 1u); }
+
+TEST(d3d_backend_device, a_stream_output_of_a_triangle_list_streams_every_vertex_through_the_triangle_variant)
+{ stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 4u); }
+
+TEST(d3d_backend_device, a_stream_output_of_a_triangle_strip_streams_every_vertex_through_the_triangle_variant)
+{ stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 5u); }
 
 TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_releases_it)
 {

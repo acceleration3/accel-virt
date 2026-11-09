@@ -287,6 +287,12 @@ TEST(vulkan_dispatch, a_pipeline_cache_read_answers_the_bytes_it_had_room_for)
   CHECK_EQ(cut.size, std::uint64_t{5u});
   CHECK(std::memcmp(cut.bytes, "cache", 5u) == 0); }
 
+TEST(vulkan_dispatch, a_pipeline_cache_read_with_room_for_nothing_answers_incomplete_and_no_bytes)
+{ const CacheAnswer none = ask_for_cache(1u, 0u);
+  CHECK(none.ran);
+  CHECK_EQ(none.result, VK_INCOMPLETE);
+  CHECK_EQ(none.size, std::uint64_t{0u}); }
+
 TEST(vulkan_dispatch, a_pipeline_cache_read_asking_for_more_room_than_the_arena_has_is_refused)
 { const CacheAnswer huge = ask_for_cache(1u, std::uint64_t{1} << 40u);
   CHECK(!huge.ran); }

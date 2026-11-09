@@ -34,14 +34,18 @@ public:
         for (uint32_t index = 0u; index < stride_count_; index++)
             if (strides_[index] == 0u || strides_[index] % 4u != 0u || strides_[index] > most_stride) return false;
         uint32_t stream_of_buffer[most_buffers] = {};
+        uint32_t bytes_of_buffer[most_buffers] = {};
         bool     used[most_buffers] = {};
         for (uint32_t index = 0u; index < count_; index++) {
             const Entry &entry = entries_[index];
             if (entry.stream >= most_streams || entry.output_slot >= most_buffers) return false;
-            if (stride_count_ != 0u && entry.output_slot >= stride_count_) return false;
+            if (stride_count_ == 0u ? entry.output_slot != 0u : entry.output_slot >= stride_count_) return false;
+            if (!contiguous(entries_[index].mask)) return false;
             if (used[entry.output_slot] && stream_of_buffer[entry.output_slot] != entry.stream) return false;
             used[entry.output_slot] = true;
             stream_of_buffer[entry.output_slot] = entry.stream;
+            bytes_of_buffer[entry.output_slot] += component_count(index) * 4u;
+            if (stride_count_ != 0u && bytes_of_buffer[entry.output_slot] > strides_[entry.output_slot]) return false;
         }
         return true;
     }
@@ -66,6 +70,15 @@ public:
     }
 
 private:
+    bool contiguous(uint32_t mask) const
+    {
+        AV_SCOPE("StreamOutputDeclaration::contiguous");
+        const uint32_t low = mask & 0xFu;
+        if (low == 0u) return false;
+        const uint32_t run = low >> __builtin_ctz(low);
+        return (run & (run + 1u)) == 0u;
+    }
+
     const Entry    *entries_;
     uint32_t        count_;
     const uint32_t *strides_;

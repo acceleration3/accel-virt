@@ -523,7 +523,7 @@ VOID D3d11Device::destroy_unordered_access_view(D3D11DDI_HUNORDEREDACCESSVIEW ha
 }
 
 
-void D3d11Device::create_shader(uint32_t stage, const UINT *code, ObjectRecord &record_of,
+bool D3d11Device::create_shader(uint32_t stage, const UINT *code, ObjectRecord &record_of,
                                 const D3D11_1DDIARG_SIGNATURE_ENTRY2 *inputs, UINT input_count,
                                 const D3D11_1DDIARG_SIGNATURE_ENTRY2 *outputs, UINT output_count,
                                 const D3D11_1DDIARG_SIGNATURE_ENTRY2 *patch, UINT patch_count,
@@ -564,8 +564,11 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, ObjectRecord &
         lines_.write("a shader larger than the arena");
     if (!d3dproto::av_d3d_CreateShader(wire(), record_of.stamp.id(), stage, counts[0], signatures[0], counts[1],
                                         signatures[1], counts[2], signatures[2], declared, declaration, strides_count,
-                                        strides, rasterized, code, bytes))
+                                        strides, rasterized, code, bytes)) {
         set_error(E_OUTOFMEMORY);
+        return false;
+    }
+    return true;
 }
 
 SIZE_T D3d11Device::calc_private_shader_size(const UINT *, const D3D11_1DDIARG_STAGE_IO_SIGNATURES *)
@@ -647,15 +650,21 @@ void D3d11Device::stream_vertex_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWIT
             taken = written.add(passed[index].Register, passed[index].Mask,
                                 static_cast<uint32_t>(passed[index].SystemValue));
         const uint32_t *const tokens = taken ? written.tokens() : nullptr;
-        if (tokens == nullptr) {
+        ObjectRecord          made = {};
+        bool                  created = false;
+        if (tokens != nullptr) {
+            created = create_shader(stage_geometry, tokens, variant == 0u ? record.head : made, passed, count, passed,
+                                    count, nullptr, 0u, &args);
+            if (created && variant != 0u) record.variant[variant - 1u] = made.stamp.id();
+        } else {
             lines_.write("a stream output with no shader names no register it can pass through");
             set_error(E_INVALIDARG);
-            return;
         }
-        ObjectRecord made = {};
-        create_shader(stage_geometry, tokens, variant == 0u ? record.head : made, passed, count, passed, count, nullptr,
-                      0u, &args);
-        if (variant != 0u) record.variant[variant - 1u] = made.stamp.id();
+        if (created) continue;
+        for (uint32_t made_before = 1u; made_before < variant; made_before++) destroy_object(record.variant[made_before - 1u]);
+        if (variant > 0u) destroy_object(record.head.stamp.id());
+        record = StreamPassthroughRecord{};
+        return;
     }
     record.head.resource = StreamPassthroughRecord::marker;
 }
@@ -695,7 +704,6 @@ VOID D3d11Device::destroy_shader(D3D10DDI_HSHADER handle)
     if (record.head.resource == StreamPassthroughRecord::marker)
         for (uint32_t variant = 0u; variant < StreamPassthroughRecord::variants; variant++)
             destroy_object(record.variant[variant]);
-    if (geometry_shader_ == handle.pDrvPrivate) geometry_shader_ = nullptr;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 

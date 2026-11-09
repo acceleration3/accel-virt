@@ -27,6 +27,7 @@ private:
     void copy(uint32_t index, uint32_t vertex);
 
     uint32_t input_;
+    uint32_t input_vertices_;
     uint32_t output_;
     uint32_t emitted_;
     uint32_t source_[max_vertices];
