@@ -285,7 +285,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     constexpr std::uint32_t position = 1u;
     constexpr std::uint32_t float_type = 3u;
-    av::d3d::PassthroughGeometryShader shader;
+    av::d3d::PassthroughGeometryShader shader(av::d3d::PassthroughPrimitive::point);
     CHECK(shader.add(0u, 0xFu, position));
     CHECK(shader.add(1u, 0xFu, 0u));
     const std::uint32_t *const tokens = shader.tokens();
@@ -315,7 +315,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     make_triangle(wire);
-    av::d3d::PassthroughGeometryShader shader;
+    av::d3d::PassthroughGeometryShader shader(av::d3d::PassthroughPrimitive::point);
     for (std::uint32_t index = 0u; index < triangle_vs::outputs_count; index++)
         CHECK(shader.add(triangle_vs::outputs[index].register_index, triangle_vs::outputs[index].mask,
                          triangle_vs::outputs[index].system_value));
