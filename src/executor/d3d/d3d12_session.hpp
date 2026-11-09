@@ -173,7 +173,7 @@ private:
     bool                       written_view(const d3d12proto::DescriptorRef &ref) const;
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
-    bool                       window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base);
+    bool                       window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base, uint32_t &hresult);
     bool                       kept(uint32_t id, D3dObjectKind kind, IUnknown *made);
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
                                       const d3d12proto::ResourceDesc &desc, uint32_t state,

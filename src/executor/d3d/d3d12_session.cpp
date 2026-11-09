@@ -579,7 +579,7 @@ bool D3d12Session::on_QueryHeapSlices12(uint32_t &supported)
     return true;
 }
 
-bool D3d12Session::window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base)
+bool D3d12Session::window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base, uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::window_heap");
     SourceMemory *const backing = imports_ != nullptr ? imports_->named(memory) : nullptr;
@@ -587,8 +587,12 @@ bool D3d12Session::window_heap(uint32_t heap, uint64_t size, uint64_t memory, ui
         LogLine(lines_).text("a heap of ").number(size).text(" bytes names no memory, handle ").number(memory).write();
         return false;
     }
+    if (size == 0u || base % D3d12BlockHeaps::window_alignment != 0u || backing->at(base, size) == nullptr) return false;
     ID3D12Heap *const block = block_heaps_.open(*device_, *backing, heap, base, size);
-    if (block == nullptr) return false;
+    if (block == nullptr) {
+        hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
+        return true;
+    }
     block->AddRef();
     if (kept(heap, D3dObjectKind::heap12, block)) return true;
     block_heaps_.release_heap(heap);
@@ -626,7 +630,7 @@ bool D3d12Session::create_heap(uint32_t heap, const d3d12proto::HeapProperties &
         return true;
     }
     if (device_ == nullptr) return false;
-    if (cpu_visible(properties)) return window_heap(heap, size, memory, offset);
+    if (cpu_visible(properties)) return window_heap(heap, size, memory, offset, hresult);
     D3D12_HEAP_DESC desc = {};
     desc.SizeInBytes = size;
     desc.Properties = host_properties(properties);
