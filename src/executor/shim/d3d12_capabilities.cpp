@@ -1,6 +1,7 @@
 #include "executor/shim/d3d12_capabilities.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/shim/d3d12_newer_interfaces.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "proto/d3d/caps12_layout.hpp"
 #include "proto/d3d/dxgi_format.hpp"
@@ -94,8 +95,16 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
             options.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation ? 1u : 0u;
     }
     D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3 = {};
-    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3))))
+    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3)))) {
         caps_.barycentrics = options3.BarycentricsSupported ? 1u : 0u;
+        caps_.view_instancing_tier = static_cast<uint32_t>(options3.ViewInstancingTier);
+    }
+    D3D12_FEATURE_DATA_D3D12_OPTIONS2 options2 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS2, &options2, sizeof(options2))))
+        caps_.depth_bounds = options2.DepthBoundsTestSupported ? 1u : 0u;
+    d3d12new::Options7 options7 = {};
+    if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(d3d12new::feature_options7), &options7, sizeof(options7))))
+        caps_.mesh_shader_tier = static_cast<uint32_t>(options7.mesh_shader_tier);
     D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4))))
         caps_.native_16bit_ops = options4.Native16BitShaderOpsSupported ? 1u : 0u;

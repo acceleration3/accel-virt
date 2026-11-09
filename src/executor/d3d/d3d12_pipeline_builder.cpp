@@ -29,6 +29,13 @@ constexpr uint32_t stage_geometry = 3u;
 constexpr uint32_t role_output = 1u;
 constexpr uint32_t no_register = 0xFFFFFFFFu;
 constexpr uint32_t stage_pixel = 4u;
+constexpr uint32_t stage_mesh = 5u;
+constexpr uint32_t stage_amplification = 6u;
+constexpr uint32_t most_stencil_op = 8u;
+constexpr uint32_t most_comparison = 8u;
+constexpr uint32_t most_mask = 0xFFu;
+constexpr uint32_t most_viewport_index = 15u;
+constexpr uint32_t most_target_array_index = 2047u;
 constexpr uint32_t dxil_magic = 0x4c495844u;
 constexpr uint32_t dxil_magic_at = 8u;
 constexpr size_t   container_slack = 64u * 1024u;
@@ -156,11 +163,12 @@ bool D3d12PipelineBuilder::container(uint32_t stage, const uint8_t *code, uint64
     uint8_t *const buffer = scratch.allocate<uint8_t>(capacity);
     d3dproto::SignatureEntry *const entries = scratch.allocate<d3dproto::SignatureEntry>(signature_count + 1u);
     if (buffer == nullptr || entries == nullptr) return false;
-    DxbcContainer made(buffer, capacity);
+    const uint32_t signature_stage = stage >= stage_mesh && stage < stage_count ? stage + 1u : stage;
+    DxbcContainer  made(buffer, capacity);
     const DxbcContainer::Role order[roles] = {DxbcContainer::Role::input, DxbcContainer::Role::output,
                                               DxbcContainer::Role::patch_constant};
     for (uint32_t role = 0u; role < roles; role++) {
-        const uint32_t count = gather(signatures, signature_count, stage * roles + role, entries);
+        const uint32_t count = gather(signatures, signature_count, signature_stage * roles + role, entries);
         if (count == 0u && role == 2u) continue;
         const bool pixel_output = stage == stage_pixel && role == 1u;
         if (!made.add_signature(order[role], entries, count, pixel_output)) return false;
@@ -256,7 +264,32 @@ bool D3d12PipelineBuilder::state_holds(const d3d12proto::GraphicsState &state) c
     if (state.sample_count == 0u || state.sample_count > most_samples) return false;
     for (uint32_t target = 0u; target < 8u; target++)
         if (!DxgiFormatLayout(state.rtv_formats[target]).known()) return false;
+    const d3d12proto::DepthStencilDesc &depth = state.depth_stencil;
+    if (depth.depth_enable > 1u || depth.depth_write_mask > 1u || depth.depth_func > most_comparison ||
+        depth.stencil_enable > 1u || depth.depth_bounds_enable > 1u || depth.stencil_read_mask > most_mask ||
+        depth.stencil_write_mask > most_mask || depth.back_read_mask > most_mask || depth.back_write_mask > most_mask)
+        return false;
+    const d3d12proto::StencilOp faces[2] = {depth.front, depth.back};
+    for (const d3d12proto::StencilOp &face : faces)
+        if (face.fail > most_stencil_op || face.depth_fail > most_stencil_op || face.pass > most_stencil_op ||
+            face.func > most_comparison)
+            return false;
+    if (state.view_instance_count > D3d12PipelineJob::max_view_instances || state.view_instancing_flags > 1u) return false;
+    for (uint32_t view = 0u; view < state.view_instance_count; view++)
+        if (state.view_instances[view].viewport_index > most_viewport_index ||
+            state.view_instances[view].render_target_index > most_target_array_index)
+            return false;
     return true;
+}
+
+bool D3d12PipelineBuilder::shape_holds(const uint64_t *code_size, uint32_t stream_out_count) const
+{
+    AV_SCOPE("D3d12PipelineBuilder::shape_holds");
+    const bool classic = code_size[stage_vertex] != 0u;
+    const bool meshed = code_size[stage_mesh] != 0u;
+    if (classic == meshed) return false;
+    if (meshed) return code_size[1] == 0u && code_size[2] == 0u && code_size[stage_geometry] == 0u && stream_out_count == 0u;
+    return code_size[stage_amplification] == 0u;
 }
 
 bool D3d12PipelineBuilder::graphics(uint32_t id, uint32_t root, const d3d12proto::GraphicsState &state,
@@ -271,77 +304,85 @@ bool D3d12PipelineBuilder::graphics(uint32_t id, uint32_t root, const d3d12proto
         static_cast<ID3D12RootSignature *>(static_cast<void *>(objects_.find(root, D3dObjectKind::root_signature12)));
     if (device_ == nullptr || signature == nullptr || element_count > D3d12PipelineJob::max_elements || !state_holds(state))
         return false;
+    if (!shape_holds(code_size, stream_out_count)) return false;
     D3D12_SHADER_BYTECODE stages[stage_count] = {};
     for (uint32_t stage = 0u; stage < stage_count; stage++)
         if (!container(stage, code[stage], code_size[stage], signatures, signature_count, job, stages[stage]))
             return false;
-    if (stages[stage_vertex].BytecodeLength == 0u) return false;
+    const bool classic = stages[stage_vertex].BytecodeLength != 0u;
     D3D12_INPUT_ELEMENT_DESC made_elements[D3d12PipelineJob::max_elements] = {};
-    if (!layout(elements, element_count, stages[stage_vertex], signatures, signature_count, made_elements))
+    if (classic && !layout(elements, element_count, stages[stage_vertex], signatures, signature_count, made_elements))
         return false;
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
-    desc.pRootSignature = signature;
-    desc.VS = stages[0];
-    desc.HS = stages[1];
-    desc.DS = stages[2];
-    desc.GS = stages[3];
-    desc.PS = stages[4];
+    D3d12GraphicsStream made;
+    made.root.value = signature;
+    made.vs.value = stages[0];
+    made.hs.value = stages[1];
+    made.ds.value = stages[2];
+    made.gs.value = stages[3];
+    made.ps.value = stages[4];
+    made.ms.value = stages[stage_mesh];
+    made.as.value = stages[stage_amplification];
     if (!stream_output(stream_out, stream_out_count, strides, stride_count, rasterized_stream, signatures,
-                       signature_count, job, desc.StreamOutput))
+                       signature_count, job, made.stream_output.value))
         return false;
-    desc.BlendState.AlphaToCoverageEnable = state.alpha_to_coverage != 0u;
-    desc.BlendState.IndependentBlendEnable = state.independent_blend != 0u;
+    D3D12_BLEND_DESC &blend = made.blend.value;
+    blend.AlphaToCoverageEnable = state.alpha_to_coverage != 0u;
+    blend.IndependentBlendEnable = state.independent_blend != 0u;
     for (uint32_t target = 0u; target < 8u; target++) {
         const d3d12proto::RenderTargetBlend &from = state.targets[target];
-        desc.BlendState.RenderTarget[target] = {from.blend_enable != 0u,
-                                                from.logic_op_enable != 0u,
-                                                static_cast<D3D12_BLEND>(from.src_blend),
-                                                static_cast<D3D12_BLEND>(from.dest_blend),
-                                                static_cast<D3D12_BLEND_OP>(from.blend_op),
-                                                static_cast<D3D12_BLEND>(from.src_blend_alpha),
-                                                static_cast<D3D12_BLEND>(from.dest_blend_alpha),
-                                                static_cast<D3D12_BLEND_OP>(from.blend_op_alpha),
-                                                static_cast<D3D12_LOGIC_OP>(from.logic_op),
-                                                static_cast<UINT8>(from.write_mask)};
+        blend.RenderTarget[target] = {from.blend_enable != 0u,
+                                      from.logic_op_enable != 0u,
+                                      static_cast<D3D12_BLEND>(from.src_blend),
+                                      static_cast<D3D12_BLEND>(from.dest_blend),
+                                      static_cast<D3D12_BLEND_OP>(from.blend_op),
+                                      static_cast<D3D12_BLEND>(from.src_blend_alpha),
+                                      static_cast<D3D12_BLEND>(from.dest_blend_alpha),
+                                      static_cast<D3D12_BLEND_OP>(from.blend_op_alpha),
+                                      static_cast<D3D12_LOGIC_OP>(from.logic_op),
+                                      static_cast<UINT8>(from.write_mask)};
     }
-    desc.SampleMask = state.sample_mask;
+    made.sample_mask.value = state.sample_mask;
     const d3d12proto::RasterizerDesc &raster = state.rasterizer;
-    desc.RasterizerState = {static_cast<D3D12_FILL_MODE>(raster.fill_mode),
-                            static_cast<D3D12_CULL_MODE>(raster.cull_mode),
-                            raster.front_counter_clockwise != 0u,
-                            raster.depth_bias,
-                            raster.depth_bias_clamp,
-                            raster.slope_scaled_depth_bias,
-                            raster.depth_clip != 0u,
-                            raster.multisample != 0u,
-                            raster.antialiased_line != 0u,
-                            raster.forced_sample_count,
-                            static_cast<D3D12_CONSERVATIVE_RASTERIZATION_MODE>(raster.conservative)};
+    made.rasterizer.value = {static_cast<D3D12_FILL_MODE>(raster.fill_mode),
+                             static_cast<D3D12_CULL_MODE>(raster.cull_mode),
+                             raster.front_counter_clockwise != 0u,
+                             raster.depth_bias,
+                             raster.depth_bias_clamp,
+                             raster.slope_scaled_depth_bias,
+                             raster.depth_clip != 0u,
+                             raster.multisample != 0u,
+                             raster.antialiased_line != 0u,
+                             raster.forced_sample_count,
+                             static_cast<D3D12_CONSERVATIVE_RASTERIZATION_MODE>(raster.conservative)};
     const d3d12proto::DepthStencilDesc &depth = state.depth_stencil;
-    desc.DepthStencilState.DepthEnable = depth.depth_enable != 0u;
-    desc.DepthStencilState.DepthWriteMask = static_cast<D3D12_DEPTH_WRITE_MASK>(depth.depth_write_mask);
-    desc.DepthStencilState.DepthFunc = static_cast<D3D12_COMPARISON_FUNC>(depth.depth_func);
-    desc.DepthStencilState.StencilEnable = depth.stencil_enable != 0u;
-    desc.DepthStencilState.StencilReadMask = static_cast<UINT8>(depth.stencil_read_mask);
-    desc.DepthStencilState.StencilWriteMask = static_cast<UINT8>(depth.stencil_write_mask);
-    desc.DepthStencilState.FrontFace = {static_cast<D3D12_STENCIL_OP>(depth.front.fail),
-                                        static_cast<D3D12_STENCIL_OP>(depth.front.depth_fail),
-                                        static_cast<D3D12_STENCIL_OP>(depth.front.pass),
-                                        static_cast<D3D12_COMPARISON_FUNC>(depth.front.func)};
-    desc.DepthStencilState.BackFace = {static_cast<D3D12_STENCIL_OP>(depth.back.fail),
-                                       static_cast<D3D12_STENCIL_OP>(depth.back.depth_fail),
-                                       static_cast<D3D12_STENCIL_OP>(depth.back.pass),
-                                       static_cast<D3D12_COMPARISON_FUNC>(depth.back.func)};
-    desc.InputLayout = {made_elements, element_count};
-    desc.IBStripCutValue = static_cast<D3D12_INDEX_BUFFER_STRIP_CUT_VALUE>(state.strip_cut);
-    desc.PrimitiveTopologyType = static_cast<D3D12_PRIMITIVE_TOPOLOGY_TYPE>(state.topology_type);
-    desc.NumRenderTargets = state.render_targets;
-    for (uint32_t target = 0u; target < 8u; target++) desc.RTVFormats[target] = static_cast<DXGI_FORMAT>(state.rtv_formats[target]);
-    desc.DSVFormat = static_cast<DXGI_FORMAT>(state.dsv_format);
-    desc.SampleDesc = {state.sample_count, state.sample_quality};
-    desc.NodeMask = 0u;
-    desc.Flags = static_cast<D3D12_PIPELINE_STATE_FLAGS>(state.flags);
-    job.describe(id, signature, desc);
+    d3d12new::DepthStencil2 &made_depth = made.depth_stencil.value;
+    made_depth.depth_enable = depth.depth_enable != 0u;
+    made_depth.depth_write_mask = static_cast<D3D12_DEPTH_WRITE_MASK>(depth.depth_write_mask);
+    made_depth.depth_func = static_cast<D3D12_COMPARISON_FUNC>(depth.depth_func);
+    made_depth.stencil_enable = depth.stencil_enable != 0u;
+    made_depth.depth_bounds_enable = depth.depth_bounds_enable != 0u;
+    made_depth.front = {static_cast<D3D12_STENCIL_OP>(depth.front.fail), static_cast<D3D12_STENCIL_OP>(depth.front.depth_fail),
+                        static_cast<D3D12_STENCIL_OP>(depth.front.pass), static_cast<D3D12_COMPARISON_FUNC>(depth.front.func),
+                        static_cast<UINT8>(depth.stencil_read_mask), static_cast<UINT8>(depth.stencil_write_mask)};
+    made_depth.back = {static_cast<D3D12_STENCIL_OP>(depth.back.fail), static_cast<D3D12_STENCIL_OP>(depth.back.depth_fail),
+                       static_cast<D3D12_STENCIL_OP>(depth.back.pass), static_cast<D3D12_COMPARISON_FUNC>(depth.back.func),
+                       static_cast<UINT8>(depth.back_read_mask), static_cast<UINT8>(depth.back_write_mask)};
+    made.input_layout.value = {made_elements, classic ? element_count : 0u};
+    made.strip_cut.value = static_cast<D3D12_INDEX_BUFFER_STRIP_CUT_VALUE>(state.strip_cut);
+    made.topology.value = static_cast<D3D12_PRIMITIVE_TOPOLOGY_TYPE>(state.topology_type);
+    d3d12new::RenderTargetFormats &targets = made.targets.value;
+    targets.count = state.render_targets;
+    for (uint32_t target = 0u; target < 8u; target++) targets.formats[target] = static_cast<DXGI_FORMAT>(state.rtv_formats[target]);
+    made.depth_format.value = static_cast<DXGI_FORMAT>(state.dsv_format);
+    made.samples.value = {state.sample_count, state.sample_quality};
+    made.node_mask.value = 0u;
+    made.flags.value = static_cast<D3D12_PIPELINE_STATE_FLAGS>(state.flags);
+    d3d12new::ViewInstanceLocation views[D3d12PipelineJob::max_view_instances] = {};
+    for (uint32_t view = 0u; view < state.view_instance_count; view++)
+        views[view] = {state.view_instances[view].viewport_index, state.view_instances[view].render_target_index};
+    made.view_instancing.value = {state.view_instance_count, state.view_instance_count == 0u ? nullptr : views,
+                                  state.view_instancing_flags};
+    job.describe(id, signature, made);
     return true;
 }
 

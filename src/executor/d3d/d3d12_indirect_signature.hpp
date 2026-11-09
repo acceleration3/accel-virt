@@ -34,6 +34,8 @@ private:
         constant_buffer_view,
         shader_resource_view,
         unordered_access_view,
+        dispatch_rays,
+        dispatch_mesh,
     };
     static constexpr uint32_t word_bytes = 4u;
 

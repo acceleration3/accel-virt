@@ -19,6 +19,8 @@ constexpr uint32_t level_12_1 = 0xc100u;
 constexpr uint32_t binding_tier_12_0 = 2u;
 constexpr uint32_t tiled_tier_12_0 = 2u;
 constexpr uint32_t most_tiled_tier = 2u;
+constexpr uint32_t most_view_instancing_tier = 3u;
+constexpr uint32_t mesh_tier_1 = 10u;
 constexpr uint32_t api_model_6_0 = 0x60u;
 constexpr uint32_t api_model_6_8 = 0x68u;
 constexpr uint32_t ddi_model_5_1 = 0x50015u;
@@ -121,6 +123,11 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     answer.TiledResourcesTier = static_cast<D3D12DDI_TILED_RESOURCES_TIER>(tiled_tier());
     answer.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
     answer.OutputMergerLogicOp = caps_.output_merger_logic_op != 0u;
+    answer.DepthBoundsTestSupported = caps_.depth_bounds != 0u;
+    answer.ViewInstancingTier = static_cast<D3D12DDI_VIEW_INSTANCING_TIER>(
+        caps_.view_instancing_tier < most_view_instancing_tier ? caps_.view_instancing_tier : most_view_instancing_tier);
+    answer.MeshShaderTier = caps_.mesh_shader_tier >= mesh_tier_1 ? D3D12DDI_MESH_SHADER_TIER_1
+                                                                  : D3D12DDI_MESH_SHADER_TIER_NOT_SUPPORTED;
     return fill(data, bytes, &answer, sizeof(answer));
 }
 

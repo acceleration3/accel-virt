@@ -587,8 +587,14 @@ static bool decode_CreateGraphicsPipeline12(ServerDispatch& s, ::av::WireReader&
     const uint8_t* ps = nullptr;
     uint64_t ps_size = 0u;
     if (!read_bytes(s, r, arena, ps, ps_size)) return false;
+    const uint8_t* ms = nullptr;
+    uint64_t ms_size = 0u;
+    if (!read_bytes(s, r, arena, ms, ms_size)) return false;
+    const uint8_t* as = nullptr;
+    uint64_t as_size = 0u;
+    if (!read_bytes(s, r, arena, as, as_size)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateGraphicsPipeline12(pipeline, root, state, element_count, elements, signature_count, signatures, stream_out_count, stream_out, stride_count, strides, rasterized_stream, vs, vs_size, hs, hs_size, ds, ds_size, gs, gs_size, ps, ps_size)) return false;
+    if (!s.on_CreateGraphicsPipeline12(pipeline, root, state, element_count, elements, signature_count, signatures, stream_out_count, stream_out, stride_count, strides, rasterized_stream, vs, vs_size, hs, hs_size, ds, ds_size, gs, gs_size, ps, ps_size, ms, ms_size, as, as_size)) return false;
     return true;
 }
 
@@ -1213,6 +1219,24 @@ static bool decode_Dispatch12(ServerDispatch& s, ::av::WireReader& r, ::av::Wire
     return true;
 }
 
+static bool decode_DispatchMesh12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:DispatchMesh12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t x{};
+    if (!r.read_pod(x)) return false;
+    uint32_t y{};
+    if (!r.read_pod(y)) return false;
+    uint32_t z{};
+    if (!r.read_pod(z)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_DispatchMesh12(list, x, y, z)) return false;
+    return true;
+}
+
 static bool decode_CopyBufferRegion12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CopyBufferRegion12");
     (void)s;
@@ -1749,6 +1773,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_DrawInstanced12:
         case kCmd_DrawIndexedInstanced12:
         case kCmd_Dispatch12:
+        case kCmd_DispatchMesh12:
         case kCmd_CopyBufferRegion12:
         case kCmd_CopyTextureRegion12:
         case kCmd_CopyResource12:
@@ -1837,6 +1862,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_DrawInstanced12: return decode_DrawInstanced12(s, r, reply, arena);
         case kCmd_DrawIndexedInstanced12: return decode_DrawIndexedInstanced12(s, r, reply, arena);
         case kCmd_Dispatch12: return decode_Dispatch12(s, r, reply, arena);
+        case kCmd_DispatchMesh12: return decode_DispatchMesh12(s, r, reply, arena);
         case kCmd_CopyBufferRegion12: return decode_CopyBufferRegion12(s, r, reply, arena);
         case kCmd_CopyTextureRegion12: return decode_CopyTextureRegion12(s, r, reply, arena);
         case kCmd_CopyResource12: return decode_CopyResource12(s, r, reply, arena);

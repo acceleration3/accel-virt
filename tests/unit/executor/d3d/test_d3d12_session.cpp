@@ -193,7 +193,7 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   const GraphicsState state = {};
   const std::uint8_t *const nothing = nullptr;
   CHECK(!session.on_CreateGraphicsPipeline12(11u, 5u, state, 0u, nullptr, 0u, nullptr, 0u, nullptr, 0u, nullptr, 0xFFFFFFFFu, nothing, 0u, nothing, 0u,
-                                            nothing, 0u, nothing, 0u, nothing, 0u));
+                                            nothing, 0u, nothing, 0u, nothing, 0u, nothing, 0u, nothing, 0u));
   CHECK(!session.on_CreateComputePipeline12(12u, 5u, nothing, 0u));
   const IndirectArgument draw = {};
   CHECK(!session.on_CreateCommandSignature12(13u, 0u, 16u, 1u, &draw));

@@ -100,8 +100,8 @@ private:
     HRESULT                  show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime,
                                   const D3D12DDIARG_CREATERESOURCE_0109 &args);
 
-    SIZE_T  shader_bytes(const D3D12DDIARG_CREATE_SHADER_0026 &args, bool tessellation) const;
-    void    make_shader(uint32_t stage, const D3D12DDIARG_CREATE_SHADER_0026 &args, bool tessellation,
+    SIZE_T  shader_bytes(const D3D12DDIARG_CREATE_SHADER_0026 &args, ShaderIo io) const;
+    void    make_shader(uint32_t stage, const D3D12DDIARG_CREATE_SHADER_0026 &args, ShaderIo io,
                         D3D12DDI_HSHADER handle);
     uint32_t copy_signature(const D3D12DDIARG_SIGNATURE_ENTRY_0012 *entries, UINT count, uint32_t set,
                             d3d12proto::SignatureEntry *out) const;

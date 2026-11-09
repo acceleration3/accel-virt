@@ -38,7 +38,8 @@ IMPLEMENTED = {
         "pfnCalcPrivateShaderSize", "pfnCreateVertexShader", "pfnCreatePixelShader", "pfnCreateGeometryShader",
         "pfnCreateComputeShader", "pfnCalcPrivateGeometryShaderWithStreamOutput",
         "pfnCreateGeometryShaderWithStreamOutput", "pfnCalcPrivateTessellationShaderSize", "pfnCreateHullShader",
-        "pfnCreateDomainShader", "pfnDestroyShader",
+        "pfnCreateDomainShader", "pfnDestroyShader", "pfnCalcPrivateMeshShaderSize", "pfnCreateMeshShader",
+        "pfnCreateAmplificationShader",
         "pfnCalcPrivateCommandQueueSize", "pfnCreateCommandQueue", "pfnDestroyCommandQueue",
         "pfnCalcPrivateCommandPoolSize", "pfnCreateCommandPool", "pfnDestroyCommandPool", "pfnResetCommandPool",
         "pfnCalcPrivatePipelineStateSize", "pfnCreatePipelineState", "pfnDestroyPipelineState",
@@ -86,7 +87,7 @@ IMPLEMENTED = {
         "pfnPresent", "pfnCopyTiles", "pfnResourceResolveSubresourceRegion", "pfnSetSamplePositions",
         "pfnWriteBufferImmediate", "pfnSetViewInstanceMask", "pfnOMSetDepthBounds", "pfnSetPredication",
         "pfnSOSetTargets", "pfnClearUnorderedAccessViewUint", "pfnClearUnorderedAccessViewFloat",
-        "pfnExecuteBundle", "pfnAtomicCopyBufferRegion",
+        "pfnExecuteBundle", "pfnAtomicCopyBufferRegion", "pfnDispatchMesh",
     },
 }
 

@@ -87,7 +87,7 @@ namespace av::d3d12proto {
 // signatures are every stage's, as registers. The input layout names vertex shader input registers. The
 // geometry shader's stream output declaration, if it has one, is stream_out with its buffer strides and the stream
 // that is rasterized (0xFFFFFFFF for none).
-[[nodiscard]] bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, uint32_t stream_out_count, const StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size);
+[[nodiscard]] bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, uint32_t stream_out_count, const StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size, const void* ms, uint64_t ms_size, const void* as, uint64_t as_size);
 [[nodiscard]] bool av_d3d12_CreateComputePipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const void* cs, uint64_t cs_size);
 [[nodiscard]] bool av_d3d12_CreateCommandQueue12(::av::ClientTransport& t, uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags);
 [[nodiscard]] bool av_d3d12_CreateCommandAllocator12(::av::ClientTransport& t, uint32_t allocator, uint32_t type);
@@ -134,6 +134,8 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_DrawInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t vertex_count, uint32_t instance_count, uint32_t start_vertex, uint32_t start_instance);
 [[nodiscard]] bool av_d3d12_DrawIndexedInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t index_count, uint32_t instance_count, uint32_t start_index, int32_t base_vertex, uint32_t start_instance);
 [[nodiscard]] bool av_d3d12_Dispatch12(::av::ClientTransport& t, uint32_t list, uint32_t x, uint32_t y, uint32_t z);
+// Runs the mesh pipeline set on `list` over x by y by z groups; the host refuses counts past its dispatch limit.
+[[nodiscard]] bool av_d3d12_DispatchMesh12(::av::ClientTransport& t, uint32_t list, uint32_t x, uint32_t y, uint32_t z);
 [[nodiscard]] bool av_d3d12_CopyBufferRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes);
 [[nodiscard]] bool av_d3d12_CopyTextureRegion12(::av::ClientTransport& t, uint32_t list, const CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const CopyLocation& source, uint32_t has_box, const Box& box);
 [[nodiscard]] bool av_d3d12_CopyResource12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t source);

@@ -123,6 +123,12 @@ VOID D3d12Recorder::dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT 
     sent(av_d3d12_Dispatch12(device_.wire(), list(handle), x, y, z), "Dispatch12");
 }
 
+VOID D3d12Recorder::dispatch_mesh(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT z)
+{
+    AV_SCOPE("D3d12Recorder::dispatch_mesh");
+    sent(av_d3d12_DispatchMesh12(device_.wire(), list(handle), x, y, z), "DispatchMesh12");
+}
+
 VOID D3d12Recorder::clear_render_target_view(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view,
                                              const FLOAT *color, UINT rect_count, const D3D12DDI_RECT *rects)
 {

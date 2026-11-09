@@ -2,6 +2,7 @@
 #define AV_D3D12_LIST_CAST_HPP
 
 #include "core/trace/function_scope.hpp"
+#include "executor/shim/d3d12_newer_interfaces.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
 namespace av {

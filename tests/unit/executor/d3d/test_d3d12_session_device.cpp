@@ -282,7 +282,7 @@ void make_triangle(av::D3dLoopback &wire, bool whole_containers)
     const std::uint64_t ps_bytes = whole_containers ? triangle_ps::container_bytes : triangle_ps::program_bytes;
     CHECK(av_d3d12_CreateGraphicsPipeline12(wire, pipeline, root, state, 2u, elements, whole_containers ? 0u : count,
                                              signatures, 0u, nullptr, 0u, nullptr, 0xFFFFFFFFu, vs, vs_bytes, nullptr, 0u, nullptr, 0u, nullptr, 0u, ps,
-                                             ps_bytes));
+                                             ps_bytes, nullptr, 0u, nullptr, 0u));
 }
 
 void bind_triangle(av::D3dLoopback &wire)

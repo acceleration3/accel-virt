@@ -1,4 +1,5 @@
 #include "executor/d3d/d3d12_session.hpp"
+#include "executor/d3d/d3d12_list_cast.hpp"
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -326,6 +327,22 @@ bool D3d12Session::on_Dispatch12(uint32_t id, uint32_t x, uint32_t y, uint32_t z
         return false;
     }
     recorded->Dispatch(x, y, z);
+    return true;
+}
+
+bool D3d12Session::on_DispatchMesh12(uint32_t id, uint32_t x, uint32_t y, uint32_t z)
+{
+    AV_SCOPE("D3d12Session::on_DispatchMesh12");
+    constexpr uint32_t most_group_count = 65535u;
+    constexpr uint64_t most_groups = 1u << 22;
+    const D3d12ListCast<ID3D12GraphicsCommandList6> mesh(list(id));
+    if (mesh.get() == nullptr || x > most_group_count || y > most_group_count || z > most_group_count ||
+        uint64_t{x} * y * z > most_groups) {
+        LogLine(lines_).text("DispatchMesh12 on list ").number(id).text(" of ").number(x).text(" x ").number(y)
+            .text(" x ").number(z).text(" groups").write();
+        return false;
+    }
+    mesh.get()->DispatchMesh(x, y, z);
     return true;
 }
 

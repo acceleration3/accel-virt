@@ -89,5 +89,6 @@ inline constexpr uint32_t kCmd_SetStreamOutputTargets12 = 0x00041528;
 inline constexpr uint32_t kCmd_ClearUnorderedAccessViewUint12 = 0x00041529;
 inline constexpr uint32_t kCmd_ClearUnorderedAccessViewFloat12 = 0x0004152a;
 inline constexpr uint32_t kCmd_ExecuteBundle12 = 0x0004152b;
+inline constexpr uint32_t kCmd_DispatchMesh12 = 0x0004152c;
 
 }  // namespace av::d3d12proto

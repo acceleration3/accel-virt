@@ -371,13 +371,13 @@ extern "C" VOID APIENTRY avumd_d3d12_CreateSamplerFeedbackUnorderedAccessView(D3
 { static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateSamplerFeedbackUnorderedAccessView"); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateAmplificationShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateAmplificationShader"); }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); target.create_amplification_shader(a1, a2); target.trace_call("CreateAmplificationShader", a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateMeshShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateMeshShader"); }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); target.create_mesh_shader(a1, a2); target.trace_call("CreateMeshShader", a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateMeshShaderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1)
-{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateMeshShaderSize"); return SIZE_T{}; }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); const SIZE_T answer = target.calc_private_mesh_shader_size(a1); target.trace_call("CalcPrivateMeshShaderSize", a1); return answer; }
 
 extern "C" VOID APIENTRY avumd_d3d12_ImplicitShaderCacheControl(D3D12DDI_HDEVICE handle, D3D12DDI_IMPLICIT_SHADER_CACHE_CONTROL_FLAGS_0080 a1)
 { static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnImplicitShaderCacheControl"); }
@@ -617,7 +617,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_RSSetShadingRateImage(D3D12DDI_HCOMMANDLIS
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_DispatchMesh(D3D12DDI_HCOMMANDLIST handle, UINT a1, UINT a2, UINT a3)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
+{ D3d12Recorder &target = D3d12RecordHandle(handle.pDrvPrivate).recorder(); target.dispatch_mesh(handle, a1, a2, a3); D3d12RecordHandle(handle.pDrvPrivate).device().trace_call("DispatchMesh", handle, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_Barrier(D3D12DDI_HCOMMANDLIST handle, UINT32 a1, const D3D12DDIARG_BARRIER_0094 * a2)
 { static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); }

@@ -53,7 +53,7 @@ public:
     virtual bool on_CopyDescriptors12(const DescriptorRef& destination, const DescriptorRef& source, uint32_t count) = 0;
     virtual bool on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count, const RootParameter* parameters, uint32_t range_count, const DescriptorRange* ranges, uint32_t sampler_count, const StaticSampler* samplers) = 0;
     virtual bool on_CreateCommandSignature12(uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments) = 0;
-    virtual bool on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, uint32_t stream_out_count, const StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const uint8_t* vs, uint64_t vs_size, const uint8_t* hs, uint64_t hs_size, const uint8_t* ds, uint64_t ds_size, const uint8_t* gs, uint64_t gs_size, const uint8_t* ps, uint64_t ps_size) = 0;
+    virtual bool on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, uint32_t stream_out_count, const StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const uint8_t* vs, uint64_t vs_size, const uint8_t* hs, uint64_t hs_size, const uint8_t* ds, uint64_t ds_size, const uint8_t* gs, uint64_t gs_size, const uint8_t* ps, uint64_t ps_size, const uint8_t* ms, uint64_t ms_size, const uint8_t* as, uint64_t as_size) = 0;
     virtual bool on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, const uint8_t* cs, uint64_t cs_size) = 0;
     virtual bool on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags) = 0;
     virtual bool on_CreateCommandAllocator12(uint32_t allocator, uint32_t type) = 0;
@@ -86,6 +86,7 @@ public:
     virtual bool on_DrawInstanced12(uint32_t list, uint32_t vertex_count, uint32_t instance_count, uint32_t start_vertex, uint32_t start_instance) = 0;
     virtual bool on_DrawIndexedInstanced12(uint32_t list, uint32_t index_count, uint32_t instance_count, uint32_t start_index, int32_t base_vertex, uint32_t start_instance) = 0;
     virtual bool on_Dispatch12(uint32_t list, uint32_t x, uint32_t y, uint32_t z) = 0;
+    virtual bool on_DispatchMesh12(uint32_t list, uint32_t x, uint32_t y, uint32_t z) = 0;
     virtual bool on_CopyBufferRegion12(uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes) = 0;
     virtual bool on_CopyTextureRegion12(uint32_t list, const CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const CopyLocation& source, uint32_t has_box, const Box& box) = 0;
     virtual bool on_CopyResource12(uint32_t list, uint32_t destination, uint32_t source) = 0;

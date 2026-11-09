@@ -6,7 +6,7 @@
 namespace av {
 
 D3d12PipelineJob::D3d12PipelineJob()
-    : memory_(nullptr, 0u), graphics_{}, compute_{}, elements_{}, stream_outputs_{}, strides_{}, root_(nullptr), made_(nullptr), id_(0u),
+    : memory_(nullptr, 0u), graphics_{}, compute_{}, elements_{}, stream_outputs_{}, strides_{}, view_instances_{}, root_(nullptr), made_(nullptr), id_(0u),
       graphics_described_(false)
 {
     AV_SCOPE("D3d12PipelineJob::D3d12PipelineJob");
@@ -51,21 +51,26 @@ D3D12_STREAM_OUTPUT_DESC D3d12PipelineJob::keep_stream_output(const D3D12_SO_DEC
     return D3D12_STREAM_OUTPUT_DESC{stream_outputs_, kept, strides_, kept_strides, rasterized};
 }
 
-void D3d12PipelineJob::describe(uint32_t id, ID3D12RootSignature *root, const D3D12_GRAPHICS_PIPELINE_STATE_DESC &desc)
+void D3d12PipelineJob::describe(uint32_t id, ID3D12RootSignature *root, const D3d12GraphicsStream &stream)
 {
     AV_SCOPE("D3d12PipelineJob::describe");
     id_ = id;
     root->AddRef();
     root_ = root;
-    graphics_ = desc;
-    graphics_.pRootSignature = root;
-    const UINT elements = desc.InputLayout.NumElements < max_elements ? desc.InputLayout.NumElements : max_elements;
-    for (UINT index = 0u; index < elements; index++) elements_[index] = desc.InputLayout.pInputElementDescs[index];
-    graphics_.InputLayout = {elements == 0u ? nullptr : elements_, elements};
-    if (desc.StreamOutput.NumEntries != 0u)
-        graphics_.StreamOutput = keep_stream_output(desc.StreamOutput.pSODeclaration, desc.StreamOutput.NumEntries,
-                                                    desc.StreamOutput.pBufferStrides, desc.StreamOutput.NumStrides,
-                                                    desc.StreamOutput.RasterizedStream);
+    graphics_ = stream;
+    graphics_.root.value = root;
+    const D3D12_INPUT_LAYOUT_DESC &layout = stream.input_layout.value;
+    const UINT elements = layout.NumElements < max_elements ? layout.NumElements : max_elements;
+    for (UINT index = 0u; index < elements; index++) elements_[index] = layout.pInputElementDescs[index];
+    graphics_.input_layout.value = {elements == 0u ? nullptr : elements_, elements};
+    const D3D12_STREAM_OUTPUT_DESC &output = stream.stream_output.value;
+    if (output.NumEntries != 0u)
+        graphics_.stream_output.value = keep_stream_output(output.pSODeclaration, output.NumEntries, output.pBufferStrides,
+                                                           output.NumStrides, output.RasterizedStream);
+    const d3d12new::ViewInstancingDesc &views = stream.view_instancing.value;
+    const UINT kept_views = views.view_instance_count < max_view_instances ? views.view_instance_count : max_view_instances;
+    for (UINT index = 0u; index < kept_views; index++) view_instances_[index] = views.locations[index];
+    graphics_.view_instancing.value = {kept_views, kept_views == 0u ? nullptr : view_instances_, views.flags};
     graphics_described_ = true;
 }
 
@@ -86,9 +91,17 @@ void D3d12PipelineJob::compile(ID3D12Device *device)
     made_ = nullptr;
     if (device == nullptr || root_ == nullptr) return;
     void *made = nullptr;
-    const HRESULT result = graphics_described_
-                               ? device->CreateGraphicsPipelineState(&graphics_, __uuidof(ID3D12PipelineState), &made)
-                               : device->CreateComputePipelineState(&compute_, __uuidof(ID3D12PipelineState), &made);
+    HRESULT result = E_NOINTERFACE;
+    if (!graphics_described_) {
+        result = device->CreateComputePipelineState(&compute_, __uuidof(ID3D12PipelineState), &made);
+    } else {
+        ID3D12Device2 *streamed = nullptr;
+        if (SUCCEEDED(device->QueryInterface(__uuidof(ID3D12Device2), reinterpret_cast<void **>(&streamed)))) {
+            d3d12new::StreamDesc desc = {sizeof(graphics_), &graphics_};
+            result = streamed->CreatePipelineState(&desc, __uuidof(ID3D12PipelineState), &made);
+            streamed->Release();
+        }
+    }
     if (SUCCEEDED(result)) made_ = static_cast<ID3D12PipelineState *>(made);
 }
 
@@ -120,7 +133,7 @@ void D3d12PipelineJob::clear()
     made_ = nullptr;
     root_ = nullptr;
     id_ = 0u;
-    graphics_ = {};
+    graphics_ = D3d12GraphicsStream{};
     compute_ = {};
     graphics_described_ = false;
     memory_.reset();

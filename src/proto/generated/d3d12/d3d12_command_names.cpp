@@ -89,6 +89,7 @@ const char* command_name(uint32_t id) {
         case kCmd_ClearUnorderedAccessViewUint12: return "ClearUnorderedAccessViewUint12";
         case kCmd_ClearUnorderedAccessViewFloat12: return "ClearUnorderedAccessViewFloat12";
         case kCmd_ExecuteBundle12: return "ExecuteBundle12";
+        case kCmd_DispatchMesh12: return "DispatchMesh12";
         default: return nullptr;
     }
 }

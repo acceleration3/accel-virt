@@ -97,7 +97,7 @@ public:
     bool on_CopyDescriptors12(const d3d12proto::DescriptorRef& destination, const d3d12proto::DescriptorRef& source, uint32_t count) override;
     bool on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count, const d3d12proto::RootParameter* parameters, uint32_t range_count, const d3d12proto::DescriptorRange* ranges, uint32_t sampler_count, const d3d12proto::StaticSampler* samplers) override;
     bool on_CreateCommandSignature12(uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const d3d12proto::IndirectArgument* arguments) override;
-    bool on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const d3d12proto::GraphicsState& state, uint32_t element_count, const d3d12proto::InputElement* elements, uint32_t signature_count, const d3d12proto::SignatureEntry* signatures, uint32_t stream_out_count, const d3d12proto::StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const uint8_t* vs, uint64_t vs_size, const uint8_t* hs, uint64_t hs_size, const uint8_t* ds, uint64_t ds_size, const uint8_t* gs, uint64_t gs_size, const uint8_t* ps, uint64_t ps_size) override;
+    bool on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const d3d12proto::GraphicsState& state, uint32_t element_count, const d3d12proto::InputElement* elements, uint32_t signature_count, const d3d12proto::SignatureEntry* signatures, uint32_t stream_out_count, const d3d12proto::StreamOutDeclaration* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const uint8_t* vs, uint64_t vs_size, const uint8_t* hs, uint64_t hs_size, const uint8_t* ds, uint64_t ds_size, const uint8_t* gs, uint64_t gs_size, const uint8_t* ps, uint64_t ps_size, const uint8_t* ms, uint64_t ms_size, const uint8_t* as, uint64_t as_size) override;
     bool on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, const uint8_t* cs, uint64_t cs_size) override;
     bool on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags) override;
     bool on_CreateCommandAllocator12(uint32_t allocator, uint32_t type) override;
@@ -129,6 +129,7 @@ public:
     bool on_DrawInstanced12(uint32_t list, uint32_t vertex_count, uint32_t instance_count, uint32_t start_vertex, uint32_t start_instance) override;
     bool on_DrawIndexedInstanced12(uint32_t list, uint32_t index_count, uint32_t instance_count, uint32_t start_index, int32_t base_vertex, uint32_t start_instance) override;
     bool on_Dispatch12(uint32_t list, uint32_t x, uint32_t y, uint32_t z) override;
+    bool on_DispatchMesh12(uint32_t list, uint32_t x, uint32_t y, uint32_t z) override;
     bool on_CopyBufferRegion12(uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes) override;
     bool on_CopyTextureRegion12(uint32_t list, const d3d12proto::CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const d3d12proto::CopyLocation& source, uint32_t has_box, const d3d12proto::Box& box) override;
     bool on_CopyResource12(uint32_t list, uint32_t destination, uint32_t source) override;

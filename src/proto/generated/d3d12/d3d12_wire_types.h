@@ -274,9 +274,20 @@ struct DepthStencilDesc {
     uint32_t stencil_write_mask;
     StencilOp front;
     StencilOp back;
+    uint32_t depth_bounds_enable;
+    uint32_t back_read_mask;
+    uint32_t back_write_mask;
+    uint32_t reserved;
 };
-static_assert(sizeof(DepthStencilDesc) == 56, "DepthStencilDesc crosses as 56 bytes");
+static_assert(sizeof(DepthStencilDesc) == 72, "DepthStencilDesc crosses as 72 bytes");
 static_assert(__is_trivially_copyable(DepthStencilDesc), "DepthStencilDesc is plain data");
+
+struct ViewInstanceLocation {
+    uint32_t viewport_index;
+    uint32_t render_target_index;
+};
+static_assert(sizeof(ViewInstanceLocation) == 8, "ViewInstanceLocation crosses as 8 bytes");
+static_assert(__is_trivially_copyable(ViewInstanceLocation), "ViewInstanceLocation is plain data");
 
 struct GraphicsState {
     uint32_t alpha_to_coverage;
@@ -293,8 +304,11 @@ struct GraphicsState {
     uint32_t sample_count;
     uint32_t sample_quality;
     uint32_t flags;
+    uint32_t view_instance_count;
+    uint32_t view_instancing_flags;
+    ViewInstanceLocation view_instances[4];
 };
-static_assert(sizeof(GraphicsState) == 496, "GraphicsState crosses as 496 bytes");
+static_assert(sizeof(GraphicsState) == 552, "GraphicsState crosses as 552 bytes");
 static_assert(__is_trivially_copyable(GraphicsState), "GraphicsState is plain data");
 
 struct Barrier {
@@ -406,8 +420,11 @@ struct Caps12 {
     uint32_t writeable_msaa_textures;
     uint32_t sample_cmp_gradient_bias;
     uint32_t extended_command_info;
+    uint32_t depth_bounds;
+    uint32_t view_instancing_tier;
+    uint32_t mesh_shader_tier;
 };
-static_assert(sizeof(Caps12) == 132, "Caps12 crosses as 132 bytes");
+static_assert(sizeof(Caps12) == 144, "Caps12 crosses as 144 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto

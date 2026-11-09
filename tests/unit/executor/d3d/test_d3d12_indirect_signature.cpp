@@ -76,7 +76,7 @@ TEST(d3d12_indirect_signature, a_stride_that_is_no_command_s_is_refused)
 
 TEST(d3d12_indirect_signature, an_argument_type_the_driver_does_not_report_is_refused)
 { const D3d12RootLayout root = rooted();
-  const std::uint32_t unreported[] = {dispatch_rays, dispatch_mesh, incrementing_constant, 0xFFFFFFFFu};
+  const std::uint32_t unreported[] = {dispatch_rays, incrementing_constant, 0xFFFFFFFFu};
   for (const std::uint32_t type : unreported) {
       const IndirectArgument arguments[] = {{type, 0u, 0u, 0u}};
       CHECK(!holds(arguments, 1u, 256u, &root));
@@ -100,3 +100,12 @@ TEST(d3d12_indirect_signature, a_root_argument_that_names_no_parameter_of_its_ki
   CHECK(!holds(wrapping, 2u, 20u, &root));
   const IndirectArgument slot[] = {{vertex_buffer_view, 32u, 0u, 0u}, {draw, 0u, 0u, 0u}};
   CHECK(!holds(slot, 2u, 32u, &root)); }
+
+TEST(d3d12_indirect_signature, a_mesh_dispatch_is_three_words_and_ray_dispatch_or_incrementing_constants_are_refused)
+{ const IndirectArgument meshes[] = {{dispatch_mesh, 0u, 0u, 0u}};
+  CHECK(holds(meshes, 1u, 12u, nullptr));
+  CHECK(!holds(meshes, 1u, 8u, nullptr));
+  const IndirectArgument rays[] = {{dispatch_rays, 0u, 0u, 0u}};
+  CHECK(!holds(rays, 1u, 64u, nullptr));
+  const IndirectArgument counting[] = {{incrementing_constant, 0u, 0u, 0u}};
+  CHECK(!holds(counting, 1u, 64u, nullptr)); }

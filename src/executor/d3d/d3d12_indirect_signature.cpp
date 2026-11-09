@@ -35,7 +35,8 @@ uint64_t D3d12IndirectSignature::bytes_of(const d3d12proto::IndirectArgument &ar
     switch (argument.type) {
     case draw: return sizeof(D3D12_DRAW_ARGUMENTS);
     case draw_indexed: return sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
-    case dispatch: return sizeof(D3D12_DISPATCH_ARGUMENTS);
+    case dispatch:
+    case dispatch_mesh: return sizeof(D3D12_DISPATCH_ARGUMENTS);
     case constant:
         return root != nullptr && root->has_constants(argument.a, argument.b, argument.c)
                    ? uint64_t{argument.c} * word_bytes

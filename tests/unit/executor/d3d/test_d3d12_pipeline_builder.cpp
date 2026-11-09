@@ -112,3 +112,87 @@ TEST(d3d12_pipeline_builder, a_stream_output_buffer_slot_or_stream_the_host_arra
   const SignatureEntry       outputs[1] = {{10u, 1u, 0u, 0xFu, 3u, 0u, 0u, 0u}};
   CHECK(builder.stream_output(fine, 1u, strides, 1u, 3u, outputs, 1u, job, made));
   CHECK_EQ(made.RasterizedStream, 3u); }
+
+namespace {
+GraphicsState plain_state()
+{ GraphicsState state = {};
+  state.sample_count = 1u;
+  return state; }
+}
+
+TEST(d3d12_pipeline_builder, depth_bounds_back_masks_and_view_instances_that_fit_are_accepted)
+{ D3d12PipelineBuilder builder(objects);
+  GraphicsState state = plain_state();
+  state.depth_stencil.depth_bounds_enable = 1u;
+  state.depth_stencil.back_read_mask = 0xFFu;
+  state.depth_stencil.back_write_mask = 0x0Fu;
+  state.view_instance_count = 4u;
+  state.view_instancing_flags = 1u;
+  state.view_instances[3] = {15u, 2047u};
+  CHECK(builder.state_holds(state)); }
+
+TEST(d3d12_pipeline_builder, depth_stencil_and_view_instancing_fields_past_their_range_are_refused)
+{ D3d12PipelineBuilder builder(objects);
+  GraphicsState state = plain_state();
+  state.depth_stencil.depth_bounds_enable = 2u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.depth_stencil.back_read_mask = 0x100u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.depth_stencil.back_write_mask = 0x100u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.depth_stencil.stencil_read_mask = 0x1234u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.depth_stencil.back.func = 9u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.depth_stencil.front.pass = 9u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.depth_stencil.depth_func = 9u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.view_instance_count = 5u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.view_instance_count = 1u;
+  state.view_instancing_flags = 2u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.view_instance_count = 1u;
+  state.view_instances[0].viewport_index = 16u;
+  CHECK(!builder.state_holds(state));
+  state = plain_state();
+  state.view_instance_count = 1u;
+  state.view_instances[0].render_target_index = 2048u;
+  CHECK(!builder.state_holds(state)); }
+
+TEST(d3d12_pipeline_builder, a_pipeline_is_either_classic_or_mesh_and_an_amplification_shader_needs_a_mesh_shader)
+{ D3d12PipelineBuilder builder(objects);
+  std::uint64_t sizes[D3d12PipelineBuilder::stage_count] = {};
+  CHECK(!builder.shape_holds(sizes, 0u));
+  sizes[0] = 8u;
+  CHECK(builder.shape_holds(sizes, 0u));
+  sizes[3] = 8u;
+  sizes[4] = 8u;
+  CHECK(builder.shape_holds(sizes, 2u));
+  sizes[6] = 8u;
+  CHECK(!builder.shape_holds(sizes, 0u));
+  sizes[6] = 0u;
+  sizes[5] = 8u;
+  CHECK(!builder.shape_holds(sizes, 0u));
+  std::uint64_t mesh[D3d12PipelineBuilder::stage_count] = {};
+  mesh[5] = 8u;
+  CHECK(builder.shape_holds(mesh, 0u));
+  mesh[6] = 8u;
+  mesh[4] = 8u;
+  CHECK(builder.shape_holds(mesh, 0u));
+  CHECK(!builder.shape_holds(mesh, 1u));
+  mesh[1] = 8u;
+  CHECK(!builder.shape_holds(mesh, 0u));
+  mesh[1] = 0u;
+  mesh[3] = 8u;
+  CHECK(!builder.shape_holds(mesh, 0u)); }

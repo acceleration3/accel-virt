@@ -87,13 +87,18 @@ fields = ["u32 fail", "u32 depth_fail", "u32 pass", "u32 func"]
 
 [structs.DepthStencilDesc]
 fields = ["u32 depth_enable", "u32 depth_write_mask", "u32 depth_func", "u32 stencil_enable",
-          "u32 stencil_read_mask", "u32 stencil_write_mask", "StencilOp front", "StencilOp back"]
+          "u32 stencil_read_mask", "u32 stencil_write_mask", "StencilOp front", "StencilOp back",
+          "u32 depth_bounds_enable", "u32 back_read_mask", "u32 back_write_mask", "u32 reserved"]
+
+[structs.ViewInstanceLocation]
+fields = ["u32 viewport_index", "u32 render_target_index"]
 
 [structs.GraphicsState]
 fields = ["u32 alpha_to_coverage", "u32 independent_blend", "RenderTargetBlend targets[8]",
           "u32 sample_mask", "RasterizerDesc rasterizer", "DepthStencilDesc depth_stencil",
           "u32 strip_cut", "u32 topology_type", "u32 render_targets", "u32 rtv_formats[8]",
-          "u32 dsv_format", "u32 sample_count", "u32 sample_quality", "u32 flags"]
+          "u32 dsv_format", "u32 sample_count", "u32 sample_quality", "u32 flags",
+          "u32 view_instance_count", "u32 view_instancing_flags", "ViewInstanceLocation view_instances[4]"]
 
 [structs.Barrier]
 fields = ["u32 type", "u32 flags", "u32 resource", "u32 subresource", "u32 before", "u32 after",
@@ -131,7 +136,8 @@ fields = ["u32 layout", "u32 feature_level", "u32 shader_model", "u32 resource_b
           "u32 min_precision", "u32 ps_stencil_ref", "u32 native_16bit_ops", "u32 atomic_int64_typed",
           "u32 atomic_int64_group_shared", "u32 barycentrics", "u32 vp_rt_array_without_gs",
           "u32 advanced_texture_ops", "u32 writeable_msaa_textures", "u32 sample_cmp_gradient_bias",
-          "u32 extended_command_info"]
+          "u32 extended_command_info",
+          "u32 depth_bounds", "u32 view_instancing_tier", "u32 mesh_shader_tier"]
 
 [[command]]
 name = "OpenDevice12"
@@ -325,7 +331,7 @@ params = ["u32 pipeline", "u32 root", "GraphicsState state", "u32 element_count"
           "SignatureEntry signatures[signature_count] max 1024", "u32 stream_out_count",
           "StreamOutDeclaration stream_out[stream_out_count] max 128", "u32 stride_count",
           "u32 strides[stride_count] max 4", "u32 rasterized_stream", "bytes vs", "bytes hs", "bytes ds", "bytes gs",
-          "bytes ps"]
+          "bytes ps", "bytes ms", "bytes as"]
 
 [[command]]
 name = "CreateComputePipeline12"
@@ -503,6 +509,12 @@ params = ["u32 list", "u32 index_count", "u32 instance_count", "u32 start_index"
 [[command]]
 name = "Dispatch12"
 id = 0x1514
+params = ["u32 list", "u32 x", "u32 y", "u32 z"]
+
+[[command]]
+name = "DispatchMesh12"
+id = 0x152c
+doc = "Runs the mesh pipeline set on `list` over x by y by z groups; the host refuses counts past its dispatch limit."
 params = ["u32 list", "u32 x", "u32 y", "u32 z"]
 
 [[command]]

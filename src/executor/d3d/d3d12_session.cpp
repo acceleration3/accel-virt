@@ -894,11 +894,12 @@ bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root,
                                                uint32_t rasterized_stream, const uint8_t *vs, uint64_t vs_size, const uint8_t *hs,
                                                uint64_t hs_size, const uint8_t *ds, uint64_t ds_size,
                                                const uint8_t *gs, uint64_t gs_size, const uint8_t *ps,
-                                               uint64_t ps_size)
+                                               uint64_t ps_size, const uint8_t *ms, uint64_t ms_size,
+                                               const uint8_t *as, uint64_t as_size)
 {
     AV_SCOPE("D3d12Session::on_CreateGraphicsPipeline12");
-    const uint8_t *const code[D3d12PipelineBuilder::stage_count] = {vs, hs, ds, gs, ps};
-    const uint64_t sizes[D3d12PipelineBuilder::stage_count] = {vs_size, hs_size, ds_size, gs_size, ps_size};
+    const uint8_t *const code[D3d12PipelineBuilder::stage_count] = {vs, hs, ds, gs, ps, ms, as};
+    const uint64_t sizes[D3d12PipelineBuilder::stage_count] = {vs_size, hs_size, ds_size, gs_size, ps_size, ms_size, as_size};
     D3d12PipelineJob *const job = vacant_job();
     if (job == nullptr) return false;
     if (!pipelines_.graphics(pipeline, root, state, elements, element_count, signatures, signature_count, stream_out,

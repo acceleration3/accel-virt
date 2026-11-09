@@ -121,6 +121,8 @@ struct LayoutRecord {
     d3d12proto::InputElement elements[max_elements];
 };
 
+enum class ShaderIo : uint32_t { standard, tessellation, mesh, none };
+
 struct ObjectRecord {
     static constexpr uint32_t tag = 0x004F5641u;
 
