@@ -19,8 +19,11 @@ namespace av::glproto {
     switch (pname) {
         case 0x0B80: return 4;  // GL_ACCUM_CLEAR_VALUE
         case 0x846E: return 2;  // GL_ALIASED_LINE_WIDTH_RANGE
+        case 0x1200: return 4;  // GL_AMBIENT
+        case 0x1602: return 4;  // GL_AMBIENT_AND_DIFFUSE
         case 0x8005: return 4;  // GL_BLEND_COLOR
         case 0x0C22: return 4;  // GL_COLOR_CLEAR_VALUE
+        case 0x1603: return 3;  // GL_COLOR_INDEXES
         case 0x80B1: return 16;  // GL_COLOR_MATRIX
         case 0x0C23: return 4;  // GL_COLOR_WRITEMASK
         case 0x86A3: return 128;  // GL_COMPRESSED_TEXTURE_FORMATS
@@ -37,7 +40,10 @@ namespace av::glproto {
         case 0x9599: return 8;  // GL_DEVICE_LUID_EXT
         case 0x959A: return 4;  // GL_DEVICE_NODE_MASK_EXT
         case 0x9597: return 16;  // GL_DEVICE_UUID_EXT
+        case 0x1201: return 4;  // GL_DIFFUSE
         case 0x9598: return 16;  // GL_DRIVER_UUID_EXT
+        case 0x1600: return 4;  // GL_EMISSION
+        case 0x2502: return 4;  // GL_EYE_PLANE
         case 0x0B66: return 4;  // GL_FOG_COLOR
         case 0x0B53: return 4;  // GL_LIGHT_MODEL_AMBIENT
         case 0x0B22: return 2;  // GL_LINE_WIDTH_RANGE
@@ -46,15 +52,19 @@ namespace av::glproto {
         case 0x0DD3: return 2;  // GL_MAP2_GRID_SEGMENTS
         case 0x0D3A: return 2;  // GL_MAX_VIEWPORT_DIMS
         case 0x0BA6: return 16;  // GL_MODELVIEW_MATRIX
+        case 0x2501: return 4;  // GL_OBJECT_PLANE
         case 0x8E73: return 2;  // GL_PATCH_DEFAULT_INNER_LEVEL
         case 0x8E74: return 4;  // GL_PATCH_DEFAULT_OUTER_LEVEL
         case 0x8129: return 3;  // GL_POINT_DISTANCE_ATTENUATION
         case 0x0000: return 2;  // GL_POINT_SIZE_IMPLEMENTATION_DEPENDENT
         case 0x0B12: return 2;  // GL_POINT_SIZE_RANGE
+        case 0x1203: return 4;  // GL_POSITION
         case 0x87FF: return 16;  // GL_PROGRAM_BINARY_FORMATS
         case 0x0BA7: return 16;  // GL_PROJECTION_MATRIX
         case 0x0C10: return 4;  // GL_SCISSOR_BOX
         case 0x8DF8: return 16;  // GL_SHADER_BINARY_FORMATS, GL_SMOOTH_LINE_WIDTH_RANGE, GL_SMOOTH_POINT_SIZE_RANGE
+        case 0x1202: return 4;  // GL_SPECULAR
+        case 0x1204: return 3;  // GL_SPOT_DIRECTION
         case 0x1004: return 4;  // GL_TEXTURE_BORDER_COLOR
         case 0x2201: return 4;  // GL_TEXTURE_ENV_COLOR
         case 0x0BA8: return 16;  // GL_TEXTURE_MATRIX

@@ -488,7 +488,7 @@ void *OpenGlBackend::fence_for(uint64_t token) const
     AV_SCOPE("OpenGlBackend::fence_for");
     void *const own = fences_.fence_for(token);
     if (own != nullptr || shared_fences_ == nullptr) return own;
-    return shared_fences_->find(token);
+    return shared_fences_->await(token, GlSharedFences::await_nanoseconds);
 }
 
 void *OpenGlBackend::forget_fence(uint64_t token)

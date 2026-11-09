@@ -44,3 +44,11 @@ TEST(gl_shared_fences, the_oldest_row_is_overwritten_when_the_table_is_full)
   CHECK(fences.find(1u) == nullptr);
   CHECK(fences.find(GlSharedFences::most_fences + 1u) == &fence[GlSharedFences::most_fences]);
   CHECK(fences.invariants_hold()); }
+
+TEST(gl_shared_fences, a_token_past_the_newest_is_awaited_and_one_below_it_is_not)
+{ GlSharedFences fences;
+  fences.publish(9u, &firsts);
+  CHECK(fences.await(5u, 1000000u) == nullptr);
+  CHECK(fences.await(9u, 1000000u) == &firsts);
+  CHECK(fences.await(12u, 1000000u) == nullptr);
+  CHECK(fences.invariants_hold()); }

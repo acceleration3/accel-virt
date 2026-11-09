@@ -10,6 +10,7 @@ namespace av {
 class GlSharedFences {
 public:
     static constexpr uint32_t most_fences = 512u;
+    static constexpr uint64_t await_nanoseconds = 100000000u;
 
     GlSharedFences();
     GlSharedFences(const GlSharedFences &) = delete;
@@ -18,6 +19,7 @@ public:
     void  publish(uint64_t token, void *fence);
     void  withdraw(void *fence);
     void *find(uint64_t token);
+    void *await(uint64_t token, uint64_t nanoseconds);
 
     uint32_t count();
 
@@ -33,6 +35,7 @@ private:
     Entry     entries_[most_fences];
     uint32_t  next_;
     uint32_t  count_;
+    uint64_t  newest_;
 };
 
 }

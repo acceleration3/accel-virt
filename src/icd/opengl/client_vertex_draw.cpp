@@ -459,7 +459,7 @@ uint32_t ClientVertexDraw::scan(uint32_t type, int64_t count, const void *indice
     uint64_t highest = 0u;
     for (int64_t at = 0; at < count; at++) {
         uint64_t value = 0u;
-        __builtin_memcpy(&value, data + static_cast<uint64_t>(at) * width, width);
+        __builtin_memcpy(&value, data + static_cast<uint64_t>(at) * width, static_cast<size_t>(width));
         if (value < lowest) lowest = value;
         if (value > highest) highest = value;
     }
