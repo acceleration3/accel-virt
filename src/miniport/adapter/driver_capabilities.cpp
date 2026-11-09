@@ -1,6 +1,7 @@
 #include "miniport/adapter/driver_capabilities.hpp"
 
 #include "miniport/ddi/dxgkarg_doorbell_records.hpp"
+#include "proto/context/capset_info.hpp"
 #include "miniport/ddi/dxgkarg_native_fence_records.hpp"
 
 #include "miniport/ddi/dxgk_driver_caps_record.hpp"
@@ -16,7 +17,7 @@ namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
     : platform_(platform), native_fences_(false), wddm_version_(wddm_3_2),
-      highest_acceptable_address_(any_address), mode_behaviors_(0u), display_extension_(0u)
+      highest_acceptable_address_(any_address), mode_behaviors_(0u), display_extension_(0u), hybrid_discrete_(false), hybrid_integrated_(false)
       {
           AV_SCOPE("DriverCapabilities::DriverCapabilities");
       }
@@ -40,6 +41,9 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     caps.MaxPointerWidth = HardwareCursor::max_side;
     caps.MaxPointerHeight = HardwareCursor::max_side;
     caps.PointerCaps = pointer_caps;
+    caps.HybridDiscrete = hybrid_discrete_ ? 1u : 0u;
+    caps.HybridIntegrated = hybrid_integrated_ ? 1u : 0u;
+    if (hybrid_discrete_) caps.MiscCaps = misc_no_hybrid_discrete_dlist_dll | misc_no_hybrid_discrete_dlist_dll_mux;
     return query.write_output(&caps, sizeof caps);
 }
 
@@ -68,6 +72,26 @@ void DriverCapabilities::native_fences_allowed()
     AV_SCOPE("DriverCapabilities::native_fences_allowed");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::native_fences_allowed");
     native_fences_ = true;
+}
+
+void DriverCapabilities::offer(const CapsetInfo &capset)
+{
+    AV_SCOPE("DriverCapabilities::offer");
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::offer");
+    hybrid_discrete_ = capset.has_feature(CapsetInfo::feature_hybrid_discrete);
+    hybrid_integrated_ = capset.has_feature(CapsetInfo::feature_hybrid_integrated);
+}
+
+bool DriverCapabilities::hybrid_discrete() const
+{
+    AV_SCOPE("DriverCapabilities::hybrid_discrete");
+    return hybrid_discrete_;
+}
+
+bool DriverCapabilities::hybrid_integrated() const
+{
+    AV_SCOPE("DriverCapabilities::hybrid_integrated");
+    return hybrid_integrated_;
 }
 
 Status DriverCapabilities::report_native_fence_caps(const AdapterInfoQuery &query) const

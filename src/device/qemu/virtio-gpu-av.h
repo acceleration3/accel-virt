@@ -45,6 +45,7 @@ struct VirtIOGPUAv {
     char *record_kinds;
     bool record_wrap;
     bool display;
+    char *hybrid;
     char *modes;
     uint32_t refresh;
     char *export_socket;

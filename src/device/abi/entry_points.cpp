@@ -66,6 +66,10 @@ int av_device_set_refresh(AvDevice *device, uint32_t millihz)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().offer_refresh(millihz) ? 1 : -1; }
 
 __attribute__((visibility("default")))
+void av_device_set_hybrid(AvDevice *device, uint32_t role)
+{ reinterpret_cast<av::DeviceInstance *>(device)->device().offer_hybrid(role); }
+
+__attribute__((visibility("default")))
 void av_device_status(AvDevice *device, uint8_t status)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().status(status); }
 

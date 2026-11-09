@@ -216,6 +216,7 @@ void Adapter::remember_device()
     const Status   read = exchange.read(capset);
     if (read == Status::ok) {
         identity_.remember(capset);
+        capabilities_.offer(capset);
         start_presents();
         host_visible_.offer(capset);
         memory_.offer_local(capset);

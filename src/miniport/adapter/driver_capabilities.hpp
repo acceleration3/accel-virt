@@ -9,6 +9,7 @@
 namespace av {
 
 class AdapterInfoQuery;
+class CapsetInfo;
 struct DxgkargControlModeBehaviorRecord;
 
 class DriverCapabilities {
@@ -19,6 +20,9 @@ public:
     static constexpr uint32_t hardware_queue_node = 1u;
     explicit DriverCapabilities(Platform &platform);
     void                 native_fences_allowed();
+    void                 offer(const CapsetInfo &capset);
+    bool                 hybrid_discrete() const;
+    bool                 hybrid_integrated() const;
     DriverCapabilities(const DriverCapabilities &) = delete;
     DriverCapabilities &operator=(const DriverCapabilities &) = delete;
 
@@ -44,6 +48,8 @@ private:
         presentation_gdi_limits = (2u << 10u) | (3u << 14u) | (3u << 17u),
         presentation_software_device_bitmaps = 0x10000000u,
         physical_gpu_mmu = 0x2u,
+        misc_no_hybrid_discrete_dlist_dll = 0x20u,
+        misc_no_hybrid_discrete_dlist_dll_mux = 0x80u,
     };
     static constexpr int64_t any_address = -1;
     static constexpr uint32_t interface_version_bytes = 4u;
@@ -55,6 +61,8 @@ private:
     int64_t   highest_acceptable_address_;
     uint32_t  mode_behaviors_;
     uint32_t  display_extension_;
+    bool      hybrid_discrete_;
+    bool      hybrid_integrated_;
 };
 
 }

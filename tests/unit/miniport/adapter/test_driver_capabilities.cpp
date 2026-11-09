@@ -7,6 +7,10 @@
 #include "miniport/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "miniport/driver/adapter_info_query.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/context/sub_api.hpp"
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -243,3 +247,48 @@ TEST(driver_capabilities_report_user_mode_submission_caps, refuses_an_output_too
   const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, output.data(), static_cast<std::uint32_t>(output.size()));
   CHECK(capabilities.report_user_mode_submission_caps(AdapterInfoQuery(platform, record)) != Status::ok);
   CHECK(output.guards_intact()); }
+
+namespace {
+
+av::CapsetInfo hybrid_capset(std::uint64_t features)
+{
+    static constexpr std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {7};
+    return av::CapsetInfo(av::ProtocolVersion(1u, 3u), static_cast<std::uint32_t>(av::SubApi::vulkan), 64u, 12u, 24u,
+                          features, av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 1u, "gpu"));
+}
+
+DxgkDriverCapsRecord driver_caps(MockPlatform &platform, const DriverCapabilities &capabilities)
+{
+    DxgkDriverCapsRecord caps = {};
+    const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
+    CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
+    return caps;
+}
+
+}
+
+TEST(driver_capabilities_offer, a_discrete_capset_sets_hybrid_discrete_and_the_dlist_dll_misc_bits)
+{ MockPlatform platform; DriverCapabilities capabilities(platform);
+  capabilities.offer(hybrid_capset(av::CapsetInfo::feature_hybrid_discrete));
+  const DxgkDriverCapsRecord caps = driver_caps(platform, capabilities);
+  CHECK(capabilities.hybrid_discrete() && !capabilities.hybrid_integrated());
+  CHECK_EQ(caps.HybridDiscrete, 1u);
+  CHECK_EQ(caps.HybridIntegrated, 0u);
+  CHECK_EQ(caps.MiscCaps, 0xA0u); }
+
+TEST(driver_capabilities_offer, an_integrated_capset_sets_hybrid_integrated_only)
+{ MockPlatform platform; DriverCapabilities capabilities(platform);
+  capabilities.offer(hybrid_capset(av::CapsetInfo::feature_hybrid_integrated));
+  const DxgkDriverCapsRecord caps = driver_caps(platform, capabilities);
+  CHECK(!capabilities.hybrid_discrete() && capabilities.hybrid_integrated());
+  CHECK_EQ(caps.HybridDiscrete, 0u);
+  CHECK_EQ(caps.HybridIntegrated, 1u);
+  CHECK_EQ(caps.MiscCaps, 0u); }
+
+TEST(driver_capabilities_offer, a_capset_without_hybrid_leaves_both_off)
+{ MockPlatform platform; DriverCapabilities capabilities(platform);
+  capabilities.offer(hybrid_capset(1u));
+  const DxgkDriverCapsRecord caps = driver_caps(platform, capabilities);
+  CHECK_EQ(caps.HybridDiscrete, 0u);
+  CHECK_EQ(caps.HybridIntegrated, 0u);
+  CHECK_EQ(caps.MiscCaps, 0u); }

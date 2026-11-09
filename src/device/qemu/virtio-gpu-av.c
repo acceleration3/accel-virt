@@ -188,6 +188,16 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
         error_setg(errp, "%s", error);
         return;
     }
+    if (r->hybrid && r->hybrid[0] && strcmp(r->hybrid, "off") != 0) {
+        if (strcmp(r->hybrid, "integrated") == 0) {
+            av_device_set_hybrid(r->core, 1);
+        } else if (strcmp(r->hybrid, "discrete") == 0) {
+            av_device_set_hybrid(r->core, 2);
+        } else {
+            error_setg(errp, "virtio-gpu-av: hybrid '%s' is not off, integrated or discrete", r->hybrid);
+            return;
+        }
+    }
     if (r->export_socket && r->export_socket[0] && !virtio_gpu_av_export_listen(r, errp)) {
         return;
     }
@@ -401,6 +411,7 @@ static const Property virtio_gpu_av_properties[] = {
     DEFINE_PROP_STRING("record-kinds", VirtIOGPUAv, record_kinds),
     DEFINE_PROP_BOOL("record-wrap", VirtIOGPUAv, record_wrap, false),
     DEFINE_PROP_BOOL("display", VirtIOGPUAv, display, true),
+    DEFINE_PROP_STRING("hybrid", VirtIOGPUAv, hybrid),
     DEFINE_PROP_STRING("export-socket", VirtIOGPUAv, export_socket),
 };
 

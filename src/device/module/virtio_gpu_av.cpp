@@ -243,6 +243,13 @@ bool VirtioGpuAv::offer_refresh(uint32_t millihz)
     return set_refresh(millihz) == Status::ok;
 }
 
+void VirtioGpuAv::offer_hybrid(uint32_t role)
+{
+    AV_SCOPE("VirtioGpuAv::offer_hybrid");
+    host_.require_main_loop("VirtioGpuAv::offer_hybrid");
+    capset_.announce_hybrid(role);
+}
+
 uint32_t VirtioGpuAv::capsets() const
 {
     AV_SCOPE("VirtioGpuAv::capsets");

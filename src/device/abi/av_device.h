@@ -161,6 +161,7 @@ uint32_t av_device_capsets(AvDevice *device);
 int av_device_pci_identity(AvDevice *device, AvPciIdentity *identity);
 int av_device_set_modes(AvDevice *device, const char *modes, uint32_t *width, uint32_t *height);
 int av_device_set_refresh(AvDevice *device, uint32_t millihz);
+void av_device_set_hybrid(AvDevice *device, uint32_t role);
 void av_device_status(AvDevice *device, uint8_t status);
 void av_device_reset(AvDevice *device);
 void av_device_renderer_lost(AvDevice *device);

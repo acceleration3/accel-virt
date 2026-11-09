@@ -51,6 +51,7 @@ public:
     int                  offer_modes(const char *text, uint32_t *width, uint32_t *height);
     [[nodiscard]] Status set_refresh(uint32_t millihz);
     bool                 offer_refresh(uint32_t millihz);
+    void                 offer_hybrid(uint32_t role);
     uint32_t             capsets() const;
     bool                 export_image(uint64_t key, AvExportedImage &image);
     bool                 export_head(uint32_t head, uint64_t key, AvExportedImage &image);

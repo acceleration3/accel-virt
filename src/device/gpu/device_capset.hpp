@@ -13,6 +13,10 @@ class DeviceCapset {
 public:
     static constexpr uint32_t capset_version = 2u;
 
+    static constexpr uint32_t hybrid_off = 0u;
+    static constexpr uint32_t hybrid_integrated = 1u;
+    static constexpr uint32_t hybrid_discrete = 2u;
+
     explicit DeviceCapset(Host &host);
     DeviceCapset(const DeviceCapset &) = delete;
     DeviceCapset &operator=(const DeviceCapset &) = delete;
@@ -22,6 +26,7 @@ public:
     void              describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features);
     void              resolve_display(bool takes_dmabuf);
     bool              display_resolved() const;
+    void              announce_hybrid(uint32_t role);
     bool              described() const;
     const CapsetInfo &info() const;
 

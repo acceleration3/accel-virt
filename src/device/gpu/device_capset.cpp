@@ -69,6 +69,15 @@ void DeviceCapset::resolve_display(bool takes_dmabuf)
                            : "virtio-gpu-av: the display shows no dma-buf; the guest keeps the 2D path");
 }
 
+void DeviceCapset::announce_hybrid(uint32_t role)
+{
+    AV_SCOPE("DeviceCapset::announce_hybrid");
+    host_.require_main_loop("DeviceCapset::announce_hybrid");
+    if (!described_) return;
+    if (role == hybrid_integrated) info_.announce(CapsetInfo::feature_hybrid_integrated);
+    if (role == hybrid_discrete) info_.announce(CapsetInfo::feature_hybrid_discrete);
+}
+
 bool DeviceCapset::display_resolved() const
 {
     AV_SCOPE("DeviceCapset::display_resolved");
