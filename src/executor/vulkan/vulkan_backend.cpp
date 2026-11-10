@@ -987,6 +987,10 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
         asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
         asked.pNext = &budget;
         RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2(physical_, &asked);
+        VkPhysicalDeviceProperties named = {};
+        RealVulkanDispatch::on_vkGetPhysicalDeviceProperties(physical_, &named);
+        const VkMemoryType &kind = asked.memoryProperties.memoryTypes[allocate.memoryTypeIndex < VK_MAX_MEMORY_TYPES ? allocate.memoryTypeIndex : 0u];
+        LogLine(lines_).text("on ").text(named.deviceName).text(", host type flags ").number(kind.propertyFlags).text(" heap ").number(kind.heapIndex).text(" of ").number(asked.memoryProperties.memoryTypeCount).text(" types, committed ").number(vram_.used(heap)).write();
         LogLine(lines_).text("host heap 0 budget ").number(budget.heapBudget[0]).text(" usage ").number(budget.heapUsage[0]).text(", heap 1 budget ").number(budget.heapBudget[1]).text(" usage ").number(budget.heapUsage[1]).write();
         vram_.refund(heap, pAllocateInfo->allocationSize);
         return made;
