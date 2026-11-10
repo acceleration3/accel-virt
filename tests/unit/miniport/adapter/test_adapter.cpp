@@ -1203,9 +1203,10 @@ TEST(adapter_set_power_state, what_was_scanning_out_before_d3_is_scanning_out_af
   fixture.forget_control();
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
   av::FakeVirtqueueDevice &resumed = fixture.control();
-  CHECK_EQ(resumed.respond_all(0x1100u), 2u);
+  CHECK_EQ(resumed.respond_all(0x1100u), 3u);
   CHECK_EQ(resumed.request_type(0u), 0x02F4u);
   CHECK_EQ(resumed.request_type(1u), 0x0101u);
+  CHECK_EQ(resumed.request_type(2u), 0x02F5u);
   CHECK(fixture.adapter().invariants_hold()); }
 
 TEST(adapter_set_power_state, a_source_that_was_dark_stays_dark_across_power)

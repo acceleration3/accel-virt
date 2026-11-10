@@ -716,16 +716,17 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
   driver.platform().set_irql(av::Irql::passive);
   av::FakeVirtqueueDevice &control = device.control();
-  CHECK_EQ(control.respond_all(0x1100u), 5u);
+  CHECK_EQ(control.respond_all(0x1100u), 6u);
   CHECK_EQ(control.request_type(0u), 0x02F4u);
   CHECK_EQ(control.request_type(5u), 0x0101u);
-  CHECK_EQ(control.request_type(6u), 0x0106u);
-  CHECK_EQ(control.request_type(7u), 0x0103u);
-  CHECK_EQ(control.request_type(8u), 0x0105u);
-  CHECK_EQ(control.request_type(9u), 0x0104u);
-  CHECK_EQ(u32(control.request(6u), 28u), 1u);
-  CHECK_EQ(u32(control.request(6u), 32u), 0x40000000u);
-  CHECK_EQ(u32(control.request(6u), 40u), 1280u * 800u * 4u);
+  CHECK_EQ(control.request_type(6u), 0x02F5u);
+  CHECK_EQ(control.request_type(7u), 0x0106u);
+  CHECK_EQ(control.request_type(8u), 0x0103u);
+  CHECK_EQ(control.request_type(9u), 0x0105u);
+  CHECK_EQ(control.request_type(10u), 0x0104u);
+  CHECK_EQ(u32(control.request(7u), 28u), 1u);
+  CHECK_EQ(u32(control.request(7u), 32u), 0x40000000u);
+  CHECK_EQ(u32(control.request(7u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
@@ -764,7 +765,7 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   driver.platform().set_irql(av::Irql::dispatch);
   dpc(adapter);
   driver.platform().set_irql(av::Irql::passive);
-  CHECK_EQ(device.control().respond_all(0x1100u), 5u);
+  CHECK_EQ(device.control().respond_all(0x1100u), 6u);
 
   CHECK_EQ(device.fdo().set_power_state(power_d3), 0);
   CHECK_EQ(device.function().common().status(), 0u);
@@ -772,9 +773,10 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   CHECK_EQ(device.function().common().status(), driver_ok_status);
   device.forget_control();
   av::FakeVirtqueueDevice &resumed = device.control();
-  CHECK_EQ(resumed.respond_all(0x1100u), 2u);
+  CHECK_EQ(resumed.respond_all(0x1100u), 3u);
   CHECK_EQ(resumed.request_type(0u), 0x02F4u);
   CHECK_EQ(resumed.request_type(1u), 0x0101u);
+  CHECK_EQ(resumed.request_type(2u), 0x02F5u);
 
   driver.platform().set_irql(av::Irql::isr);
   CHECK_EQ(set_address(adapter, &address), 0);
@@ -1993,11 +1995,12 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
                    table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
                0);
   }
-  CHECK_EQ(control.respond_all(0x1100u), 2u);
+  CHECK_EQ(control.respond_all(0x1100u), 4u);
   CHECK_EQ(control.request_type(5u), 0x0101u);
   CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id);
-  CHECK_EQ(control.request_type(6u), 0x0101u);
-  CHECK_EQ(u32(control.request(6u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(control.request_type(6u), 0x02F5u);
+  CHECK_EQ(control.request_type(7u), 0x0101u);
+  CHECK_EQ(u32(control.request(7u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 TEST(ddi_scenario, a_device_with_host_memory_reports_the_aperture_alone)

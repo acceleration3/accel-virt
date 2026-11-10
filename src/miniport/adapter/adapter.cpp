@@ -1371,12 +1371,10 @@ void Adapter::retime_display(uint32_t source, const DisplayMode &mode)
     AV_SCOPE("Adapter::retime_display");
     platform_.require_irql_at_most(Irql::passive, "Adapter::retime_display");
     if (!device_.constructed()) return;
-    uint8_t          request[AvRequestWriter::max_request_size] = {};
-    AvRequestWriter  writer(request, sizeof request);
-    uint8_t          answer[DisplayModeSet::max_encoded_size] = {};
-    uint32_t         written = 0u;
+    uint8_t         request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter writer(request, sizeof request);
     if (writer.display_timing(source, mode.refresh_millihz()) != Status::ok) return;
-    if (device_.object().ask_control(request, writer.length(), answer, sizeof answer, written) == Status::ok)
+    if (device_.object().send_control(request, writer.length()) == Status::ok)
         platform_.store_atomic(scanout_period_, mode.period());
 }
 
