@@ -26,6 +26,11 @@ uint32_t VulkanMemoryImport::dmabuf_types(int fd) const
 bool VulkanMemoryImport::import_dmabuf(OwnedFd &descriptor, uint64_t size, uint32_t memory_type, uint64_t &memory)
 {
     AV_SCOPE("VulkanMemoryImport::import_dmabuf");
+    VkPhysicalDeviceMemoryProperties host = {};
+    table_.memory_properties(host);
+    if (memory_type >= host.memoryTypeCount ||
+        (host.memoryTypes[memory_type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0u)
+        return false;
     VkDeviceMemory made = VK_NULL_HANDLE;
     if (!table_.import_memory(descriptor, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size, memory_type, nullptr,
                               made))
