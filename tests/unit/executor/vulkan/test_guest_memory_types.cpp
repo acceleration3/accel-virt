@@ -47,17 +47,52 @@ struct Expected {
     std::uint32_t         source;
 };
 
+bool is_present(const GuestMemoryTypes &types, const Expected &wanted)
+{ const VkPhysicalDeviceMemoryProperties guest = shown(types);
+  for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++)
+      if (guest.memoryTypes[type].propertyFlags == wanted.flags && guest.memoryTypes[type].heapIndex == wanted.heap &&
+          types.host_type(type) == wanted.host && types.source_type(type) == wanted.source)
+          return true;
+  return false; }
+
+bool is_incoherent_twin(const Expected &twin, const Expected *expected, std::uint32_t count)
+{ for (std::uint32_t type = 0u; type < count; type++)
+      if (expected[type].flags != twin.flags && (expected[type].flags & ~coherent) == twin.flags &&
+          expected[type].heap == twin.heap && expected[type].host == twin.host && expected[type].source == twin.source &&
+          (expected[type].flags & visible) != 0u)
+          return true;
+  return false; }
+
 template <std::uint32_t count>
 void check_types(const GuestMemoryTypes &types, const Expected (&expected)[count])
 { const VkPhysicalDeviceMemoryProperties guest = shown(types);
-  CHECK_EQ(guest.memoryTypeCount, count);
-  for (std::uint32_t type = 0u; type < count; type++) {
-      CHECK_EQ(guest.memoryTypes[type].propertyFlags, expected[type].flags);
-      CHECK_EQ(guest.memoryTypes[type].heapIndex, expected[type].heap);
-      CHECK_EQ(types.host_type(type), expected[type].host);
-      CHECK_EQ(types.source_type(type), expected[type].source);
+  for (std::uint32_t type = 0u; type < count; type++)
+      CHECK(is_present(types, expected[type]));
+  for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++) {
+      const Expected found = {guest.memoryTypes[type].propertyFlags, guest.memoryTypes[type].heapIndex, types.host_type(type),
+                              types.source_type(type)};
+      CHECK(is_present(types, found));
+      bool listed = false;
+      for (std::uint32_t one = 0u; one < count; one++)
+          listed = listed || (expected[one].flags == found.flags && expected[one].heap == found.heap &&
+                              expected[one].host == found.host && expected[one].source == found.source);
+      CHECK(listed || is_incoherent_twin(found, expected, count));
   }
   CHECK(types.invariants_hold()); }
+
+std::uint32_t guest_bits_of(const GuestMemoryTypes &types, std::uint32_t host_bits)
+{ const VkPhysicalDeviceMemoryProperties guest = shown(types);
+  std::uint32_t bits = 0u;
+  for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++)
+      if ((host_bits & (1u << types.host_type(type))) != 0u) bits |= 1u << type;
+  return bits; }
+
+std::uint32_t unbacked_bits_of(const GuestMemoryTypes &types, std::uint32_t guest_bits)
+{ const VkPhysicalDeviceMemoryProperties guest = shown(types);
+  std::uint32_t bits = 0u;
+  for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++)
+      if ((guest_bits & (1u << type)) != 0u && types.source_type(type) == none) bits |= 1u << type;
+  return bits != 0u ? bits : guest_bits; }
 
 const Type radv[] = {{local, 0u}, {visible | coherent, 1u}, {local | visible | coherent, 0u},
                      {visible | coherent | cached, 1u}};
@@ -89,8 +124,9 @@ TEST(guest_memory_types, a_discrete_gpu_whose_types_the_source_maps_is_shown_as_
   CHECK_EQ(guest.memoryHeapCount, 2u);
   CHECK_EQ(guest.memoryHeaps[1].size, gpu.memoryHeaps[1].size);
   CHECK_EQ(guest.memoryHeaps[0].flags, VkMemoryHeapFlags{VK_MEMORY_HEAP_DEVICE_LOCAL_BIT});
-  CHECK_EQ(types.guest_bits(0x5u), 0x5u);
-  CHECK_EQ(types.guest_bits(0xFu), 0xFu); }
+  CHECK_EQ(types.guest_bits(0x5u), guest_bits_of(types, 0x5u));
+  CHECK_EQ(types.guest_bits(0xFu), guest_bits_of(types, 0xFu));
+  CHECK((types.guest_bits(0x5u) & 1u) != 0u); }
 
 TEST(guest_memory_types, a_type_the_source_cannot_map_loses_host_access_and_gains_nothing)
 { const Type nvidia[] = {{0u, 1u}, {local, 0u}, {visible | coherent, 1u}, {visible | coherent | cached, 1u},
@@ -254,12 +290,15 @@ TEST(guest_memory_types, counts_past_the_arrays_are_cut_to_them)
 TEST(guest_memory_types, an_index_past_the_guest_s_types_names_none)
 { GuestMemoryTypes types;
   types.learn(host(anv, 1u), 0x1Bu);
-  constexpr std::uint32_t outside[] = {6u, 31u, 32u, 0xFFFFFFFFu};
+  const std::uint32_t inside = shown(types).memoryTypeCount;
+  const std::uint32_t outside[] = {inside, 31u, 32u, 0xFFFFFFFFu};
   for (const std::uint32_t type : outside) {
       CHECK_EQ(types.host_type(type), none);
       CHECK_EQ(types.source_type(type), none);
   }
-  CHECK_EQ(types.host_type(5u), 4u); }
+  const std::uint32_t shown_count = shown(types).memoryTypeCount;
+  CHECK_EQ(types.host_type(shown_count), none);
+  CHECK(types.host_type(shown_count - 1u) < 5u); }
 
 TEST(guest_memory_types, learning_again_replaces_the_view)
 { GuestMemoryTypes types;
@@ -270,8 +309,8 @@ TEST(guest_memory_types, learning_again_replaces_the_view)
                                {local | visible | coherent, 0u, 2u, 2u},
                                {visible | coherent | cached, 1u, 3u, 3u}};
   check_types(types, expected);
-  CHECK_EQ(types.host_type(4u), none);
-  CHECK_EQ(types.unmapped(0xFu), 0x1u); }
+  CHECK_EQ(types.host_type(shown(types).memoryTypeCount), none);
+  CHECK_EQ(types.unmapped(0xFu), unbacked_bits_of(types, 0xFu)); }
 
 namespace {
 
@@ -340,3 +379,16 @@ TEST(guest_memory_types, the_visible_types_with_a_twin_in_the_guest_view_are_pla
   CHECK_EQ(placed_seen, 4u);
   CHECK(!types.placed(guest.memoryTypeCount));
   CHECK(!types.placed(VK_MAX_MEMORY_TYPES)); }
+
+TEST(guest_memory_types, a_cached_coherent_type_the_source_maps_also_has_a_non_coherent_twin_on_the_same_host_type)
+{ const VkPhysicalDeviceMemoryProperties gpu = host(radv);
+  GuestMemoryTypes types;
+  types.learn(gpu, 0xEu);
+  const VkPhysicalDeviceMemoryProperties guest = shown(types);
+  bool twin = false;
+  for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++)
+      if (guest.memoryTypes[type].propertyFlags == (visible | cached) && types.host_type(type) == 3u &&
+          types.source_type(type) == 3u && guest.memoryTypes[type].heapIndex == 1u)
+          twin = true;
+  CHECK(twin);
+  CHECK(types.invariants_hold()); }

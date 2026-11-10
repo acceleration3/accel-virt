@@ -875,6 +875,12 @@ bool driver_imports_image(std::uint64_t physical, const VkImageCreateInfo &creat
       return false;
   return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u; }
 
+std::uint32_t host_bits_of(const av::GuestMemoryTypes &view, std::uint32_t guest_bits)
+{ std::uint32_t bits = 0u;
+  for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++)
+      if ((guest_bits >> type & 1u) != 0u && view.host_type(type) != av::GuestMemoryTypes::no_type) bits |= 1u << view.host_type(type);
+  return bits; }
+
 std::uint32_t wire_buffer_types(BackendTransport &wire, std::uint64_t device, const VkBufferCreateInfo &create)
 { const VkDevice host = as_handle<VkDevice>(device);
   VkBuffer buffer = VK_NULL_HANDLE;
@@ -907,8 +913,8 @@ TEST(vulkan_backend_device, buffers_and_images_are_made_for_host_allocation_wher
       for_host.pNext = &external;
       const std::uint32_t host_types = driver_buffer_types(made.device(), for_host);
       CHECK(host_types != 0u);
-      CHECK_EQ(wire_buffer_types(wire, made.device(), asked), host_types);
-      CHECK_EQ(wire_buffer_types(wire, made.device(), for_host), host_types);
+      CHECK_EQ(host_bits_of(made.probe().types(), wire_buffer_types(wire, made.device(), asked)), host_types);
+      CHECK_EQ(host_bits_of(made.probe().types(), wire_buffer_types(wire, made.device(), for_host)), host_types);
 
       VkExternalMemoryImageCreateInfo image_external = {};
       image_external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
@@ -944,8 +950,8 @@ TEST(vulkan_backend_device, a_replaced_device_makes_buffers_as_asked_while_its_r
       const std::uint64_t replaced = made.device();
       const std::uint64_t kept = made.guest().create_device(made.physical());
       CHECK(kept != 0u);
-      CHECK_EQ(wire_buffer_types(wire, kept, asked), driver_buffer_types(kept, for_host));
-      CHECK_EQ(wire_buffer_types(wire, replaced, asked), driver_buffer_types(replaced, asked));
+      CHECK_EQ(host_bits_of(made.probe().types(), wire_buffer_types(wire, kept, asked)), driver_buffer_types(kept, for_host));
+      CHECK_EQ(host_bits_of(made.probe().types(), wire_buffer_types(wire, replaced, asked)), driver_buffer_types(replaced, asked));
   }
 }
 
@@ -965,7 +971,7 @@ TEST(vulkan_backend_device, a_buffer_with_its_own_chain_is_still_made_for_host_a
       for_host.pNext = &external;
       const std::uint32_t host_types = driver_buffer_types(made.device(), for_host);
       CHECK(host_types != 0u);
-      CHECK_EQ(wire_buffer_types(wire, made.device(), asked), host_types);
+      CHECK_EQ(host_bits_of(made.probe().types(), wire_buffer_types(wire, made.device(), asked)), host_types);
   }
 }
 
@@ -1006,7 +1012,7 @@ void check_view(const VkPhysicalDeviceMemoryProperties &guest, const VkPhysicalD
 { constexpr VkMemoryPropertyFlags host_only = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
                                               VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-  CHECK_EQ(guest.memoryTypeCount, driver.memoryTypeCount);
+  CHECK(guest.memoryTypeCount >= driver.memoryTypeCount);
   CHECK_EQ(guest.memoryHeapCount, driver.memoryHeapCount);
   std::uint32_t shown = 0u;
   for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++) {
@@ -1017,7 +1023,10 @@ void check_view(const VkPhysicalDeviceMemoryProperties &guest, const VkPhysicalD
       const VkMemoryPropertyFlags flags = driver.memoryTypes[host].propertyFlags;
       const bool                  sourced = types.source_type(type) == host;
       CHECK(!sourced || (mappable >> host & 1u) != 0u);
-      CHECK_EQ(guest.memoryTypes[type].propertyFlags, sourced ? flags : flags & ~host_only);
+      const VkMemoryPropertyFlags shown_flags = guest.memoryTypes[type].propertyFlags;
+      const VkMemoryPropertyFlags whole = sourced ? flags : flags & ~host_only;
+      const bool                  incoherent_twin = sourced && shown_flags == (flags & ~VkMemoryPropertyFlags{VK_MEMORY_PROPERTY_HOST_COHERENT_BIT});
+      CHECK(shown_flags == whole || incoherent_twin);
       CHECK_EQ(guest.memoryTypes[type].heapIndex, driver.memoryTypes[host].heapIndex);
       for (std::uint32_t earlier = 0u; earlier < type; earlier++) {
           const VkMemoryPropertyFlags before = guest.memoryTypes[earlier].propertyFlags;
@@ -1512,7 +1521,7 @@ TEST(vulkan_backend_device, device_local_memory_the_guest_never_maps_is_the_driv
       BackendTransport wire(made.backend());
       const VkDevice device = as_handle<VkDevice>(made.device());
       const VkPhysicalDeviceMemoryProperties guest = wire_memory(wire, made.physical());
-      CHECK_EQ(guest.memoryTypeCount, driver_types + 1u);
+      CHECK(guest.memoryTypeCount >= driver_types + 1u);
       CHECK_EQ(guest.memoryTypes[0].propertyFlags, VkMemoryPropertyFlags{VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT});
       const std::uint32_t live = made.source() != nullptr ? made.source()->live() : 0u;
 

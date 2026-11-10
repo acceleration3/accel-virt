@@ -25,11 +25,17 @@ void GuestMemoryTypes::learn(const VkPhysicalDeviceMemoryProperties &host, uint3
         if ((host.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u)
             sourced |= backed & (1u << type);
     const uint32_t twins = twin_origins(host, sourced);
+    uint32_t       room = VK_MAX_MEMORY_TYPES - host_types_ - static_cast<uint32_t>(__builtin_popcount(twins));
     for (uint32_t type = 0u; type < host_types_; type++) {
         const VkMemoryType &kind = host.memoryTypes[type];
         const bool          source = (sourced & (1u << type)) != 0u;
         if ((twins & (1u << type)) != 0u) append(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, kind.heapIndex, type, false);
         append(source ? kind.propertyFlags : kind.propertyFlags & ~host_access, kind.heapIndex, type, source);
+        if (source && room != 0u && (kind.propertyFlags & cached_coherent_mask) == cached_coherent) {
+            append(kind.propertyFlags & ~static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), kind.heapIndex,
+                   type, true);
+            room--;
+        }
     }
     order();
     placed_ = PlacedMemoryTypes::mask(properties_);

@@ -64,9 +64,19 @@ class Rig {
 public:
     Rig() : platform(), exporter(), source(exporter, platform) {}
 
-    static constexpr std::uint32_t guest_uncached = 3u;
-    static constexpr std::uint32_t guest_cached = 4u;
-    static constexpr std::uint32_t guest_bar = 5u;
+    std::uint32_t guest_type(std::uint32_t host_type, VkMemoryPropertyFlags flags)
+    {
+        av::GuestMemoryTypes types;
+        CHECK(source.vulkan_types(types));
+        VkPhysicalDeviceMemoryProperties shown = {};
+        types.properties(shown);
+        for (std::uint32_t type = 0u; type < shown.memoryTypeCount; type++)
+            if (types.host_type(type) == host_type && shown.memoryTypes[type].propertyFlags == flags) return type;
+        return av::GuestMemoryTypes::no_type;
+    }
+    std::uint32_t guest_uncached() { return guest_type(1u, visible | coherent); }
+    std::uint32_t guest_cached() { return guest_type(2u, visible | coherent | cached); }
+    std::uint32_t guest_bar() { return guest_type(3u, local | visible | coherent); }
 
     void discrete()
     {
@@ -223,7 +233,7 @@ TEST(host_memory_source_choice, upload_takes_a_bar_no_importer_can_map_last)
   rig.exporter.fail_allocations(2u);
   CHECK_STATUS(rig.allocate(3u, upload, memory), Status::no_memory);
   CHECK_EQ(rig.exporter.attempts(), 5u);
-  CHECK_STATUS(rig.allocate(4u, vulkan(Rig::guest_bar), memory), Status::ok);
+  CHECK_STATUS(rig.allocate(4u, vulkan(rig.guest_bar()), memory), Status::ok);
   CHECK_EQ(rig.exporter.last_type(), 3u);
   CHECK(rig.source.invariants_hold());
   rig.source.free_domain(domain);
@@ -304,10 +314,10 @@ TEST(host_memory_source_choice, a_vulkan_request_is_the_host_type_behind_its_gue
 { Rig rig;
   rig.discrete();
   AvHostMemory memory = {};
-  CHECK_STATUS(rig.allocate(1u, vulkan(Rig::guest_cached), memory), Status::ok);
+  CHECK_STATUS(rig.allocate(1u, vulkan(rig.guest_cached()), memory), Status::ok);
   CHECK_EQ(rig.exporter.last_type(), 2u);
   CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_BACK});
-  CHECK_STATUS(rig.allocate(2u, vulkan(Rig::guest_bar), memory), Status::ok);
+  CHECK_STATUS(rig.allocate(2u, vulkan(rig.guest_bar()), memory), Status::ok);
   CHECK_EQ(rig.exporter.last_type(), 3u);
   CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
   av::MemoryExporter              &exporter = rig.exporter;
@@ -317,10 +327,11 @@ TEST(host_memory_source_choice, a_vulkan_request_is_the_host_type_behind_its_gue
   CHECK((gpu.memoryTypes[2].propertyFlags & cached) != 0u);
   const std::uint32_t before = rig.exporter.attempts();
   rig.exporter.fail_allocation_at(1u);
-  CHECK_STATUS(rig.allocate(3u, vulkan(Rig::guest_uncached), memory), Status::no_memory);
+  CHECK_STATUS(rig.allocate(3u, vulkan(rig.guest_uncached()), memory), Status::no_memory);
   CHECK_EQ(rig.exporter.attempts(), before + 1u);
   CHECK_EQ(rig.exporter.last_type(), 1u);
-  constexpr std::uint32_t unmapped[] = {0u, 1u, 2u, 6u, 31u};
+  const std::uint32_t unmapped[] = {rig.guest_type(0u, local), rig.guest_type(4u, 0u), rig.guest_type(5u, 0u),
+                                    32u, 31u};
   for (const std::uint32_t type : unmapped) CHECK_STATUS(rig.allocate(4u, vulkan(type), memory), Status::invalid_parameter);
   CHECK_EQ(rig.exporter.attempts(), before + 1u);
   CHECK_EQ(rig.source.live(), 2u);

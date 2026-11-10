@@ -30,6 +30,12 @@ private:
     static constexpr VkMemoryPropertyFlags host_access =
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 
+    static constexpr VkMemoryPropertyFlags cached_coherent =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    static constexpr VkMemoryPropertyFlags cached_coherent_mask =
+        cached_coherent | VK_MEMORY_PROPERTY_PROTECTED_BIT | VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD |
+        VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD | VK_MEMORY_PROPERTY_RDMA_CAPABLE_BIT_NV;
+
     uint32_t twin_origins(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed) const;
     void     append(VkMemoryPropertyFlags flags, uint32_t heap, uint32_t host, bool backed);
     void     order();
