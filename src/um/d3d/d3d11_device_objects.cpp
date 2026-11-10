@@ -1,5 +1,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
+#include "icd/d3d/shader_code_extent.hpp"
+#include "um/common/readable_extent.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/shared_object_call.hpp"
 #include "core/log/keyed_log.hpp"
@@ -561,7 +563,7 @@ bool D3d11Device::create_shader(uint32_t stage, const UINT *code, ObjectRecord &
         strides = stream_out->BufferStridesInBytes;
         rasterized = stream_out->RasterizedStream;
     }
-    const size_t bytes = static_cast<size_t>(code[1]) * sizeof(UINT);
+    const size_t bytes = d3d::ShaderCodeExtent(ReadableExtent(size_t{1} << 28u).from(code)).bytes(code);
     const uint64_t wanted_1[1] = {static_cast<uint64_t>(bytes)};
     if (!wire().make_room_for_blobs(wanted_1, 1u))
         lines_.write("a shader larger than the arena");

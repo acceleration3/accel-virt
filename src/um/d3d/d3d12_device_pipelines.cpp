@@ -1,5 +1,7 @@
 #include "core/log/keyed_log.hpp"
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/shader_code_extent.hpp"
+#include "um/common/readable_extent.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
 
@@ -14,12 +16,11 @@ constexpr uint32_t stage_pixel = 4u;
 constexpr uint32_t stage_compute = 5u;
 constexpr uint32_t stage_mesh = 6u;
 constexpr uint32_t stage_amplification = 7u;
+constexpr size_t   readable_most = size_t{1} << 28u;
 constexpr uint32_t roles = 3u;
 constexpr uint32_t role_input = 0u;
 constexpr uint32_t role_output = 1u;
 constexpr uint32_t role_patch = 2u;
-constexpr uint32_t container_magic = 0x43425844u;
-constexpr size_t   container_size_at = 24u;
 constexpr uint32_t most_parameters = 64u;
 constexpr uint32_t most_ranges = 512u;
 constexpr uint32_t most_samplers = 64u;
@@ -34,12 +35,7 @@ uint32_t code_bytes(const UINT *code)
 {
     AV_SCOPE("code_bytes");
     if (code == nullptr) return 0u;
-    if (code[0] == container_magic) {
-        uint32_t bytes = 0u;
-        __builtin_memcpy(&bytes, reinterpret_cast<const uint8_t *>(code) + container_size_at, sizeof(bytes));
-        return bytes;
-    }
-    return code[1] * sizeof(UINT);
+    return static_cast<uint32_t>(d3d::ShaderCodeExtent(ReadableExtent(readable_most).from(code)).bytes(code));
 }
 
 const ShaderRecord *shader_of(D3D12DDI_HSHADER handle)
