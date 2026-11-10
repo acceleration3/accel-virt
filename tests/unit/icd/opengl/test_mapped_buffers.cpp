@@ -113,7 +113,7 @@ TEST(mapped_buffers, access_bits_and_arguments_are_judged_first)
       {1u, 0, 4, read | BufferMapping::map_unsynchronized, invalid_operation},
       {1u, 0, 4, read | explicit_flush, invalid_operation},
       {1u, -1, 4, read, invalid_value},
-      {1u, 0, 0, read, invalid_value},
+      {1u, 0, 0, read, invalid_operation},
       {1u, 0, -2, write, invalid_value},
       {0u, 0, 4, read, invalid_operation},
   };
