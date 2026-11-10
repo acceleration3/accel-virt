@@ -388,7 +388,7 @@ bool GuestGlContext::take_host_error(uint32_t &error)
     const uint64_t word = channel_.host_errors();
     if (!reported_.readable(word)) return false;
     error = reported_.take(word);
-    return true;
+    return error != no_error;
 }
 
 const char *GuestGlContext::string(uint32_t name) const
