@@ -910,3 +910,127 @@ TEST(d3d9_session_device, a_device_that_can_draw_from_a_slice_in_place_is_probed
     wire.close_memory(memory);
     backend.shut_down();
 }
+
+namespace {
+
+constexpr std::uint32_t fvf_xyzrhw_diffuse_tex1 = 0x004u | 0x040u | 0x100u;
+constexpr std::uint32_t fvf_xyzrhw_diffuse_tex2 = 0x004u | 0x040u | 0x200u;
+constexpr std::uint32_t render_state_wrap0 = 128u;
+constexpr std::uint32_t sampler_address_u = 1u;
+constexpr std::uint32_t sampler_address_v = 2u;
+constexpr std::uint32_t sampler_mag_filter = 5u;
+constexpr std::uint32_t sampler_min_filter = 6u;
+constexpr std::uint32_t texf_point = 1u;
+constexpr std::uint32_t taddress_wrap = 1u;
+constexpr std::uint32_t stage_texcoord_index = 11u;
+constexpr std::uint32_t wrap_coord_0 = 1u;
+constexpr std::uint32_t wrap_coord_1 = 2u;
+constexpr std::uint32_t texels = 8u;
+
+struct WrapVertex {
+    float         x, y, z, rhw;
+    std::uint32_t color;
+    float         u0, v0, u1, v1;
+};
+
+std::uint32_t texel_color(std::uint32_t index) { return 0xff000000u | (index * 32u + 16u) << 16 | (255u - index * 32u) << 8 | index * 8u; }
+
+struct WrapDraw {
+    bool          along_u;
+    bool          second_set;
+    std::uint32_t wrap_state;
+    std::uint32_t wrap_value;
+    bool          expect_wrapped;
+};
+
+void draw_wrapped(av::D3dLoopback &wire, const WrapDraw &draw)
+{
+    CHECK(av_d3d9_CreateTexture9(wire, texture, 1u, texels, texels, 1u, 1u, 0u, format_a8r8g8b8, pool_managed));
+    std::uint32_t image[texels * texels];
+    for (std::uint32_t y = 0u; y < texels; y++)
+        for (std::uint32_t x = 0u; x < texels; x++) image[y * texels + x] = texel_color(draw.along_u ? x : y);
+    CHECK(av_d3d9_WriteTexture9(wire, texture, 0u, Box{0u, 0u, 0u, texels, texels, 1u}, texels * 4u, 0u, 0u,
+                                reinterpret_cast<const std::uint8_t *>(image), sizeof(image)));
+    CHECK(av_d3d9_SetTexture9(wire, 0u, texture));
+    const std::uint32_t samplers[] = {0u, sampler_min_filter, texf_point, 0u, sampler_mag_filter, texf_point,
+                                      0u, sampler_address_u, taddress_wrap, 0u, sampler_address_v, taddress_wrap};
+    CHECK(av_d3d9_SetSamplerStates9(wire, 12u, samplers));
+    if (draw.second_set) {
+        const std::uint32_t stage[] = {0u, stage_texcoord_index, 1u};
+        CHECK(av_d3d9_SetTextureStageStates9(wire, 3u, stage));
+    }
+    const std::uint32_t states[] = {draw.wrap_state, draw.wrap_value};
+    CHECK(av_d3d9_SetRenderStates9(wire, 2u, states));
+
+    const float edge = static_cast<float>(size);
+    const float a = draw.along_u ? 0.9f : 0.5f, b = draw.along_u ? 0.1f : 0.5f;
+    const float va = draw.along_u ? 0.5f : 0.9f, vb = draw.along_u ? 0.5f : 0.1f;
+    const float z = draw.second_set ? 0.0f : 1.0f;
+    const auto  vertex = [&](float x, float y, float u, float v) {
+        return WrapVertex{x, y, 0.5f, 1.0f, 0xffffffffu, u * z, v * z, u, v};
+    };
+    const WrapVertex quad[6] = {vertex(0.0f, 0.0f, a, va),  vertex(edge, 0.0f, b, va),  vertex(0.0f, edge, a, vb),
+                                vertex(edge, 0.0f, b, va), vertex(edge, edge, b, vb), vertex(0.0f, edge, a, vb)};
+    CHECK(av_d3d9_CreateVertexBuffer9(wire, vertices, sizeof(quad), usage_write_only,
+                                      draw.second_set ? fvf_xyzrhw_diffuse_tex2 : fvf_xyzrhw_diffuse_tex1,
+                                      pool_managed));
+    CHECK(av_d3d9_WriteBuffer9(wire, vertices, 0u, 0u, reinterpret_cast<const std::uint8_t *>(quad), sizeof(quad)));
+    CHECK(av_d3d9_SetFvf9(wire, draw.second_set ? fvf_xyzrhw_diffuse_tex2 : fvf_xyzrhw_diffuse_tex1));
+    CHECK(av_d3d9_SetStreamSource9(wire, 0u, vertices, 0u, sizeof(WrapVertex)));
+    CHECK(av_d3d9_DrawPrimitive9(wire, triangle_list, 0u, 2u));
+}
+
+std::uint32_t wrapped_texel(const Pixels &pixels, bool along_u, std::uint32_t along)
+{
+    return along_u ? pixels.at(along, size / 2u) : pixels.at(size / 2u, along);
+}
+
+void check_wrap(const WrapDraw &draw)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice    *device11 = nullptr;
+    av::D3d9HostDevice     *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
+    make_target(wire);
+    draw_wrapped(wire, draw);
+
+    Pixels pixels;
+    CHECK(read(wire, draw_target, pixels));
+    CHECK_EQ(pixels.hresult, 0u);
+    const bool wrapped = draw.expect_wrapped;
+    CHECK_EQ(wrapped_texel(pixels, draw.along_u, 10u), texel_color(wrapped ? 7u : 6u));
+    CHECK_EQ(wrapped_texel(pixels, draw.along_u, 54u), texel_color(wrapped ? 0u : 1u));
+    CHECK_EQ(wire.refused(), 0u);
+}
+
+}
+
+TEST(d3d9_session_device, a_wrapped_coordinate_takes_the_short_way_round_the_texture)
+{
+    check_wrap({true, false, render_state_wrap0, wrap_coord_0, true});
+}
+
+TEST(d3d9_session_device, a_wrapped_second_coordinate_takes_the_short_way_round_the_texture)
+{
+    check_wrap({false, false, render_state_wrap0, wrap_coord_1, true});
+}
+
+TEST(d3d9_session_device, a_wrap_of_another_set_leaves_the_interpolation_alone)
+{
+    check_wrap({true, false, render_state_wrap0 + 3u, wrap_coord_0, false});
+}
+
+TEST(d3d9_session_device, a_wrap_names_the_texture_coordinate_set_not_the_stage)
+{
+    check_wrap({true, true, render_state_wrap0 + 1u, wrap_coord_0, true});
+}
+
+TEST(d3d9_session_device, without_a_wrap_the_coordinate_runs_straight_across)
+{
+    check_wrap({true, false, render_state_wrap0, 0u, false});
+}

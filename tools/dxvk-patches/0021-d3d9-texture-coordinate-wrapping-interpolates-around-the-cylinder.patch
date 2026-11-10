@@ -1,0 +1,407 @@
+From: accel-virt
+Subject: [PATCH] Direct3D 9 texture coordinate wrapping interpolates the wrapped components around the cylinder per triangle
+
+When a WRAPn render state is set, the fixed-function pixel shader takes the texture
+coordinates of the stages that use that set per vertex through fragment shader
+barycentrics, moves each vertex of the triangle by whole units so that it lies within
+half a unit of the first, and interpolates those. Hosts without the extension and
+states without a wrap run the shader they ran before.
+---
+diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
+index 4e0cef2..669750a 100644
+--- a/src/d3d9/d3d9_device.cpp
++++ b/src/d3d9/d3d9_device.cpp
+@@ -2471,6 +2471,17 @@ namespace dxvk {
+           m_dirty.set(D3D9DeviceDirtyFlag::ClipPlanes);
+           break;
+ 
++        case D3DRS_WRAP0:
++        case D3DRS_WRAP1:
++        case D3DRS_WRAP2:
++        case D3DRS_WRAP3:
++        case D3DRS_WRAP4:
++        case D3DRS_WRAP5:
++        case D3DRS_WRAP6:
++        case D3DRS_WRAP7:
++          m_dirty.set(D3D9DeviceDirtyFlag::FFPixelShader);
++          break;
++
+         case D3DRS_ALPHAREF:
+           m_pushData.shared.alphaRef = Value;
+           m_dirty.set(D3D9DeviceDirtyFlag::PushDataShared);
+@@ -3484,6 +3495,8 @@ namespace dxvk {
+     const bool usesProgrammableVS = UseProgrammableVS();
+ 
+     if (unlikely(usesProgrammableVS != wasUsingProgrammableVS)) {
++      m_dirty.set(D3D9DeviceDirtyFlag::FFPixelShader);
++
+       if (usesProgrammableVS) {
+         BindShader<D3D9ShaderType::VertexShader>(GetCommonShader(m_state.vertexShader));
+       } else {
+@@ -3604,6 +3617,9 @@ namespace dxvk {
+ 
+     const bool usesProgrammableVS = UseProgrammableVS();
+ 
++    if (usesProgrammableVS != wasUsingProgrammableVS)
++      m_dirty.set(D3D9DeviceDirtyFlag::FFPixelShader);
++
+     if (usesProgrammableVS) {
+       BindShader<D3D9ShaderType::VertexShader>(GetCommonShader(shader));
+     } else if (wasUsingProgrammableVS) {
+@@ -4735,7 +4751,8 @@ namespace dxvk {
+           break;
+ 
+         case DXVK_TSS_TEXCOORDINDEX:
+-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
++          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData,
++                      D3D9DeviceDirtyFlag::FFPixelShader);
+           break;
+ 
+         case DXVK_TSS_TEXTURETRANSFORMFLAGS:
+@@ -4765,6 +4782,11 @@ namespace dxvk {
+   }
+ 
+ 
++  bool D3D9DeviceEx::SupportsTexCoordWrap() {
++    return m_dxvkDevice->features().khrFragmentShaderBarycentric.fragmentShaderBarycentric;
++  }
++
++
+   bool D3D9DeviceEx::SupportsSWVP() {
+     return m_dxvkDevice->features().core.features.vertexPipelineStoresAndAtomics;
+   }
+@@ -7716,7 +7738,7 @@ namespace dxvk {
+       : VK_SHADER_STAGE_FRAGMENT_BIT;
+ 
+     EmitCs([
+-      cShader = m_ffModules.GetShader<ShaderStage>()
++      cShader = m_ffModules.GetShader<ShaderStage>(m_ffPsWrapsTexCoords)
+     ](DxvkContext* ctx) mutable {
+       ctx->bindShader<Stage>(std::move(cShader));
+     });
+@@ -8552,6 +8574,27 @@ namespace dxvk {
+     for (uint32_t i = activeTextureStageCount; i < caps::TextureStageCount; i++)
+       dirty |= m_specData.disableTextureStage(i);
+ 
++    uint32_t texCoordWrap = 0u;
++
++    if (SupportsTexCoordWrap()) {
++      const bool useTexcoordIndex = !UseProgrammableVS();
++
++      for (uint32_t i = 0u; i < activeTextureStageCount; i++) {
++        uint32_t set = useTexcoordIndex
++          ? m_state.textureStages[i][DXVK_TSS_TEXCOORDINDEX] & 0b111u
++          : i;
++
++        texCoordWrap |= (m_state.renderStates[D3DRS_WRAP0 + set] & 0xfu) << (4u * i);
++      }
++    }
++
++    dirty |= m_specData.setTexCoordWrap(texCoordWrap);
++
++    if (m_ffPsWrapsTexCoords != (texCoordWrap != 0u)) {
++      m_ffPsWrapsTexCoords = texCoordWrap != 0u;
++      BindFFUbershader<D3D9ShaderType::PixelShader>();
++    }
++
+     if (dirty)
+       m_dirty.set(D3D9DeviceDirtyFlag::SpecializationEntries);
+ 
+diff --git a/src/d3d9/d3d9_device.h b/src/d3d9/d3d9_device.h
+index 2f686f4..ff4a796 100644
+--- a/src/d3d9/d3d9_device.h
++++ b/src/d3d9/d3d9_device.h
+@@ -804,6 +804,8 @@ namespace dxvk {
+      */
+     bool SupportsSWVP();
+ 
++    bool SupportsTexCoordWrap();
++
+     bool SupportsVCacheQuery() const;
+ 
+     HWND GetWindow();
+@@ -1624,6 +1626,7 @@ namespace dxvk {
+     D3D9VBSlotTracking              m_vbSlotTracking;
+ 
+     bool                            m_isSWVP;
++    bool                            m_ffPsWrapsTexCoords = false;
+     bool                            m_ffZTest          = false;
+ 
+     // the enablement of below features is tracked independently
+diff --git a/src/d3d9/d3d9_fixed_function.cpp b/src/d3d9/d3d9_fixed_function.cpp
+index 920d1f1..bae8916 100644
+--- a/src/d3d9/d3d9_fixed_function.cpp
++++ b/src/d3d9/d3d9_fixed_function.cpp
+@@ -15,12 +15,14 @@
+ #include <d3d9_fixed_function_vert.h>
+ #include <d3d9_fixed_function_frag.h>
+ #include <d3d9_fixed_function_frag_sample.h>
++#include <d3d9_fixed_function_frag_wrap.h>
+ 
+ namespace dxvk {
+ 
+   D3D9FFShaderModuleSet::D3D9FFShaderModuleSet(D3D9DeviceEx* pDevice)
+     : m_vs(buildVs())
+-    , m_fs(buildFs(pDevice)) {}
++    , m_fs(buildFs(pDevice, false))
++    , m_fsWrap(pDevice->SupportsTexCoordWrap() ? buildFs(pDevice, true) : nullptr) {}
+ 
+ 
+   Rc<DxvkShader> D3D9FFShaderModuleSet::buildVs() {
+@@ -65,7 +67,7 @@ namespace dxvk {
+   }
+ 
+ 
+-  Rc<DxvkShader> D3D9FFShaderModuleSet::buildFs(D3D9DeviceEx* pDevice) {
++  Rc<DxvkShader> D3D9FFShaderModuleSet::buildFs(D3D9DeviceEx* pDevice, bool wrapTexCoords) {
+     small_vector<DxvkBindingInfo, 10> bindings = {};
+ 
+     auto& sharedDataBinding = bindings.emplace_back();
+@@ -118,6 +120,9 @@ namespace dxvk {
+     info.specDataBuffer = DxvkShaderBinding(VK_SHADER_STAGE_FRAGMENT_BIT, SpecDataSet, 0u);
+     info.debugName = "FF FS";
+ 
++    if (wrapTexCoords)
++      return new DxvkSpirvShader(info, d3d9_fixed_function_frag_wrap);
++
+     return pDevice->GetOptions()->forceSampleRateShading
+       ? new DxvkSpirvShader(info, d3d9_fixed_function_frag_sample)
+       : new DxvkSpirvShader(info, d3d9_fixed_function_frag);
+diff --git a/src/d3d9/d3d9_fixed_function.h b/src/d3d9/d3d9_fixed_function.h
+index 3decba1..77168b2 100644
+--- a/src/d3d9/d3d9_fixed_function.h
++++ b/src/d3d9/d3d9_fixed_function.h
+@@ -50,17 +50,21 @@ namespace dxvk {
+     explicit D3D9FFShaderModuleSet(D3D9DeviceEx* pDevice);
+ 
+     template<D3D9ShaderType Stage>
+-    Rc<DxvkShader> GetShader() {
+-      return Stage == D3D9ShaderType::VertexShader ? m_vs : m_fs;
++    Rc<DxvkShader> GetShader(bool wrapTexCoords = false) {
++      if (Stage == D3D9ShaderType::VertexShader)
++        return m_vs;
++
++      return wrapTexCoords ? m_fsWrap : m_fs;
+     }
+ 
+   private:
+ 
+     Rc<DxvkShader> m_vs;
+     Rc<DxvkShader> m_fs;
++    Rc<DxvkShader> m_fsWrap;
+ 
+     static Rc<DxvkShader> buildVs();
+-    static Rc<DxvkShader> buildFs(D3D9DeviceEx* pDevice);
++    static Rc<DxvkShader> buildFs(D3D9DeviceEx* pDevice, bool wrapTexCoords);
+ 
+     constexpr static uint32_t GetPushSamplerOffset(uint32_t samplerIndex) {
+       // Located directly after the PS push data block.
+diff --git a/src/d3d9/d3d9_state.h b/src/d3d9/d3d9_state.h
+index 0260427..6ca99a7 100644
+--- a/src/d3d9/d3d9_state.h
++++ b/src/d3d9/d3d9_state.h
+@@ -144,8 +144,9 @@ namespace dxvk {
+     uint16_t psBoolConstants = 0u;
+     uint16_t spec6Pad = 0u;
+ 
+-    // Spec ID 7: Reserved.
+-    uint32_t spec7Pad = 0u;
++    // Spec ID 7: Texture coordinate wrapping for fixed-function pixel
++    // shaders. Four bits per texture stage, one for each component.
++    uint32_t texCoordWrap = 0u;
+ 
+     // Spec ID 8..11: Texture stage ops for fixed function.
+     // Each stage is packed as follows:
+@@ -221,6 +222,10 @@ namespace dxvk {
+         drefClampMask >> FirstVSSamplerSlot);
+     }
+ 
++    bool setTexCoordWrap(uint32_t mask) {
++      return set(texCoordWrap, mask);
++    }
++
+     bool setPsShaderModel(uint32_t majorVersion) {
+       return set(psIsShaderModel3, majorVersion >= 3u);
+     }
+diff --git a/src/d3d9/meson.build b/src/d3d9/meson.build
+index 53d23a6..cd77f0e 100644
+--- a/src/d3d9/meson.build
++++ b/src/d3d9/meson.build
+@@ -11,6 +11,7 @@ d3d9_shaders = files([
+   'shaders/d3d9_fixed_function_vert.vert',
+   'shaders/d3d9_fixed_function_frag.frag',
+   'shaders/d3d9_fixed_function_frag_sample.frag',
++  'shaders/d3d9_fixed_function_frag_wrap.frag',
+ ])
+ 
+ d3d9_src = [
+diff --git a/src/d3d9/shaders/d3d9_fixed_function_common.glsl b/src/d3d9/shaders/d3d9_fixed_function_common.glsl
+index 19ec18b..9ce7fcb 100644
+--- a/src/d3d9/shaders/d3d9_fixed_function_common.glsl
++++ b/src/d3d9/shaders/d3d9_fixed_function_common.glsl
+@@ -70,7 +70,7 @@ layout(set = SPEC_DATA_SET, binding = 0, scalar) uniform SpecConsts {
+     uint psSamplerTypes;
+     uint psSamplerModes;
+     uint unused_psBools;
+-    uint unused_spec7;
++    uint texCoordWrap;
+     uint packedStageOps01;
+     uint packedStageOps23;
+     uint packedStageOps45;
+diff --git a/src/d3d9/shaders/d3d9_fixed_function_frag.glsl b/src/d3d9/shaders/d3d9_fixed_function_frag.glsl
+index 182c665..7f27d07 100644
+--- a/src/d3d9/shaders/d3d9_fixed_function_frag.glsl
++++ b/src/d3d9/shaders/d3d9_fixed_function_frag.glsl
+@@ -5,6 +5,9 @@
+ #extension GL_ARB_derivative_control : require
+ #extension GL_EXT_control_flow_attributes : require
+ #extension GL_EXT_nonuniform_qualifier : require
++#ifdef WRAP_TEXCOORDS
++#extension GL_EXT_fragment_shader_barycentric : require
++#endif
+ 
+ #include "d3d9_fixed_function_common.glsl"
+ 
+@@ -14,6 +17,16 @@
+ #endif
+ 
+ layout(location = 0) INTERP_MODE in vec4 in_Normal;
++#ifdef WRAP_TEXCOORDS
++layout(location = 1) pervertexEXT in vec4 in_Texcoord0[3];
++layout(location = 2) pervertexEXT in vec4 in_Texcoord1[3];
++layout(location = 3) pervertexEXT in vec4 in_Texcoord2[3];
++layout(location = 4) pervertexEXT in vec4 in_Texcoord3[3];
++layout(location = 5) pervertexEXT in vec4 in_Texcoord4[3];
++layout(location = 6) pervertexEXT in vec4 in_Texcoord5[3];
++layout(location = 7) pervertexEXT in vec4 in_Texcoord6[3];
++layout(location = 8) pervertexEXT in vec4 in_Texcoord7[3];
++#else
+ layout(location = 1) INTERP_MODE in vec4 in_Texcoord0;
+ layout(location = 2) INTERP_MODE in vec4 in_Texcoord1;
+ layout(location = 3) INTERP_MODE in vec4 in_Texcoord2;
+@@ -22,6 +35,7 @@ layout(location = 5) INTERP_MODE in vec4 in_Texcoord4;
+ layout(location = 6) INTERP_MODE in vec4 in_Texcoord5;
+ layout(location = 7) INTERP_MODE in vec4 in_Texcoord6;
+ layout(location = 8) INTERP_MODE in vec4 in_Texcoord7;
++#endif
+ layout(location = 9) INTERP_MODE in vec4 in_Color0;
+ layout(location = 10) INTERP_MODE in vec4 in_Color1;
+ layout(location = 11) INTERP_MODE in float in_Fog;
+@@ -529,12 +543,41 @@ struct TextureStageState {
+     bool premodulateAlpha;
+ };
+ 
+-vec4 getTexCoord(uint stage) {
+-    // If point sprites are enabled, we need to replace the
+-    // input texture coordinate with the point coordinate
+-    if (isPointSpriteEnabled())
+-        return vec4(gl_PointCoord, 0.0f, 0.0f);
++#ifdef WRAP_TEXCOORDS
++uint getTexCoordWrapMask(uint stage) {
++    return bitfieldExtract(texCoordWrap, int(stage) * 4, 4);
++}
++
++vec4 wrapTexCoord(vec4 v0, vec4 v1, vec4 v2, uint mask) {
++    vec4 weights = vec4(0.0f);
++
++    for (uint i = 0; i < 4; i++)
++        weights[i] = (mask & (1u << i)) != 0u ? 1.0f : 0.0f;
++
++    v1 -= weights * floor(v1 - v0 + 0.5f);
++    v2 -= weights * floor(v2 - v0 + 0.5f);
++
++    return v0 * gl_BaryCoordEXT.x + v1 * gl_BaryCoordEXT.y + v2 * gl_BaryCoordEXT.z;
++}
++
++vec4 getStageTexCoord(uint stage) {
++    uint mask = getTexCoordWrapMask(stage);
+ 
++    switch (stage) {
++        case 0: return wrapTexCoord(in_Texcoord0[0], in_Texcoord0[1], in_Texcoord0[2], mask);
++        case 1: return wrapTexCoord(in_Texcoord1[0], in_Texcoord1[1], in_Texcoord1[2], mask);
++        case 2: return wrapTexCoord(in_Texcoord2[0], in_Texcoord2[1], in_Texcoord2[2], mask);
++        case 3: return wrapTexCoord(in_Texcoord3[0], in_Texcoord3[1], in_Texcoord3[2], mask);
++        case 4: return wrapTexCoord(in_Texcoord4[0], in_Texcoord4[1], in_Texcoord4[2], mask);
++        case 5: return wrapTexCoord(in_Texcoord5[0], in_Texcoord5[1], in_Texcoord5[2], mask);
++        case 6: return wrapTexCoord(in_Texcoord6[0], in_Texcoord6[1], in_Texcoord6[2], mask);
++        case 7: return wrapTexCoord(in_Texcoord7[0], in_Texcoord7[1], in_Texcoord7[2], mask);
++    }
++
++    return vec4(0.0f);
++}
++#else
++vec4 getStageTexCoord(uint stage) {
+     switch (stage) {
+         case 0: return in_Texcoord0;
+         case 1: return in_Texcoord1;
+@@ -548,6 +591,16 @@ vec4 getTexCoord(uint stage) {
+ 
+     return vec4(0.0f);
+ }
++#endif
++
++vec4 getTexCoord(uint stage) {
++    // If point sprites are enabled, we need to replace the
++    // input texture coordinate with the point coordinate
++    if (isPointSpriteEnabled())
++        return vec4(gl_PointCoord, 0.0f, 0.0f);
++
++    return getStageTexCoord(stage);
++}
+ 
+ TextureStageState runTextureStage(uint stage, TextureStageState state) {
+     TextureStage info = getTextureStage(stage);
+diff --git a/src/d3d9/shaders/d3d9_fixed_function_frag_wrap.frag b/src/d3d9/shaders/d3d9_fixed_function_frag_wrap.frag
+new file mode 100644
+index 0000000..514380f
+--- /dev/null
++++ b/src/d3d9/shaders/d3d9_fixed_function_frag_wrap.frag
+@@ -0,0 +1,6 @@
++#version 450
++#extension GL_GOOGLE_include_directive : enable
++
++#define WRAP_TEXCOORDS
++
++#include "d3d9_fixed_function_frag.glsl"
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index a03693b..900602d 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -47,6 +47,7 @@ namespace dxvk {
+     HANDLE_EXT(extVertexAttributeDivisor);         \
+     HANDLE_EXT(khrDeviceFault);                    \
+     HANDLE_EXT(khrDynamicRenderingLocalRead);      \
++    HANDLE_EXT(khrFragmentShaderBarycentric);      \
+     HANDLE_EXT(khrExternalMemoryWin32);            \
+     HANDLE_EXT(khrExternalSemaphoreWin32);         \
+     HANDLE_EXT(khrExternalMemoryFd);               \
+@@ -967,6 +968,9 @@ namespace dxvk {
+       ENABLE_EXT_FEATURE(extFragmentShaderInterlock, fragmentShaderSampleInterlock, false),
+       ENABLE_EXT_FEATURE(extFragmentShaderInterlock, fragmentShaderPixelInterlock, false),
+ 
++      /* Per-vertex fragment inputs, used for D3D9 texture coordinate wrapping */
++      ENABLE_EXT_FEATURE(khrFragmentShaderBarycentric, fragmentShaderBarycentric, false),
++
+       /* Windows-only extension to work around driver-side FSE issues */
+       ENABLE_EXT(extFullScreenExclusive, false),
+ 
+diff --git a/src/dxvk/dxvk_device_info.h b/src/dxvk/dxvk_device_info.h
+index 0316aef..f4a6f94 100644
+--- a/src/dxvk/dxvk_device_info.h
++++ b/src/dxvk/dxvk_device_info.h
+@@ -71,6 +71,7 @@ namespace dxvk {
+     VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT extDynamicRenderingUnusedAttachments = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT };
+     VkPhysicalDeviceExtendedDynamicState3FeaturesEXT          extExtendedDynamicState3        = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT };
+     VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT        extFragmentShaderInterlock      = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT };
++    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR      khrFragmentShaderBarycentric    = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR };
+     VkBool32                                                  extFullScreenExclusive          = VK_FALSE;
+     VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT        extGraphicsPipelineLibrary      = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT };
+     VkBool32                                                  extHdrMetadata                  = VK_FALSE;
+@@ -153,6 +154,7 @@ namespace dxvk {
+     VkExtensionProperties extDynamicRenderingUnusedAttachments = vk::makeExtension(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME);
+     VkExtensionProperties extExtendedDynamicState3          = vk::makeExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+     VkExtensionProperties extFragmentShaderInterlock        = vk::makeExtension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME);
++    VkExtensionProperties khrFragmentShaderBarycentric      = vk::makeExtension(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
+     VkExtensionProperties extFullScreenExclusive            = vk::makeExtension(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
+     VkExtensionProperties extGraphicsPipelineLibrary        = vk::makeExtension(VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
+     VkExtensionProperties extHdrMetadata                    = vk::makeExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME);
