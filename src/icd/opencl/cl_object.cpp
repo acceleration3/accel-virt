@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire,
                    GuestClContext *context, ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), companion_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -202,6 +202,18 @@ const ClMemExtent &ClObject::extent() const
 {
     AV_SCOPE("ClObject::extent");
     return extent_;
+}
+
+void ClObject::keep_companion(ClObject *companion)
+{
+    AV_SCOPE("ClObject::keep_companion");
+    companion_ = companion;
+}
+
+ClObject *ClObject::companion() const
+{
+    AV_SCOPE("ClObject::companion");
+    return companion_;
 }
 
 void ClObject::keep_flags(uint64_t flags)

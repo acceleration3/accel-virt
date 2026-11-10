@@ -626,7 +626,6 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
     const cl_mem output = run.output();
     CHECK_EQ(table->clSetKernelArg(run.kernel(), 2u, sizeof(cl_mem), &output), CL_SUCCESS);
     table->clSVMFree(run.context(), shared);
-    CHECK_EQ(process.log().holding("not synchronised"), 1u);
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }

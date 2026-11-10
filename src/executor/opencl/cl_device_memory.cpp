@@ -50,6 +50,12 @@ bool ClDeviceMemory::keep(cl_mem memory, uint64_t claimed)
 {
     AV_SCOPE("ClDeviceMemory::keep");
     if (claimed == 0u) return true;
+    uint64_t *const stale = sizes_.find(key_of(memory));
+    if (stale != nullptr) {
+        unclaim(*stale);
+        *stale = claimed;
+        return true;
+    }
     uint32_t     slot = 0u;
     const Status kept = sizes_.insert(key_of(memory), claimed, slot);
     if (kept == Status::ok) return true;

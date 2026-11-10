@@ -188,7 +188,7 @@ TEST(cl_extension_policy, the_shipped_table_is_a_valid_policy_that_reports_what_
   CHECK_EQ(policy.rows(), av::clicd::reported_extension_count);
   CHECK(policy.invariants_hold());
   CHECK(policy.reportable("cl_khr_external_memory"));
-  CHECK(!policy.reportable("cl_khr_icd"));
+  CHECK(policy.reportable("cl_khr_icd"));
   policy.observe_vendor(0x1002u);
   char into[1024] = {};
   const Host nothing;

@@ -22,7 +22,7 @@ static_assert(carried_names_fit(), "a carried extension name must fit a cl_name_
 }
 
 const ClExtensionPolicy::Row reported_extensions[] = {
-    {"cl_khr_icd", 2u, "cl_platform.the_platform_lists_the_icd_extension_and_its_suffix", "-"},
+    {"cl_khr_icd", 1u, "cl_platform.the_platform_lists_the_icd_extension_and_its_suffix", "-"},
     {"cl_khr_external_memory", 1u,
      "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver"},
     {"cl_khr_external_memory_win32", 1u,

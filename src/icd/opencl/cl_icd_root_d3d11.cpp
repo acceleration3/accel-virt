@@ -209,7 +209,7 @@ cl_int ClIcdRoot::enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, c
     }
     if (taken != CL_SUCCESS) return taken;
     cl_int done = d3d11_copy_in(queue, *context, objects, count);
-    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, CL_COMMAND_ACQUIRE_D3D11_OBJECTS_KHR);
+    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, acquire_d3d11_command);
     if (done != CL_SUCCESS) {
         const ThreadLockHold locked(lock_);
         context->d3d11().untake(objects, count);
@@ -234,7 +234,7 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
     if (given != CL_SUCCESS) return given;
     cl_int done = finish(queue);
     if (done == CL_SUCCESS) done = d3d11_copy_out(queue, *context, objects, count);
-    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, CL_COMMAND_RELEASE_D3D11_OBJECTS_KHR);
+    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, release_d3d11_command);
     if (done != CL_SUCCESS) {
         const ThreadLockHold locked(lock_);
         context->d3d11().ungive(objects, count);

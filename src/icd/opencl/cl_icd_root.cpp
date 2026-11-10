@@ -1518,6 +1518,8 @@ cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *eve
             if (settled != CL_SUCCESS) return settled;
             const cl_int copied = svm_from_guest(*wire, *held, host, pointer, static_cast<size_t>(bytes));
             if (copied != CL_SUCCESS) return copied;
+            const cl_int landed = drain_unless_idle(*wire, *held);
+            if (landed != CL_SUCCESS) return landed;
         }
     }
     uint64_t     produced = 0u;
@@ -1817,8 +1819,10 @@ cl_int ClIcdRoot::image_info(cl_mem image, cl_image_info name, size_t value_byte
     ClObject *const held = judged(image, ClObject::Kind::mem);
     if (held == nullptr) return CL_INVALID_MEM_OBJECT;
     if (name == CL_IMAGE_BUFFER) {
-        const cl_mem none = nullptr;
-        return ClInfoRequest(value_bytes, value, size_ret).give(&none, sizeof none);
+        const cl_mem named = held->companion() != nullptr && judged(held->companion(), ClObject::Kind::mem) != nullptr
+                                 ? reinterpret_cast<cl_mem>(held->companion())
+                                 : nullptr;
+        return ClInfoRequest(value_bytes, value, size_ret).give(&named, sizeof named);
     }
     if (name == d3d11_subresource_info) {
         const D3d11Object *const made = d3d11_object_of(*held);
@@ -2295,7 +2299,8 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
     }
     cl_int         host_error = CL_SUCCESS;
     const uint64_t image = av::clproto::av_clCreateImage(
-        *wire, held->wire(), asked_flags.for_host() & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR), format,
+        *wire, held->wire(),
+        desc->buffer != nullptr ? 0u : asked_flags.for_host() & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR), format,
         &described, nullptr, 0u, &host_error);
     if (image == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
@@ -2314,6 +2319,7 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
     if (made != nullptr) {
         ClObject *const object = static_cast<ClObject *>(made);
         object->keep_flags(asked_flags.asked());
+        if (desc->buffer != nullptr) object->keep_companion(judged(desc->buffer, ClObject::Kind::mem));
         object->extent().as_image(desc->image_type, desc->image_width, desc->image_height, desc->image_depth,
                                   desc->image_array_size, *format);
     }

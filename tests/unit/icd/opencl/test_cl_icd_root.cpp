@@ -135,14 +135,14 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     std::memset(reported, 'x', sizeof reported);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
              CL_SUCCESS);
-    CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"), 0);
-    CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
+    CHECK_EQ(std::strcmp(reported, "cl_khr_icd cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"), 0);
+    CHECK_EQ(answered, std::strlen("cl_khr_icd cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
     CHECK(std::strstr(plain, "cl_khr_spir") != nullptr);
 
     const std::uint32_t sent = rig.kmt().commands();
     std::size_t         wanted = 0u;
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted), CL_SUCCESS);
-    CHECK_EQ(wanted, std::strlen("cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
+    CHECK_EQ(wanted, std::strlen("cl_khr_icd cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
     char cramped[1] = {'x'};
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr), CL_INVALID_VALUE);
     CHECK_EQ(cramped[0], 'x');
@@ -156,7 +156,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
              CL_SUCCESS);
     CHECK_EQ(std::strcmp(reported,
-                         "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing cl_khr_d3d11_sharing "
+                         "cl_khr_icd cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing cl_khr_d3d11_sharing "
                          "cl_khr_pci_bus_info"),
              0);
     CHECK_EQ(answered, std::strlen(reported) + 1u); }
@@ -168,7 +168,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     std::memset(reported, 'x', sizeof reported);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
              CL_SUCCESS);
-    CHECK_EQ(std::strcmp(reported, "cl_khr_gl_sharing cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"),
+    CHECK_EQ(std::strcmp(reported, "cl_khr_icd cl_khr_gl_sharing cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"),
              0); }
 
   { ClIcdRig rig;

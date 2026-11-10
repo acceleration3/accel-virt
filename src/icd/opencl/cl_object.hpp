@@ -60,6 +60,8 @@ public:
     ClKernelShape  *shape() const;
     ClMemExtent    &extent();
     const ClMemExtent &extent() const;
+    void            keep_companion(ClObject *companion);
+    ClObject       *companion() const;
     void            keep_flags(uint64_t flags);
     uint64_t        flags() const;
     void            keep_command_type(uint32_t type);
@@ -99,6 +101,7 @@ private:
     HostAllocation        *lent_;
     ClObject              *sliced_from_;
     ClKernelShape         *shape_;
+    ClObject              *companion_;
     uint64_t               flags_;
     ClMemExtent            extent_;
     uint32_t               command_type_;

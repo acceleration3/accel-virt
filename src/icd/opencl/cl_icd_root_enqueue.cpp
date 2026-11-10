@@ -105,6 +105,8 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    ClientTransport *const early_wire = wire_of(*held);
+    if (early_wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (source->extent().shape() == ClMemExtent::Shape::buffer ||
         target->extent().shape() == ClMemExtent::Shape::image)
         return CL_INVALID_MEM_OBJECT;
@@ -112,7 +114,7 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
         const cl_int in_region = source->extent().judge_region(origin, region);
         if (in_region != CL_SUCCESS) return in_region;
         const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] *
-                                element_bytes(*wire_of(*held), source->wire());
+                                element_bytes(*early_wire, source->wire());
         const cl_int in_buffer = judge_buffer_range(*target, offset, volume);
         if (in_buffer != CL_SUCCESS) return in_buffer;
     }
@@ -143,6 +145,8 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    ClientTransport *const early_wire = wire_of(*held);
+    if (early_wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (source->extent().shape() == ClMemExtent::Shape::image ||
         target->extent().shape() == ClMemExtent::Shape::buffer)
         return CL_INVALID_MEM_OBJECT;
@@ -150,7 +154,7 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
         const cl_int in_region = target->extent().judge_region(origin, region);
         if (in_region != CL_SUCCESS) return in_region;
         const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] *
-                                element_bytes(*wire_of(*held), target->wire());
+                                element_bytes(*early_wire, target->wire());
         const cl_int in_buffer = judge_buffer_range(*source, offset, volume);
         if (in_buffer != CL_SUCCESS) return in_buffer;
     }

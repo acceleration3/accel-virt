@@ -235,6 +235,8 @@ public:
     static constexpr cl_uint d3d11_prefer_shared = 0x402Du;
     static constexpr cl_int  invalid_d3d11_device = -1006;
     static constexpr cl_int  invalid_d3d11_resource = -1007;
+    static constexpr cl_command_type acquire_d3d11_command = 0x4020u;
+    static constexpr cl_command_type release_d3d11_command = 0x4021u;
 
     cl_int device_ids_from_d3d11(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
                                  cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices);

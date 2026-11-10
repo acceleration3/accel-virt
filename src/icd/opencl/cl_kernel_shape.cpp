@@ -127,10 +127,14 @@ cl_int ClKernelShape::judge_launch(cl_uint dimensions, const size_t *offset, con
         size_t items = 1u;
         for (cl_uint axis = 0u; axis < dimensions; ++axis) {
             if (local[axis] == 0u) return CL_INVALID_WORK_GROUP_SIZE;
-            if (limits_.item_sizes[axis] != 0u && local[axis] > limits_.item_sizes[axis])
-                return CL_INVALID_WORK_ITEM_SIZE;
             if (local[axis] > ~size_t{0} / items) return CL_INVALID_WORK_GROUP_SIZE;
             items *= local[axis];
+        }
+        if (limits_.group_size != 0u && items > limits_.group_size) return CL_INVALID_WORK_GROUP_SIZE;
+        if (limits_.device_group_size != 0u && items > limits_.device_group_size) return CL_INVALID_WORK_GROUP_SIZE;
+        for (cl_uint axis = 0u; axis < dimensions; ++axis) {
+            if (limits_.item_sizes[axis] != 0u && local[axis] > limits_.item_sizes[axis])
+                return CL_INVALID_WORK_ITEM_SIZE;
             if (!non_uniform && global[axis] % local[axis] != 0u) return CL_INVALID_WORK_GROUP_SIZE;
             if (compiled && local[axis] != limits_.compiled_group[axis]) return CL_INVALID_WORK_GROUP_SIZE;
         }
@@ -138,8 +142,6 @@ cl_int ClKernelShape::judge_launch(cl_uint dimensions, const size_t *offset, con
             for (cl_uint axis = dimensions; axis < 3u; ++axis)
                 if (limits_.compiled_group[axis] != 1u) return CL_INVALID_WORK_GROUP_SIZE;
         }
-        if (limits_.group_size != 0u && items > limits_.group_size) return CL_INVALID_WORK_GROUP_SIZE;
-        if (limits_.device_group_size != 0u && items > limits_.device_group_size) return CL_INVALID_WORK_GROUP_SIZE;
     }
     if (limits_.device_local_bytes != 0u && local_bytes() > limits_.device_local_bytes) return CL_OUT_OF_RESOURCES;
     return CL_SUCCESS;
