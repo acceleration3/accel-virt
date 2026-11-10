@@ -501,7 +501,7 @@ Status GuestGlContext::build()
     GuestConnection &device = link_.device();
     const Status     opened = channel_.open(device, options_);
     if (opened != Status::ok) LogLine(lines_).text("the context's host channel did not open, status ").number(static_cast<uint32_t>(opened)).write();
-    if (opened == Status::no_memory || opened == Status::no_space) return Status::no_memory;
+    if (opened == Status::no_memory || opened == Status::no_space) return opened;
     if (opened != Status::ok) return Status::invalid_parameter;
     if (slices_.enroll() != Status::ok) {
         lines_.write("the context's buffer slices could not be enrolled");

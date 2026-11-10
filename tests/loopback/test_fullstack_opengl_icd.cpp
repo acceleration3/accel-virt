@@ -430,6 +430,14 @@ public:
     template <typename Function>
     Function proc(const char *name) const
     {
+        static constexpr struct { const char *name; std::uint32_t slot; } slots[] = {
+            {"glTexImage2D", 183u}, {"glBindTexture", 307u}, {"glGenTextures", 328u}, {"glBegin", 7u},
+            {"glColor3f", 13u}, {"glVertex3f", 136u}, {"glEnd", 43u}, {"glClearColor", 206u}, {"glClear", 203u},
+            {"glEnable", 215u}, {"glDisable", 214u}, {"glDepthFunc", 245u}, {"glColorMask", 210u},
+            {"glDepthMask", 211u}, {"glFinish", 216u}, {"glReadPixels", 256u}, {"glGetError", 261u},
+        };
+        for (const auto &row : slots)
+            if (std::strcmp(row.name, name) == 0) return gl_.gl<Function>(row.slot);
         return reinterpret_cast<Function>(gl_.get_proc_address(name));
     }
 
@@ -453,6 +461,7 @@ public:
         proc<Bind>("glBindRenderbuffer")(0x8D41u, depth);
         proc<Storage>("glRenderbufferStorage")(0x8D41u, 0x81A6u, side, side);
         proc<AttachRenderbuffer>("glFramebufferRenderbuffer")(gl_framebuffer, 0x8D00u, 0x8D41u, depth);
+        gl_.gl<void (APIENTRY *)(GLint, GLint, GLsizei, GLsizei)>(305u)(0, 0, side, side);
         return proc<GLenum (APIENTRY *)(GLenum)>("glCheckFramebufferStatus")(gl_framebuffer) == gl_framebuffer_complete;
     }
 

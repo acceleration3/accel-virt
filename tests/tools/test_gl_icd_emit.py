@@ -21,7 +21,7 @@ ORDER = """# opengl32.dll sha256 0000
 0 glNewList
 1 glBegin
 2 glColor3b_InRGBA
-3 glEnable
+3 glCullFace
 4 glGetPointerv
 """
 
@@ -43,7 +43,7 @@ def registry():
         command("glBegin", [scalar("mode", "GLenum")], tier="compat", ident=2),
         command("glColor3b", [scalar("red", "GLbyte"), scalar("green", "GLbyte"), scalar("blue", "GLbyte")],
                 ident=3),
-        command("glEnable", [scalar("cap", "GLenum")], ident=4),
+        command("glCullFace", [scalar("cap", "GLenum")], ident=4),
         command("glDrawArrays", [scalar("mode", "GLenum"), scalar("first", "GLint"), scalar("count", "GLsizei")],
                 ident=5),
         command("glIsEnabled", [scalar("cap", "GLenum")], returns="GLboolean", ident=6),
@@ -101,7 +101,7 @@ class GeneratedGlIcd(unittest.TestCase):
             ("0", "reinterpret_cast<GlProc>(&Wrap_glNewList)"),
             ("1", "reinterpret_cast<GlProc>(&Wrap_glBegin)"),
             ("2", "reinterpret_cast<GlProc>(&Wrap_glColor3b)"),
-            ("3", "reinterpret_cast<GlProc>(&Wrap_glEnable)"),
+            ("3", "reinterpret_cast<GlProc>(&Wrap_glCullFace)"),
             ("4", "reinterpret_cast<GlProc>(&Wrap_glGetPointerv)"),
         ])
         self.assertIn("GlProc slots[kProcTableSlots];", self.table)
@@ -124,7 +124,7 @@ class GeneratedGlIcd(unittest.TestCase):
         for text in (self.header, self.source, self.table):
             self.assertNotIn('extern "C"', text)
         self.assertIn("namespace av::glicd::generated {", self.header)
-        self.assertIn("void APIENTRY Wrap_glEnable(GLenum cap);", self.header)
+        self.assertIn("void APIENTRY Wrap_glCullFace(GLenum cap);", self.header)
         self.assertIn("GLboolean APIENTRY Wrap_glIsEnabled(GLenum cap);", self.header)
         self.assertNotRegex(self.header, r"APIENTRY gl\w+\(")
         self.assertFalse((self.out / "gl_icd_exports.def").exists())
@@ -139,11 +139,11 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertIn("if (!::av::glicd::legacy_calls_live()) {", begin)
         self.assertIn("::av::glicd::refuse_legacy();", begin)
         self.assertIn("::av::glproto::av_glBegin(*av_t, mode);", begin)
-        self.assertNotIn("legacy_calls_live", body_of(self.source, "Wrap_glEnable"))
+        self.assertNotIn("legacy_calls_live", body_of(self.source, "Wrap_glCullFace"))
 
     def test_forwarding_entries_are_defined_and_handwritten_ones_are_left_to_the_icd(self):
-        self.assertIn("void APIENTRY Wrap_glEnable(GLenum cap) {", self.source)
-        self.assertIn("::av::glproto::av_glEnable(*av_t, cap);", body_of(self.source, "Wrap_glEnable"))
+        self.assertIn("void APIENTRY Wrap_glCullFace(GLenum cap) {", self.source)
+        self.assertIn("::av::glproto::av_glCullFace(*av_t, cap);", body_of(self.source, "Wrap_glCullFace"))
         self.assertIn("const GLubyte* APIENTRY Wrap_glGetString(GLenum name);", self.header)
         self.assertNotIn("Wrap_glGetString(GLenum name) {", self.source)
         self.assertNotIn("Wrap_glDrawArrays(GLenum mode, GLint first, GLsizei count) {", self.source)
@@ -184,7 +184,7 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertIn('#include "proto/client/sync_call_scope.hpp"', self.client)
 
     def test_a_one_way_call_ends_only_when_its_payload_is_dropped(self):
-        for name in ("av_glEnable", "av_glUniform1iv"):
+        for name in ("av_glCullFace", "av_glUniform1iv"):
             body = body_of(self.client, name)
             self.assertNotIn("SyncCallScope", body, name)
             self.assertEqual(body.count("av_t.end_call();"), 1, name)
@@ -225,7 +225,7 @@ class ProcTableOrder(unittest.TestCase):
                 emit.read_proc_table(text)
 
     def test_the_rgba_suffix_names_the_same_command(self):
-        self.assertEqual(emit.read_proc_table("0 glColor3b_InRGBA\n1 glEnable\n"), ["glColor3b", "glEnable"])
+        self.assertEqual(emit.read_proc_table("0 glColor3b_InRGBA\n1 glCullFace\n"), ["glColor3b", "glCullFace"])
 
 
 class ParameterTypes(unittest.TestCase):
