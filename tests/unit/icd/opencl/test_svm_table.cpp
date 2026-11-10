@@ -381,3 +381,27 @@ TEST(svm_table, a_map_depth_that_cannot_rise_any_further_stays_where_it_is)
   row.mapped();
   CHECK_EQ(row.map_depth(), ~std::uint32_t{0});
   CHECK(row.invariants_hold()); }
+
+TEST(svm_table, an_allocation_remembers_its_maps_and_whether_the_device_wrote_it)
+{ MockPlatform platform;
+  SvmTable table(platform);
+  std::uint8_t *const mirror = static_cast<std::uint8_t *>(table.take(host_base, 4096u, 1024u));
+  CHECK(mirror != nullptr);
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(mirror) % 1024u, 0u);
+  SvmAllocation *const row = table.covering(mirror);
+  CHECK(row != nullptr);
+  CHECK(!row->take_device_write());
+  row->note_device_write();
+  CHECK(row->take_device_write());
+  CHECK(!row->take_device_write());
+  std::uint64_t bytes = 0u;
+  bool          writes = false;
+  row->note_region(128u, 64u, true);
+  row->note_region(512u, 32u, false);
+  CHECK(row->take_region(128u, bytes, writes));
+  CHECK_EQ(bytes, 64u);
+  CHECK(writes);
+  CHECK(!row->take_region(128u, bytes, writes));
+  CHECK(row->take_region(512u, bytes, writes));
+  CHECK(!writes);
+  CHECK_EQ(table.give_back(mirror), host_base); }

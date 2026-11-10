@@ -95,7 +95,7 @@ uint32_t ClBuildOptions::traits() const
     return traits;
 }
 
-size_t ClBuildOptions::without_arguments_option(char *text, size_t length)
+size_t ClBuildOptions::without_arguments_option(char *text, size_t length) const
 {
     AV_SCOPE("ClBuildOptions::without_arguments_option");
     const size_t option_length = length_of(arguments_option);

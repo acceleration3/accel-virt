@@ -2048,7 +2048,7 @@ cl_int ClIcdRoot::program_build_info(cl_program program, cl_device_id device,
     text[size] = '\0';
     size_t length = 0u;
     while (text[length] != '\0') ++length;
-    length = ClBuildOptions::without_arguments_option(text, length);
+    length = ClBuildOptions(memory_, nullptr).without_arguments_option(text, length);
     return ClInfoRequest(value_bytes, value, size_ret).give(text, length + 1u);
 }
 

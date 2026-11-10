@@ -114,6 +114,28 @@ TEST(cl_object, a_queue_is_known_idle_until_work_is_sent_and_again_once_it_is_do
   CHECK(queue->known_idle());
   CHECK(queue->invariants_hold()); }
 
+TEST(cl_object, an_object_keeps_the_notes_the_icd_makes_about_it)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const memory = rig.make(ClObject::Kind::mem, 0x902u, context);
+  ClObject *const image = rig.make(ClObject::Kind::mem, 0x903u, context);
+  ClObject *const kernel = rig.make(ClObject::Kind::kernel, 0x904u, context);
+  CHECK_EQ(memory->flags(), 0u);
+  memory->keep_flags(CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS);
+  CHECK_EQ(memory->flags(), static_cast<std::uint64_t>(CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS));
+  CHECK(image->companion() == nullptr);
+  image->keep_companion(memory);
+  CHECK(image->companion() == memory);
+  CHECK_EQ(image->command_type(), 0u);
+  image->keep_command_type(CL_COMMAND_READ_BUFFER);
+  CHECK_EQ(image->command_type(), static_cast<std::uint32_t>(CL_COMMAND_READ_BUFFER));
+  CHECK_EQ(kernel->traits(), 0u);
+  kernel->keep_traits(ClObject::kernel_unshaped);
+  CHECK_EQ(kernel->traits(), ClObject::kernel_unshaped);
+  CHECK(kernel->shape() == nullptr);
+  kernel->keep_shape(nullptr);
+  CHECK(kernel->invariants_hold()); }
+
 TEST(cl_object_table, an_object_of_another_kind_is_not_that_object)
 { Table rig;
   ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);

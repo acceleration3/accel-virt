@@ -17,19 +17,22 @@ namespace av::clicd {
 
 struct ClKernelShapeProbe;
 
+struct ClKernelLimits {
+    size_t   group_size_;
+    size_t   compiled_group_[3];
+    uint64_t static_local_bytes_;
+    size_t   device_group_size_;
+    size_t   item_sizes_[3];
+    cl_uint  item_dimensions_;
+    uint64_t device_local_bytes_;
+};
+
+
 class ClKernelShape {
 public:
     enum class ArgKind : uint8_t { unknown, value, buffer, local, image, sampler };
 
-    struct Limits {
-        size_t   group_size;
-        size_t   compiled_group[3];
-        uint64_t static_local_bytes;
-        size_t   device_group_size;
-        size_t   item_sizes[3];
-        cl_uint  item_dimensions;
-        uint64_t device_local_bytes;
-    };
+    using Limits = ClKernelLimits;
 
     explicit ClKernelShape(BlockSource &memory);
     ClKernelShape(const ClKernelShape &) = delete;

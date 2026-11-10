@@ -25,7 +25,7 @@ public:
     const char *for_host() const;
     uint32_t    traits() const;
 
-    static size_t without_arguments_option(char *text, size_t length);
+    size_t without_arguments_option(char *text, size_t length) const;
 
 private:
     friend struct ClBuildOptionsProbe;

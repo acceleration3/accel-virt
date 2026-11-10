@@ -9,7 +9,7 @@ ClMemFlags::ClMemFlags(cl_mem_flags flags) : flags_(flags)
     AV_SCOPE("ClMemFlags::ClMemFlags");
 }
 
-unsigned ClMemFlags::bits_of(cl_mem_flags flags)
+unsigned ClMemFlags::bits_of(cl_mem_flags flags) const
 {
     AV_SCOPE("ClMemFlags::bits_of");
     unsigned count = 0u;

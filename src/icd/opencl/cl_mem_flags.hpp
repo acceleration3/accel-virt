@@ -19,7 +19,7 @@ private:
     static constexpr cl_mem_flags host_access = CL_MEM_HOST_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_NO_ACCESS;
     static constexpr cl_mem_flags device_access = CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY;
 
-    static unsigned bits_of(cl_mem_flags flags);
+    unsigned bits_of(cl_mem_flags flags) const;
 
     cl_mem_flags flags_;
 };

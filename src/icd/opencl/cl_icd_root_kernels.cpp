@@ -51,31 +51,31 @@ ClKernelShape *ClIcdRoot::kernel_shape(ClObject &kernel, ClientTransport &wire)
     cl_ulong              local = 0u;
     if (av::clproto::av_clGetKernelWorkGroupInfo(wire, kernel.wire(), device, CL_KERNEL_WORK_GROUP_SIZE,
                                                   sizeof group, &group, nullptr) == CL_SUCCESS)
-        limits.group_size = group;
+        limits.group_size_ = group;
     if (av::clproto::av_clGetKernelWorkGroupInfo(wire, kernel.wire(), device, CL_KERNEL_COMPILE_WORK_GROUP_SIZE,
-                                                  sizeof limits.compiled_group, limits.compiled_group, nullptr) !=
+                                                  sizeof limits.compiled_group_, limits.compiled_group_, nullptr) !=
         CL_SUCCESS)
-        limits.compiled_group[0] = limits.compiled_group[1] = limits.compiled_group[2] = 0u;
+        limits.compiled_group_[0] = limits.compiled_group_[1] = limits.compiled_group_[2] = 0u;
     if (av::clproto::av_clGetKernelWorkGroupInfo(wire, kernel.wire(), device, CL_KERNEL_LOCAL_MEM_SIZE, sizeof local,
                                                   &local, nullptr) == CL_SUCCESS)
-        limits.static_local_bytes = local;
+        limits.static_local_bytes_ = local;
     size_t sizes[3] = {};
     size_t answered = 0u;
     if (av::clproto::av_clGetDeviceInfo(wire, device, CL_DEVICE_MAX_WORK_ITEM_SIZES, sizeof sizes, sizes,
                                          &answered) == CL_SUCCESS)
-        for (uint32_t axis = 0u; axis < 3u; ++axis) limits.item_sizes[axis] = sizes[axis];
+        for (uint32_t axis = 0u; axis < 3u; ++axis) limits.item_sizes_[axis] = sizes[axis];
     if (av::clproto::av_clGetDeviceInfo(wire, device, CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS,
-                                         sizeof limits.item_dimensions, &limits.item_dimensions, nullptr) !=
+                                         sizeof limits.item_dimensions_, &limits.item_dimensions_, nullptr) !=
         CL_SUCCESS)
-        limits.item_dimensions = 0u;
+        limits.item_dimensions_ = 0u;
     size_t device_group = 0u;
     if (av::clproto::av_clGetDeviceInfo(wire, device, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof device_group,
                                          &device_group, nullptr) == CL_SUCCESS)
-        limits.device_group_size = device_group;
+        limits.device_group_size_ = device_group;
     cl_ulong device_local = 0u;
     if (av::clproto::av_clGetDeviceInfo(wire, device, CL_DEVICE_LOCAL_MEM_SIZE, sizeof device_local, &device_local,
                                          nullptr) == CL_SUCCESS)
-        limits.device_local_bytes = device_local;
+        limits.device_local_bytes_ = device_local;
     made->limit_by(limits);
     kernel.keep_shape(made);
     return made;

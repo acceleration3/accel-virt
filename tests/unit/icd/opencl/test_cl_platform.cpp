@@ -190,3 +190,9 @@ TEST(cl_platform, the_host_timer_resolution_is_answered_by_size_alone_or_by_valu
            CL_SUCCESS);
   CHECK_EQ(resolution, 0u);
   CHECK_EQ(platform.info(nullptr, CL_PLATFORM_HOST_TIMER_RESOLUTION, 0u, nullptr, nullptr), CL_SUCCESS); }
+
+TEST(cl_platform, the_platform_lists_the_icd_extension_and_its_suffix)
+{ ClPlatform platform;
+  char suffix[16] = {};
+  CHECK_EQ(platform.info(platform.as_handle(), CL_PLATFORM_ICD_SUFFIX_KHR, sizeof suffix, suffix, nullptr), CL_SUCCESS);
+  CHECK(suffix[0] != '\0'); }

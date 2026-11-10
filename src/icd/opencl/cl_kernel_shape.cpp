@@ -104,7 +104,7 @@ bool ClKernelShape::all_set() const
 uint64_t ClKernelShape::local_bytes() const
 {
     AV_SCOPE("ClKernelShape::local_bytes");
-    uint64_t total = limits_.static_local_bytes;
+    uint64_t total = limits_.static_local_bytes_;
     for (uint32_t index = 0u; index < args_.size(); ++index) total += args_.at(index).local_bytes_;
     return total;
 }
@@ -113,7 +113,7 @@ cl_int ClKernelShape::judge_launch(cl_uint dimensions, const size_t *offset, con
                                    const size_t *local, bool non_uniform) const
 {
     AV_SCOPE("ClKernelShape::judge_launch");
-    if (dimensions == 0u || dimensions > 3u || (limits_.item_dimensions != 0u && dimensions > limits_.item_dimensions))
+    if (dimensions == 0u || dimensions > 3u || (limits_.item_dimensions_ != 0u && dimensions > limits_.item_dimensions_))
         return CL_INVALID_WORK_DIMENSION;
     if (!all_set()) return CL_INVALID_KERNEL_ARGS;
     if (global == nullptr) return CL_INVALID_GLOBAL_WORK_SIZE;
@@ -121,8 +121,8 @@ cl_int ClKernelShape::judge_launch(cl_uint dimensions, const size_t *offset, con
         if (global[axis] == 0u) return CL_INVALID_GLOBAL_WORK_SIZE;
         if (offset != nullptr && offset[axis] > ~size_t{0} - global[axis]) return CL_INVALID_GLOBAL_OFFSET;
     }
-    const bool compiled = limits_.compiled_group[0] != 0u && limits_.compiled_group[1] != 0u &&
-                          limits_.compiled_group[2] != 0u;
+    const bool compiled = limits_.compiled_group_[0] != 0u && limits_.compiled_group_[1] != 0u &&
+                          limits_.compiled_group_[2] != 0u;
     if (local != nullptr) {
         size_t items = 1u;
         for (cl_uint axis = 0u; axis < dimensions; ++axis) {
@@ -130,20 +130,20 @@ cl_int ClKernelShape::judge_launch(cl_uint dimensions, const size_t *offset, con
             if (local[axis] > ~size_t{0} / items) return CL_INVALID_WORK_GROUP_SIZE;
             items *= local[axis];
         }
-        if (limits_.group_size != 0u && items > limits_.group_size) return CL_INVALID_WORK_GROUP_SIZE;
-        if (limits_.device_group_size != 0u && items > limits_.device_group_size) return CL_INVALID_WORK_GROUP_SIZE;
+        if (limits_.group_size_ != 0u && items > limits_.group_size_) return CL_INVALID_WORK_GROUP_SIZE;
+        if (limits_.device_group_size_ != 0u && items > limits_.device_group_size_) return CL_INVALID_WORK_GROUP_SIZE;
         for (cl_uint axis = 0u; axis < dimensions; ++axis) {
-            if (limits_.item_sizes[axis] != 0u && local[axis] > limits_.item_sizes[axis])
+            if (limits_.item_sizes_[axis] != 0u && local[axis] > limits_.item_sizes_[axis])
                 return CL_INVALID_WORK_ITEM_SIZE;
             if (!non_uniform && global[axis] % local[axis] != 0u) return CL_INVALID_WORK_GROUP_SIZE;
-            if (compiled && local[axis] != limits_.compiled_group[axis]) return CL_INVALID_WORK_GROUP_SIZE;
+            if (compiled && local[axis] != limits_.compiled_group_[axis]) return CL_INVALID_WORK_GROUP_SIZE;
         }
         if (compiled) {
             for (cl_uint axis = dimensions; axis < 3u; ++axis)
-                if (limits_.compiled_group[axis] != 1u) return CL_INVALID_WORK_GROUP_SIZE;
+                if (limits_.compiled_group_[axis] != 1u) return CL_INVALID_WORK_GROUP_SIZE;
         }
     }
-    if (limits_.device_local_bytes != 0u && local_bytes() > limits_.device_local_bytes) return CL_OUT_OF_RESOURCES;
+    if (limits_.device_local_bytes_ != 0u && local_bytes() > limits_.device_local_bytes_) return CL_OUT_OF_RESOURCES;
     return CL_SUCCESS;
 }
 

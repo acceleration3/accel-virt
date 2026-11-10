@@ -66,3 +66,12 @@ TEST(cl_buffer_rect, rows_longer_than_one_command_counts_are_out_of_resources)
   CHECK_EQ(ClBufferRect(corner, corner, many_rows, 0u, 0u, 0u, 0u).check(), CL_OUT_OF_RESOURCES);
   const std::size_t one_row[3] = {16u, 1u, 1u};
   CHECK_EQ(ClBufferRect(corner, corner, one_row, 0u, 0u, std::size_t{1} << 33u, 0u).check(), CL_OUT_OF_RESOURCES); }
+
+TEST(cl_buffer_rect, the_span_a_rectangle_covers_runs_from_its_corner_to_the_end_of_its_last_row)
+{ const ClBufferRect rect(corner, corner, region, 0u, 0u, 0u, 0u);
+  std::uint64_t first = 0u, end = 0u;
+  CHECK(rect.buffer_span(first, end));
+  CHECK_EQ(first, 1u * 128u + 2u * 16u + 4u);
+  CHECK_EQ(end, first + 1u * 128u + 7u * 16u + 16u);
+  CHECK(rect.host_span(end));
+  CHECK(end > 0u); }

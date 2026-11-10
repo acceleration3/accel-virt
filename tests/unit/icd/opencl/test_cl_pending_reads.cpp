@@ -180,3 +180,19 @@ TEST(cl_pending_reads, the_invariant_catches_a_count_that_disagrees_with_the_row
   CHECK(beyond.invariants_hold());
   ClPendingReadsProbe::miscount(beyond);
   CHECK(!beyond.invariants_hold()); }
+
+TEST(cl_pending_reads, the_table_says_when_it_has_no_row_left_and_hands_back_the_scratch_buffers_of_a_queue)
+{ ClPendingReads reads;
+  int owned = 0;
+  CHECK(reads.has_room());
+  std::uint64_t markers[ClPendingReads::max_reads] = {};
+  std::uint64_t scratches[ClPendingReads::max_reads] = {};
+  std::uint32_t scratched = 0u;
+  for (std::uint32_t index = 0u; index < ClPendingReads::max_reads; ++index)
+      CHECK(reads.record(10u + index, 7u, 20u + index, 0u, 4u, &owned, true, 100u + index));
+  CHECK(!reads.has_room());
+  CHECK_EQ(reads.forget_queue(7u, markers, scratches, &scratched), ClPendingReads::max_reads);
+  CHECK_EQ(scratched, ClPendingReads::max_reads);
+  CHECK_EQ(scratches[0], 100u);
+  CHECK(reads.has_room());
+  CHECK(reads.invariants_hold()); }
