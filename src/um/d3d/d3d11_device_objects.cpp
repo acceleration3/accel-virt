@@ -223,7 +223,10 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     resource = ResourceRecord{};
     resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
     resource.runtime_resource = runtime.handle;
-    if (args->NumAllocations != 0u) resource.allocation = args->pOpenAllocationInfo2[0].hAllocation;
+    if (args->NumAllocations != 0u) {
+        resource.allocation = args->pOpenAllocationInfo2[0].hAllocation;
+        resource.allocation_owned = 1u;
+    }
     d3d::KernelSurface opened;
     const bool         surface =
         args->NumAllocations != 0u &&
