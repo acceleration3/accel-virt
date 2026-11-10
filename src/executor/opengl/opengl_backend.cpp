@@ -284,6 +284,7 @@ void OpenGlBackend::shut_down()
 void OpenGlBackend::leave_device()
 {
     AV_SCOPE("OpenGlBackend::leave_device");
+    heap_.bind(nullptr, UINT64_MAX);
 }
 
 void OpenGlBackend::let_go_of_thread()

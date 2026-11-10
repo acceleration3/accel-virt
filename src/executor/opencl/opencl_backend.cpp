@@ -643,6 +643,8 @@ cl_int OpenClBackend::answers_type(cl_device_type device_type) const
 void OpenClBackend::leave_device()
 {
     AV_SCOPE("OpenClBackend::leave_device");
+    heap_.bind(nullptr, UINT64_MAX);
+    binaries_.bind(nullptr);
 }
 
 void OpenClBackend::let_go_of_thread()

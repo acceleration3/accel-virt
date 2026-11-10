@@ -157,6 +157,7 @@ void D3dBackend::leave_device()
 {
     AV_SCOPE("D3dBackend::leave_device");
     d3d12_.leave_device();
+    heap_.bind(nullptr, UINT64_MAX);
     if (admitted_ && device11_ != nullptr) device11_->dismiss(wake_);
     admitted_ = false;
 }

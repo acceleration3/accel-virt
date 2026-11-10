@@ -345,6 +345,15 @@ TEST(vulkan_vram_cap, vulkan_and_another_api_on_the_same_gpu_share_one_cap)
   CHECK_EQ(budget.heapUsage[0], 2 * gib);
   CHECK_EQ(budget.heapBudget[0], 7 * gib); }
 
+TEST(vulkan_vram_cap, leaving_a_lost_device_gives_the_held_memory_back_without_shutting_down)
+{ Rig rig;
+  static_cast<void>(rig.properties());
+  VkDeviceMemory made = VK_NULL_HANDLE;
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.device_local_type(), 3 * gib, made)), static_cast<int>(VK_SUCCESS));
+  CHECK_EQ(rig.ledger().used(), 3 * gib);
+  rig.backend().leave_device();
+  CHECK_EQ(rig.ledger().used(), std::uint64_t{0}); }
+
 TEST(vulkan_vram_cap, shutting_down_gives_the_held_memory_back)
 { Rig rig;
   static_cast<void>(rig.properties());

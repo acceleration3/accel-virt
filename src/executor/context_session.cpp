@@ -88,6 +88,7 @@ void ContextSession::vacate()
 void ContextSession::leave_device()
 {
     AV_SCOPE("ContextSession::leave_device");
+    heap_.bind(nullptr, UINT64_MAX);
     if (backend_ != nullptr) backend_->leave_device();
 }
 

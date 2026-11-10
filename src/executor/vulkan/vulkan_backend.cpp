@@ -1311,6 +1311,8 @@ void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
 void VulkanBackend::leave_device()
 {
     AV_SCOPE("VulkanBackend::leave_device");
+    vram_.close();
+    heap_.bind(nullptr, UINT64_MAX);
 }
 
 void VulkanBackend::let_go_of_thread()
