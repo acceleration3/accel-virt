@@ -21,6 +21,7 @@
 #include "proto/resources/surface_point.hpp"
 
 #include <atomic>
+#include <bit>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -1002,4 +1003,139 @@ TEST(d3d_backend_device, a_staging_allocation_the_host_refuses_faults_its_sessio
         greedy.backend().shut_down();
         bystander.backend().shut_down();
     }
+}
+
+namespace {
+
+constexpr std::uint32_t query_occlusion_predicate = 5u;
+constexpr std::uint32_t format_r32_uint = 42u;
+constexpr std::uint32_t format_d32_float = 40u;
+constexpr std::uint32_t bind_depth_stencil = 0x40u;
+constexpr std::uint32_t bind_unordered_access = 0x80u;
+constexpr std::uint32_t dsv_texture2d = 3u;
+constexpr std::uint32_t uav_texture2d = 4u;
+constexpr std::uint32_t clear_depth = 0x1u;
+constexpr std::uint32_t predicate_query = 50u;
+
+ResourceDesc texture_desc(std::uint32_t format, std::uint32_t bind_flags, std::uint32_t samples = 1u)
+{
+    ResourceDesc desc = {};
+    desc.dimension = 3u;
+    desc.width = size;
+    desc.height = size;
+    desc.depth_or_array = 1u;
+    desc.mip_levels = 1u;
+    desc.format = format;
+    desc.sample_count = samples;
+    desc.bind_flags = bind_flags;
+    return desc;
+}
+
+ViewDesc view_desc(std::uint32_t resource, std::uint32_t format, std::uint32_t dimension)
+{
+    ViewDesc desc = {};
+    desc.resource = resource;
+    desc.format = format;
+    desc.dimension = dimension;
+    return desc;
+}
+
+std::uint32_t first_texel(av::D3dLoopback &wire, std::uint32_t resource)
+{
+    static std::uint8_t texels[size * size * 4u];
+    std::uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
+    std::uint64_t read = 0u;
+    CHECK(av_d3d_ReadSubresource(wire, resource, 0u, &hresult, &row_pitch, &depth_pitch, texels, sizeof(texels), &read));
+    CHECK_EQ(hresult, 0u);
+    std::uint32_t value = 0u;
+    std::memcpy(&value, texels + (size / 2u) * row_pitch + (size / 2u) * 4u, sizeof(value));
+    return value;
+}
+
+void check_predicated_operations(bool drawn, std::uint32_t predicate_value)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend, rig.log);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device));
+    av::D3dLoopback wire(backend, rig.imports);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    bind_triangle(wire);
+
+    constexpr std::uint32_t cleared = 20u, copy_dst = 22u, copy_src = 24u, depth = 26u, storage = 28u, multisampled = 30u,
+                            resolve_dst = 32u;
+    CHECK(av_d3d_CreateResource(wire, cleared, texture_desc(format_b8g8r8a8, bind_render_target), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateRenderTargetView(wire, 21u, view_desc(cleared, format_b8g8r8a8, rtv_texture2d)));
+    CHECK(av_d3d_CreateResource(wire, copy_dst, texture_desc(format_b8g8r8a8, bind_render_target), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateRenderTargetView(wire, 23u, view_desc(copy_dst, format_b8g8r8a8, rtv_texture2d)));
+    CHECK(av_d3d_CreateResource(wire, copy_src, texture_desc(format_b8g8r8a8, bind_render_target), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateRenderTargetView(wire, 25u, view_desc(copy_src, format_b8g8r8a8, rtv_texture2d)));
+    CHECK(av_d3d_CreateResource(wire, depth, texture_desc(format_d32_float, bind_depth_stencil), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateDepthStencilView(wire, 27u, view_desc(depth, format_d32_float, dsv_texture2d)));
+    CHECK(av_d3d_CreateResource(wire, storage, texture_desc(format_r32_uint, bind_unordered_access), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateUnorderedAccessView(wire, 29u, view_desc(storage, format_r32_uint, uav_texture2d)));
+    CHECK(av_d3d_CreateResource(wire, multisampled, texture_desc(format_b8g8r8a8, bind_render_target, 4u), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateRenderTargetView(wire, 31u, view_desc(multisampled, format_b8g8r8a8, 6u)));
+    CHECK(av_d3d_CreateResource(wire, resolve_dst, texture_desc(format_b8g8r8a8, bind_render_target), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateRenderTargetView(wire, 33u, view_desc(resolve_dst, format_b8g8r8a8, rtv_texture2d)));
+    CHECK_EQ(wire.refused(), 0u);
+
+    const Float4 red = {{1.0f, 0.0f, 0.0f, 1.0f}}, green = {{0.0f, 1.0f, 0.0f, 1.0f}}, blue = {{0.0f, 0.0f, 1.0f, 1.0f}},
+                 yellow = {{1.0f, 1.0f, 0.0f, 1.0f}};
+    CHECK(av_d3d_ClearRenderTargetView(wire, 21u, red));
+    CHECK(av_d3d_ClearRenderTargetView(wire, 23u, blue));
+    CHECK(av_d3d_ClearRenderTargetView(wire, 25u, yellow));
+    CHECK(av_d3d_ClearDepthStencilView(wire, 27u, clear_depth, 0.25f, 0u));
+    CHECK(av_d3d_ClearUnorderedAccessViewUint(wire, 29u, Uint4{{7u, 7u, 7u, 7u}}));
+    CHECK(av_d3d_ClearRenderTargetView(wire, 31u, red));
+    CHECK(av_d3d_ClearRenderTargetView(wire, 33u, blue));
+
+    CHECK(av_d3d_CreateQuery(wire, predicate_query, query_occlusion_predicate, 0u));
+    const Viewport away = {float(size) * 4.0f, 0.0f, float(size), float(size), 0.0f, 1.0f};
+    const Viewport onto = {0.0f, 0.0f, float(size), float(size), 0.0f, 1.0f};
+    CHECK(av_d3d_SetViewports(wire, 1u, drawn ? &onto : &away));
+    CHECK(av_d3d_BeginQuery(wire, predicate_query));
+    CHECK(av_d3d_Draw(wire, 3u, 0u));
+    CHECK(av_d3d_EndQuery(wire, predicate_query));
+
+    const bool performed = drawn != (predicate_value != 0u);
+    CHECK(av_d3d_SetPredication(wire, predicate_query, predicate_value));
+    CHECK(av_d3d_ClearRenderTargetView(wire, 21u, green));
+    CHECK(av_d3d_CopySubresourceRegion(wire, copy_dst, 0u, 0u, 0u, 0u, copy_src, 0u, 0u, Box{}, 0u));
+    CHECK(av_d3d_ClearDepthStencilView(wire, 27u, clear_depth, 0.75f, 0u));
+    CHECK(av_d3d_ClearUnorderedAccessViewUint(wire, 29u, Uint4{{9u, 9u, 9u, 9u}}));
+    CHECK(av_d3d_ResolveSubresource(wire, resolve_dst, 0u, multisampled, 0u, format_b8g8r8a8));
+    CHECK(av_d3d_SetPredication(wire, 0u, 0u));
+
+    CHECK_EQ(first_texel(wire, cleared), performed ? 0xff00ff00u : 0xffff0000u);
+    CHECK_EQ(first_texel(wire, copy_dst), performed ? 0xffffff00u : 0xff0000ffu);
+    CHECK_EQ(first_texel(wire, depth), std::bit_cast<std::uint32_t>(performed ? 0.75f : 0.25f));
+    CHECK_EQ(first_texel(wire, storage), performed ? 9u : 7u);
+    CHECK_EQ(first_texel(wire, resolve_dst), performed ? 0xffff0000u : 0xff0000ffu);
+    CHECK_EQ(wire.refused(), 0u);
+
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    backend.shut_down();
+}
+
+}
+
+TEST(d3d_backend_device, predicated_clears_copies_and_resolves_are_skipped_when_the_predicate_equals_the_value)
+{
+    check_predicated_operations(false, 0u);
+    check_predicated_operations(true, 1u);
+}
+
+TEST(d3d_backend_device, predicated_clears_copies_and_resolves_run_when_the_predicate_differs_from_the_value)
+{
+    check_predicated_operations(false, 1u);
+    check_predicated_operations(true, 0u);
 }
