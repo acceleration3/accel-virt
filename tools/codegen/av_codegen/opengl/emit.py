@@ -1892,7 +1892,7 @@ HANDWRITTEN = {
     "glGetUniformLocation", "glGetAttribLocation",
     "glLinkProgram", "glDeleteProgram",
     "glGenBuffers", "glGenVertexArrays", "glGenTextures",
-    "glFlush",
+    "glFlush", "glEnable", "glDisable",
     "glBindFramebuffer", "glIsFramebuffer", "glDrawBuffer", "glReadBuffer", "glReadPixels", "glViewport",
 
     "glVertexPointer", "glNormalPointer", "glColorPointer",

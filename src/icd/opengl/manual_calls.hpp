@@ -173,6 +173,7 @@ public:
     uint32_t client_wait_sync(void *sync, uint32_t flags, uint64_t timeout);
     void     finish();
     void debug_message_callback(void *callback, const void *user);
+    void capability(uint32_t cap, bool on);
     void link_program(uint32_t program);
     void delete_program(uint32_t program);
     int32_t attrib_location(uint32_t program, const char *name);

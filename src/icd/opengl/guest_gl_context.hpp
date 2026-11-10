@@ -12,6 +12,8 @@
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/client_vertex_state.hpp"
+#include "icd/opengl/debug_delivery_transport.hpp"
+#include "icd/opengl/gl_debug_messages.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
 #include "icd/common/present_pacing.hpp"
 #include "icd/common/locked_timeline.hpp"
@@ -119,9 +121,8 @@ public:
     icd::PresentPacing   &pacing();
     uint64_t              adapter_luid() const;
     void                  asking(GrantedProfile::Rung rung);
-    void        set_debug_callback(uint64_t callback, uint64_t user);
-    uint64_t    debug_callback() const;
-    uint64_t    debug_user() const;
+    GlDebugMessages &debug();
+    void             deliver_debug();
 
     void report(StateWriter &writer, uint64_t handle) const;
 
@@ -173,8 +174,8 @@ private:
     GlExternalObjects              externals_;
     PinnedBuffers                  pinned_;
     char                           strings_[strings][string_bytes];
-    uint64_t                       debug_callback_;
-    uint64_t                       debug_user_;
+    GlDebugMessages                debug_;
+    DebugDeliveryTransport         delivery_;
     uint64_t                       luid_;
 
     friend struct GuestGlContextProbe;

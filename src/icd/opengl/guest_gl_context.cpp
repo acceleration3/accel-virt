@@ -31,6 +31,7 @@ constexpr uint32_t latest_major = 4u;
 constexpr uint32_t latest_minor = 6u;
 constexpr uint32_t latest_language_minor = 60u;
 constexpr uint32_t no_error = 0u;
+constexpr uint8_t  debug_context_flag = 1u;
 
 }
 
@@ -43,7 +44,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
       channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), vertex_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, groups, groups.mint(), lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
       strings_{},
-      debug_callback_(0u), debug_user_(0u), luid_(0u)
+      debug_((options.flags() & debug_context_flag) != 0u), delivery_(debug_), luid_(0u)
 {
     AV_SCOPE("GuestGlContext::GuestGlContext");
 }
@@ -231,7 +232,10 @@ ClientTransport *GuestGlContext::wire()
         loss_.lose(channel_.fault_code());
         static_cast<void>(loss_.refuses("an OpenGL call"));
     }
-    return state_ == State::made ? &channel_.transport() : nullptr;
+    if (state_ != State::made) return nullptr;
+    if (!debug_.synchronous()) return &channel_.transport();
+    delivery_.bind(channel_.transport());
+    return &delivery_;
 }
 
 void GuestGlContext::send_forgets()
@@ -419,22 +423,16 @@ void GuestGlContext::asking(GrantedProfile::Rung rung)
     profile_.granted(rung);
 }
 
-void GuestGlContext::set_debug_callback(uint64_t callback, uint64_t user)
+GlDebugMessages &GuestGlContext::debug()
 {
-    AV_SCOPE("GuestGlContext::set_debug_callback");
-    debug_callback_ = callback;
-    debug_user_ = user;
+    AV_SCOPE("GuestGlContext::debug");
+    return debug_;
 }
 
-uint64_t GuestGlContext::debug_callback() const
+void GuestGlContext::deliver_debug()
 {
-    AV_SCOPE("GuestGlContext::debug_callback");
-    return debug_callback_;
-}
-uint64_t GuestGlContext::debug_user() const
-{
-    AV_SCOPE("GuestGlContext::debug_user");
-    return debug_user_;
+    AV_SCOPE("GuestGlContext::deliver_debug");
+    if (state_ == State::made && debug_.listening()) debug_.deliver(channel_.transport());
 }
 
 bool GuestGlContext::robust() const

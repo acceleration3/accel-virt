@@ -550,9 +550,9 @@ TEST(guest_gl_context, the_first_error_recorded_is_kept_until_taken)
   CHECK_EQ(context->take_error(), 0x0500u);
   context->set_owner(3u);
   CHECK_EQ(context->owner(), 3u);
-  context->set_debug_callback(0x1000u, 0x2000u);
-  CHECK_EQ(context->debug_callback(), 0x1000u);
-  CHECK_EQ(context->debug_user(), 0x2000u);
+  context->debug().set_callback(0x1000u, 0x2000u);
+  CHECK_EQ(context->debug().function(), 0x1000u);
+  CHECK_EQ(context->debug().user(), 0x2000u);
   CHECK_EQ(context->arrays().attribute_pointer(0u), 0u);
   CHECK_EQ(context->uniforms().held(), 0u);
   CHECK_EQ(context->options().major(), 0u); }

@@ -971,13 +971,6 @@ void APIENTRY Wrap_glDetachShader(GLuint program, GLuint shader) {
     ::av::glproto::av_glDetachShader(*av_t, program, shader);
 }
 
-void APIENTRY Wrap_glDisable(GLenum cap) {
-    AV_SCOPE("glDisable");
-    auto* av_t = ::av::glicd::wire();
-    if (av_t == nullptr) return;
-    ::av::glproto::av_glDisable(*av_t, cap);
-}
-
 void APIENTRY Wrap_glDisableVertexArrayAttrib(GLuint vaobj, GLuint index) {
     AV_SCOPE("glDisableVertexArrayAttrib");
     auto* av_t = ::av::glicd::wire();
@@ -1127,13 +1120,6 @@ void APIENTRY Wrap_glDrawTransformFeedbackStreamInstanced(GLenum mode, GLuint id
     if (av_t == nullptr) return;
     if (::av::glicd::refuse_client_arrays()) return;
     ::av::glproto::av_glDrawTransformFeedbackStreamInstanced(*av_t, mode, id, stream, instancecount);
-}
-
-void APIENTRY Wrap_glEnable(GLenum cap) {
-    AV_SCOPE("glEnable");
-    auto* av_t = ::av::glicd::wire();
-    if (av_t == nullptr) return;
-    ::av::glproto::av_glEnable(*av_t, cap);
 }
 
 void APIENTRY Wrap_glEnableVertexArrayAttrib(GLuint vaobj, GLuint index) {

@@ -68,6 +68,18 @@ GLboolean APIENTRY Wrap_glIsFramebuffer(GLuint framebuffer)
     return ::av::glicd::gl_icd_binding.root().manual().is_framebuffer(framebuffer) ? 1 : 0;
 }
 
+void APIENTRY Wrap_glEnable(GLenum cap)
+{
+    AV_SCOPE("Wrap_glEnable");
+    ::av::glicd::gl_icd_binding.root().manual().capability(cap, true);
+}
+
+void APIENTRY Wrap_glDisable(GLenum cap)
+{
+    AV_SCOPE("Wrap_glDisable");
+    ::av::glicd::gl_icd_binding.root().manual().capability(cap, false);
+}
+
 void APIENTRY Wrap_glFinish(void)
 {
     AV_SCOPE("Wrap_glFinish");

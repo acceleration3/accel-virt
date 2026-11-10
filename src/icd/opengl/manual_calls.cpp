@@ -535,11 +535,11 @@ void ManualCalls::pointer(uint32_t pname, void **params)
     GuestGlContext *const context = currents_.current();
     if (context == nullptr || params == nullptr) return;
     if (pname == gl_debug_callback_function) {
-        *params = reinterpret_cast<void *>(static_cast<uintptr_t>(context->debug_callback()));
+        *params = reinterpret_cast<void *>(static_cast<uintptr_t>(context->debug().function()));
         return;
     }
     if (pname != gl_debug_callback_user_param) return record(gl_invalid_enum);
-    *params = reinterpret_cast<void *>(static_cast<uintptr_t>(context->debug_user()));
+    *params = reinterpret_cast<void *>(static_cast<uintptr_t>(context->debug().user()));
 }
 
 void ManualCalls::pixel_store(uint32_t pname, int32_t value)
@@ -1035,7 +1035,19 @@ void ManualCalls::debug_message_callback(void *callback, const void *user)
 {
     AV_SCOPE("ManualCalls::debug_message_callback");
     GuestGlContext *const context = currents_.current();
-    if (context != nullptr) context->set_debug_callback(address_of(callback), address_of(user));
+    if (context != nullptr) context->debug().set_callback(address_of(callback), address_of(user));
+}
+
+void ManualCalls::capability(uint32_t cap, bool on)
+{
+    AV_SCOPE("ManualCalls::capability");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr) return;
+    if (context->debug().tracks(cap)) context->debug().enable(cap, on);
+    ClientTransport *const wire = context->wire();
+    if (wire == nullptr) return;
+    if (on) glproto::av_glEnable(*wire, cap);
+    else glproto::av_glDisable(*wire, cap);
 }
 
 void ManualCalls::link_program(uint32_t program)

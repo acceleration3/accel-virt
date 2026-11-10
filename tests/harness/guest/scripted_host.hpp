@@ -86,6 +86,7 @@ public:
     void gl_string(const char *text);
     void gl_varint(std::uint64_t value);
     void gl_bytes(const std::uint8_t *bytes, std::uint32_t size);
+    void gl_raw(const std::uint8_t *bytes, std::uint32_t size);
     void gl_integer(std::int32_t value);
     void gl_status(std::uint32_t value);
     void gl_resource_property(std::int32_t value);

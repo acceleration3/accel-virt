@@ -454,6 +454,7 @@ void GlIcdRoot::finish_current()
     show_front(context);
     if (context != nullptr) context->framebuffers().show_held_now();
     manual_.finish();
+    if (context != nullptr) context->deliver_debug();
 }
 
 bool GlIcdRoot::set_swap_interval(int32_t interval)
@@ -606,6 +607,7 @@ uint32_t GlIcdRoot::get_error()
     AV_SCOPE("GlIcdRoot::get_error");
     GuestGlContext *const context = currents_.current();
     if (context == nullptr) return 0u;
+    context->deliver_debug();
     ClientTransport *const transport = context->wire();
     const uint32_t         local = context->take_error();
     if (local != 0u) return local;

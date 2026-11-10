@@ -224,6 +224,13 @@ void ScriptedHost::gl_bytes(const std::uint8_t *bytes, std::uint32_t size)
     queue(writer);
 }
 
+void ScriptedHost::gl_raw(const std::uint8_t *bytes, std::uint32_t size)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write(bytes, size);
+    queue(writer);
+}
+
 void ScriptedHost::gl_integer(std::int32_t value)
 {
     std::uint8_t bytes[sizeof value];
