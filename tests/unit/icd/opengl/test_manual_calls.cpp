@@ -2209,3 +2209,17 @@ TEST(manual_calls, vertex_buffer_offsets_cross_as_eight_byte_elements)
   CHECK_EQ(current.sent_since(0u), ids::kCmd_glBindVertexBuffers);
   CHECK_EQ(current.sent_since(1u), ids::kCmd_glBindBuffersRange);
   CHECK_EQ(current.sent_since(2u), ids::kCmd_glVertexArrayVertexBuffers); }
+
+TEST(manual_calls, a_negative_buffer_size_is_an_error_without_a_host_call)
+{ Current current;
+  const std::uint8_t data[4] = {};
+  const std::uint32_t before = current.sent();
+  gen::Wrap_glBufferData(array_buffer, -1, data, 0x88E4u);
+  CHECK_EQ(current.error(), gl_invalid_value);
+  gen::Wrap_glNamedBufferData(3u, -8, data, 0x88E4u);
+  CHECK_EQ(current.error(), gl_invalid_value);
+  gen::Wrap_glNamedBufferStorage(3u, -8, data, 0u);
+  CHECK_EQ(current.error(), gl_invalid_value);
+  gen::Wrap_glBufferStorage(array_buffer, -8, data, 0u);
+  CHECK_EQ(current.error(), gl_invalid_value);
+  CHECK_EQ(current.sent(), before); }

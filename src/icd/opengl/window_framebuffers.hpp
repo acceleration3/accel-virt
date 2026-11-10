@@ -53,6 +53,7 @@ public:
     uint32_t name_of(uint32_t name) const;
     void     bound(uint32_t target, uint32_t name);
     void     reading(uint32_t buffer);
+    bool     reads_window() const;
     [[nodiscard]] bool read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
                                   uint32_t type, void *pixels) const;
     uint32_t buffer_for(uint32_t buffer, bool drawing) const;

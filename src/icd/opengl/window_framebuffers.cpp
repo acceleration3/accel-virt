@@ -104,6 +104,12 @@ bool WindowFramebuffers::read_front(int32_t x, int32_t y, int32_t width, int32_t
     return current_->read_front(x, y, width, height, format, type, pixels);
 }
 
+bool WindowFramebuffers::reads_window() const
+{
+    AV_SCOPE("WindowFramebuffers::reads_window");
+    return reads_window_;
+}
+
 uint32_t WindowFramebuffers::buffer_for(uint32_t buffer, bool drawing) const
 {
     AV_SCOPE("WindowFramebuffers::buffer_for");
