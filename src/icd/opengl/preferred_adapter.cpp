@@ -21,6 +21,13 @@ uint64_t PreferredAdapter::choose(void *dc)
     return 0u;
 }
 
+uint64_t PreferredAdapter::default_luid()
+{
+    AV_SCOPE("PreferredAdapter::default_luid");
+    AvgpuAdapters adapters(kmt_);
+    return adapters.learn() == Status::ok && adapters.count() != 0u ? adapters.luid(0u) : 0u;
+}
+
 bool PreferredAdapter::avgpu_has(uint64_t luid)
 {
     AV_SCOPE("PreferredAdapter::avgpu_has");

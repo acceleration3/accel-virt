@@ -97,6 +97,7 @@ public:
     uint32_t         reset_status();
     int32_t          force_context_fault();
     uint32_t         current_share_name();
+    uint64_t         current_adapter_luid();
     int32_t          run_held_calls();
     uint64_t         mint_sync_token();
     void             note_dropped(const char *api, const char *command, size_t written);
@@ -138,6 +139,7 @@ private:
     CurrentContexts   currents_;
     PreferredAdapter  preferred_;
     bool              adapter_chosen_;
+    uint64_t          adapter_luid_;
     icd::IcdConnection      connection_;
     GlExtensionPolicy extensions_;
     icd::SharedHandles shared_handles_;

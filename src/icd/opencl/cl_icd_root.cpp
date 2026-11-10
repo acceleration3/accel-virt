@@ -2997,10 +2997,14 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
         return CL_INVALID_VALUE;
     ClDevice *device = nullptr;
     bool      opened = false;
+    uint64_t  gl_context = 0u;
+    static_cast<void>(list.names(static_cast<uint64_t>(CL_GL_CONTEXT_KHR), gl_context));
+    const uint64_t gl_luid = gl_share_.adapter_luid(reinterpret_cast<void *>(static_cast<uintptr_t>(gl_context)));
     {
         const ThreadLockHold locked(lock_);
         learn_devices();
-        device = devices_.count() != 0u ? &devices_.at(0u) : nullptr;
+        device = devices_.on(gl_luid);
+        if (device == nullptr) device = devices_.count() != 0u ? &devices_.at(0u) : nullptr;
         bool refused = false;
         opened = device != nullptr && open_device(*device, refused) == Status::ok;
     }

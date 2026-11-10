@@ -12,6 +12,7 @@
 #include "proto/submission/fault_code.hpp"
 
 #include <CL/cl_ext.h>
+#include <CL/cl_gl.h>
 
 #include <cstdint>
 #include <cstring>
@@ -376,3 +377,18 @@ TEST(cl_devices, a_context_no_device_here_runs_is_run_by_none)
                                     rig.handles());
   CHECK(devices.running(context) == nullptr);
   CHECK(devices.invariants_hold()); }
+
+TEST(cl_devices, the_device_of_a_gl_context_is_the_one_on_the_adapter_that_context_runs_on)
+{ ClIcdRig rig;
+  two_gpus(rig);
+  cl_device_id devices[2] = {};
+  both_devices(rig, devices);
+  void *const gl = reinterpret_cast<void *>(static_cast<std::uintptr_t>(0x10030u));
+  rig.gl_share().make_current(gl, 0x40000C42u, integrated_luid);
+  const cl_context_properties properties[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(gl), 0};
+  cl_device_id named = nullptr;
+  rig.host().cl_info(CL_SUCCESS, "cl_khr_icd cl_khr_gl_sharing", 29u);
+  CHECK_EQ(rig.loader().dispatch_of(devices[0])->clGetGLContextInfoKHR(
+               properties, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(luid_of(rig, named), integrated_luid); }

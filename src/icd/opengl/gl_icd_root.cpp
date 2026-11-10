@@ -123,7 +123,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock
                      GlPresentQueue &presents, GlIcdBinding &binding, AdapterOrder &order)
     : lock_(lock), lines_(log), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
-      query_(formats_), windows_(memory), currents_(slot), preferred_(kmt, order), adapter_chosen_(false), connection_(memory, kmt, 0u),
+      query_(formats_), windows_(memory), currents_(slot), preferred_(kmt, order), adapter_chosen_(false), adapter_luid_(0u), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
       contexts_(memory, connection_, lock, send_lock, slice_lock, lines_, extensions_, shared_handles_),
@@ -330,6 +330,7 @@ void *GlIcdRoot::get_proc_address(const char *name)
     if (__builtin_strcmp(name, "avForceContextFault") == 0)
         return reinterpret_cast<void *>(&entry::avForceContextFault);
     if (__builtin_strcmp(name, "avGetShareName") == 0) return reinterpret_cast<void *>(&entry::avGetShareName);
+    if (__builtin_strcmp(name, "avGetAdapterLuid") == 0) return reinterpret_cast<void *>(&entry::avGetAdapterLuid);
     if (__builtin_strcmp(name, "avRunHeldCalls") == 0) return reinterpret_cast<void *>(&entry::avRunHeldCalls);
     for (const SharedObjectEntry &row : shared_object_entries)
         if (__builtin_strcmp(name, row.name) == 0) return row.address;
@@ -439,7 +440,9 @@ void GlIcdRoot::choose_adapter(void *dc)
     AV_SCOPE("GlIcdRoot::choose_adapter");
     if (adapter_chosen_) return;
     adapter_chosen_ = true;
-    connection_.prefer(preferred_.choose(dc));
+    const uint64_t chosen = preferred_.choose(dc);
+    adapter_luid_ = chosen;
+    connection_.prefer(chosen);
 }
 
 void GlIcdRoot::finish_current()
@@ -633,6 +636,13 @@ uint32_t GlIcdRoot::current_share_name()
     AV_SCOPE("GlIcdRoot::current_share_name");
     const GuestGlContext *const context = currents_.current();
     return context != nullptr ? context->share_name() : 0u;
+}
+
+uint64_t GlIcdRoot::current_adapter_luid()
+{
+    AV_SCOPE("GlIcdRoot::current_adapter_luid");
+    if (currents_.current() == nullptr || !adapter_chosen_) return 0u;
+    return adapter_luid_ != 0u ? adapter_luid_ : preferred_.default_luid();
 }
 
 int32_t GlIcdRoot::force_context_fault()

@@ -17,6 +17,14 @@ uint32_t WindowsGlShareSource::share_name(void *gl_context)
     return named != nullptr ? named() : 0u;
 }
 
+uint64_t WindowsGlShareSource::adapter_luid(void *gl_context)
+{
+    AV_SCOPE("WindowsGlShareSource::adapter_luid");
+    if (gl_context == nullptr || !resolve() || current_() != static_cast<HGLRC>(gl_context)) return 0u;
+    const auto named = reinterpret_cast<AdapterLuid>(proc_address_("avGetAdapterLuid"));
+    return named != nullptr ? named() : 0u;
+}
+
 void WindowsGlShareSource::run_held_calls()
 {
     AV_SCOPE("WindowsGlShareSource::run_held_calls");

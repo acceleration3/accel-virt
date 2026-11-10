@@ -281,6 +281,20 @@ TEST(gl_share_lists, the_current_share_name_is_the_current_context_s_and_none_wi
   CHECK_EQ(root.current_share_name(), 0u);
   CHECK(root.invariants_hold()); }
 
+TEST(gl_share_lists, the_current_adapter_luid_is_the_adapter_of_the_current_context_and_none_without_one)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  Root &root = rig.root();
+  CHECK_EQ(root.current_adapter_luid(), 0u);
+  void *const a = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  CHECK(current_on(rig, a) != nullptr);
+  CHECK(root.current_adapter_luid() != 0u);
+  CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
+  CHECK_EQ(root.current_adapter_luid(), 0u);
+  CHECK(root.invariants_hold()); }
+
 TEST(gl_share_lists, run_held_calls_runs_the_current_context_s_and_nothing_without_one)
 { GlIcdRig rig;
   rig.load_with_format();

@@ -18,6 +18,7 @@ public:
     PreferredAdapter &operator=(const PreferredAdapter &) = delete;
 
     uint64_t choose(void *dc);
+    uint64_t default_luid();
 
 private:
     bool avgpu_has(uint64_t luid);

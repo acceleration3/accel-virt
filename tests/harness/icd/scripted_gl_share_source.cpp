@@ -3,20 +3,26 @@
 namespace av {
 
 ScriptedGlShareSource::ScriptedGlShareSource()
-    : current_(nullptr), name_(0u), asked_(0u), runs_(0u), commands_at_run_(0u), count_(nullptr), counter_(nullptr)
+    : current_(nullptr), name_(0u), luid_(0u), asked_(0u), runs_(0u), commands_at_run_(0u), count_(nullptr), counter_(nullptr)
 {
 }
 
-void ScriptedGlShareSource::make_current(void *gl_context, std::uint32_t name)
+void ScriptedGlShareSource::make_current(void *gl_context, std::uint32_t name, std::uint64_t luid)
 {
     current_ = gl_context;
     name_ = name;
+    luid_ = luid;
 }
 
 std::uint32_t ScriptedGlShareSource::share_name(void *gl_context)
 {
     asked_++;
     return gl_context != nullptr && gl_context == current_ ? name_ : 0u;
+}
+
+std::uint64_t ScriptedGlShareSource::adapter_luid(void *gl_context)
+{
+    return gl_context != nullptr && gl_context == current_ ? luid_ : 0u;
 }
 
 void ScriptedGlShareSource::run_held_calls()

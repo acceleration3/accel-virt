@@ -12,12 +12,14 @@ public:
     WindowsGlShareSource();
 
     uint32_t share_name(void *gl_context) override;
+    uint64_t adapter_luid(void *gl_context) override;
     void     run_held_calls() override;
 
 private:
     using CurrentContext = HGLRC(WINAPI *)();
     using ProcAddress = PROC(WINAPI *)(LPCSTR);
     using ShareName = uint32_t(WINAPI *)();
+    using AdapterLuid = uint64_t(WINAPI *)();
     using RunHeldCalls = int32_t(WINAPI *)();
 
     bool resolve();

@@ -38,6 +38,7 @@ GLenum    APIENTRY get_error();
 GLenum    APIENTRY get_graphics_reset_status();
 int32_t   APIENTRY avForceContextFault();
 uint32_t  APIENTRY avGetShareName();
+uint64_t  APIENTRY avGetAdapterLuid();
 int32_t   APIENTRY avRunHeldCalls();
 void      APIENTRY get_integerv(GLenum pname, GLint *data);
 

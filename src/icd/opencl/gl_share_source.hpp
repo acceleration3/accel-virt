@@ -11,6 +11,7 @@ public:
     GlShareSource &operator=(const GlShareSource &) = delete;
 
     virtual uint32_t share_name(void *gl_context) = 0;
+    virtual uint64_t adapter_luid(void *gl_context) = 0;
     virtual void     run_held_calls() = 0;
 
 protected:

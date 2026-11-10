@@ -166,6 +166,12 @@ uint32_t APIENTRY avGetShareName()
     return gl_icd_binding.root().current_share_name();
 }
 
+uint64_t APIENTRY avGetAdapterLuid()
+{
+    AV_SCOPE("avGetAdapterLuid");
+    return gl_icd_binding.root().current_adapter_luid();
+}
+
 int32_t APIENTRY avRunHeldCalls()
 {
     AV_SCOPE("avRunHeldCalls");
