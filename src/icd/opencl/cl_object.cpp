@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire,
                    GuestClContext *context, ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -178,6 +178,66 @@ uint64_t ClObject::ordinal() const
 {
     AV_SCOPE("ClObject::ordinal");
     return ordinal_;
+}
+
+void ClObject::keep_shape(ClKernelShape *shape)
+{
+    AV_SCOPE("ClObject::keep_shape");
+    shape_ = shape;
+}
+
+ClKernelShape *ClObject::shape() const
+{
+    AV_SCOPE("ClObject::shape");
+    return shape_;
+}
+
+ClMemExtent &ClObject::extent()
+{
+    AV_SCOPE("ClObject::extent");
+    return extent_;
+}
+
+const ClMemExtent &ClObject::extent() const
+{
+    AV_SCOPE("ClObject::extent");
+    return extent_;
+}
+
+void ClObject::keep_flags(uint64_t flags)
+{
+    AV_SCOPE("ClObject::keep_flags");
+    flags_ = flags;
+}
+
+uint64_t ClObject::flags() const
+{
+    AV_SCOPE("ClObject::flags");
+    return flags_;
+}
+
+void ClObject::keep_command_type(uint32_t type)
+{
+    AV_SCOPE("ClObject::keep_command_type");
+    command_type_ = type;
+}
+
+uint32_t ClObject::command_type() const
+{
+    AV_SCOPE("ClObject::command_type");
+    return command_type_;
+}
+
+void ClObject::keep_traits(uint32_t traits)
+{
+    AV_SCOPE("ClObject::keep_traits");
+    traits_ = traits;
+}
+
+uint32_t ClObject::traits() const
+{
+    AV_SCOPE("ClObject::traits");
+    return traits_;
 }
 
 bool ClObject::kept_answer(cl_mem_info name, const ClInfoRequest &asked, cl_int &result) const

@@ -154,6 +154,10 @@ driver_implemented = [
     "clCreateProgramWithILKHR",
 ]
 
+driver_extensions = [
+    "cl_khr_icd",
+]
+
 async = [
     "clRetainContext",
     "clRetainCommandQueue",

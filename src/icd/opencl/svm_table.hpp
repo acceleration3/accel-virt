@@ -24,7 +24,9 @@ public:
     SvmTable(const SvmTable &) = delete;
     SvmTable &operator=(const SvmTable &) = delete;
 
-    void *take(uint64_t host_base, size_t bytes);
+    static constexpr size_t minimum_alignment = 128u;
+
+    void *take(uint64_t host_base, size_t bytes, size_t alignment = 0u);
     uint64_t give_back(const void *mirror);
     void     give_back_all();
 

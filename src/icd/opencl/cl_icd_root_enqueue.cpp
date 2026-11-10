@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/opencl/cl_image_region.hpp"
+#include "icd/opencl/cl_mem_flags.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "icd/opencl/mapped_region.hpp"
 #include "icd/opencl/unanswered_transport.hpp"
@@ -104,6 +105,17 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    if (source->extent().shape() == ClMemExtent::Shape::buffer ||
+        target->extent().shape() == ClMemExtent::Shape::image)
+        return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int in_region = source->extent().judge_region(origin, region);
+        if (in_region != CL_SUCCESS) return in_region;
+        const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] *
+                                element_bytes(*wire_of(*held), source->wire());
+        const cl_int in_buffer = judge_buffer_range(*target, offset, volume);
+        if (in_buffer != CL_SUCCESS) return in_buffer;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -131,6 +143,17 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    if (source->extent().shape() == ClMemExtent::Shape::image ||
+        target->extent().shape() == ClMemExtent::Shape::buffer)
+        return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int in_region = target->extent().judge_region(origin, region);
+        if (in_region != CL_SUCCESS) return in_region;
+        const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] *
+                                element_bytes(*wire_of(*held), target->wire());
+        const cl_int in_buffer = judge_buffer_range(*source, offset, volume);
+        if (in_buffer != CL_SUCCESS) return in_buffer;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -156,6 +179,11 @@ cl_int ClIcdRoot::enqueue_fill_image(cl_command_queue queue, cl_mem image, const
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     if (named->context() != held->context()) return CL_INVALID_CONTEXT;
     if (colour == nullptr || origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    if (named->extent().shape() == ClMemExtent::Shape::buffer) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int in_region = named->extent().judge_region(origin, region);
+        if (in_region != CL_SUCCESS) return in_region;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -178,6 +206,9 @@ cl_int ClIcdRoot::enqueue_migrate(cl_command_queue queue, cl_uint count, const c
     ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     if (count == 0u || objects == nullptr) return CL_INVALID_VALUE;
+    constexpr cl_mem_migration_flags known_flags =
+        CL_MIGRATE_MEM_OBJECT_HOST | CL_MIGRATE_MEM_OBJECT_CONTENT_UNDEFINED;
+    if ((flags & ~known_flags) != 0u) return CL_INVALID_VALUE;
     ClHostNumbers   named_room(memory_);
     uint64_t *const named = named_room.room(count);
     if (named == nullptr) return CL_OUT_OF_HOST_MEMORY;
@@ -215,6 +246,18 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
         report_error(error, CL_INVALID_VALUE);
         return nullptr;
     }
+    const ClMemFlags asked(flags);
+    constexpr cl_mem_flags backing_flags = CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR;
+    if (asked.judge() != CL_SUCCESS || (flags & backing_flags) != 0u) {
+        report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
+    constexpr cl_mem_flags device_access = CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY;
+    constexpr cl_mem_flags host_access = CL_MEM_HOST_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_NO_ACCESS;
+    const cl_mem_flags     parent = held->flags();
+    cl_mem_flags           inherited = flags;
+    if ((flags & device_access) == 0u) inherited |= parent & device_access;
+    if ((flags & host_access) == 0u) inherited |= parent & host_access;
     const cl_buffer_region region = *static_cast<const cl_buffer_region *>(info);
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) {
@@ -222,7 +265,8 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
         return nullptr;
     }
     cl_int         host_error = CL_SUCCESS;
-    const uint64_t made = av::clproto::av_clCreateSubBuffer(*wire, held->wire(), flags, type, &region, &host_error);
+    const uint64_t made = av::clproto::av_clCreateSubBuffer(*wire, held->wire(), ClMemFlags(inherited).for_host(), type, &region,
+                                                                  &host_error);
     if (made == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
@@ -231,6 +275,8 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
     void *const     wrapped = wrap(*wire, ClObject::Kind::mem, made, held->context(), context, error);
     if (wrapped == nullptr) return nullptr;
     ClObject *const sub = static_cast<ClObject *>(wrapped);
+    sub->keep_flags(inherited);
+    sub->extent().as_buffer(region.origin, region.size);
     {
         const ThreadLockHold locked(lock_);
         held->retain();
@@ -257,6 +303,13 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
     if (named == nullptr) {
         report_error(error, CL_INVALID_MEM_OBJECT);
         return nullptr;
+    }
+    {
+        const cl_int allowed = judge_host_map(*held, *named, flags);
+        if (allowed != CL_SUCCESS) {
+            report_error(error, allowed);
+            return nullptr;
+        }
     }
     if (origin == nullptr || region == nullptr || row_pitch == nullptr) {
         report_error(error, CL_INVALID_VALUE);
@@ -311,7 +364,7 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
     if (slice_pitch != nullptr)
         *slice_pitch = type == CL_MEM_OBJECT_IMAGE1D_ARRAY ? layout.row_pitch() : sliced ? layout.slice_pitch() : 0u;
     uint8_t *const at = taken->at();
-    const cl_int   marked = marker_event(*wire, *held, event);
+    const cl_int   marked = marker_event(*wire, *held, event, CL_COMMAND_MAP_IMAGE);
     report_error(error, marked);
     return at;
 }
@@ -331,7 +384,7 @@ cl_int ClIcdRoot::unmap_image(ClientTransport &wire, ClObject &queue, uint64_t i
     }
     context->give_back_mapping(region);
     if (written != CL_SUCCESS) return written;
-    return marker_event(wire, queue, event);
+    return marker_event(wire, queue, event, CL_COMMAND_UNMAP_MEM_OBJECT);
 }
 
 cl_mem ClIcdRoot::create_image_with_properties(cl_context context, const cl_mem_properties *properties,
@@ -499,7 +552,7 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
         __builtin_memcpy(to, from, bytes);
     }
     if (moved != CL_SUCCESS) return moved;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_SVM_MEMCPY);
 }
 
 cl_int ClIcdRoot::svm_mem_fill(cl_command_queue queue, void *pointer, const void *pattern, size_t pattern_bytes,
@@ -510,7 +563,9 @@ cl_int ClIcdRoot::svm_mem_fill(cl_command_queue queue, void *pointer, const void
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     GuestClContext *const context = held->context();
     if (context == nullptr) return CL_INVALID_CONTEXT;
-    if (pattern == nullptr || pattern_bytes == 0u || bytes == 0u || bytes % pattern_bytes != 0u)
+    const bool valid_pattern = pattern_bytes != 0u && (pattern_bytes & (pattern_bytes - 1u)) == 0u && pattern_bytes <= 128u;
+    if (pattern == nullptr || !valid_pattern || bytes == 0u || bytes % pattern_bytes != 0u ||
+        reinterpret_cast<uintptr_t>(pointer) % pattern_bytes != 0u)
         return CL_INVALID_VALUE;
     const SvmAllocation *const filled = context->svm().covering(pointer);
     if (filled == nullptr || context->svm().covering(static_cast<uint8_t *>(pointer) + bytes - 1u) != filled)
@@ -553,7 +608,7 @@ cl_int ClIcdRoot::enqueue_svm_free(cl_command_queue queue, cl_uint count, void *
         const cl_context owner = reinterpret_cast<cl_context>(held->nearest(ClObject::Kind::context));
         for (cl_uint index = 0u; index < count; ++index) svm_free(owner, pointers[index]);
     }
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_SVM_FREE);
 }
 
 cl_int ClIcdRoot::enqueue_svm_migrate(cl_command_queue queue, cl_uint count, const void **pointers,

@@ -13,7 +13,7 @@ public:
     ClPendingRead();
 
     [[nodiscard]] bool take(uint64_t event, uint64_t queue, uint64_t buffer, size_t offset,
-                            size_t bytes, void *into, bool ours);
+                            size_t bytes, void *into, bool ours, uint64_t scratch = 0u);
     void               give_up();
     bool               held() const;
 
@@ -24,6 +24,7 @@ public:
     size_t   bytes() const;
     void    *into() const;
     bool     ours() const;
+    uint64_t scratch() const;
 
     bool invariants_hold() const;
 
@@ -34,6 +35,7 @@ private:
     uint64_t event_;
     uint64_t queue_;
     uint64_t buffer_;
+    uint64_t scratch_;
     size_t   offset_;
     size_t   bytes_;
     bool     ours_;

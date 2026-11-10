@@ -142,4 +142,5 @@ def _carry_extensions(raw: RawRegistry, reg: Registry, profile) -> None:
             if any(need not in carried for need in raw.extensions[name].depends):
                 carried.discard(name)
                 dropped = True
+    carried |= set(profile.driver_extensions)
     reg.carried_extensions = [name for name in sorted(raw.extensions) if name in carried]

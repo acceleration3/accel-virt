@@ -1067,8 +1067,20 @@ cl_int OpenClBackend::on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl
                                               const cl_event *event_wait_list, cl_event *event)
 {
     AV_SCOPE("OpenClBackend::on_clEnqueueWriteBuffer");
-    static_cast<void>(blocking_write);
     if (ptr == nullptr || !ClBufferBounds::range_inside(buffer, offset, size)) return CL_INVALID_VALUE;
+    if (blocking_write != CL_TRUE && num_events_in_wait_list != 0u) {
+        cl_context context = nullptr;
+        if (::clGetCommandQueueInfo(command_queue, CL_QUEUE_CONTEXT, sizeof context, &context, nullptr) != CL_SUCCESS)
+            return CL_INVALID_COMMAND_QUEUE;
+        cl_int       made = CL_SUCCESS;
+        cl_mem const staged =
+            ::clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, size, const_cast<void *>(ptr), &made);
+        if (staged == nullptr) return made != CL_SUCCESS ? made : CL_OUT_OF_HOST_MEMORY;
+        const cl_int copied = ::clEnqueueCopyBuffer(command_queue, staged, buffer, 0u, offset, size,
+                                                  num_events_in_wait_list, event_wait_list, event);
+        ::clReleaseMemObject(staged);
+        return copied;
+    }
     return RealDispatch::on_clEnqueueWriteBuffer(command_queue, buffer, CL_TRUE, offset, size, ptr,
                                                  num_events_in_wait_list, event_wait_list, event);
 }

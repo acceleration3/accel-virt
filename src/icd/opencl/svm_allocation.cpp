@@ -4,16 +4,17 @@
 
 namespace av::clicd {
 
-SvmAllocation::SvmAllocation() : host_base_(0u), mirror_(nullptr), bytes_(0u), map_depth_(0u)
+SvmAllocation::SvmAllocation() : host_base_(0u), mirror_(nullptr), raw_(nullptr), bytes_(0u), map_depth_(0u), regions_{}
 {
     AV_SCOPE("SvmAllocation::SvmAllocation");
 }
 
-void SvmAllocation::take(uint64_t host_base, uint8_t *mirror, size_t bytes)
+void SvmAllocation::take(uint64_t host_base, uint8_t *mirror, size_t bytes, uint8_t *raw)
 {
     AV_SCOPE("SvmAllocation::take");
     host_base_ = host_base;
     mirror_ = mirror;
+    raw_ = raw != nullptr ? raw : mirror;
     bytes_ = bytes;
     map_depth_ = 0u;
 }
@@ -23,8 +24,10 @@ void SvmAllocation::give_up()
     AV_SCOPE("SvmAllocation::give_up");
     host_base_ = 0u;
     mirror_ = nullptr;
+    raw_ = nullptr;
     bytes_ = 0u;
     map_depth_ = 0u;
+    for (Region &region : regions_) region = Region{};
 }
 
 bool SvmAllocation::held() const
@@ -37,6 +40,12 @@ uint64_t SvmAllocation::host_base() const
 {
     AV_SCOPE("SvmAllocation::host_base");
     return host_base_;
+}
+
+uint8_t *SvmAllocation::raw() const
+{
+    AV_SCOPE("SvmAllocation::raw");
+    return raw_;
 }
 
 uint8_t *SvmAllocation::mirror() const
@@ -79,6 +88,30 @@ bool SvmAllocation::unmapped()
     if (map_depth_ == 0u) return false;
     --map_depth_;
     return true;
+}
+
+void SvmAllocation::note_region(uint64_t offset, uint64_t bytes, bool writes)
+{
+    AV_SCOPE("SvmAllocation::note_region");
+    for (Region &region : regions_) {
+        if (region.used_) continue;
+        region = Region{offset, bytes, writes, true};
+        return;
+    }
+    regions_[0] = Region{0u, bytes_, writes || regions_[0].writes_, true};
+}
+
+bool SvmAllocation::take_region(uint64_t offset, uint64_t &bytes, bool &writes)
+{
+    AV_SCOPE("SvmAllocation::take_region");
+    for (Region &region : regions_) {
+        if (!region.used_ || region.offset_ != offset) continue;
+        bytes = region.bytes_;
+        writes = region.writes_;
+        region = Region{};
+        return true;
+    }
+    return false;
 }
 
 uint32_t SvmAllocation::map_depth() const

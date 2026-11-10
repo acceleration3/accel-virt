@@ -10,14 +10,14 @@ ClPendingReads::ClPendingReads() : rows_(), held_(0u), delivered_(0u)
 }
 
 bool ClPendingReads::record(uint64_t event, uint64_t queue, uint64_t buffer, uint64_t offset,
-                            uint64_t bytes, void *into, bool ours)
+                            uint64_t bytes, void *into, bool ours, uint64_t scratch)
 {
     AV_SCOPE("ClPendingReads::record");
     uint32_t slot = 0u;
     while (slot < max_reads && rows_[slot].held()) ++slot;
     if (slot == max_reads) return false;
     if (!rows_[slot].take(event, queue, buffer, static_cast<size_t>(offset),
-                          static_cast<size_t>(bytes), into, ours))
+                          static_cast<size_t>(bytes), into, ours, scratch))
         return false;
     ++held_;
     return true;

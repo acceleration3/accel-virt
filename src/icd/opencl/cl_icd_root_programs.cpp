@@ -4,6 +4,7 @@
 #include "core/log/log_line.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "icd/opencl/cl_build_options.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -58,7 +59,10 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     if (devices != CL_SUCCESS) return devices;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, options);
+    const ClBuildOptions sent(memory_, options);
+    if (!sent.usable()) return CL_OUT_OF_HOST_MEMORY;
+    const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, sent.for_host());
+    if (built == CL_SUCCESS) held->keep_traits(sent.traits());
     if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
     if (built == CL_SUCCESS || built == CL_BUILD_PROGRAM_FAILURE) notify.tell(program);
     return built;
@@ -150,7 +154,13 @@ cl_program ClIcdRoot::create_program_with_il(cl_context context, const void *il,
         report_program_error(error, CL_INVALID_CONTEXT);
         return nullptr;
     }
-    if (il == nullptr || length == 0u) {
+    uint32_t magic = 0u;
+    if (il != nullptr && length >= sizeof magic) __builtin_memcpy(&magic, il, sizeof magic);
+    constexpr uint32_t module_magic = 0x07230203u;
+    constexpr uint32_t swapped_magic = 0x03022307u;
+    constexpr size_t   header_bytes = 20u;
+    if (il == nullptr || length < header_bytes || length % sizeof magic != 0u ||
+        (magic != module_magic && magic != swapped_magic)) {
         report_program_error(error, CL_INVALID_VALUE);
         return nullptr;
     }
@@ -219,8 +229,12 @@ cl_int ClIcdRoot::compile_program(cl_program program, cl_uint num_devices, const
     if (listed != CL_SUCCESS) return listed;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const cl_int compiled = av::clproto::av_clCompileProgram(*wire, held->wire(), 0u, nullptr, options, num_headers,
-                                                             num_headers != 0u ? host_headers : nullptr, header_names);
+    const ClBuildOptions sent(memory_, options);
+    if (!sent.usable()) return CL_OUT_OF_HOST_MEMORY;
+    const cl_int compiled = av::clproto::av_clCompileProgram(*wire, held->wire(), 0u, nullptr, sent.for_host(),
+                                                             num_headers, num_headers != 0u ? host_headers : nullptr,
+                                                             header_names);
+    if (compiled == CL_SUCCESS) held->keep_traits(sent.traits());
     if (compiled == CL_COMPILE_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
     if (compiled == CL_SUCCESS || compiled == CL_COMPILE_PROGRAM_FAILURE) notify.tell(program);
     return compiled;
@@ -257,6 +271,16 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
     if (host_error == CL_LINK_PROGRAM_FAILURE) note_build_log(*wire, linked, host_device_of(*held), options);
     cl_int     kept = CL_SUCCESS;
     cl_program made = static_cast<cl_program>(wrap(*wire, ClObject::Kind::program, linked, held->context(), held, &kept));
+    if (made != nullptr) {
+        uint32_t carried = ClObject::program_typed_arguments | ClObject::program_arguments_asked;
+        uint32_t non_uniform = 0u;
+        for (cl_uint index = 0u; index < num_inputs; ++index) {
+            const ClObject *const input = judged(inputs[index], ClObject::Kind::program);
+            carried &= input != nullptr ? input->traits() : 0u;
+            non_uniform |= input != nullptr ? input->traits() & ClObject::program_non_uniform : 0u;
+        }
+        static_cast<ClObject *>(static_cast<void *>(made))->keep_traits(carried | non_uniform);
+    }
     report_program_error(error, kept != CL_SUCCESS ? kept : host_error);
     notify.tell(made);
     return made;
@@ -392,7 +416,18 @@ cl_kernel ClIcdRoot::clone_kernel(cl_kernel kernel, cl_int *error)
         report_program_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_kernel>(wrap(*wire, ClObject::Kind::kernel, clone, held->context(), held->parent(), error));
+    void *const made = wrap(*wire, ClObject::Kind::kernel, clone, held->context(), held->parent(), error);
+    if (made == nullptr) return nullptr;
+    ClObject *const cloned = static_cast<ClObject *>(made);
+    ClKernelShape *const shape = kernel_shape(*held, *wire);
+    if (shape != nullptr) {
+        ClKernelShape *copy = nullptr;
+        if (shapes_.create(copy, memory_) == Status::ok) {
+            if (copy->copy_from(*shape) == Status::ok) cloned->keep_shape(copy);
+            else static_cast<void>(shapes_.destroy(copy));
+        }
+    }
+    return static_cast<cl_kernel>(made);
 }
 
 cl_int ClIcdRoot::kernel_info(cl_kernel kernel, cl_kernel_info name, size_t value_bytes, void *value,
@@ -429,6 +464,10 @@ cl_int ClIcdRoot::kernel_arg_info(cl_kernel kernel, cl_uint index, cl_kernel_arg
     AV_SCOPE("ClIcdRoot::kernel_arg_info");
     ClObject *const held = judged(kernel, ClObject::Kind::kernel);
     if (held == nullptr) return CL_INVALID_KERNEL;
+    const ClObject *const owner = held->parent();
+    if (owner != nullptr && (owner->traits() & ClObject::program_typed_arguments) != 0u &&
+        (owner->traits() & ClObject::program_arguments_asked) == 0u)
+        return CL_KERNEL_ARG_INFO_NOT_AVAILABLE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     return av::clproto::av_clGetKernelArgInfo(*wire, held->wire(), index, name, value_bytes, value, size_ret);

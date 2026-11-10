@@ -5,6 +5,7 @@
 
 #include <CL/cl.h>
 #include <stddef.h>
+#include <stdint.h>
 
 namespace av::clicd {
 
@@ -18,6 +19,8 @@ public:
     const ClImageRegion &buffer_side() const;
     const ClImageRegion &application() const;
     size_t host_offset() const;
+    [[nodiscard]] bool buffer_span(uint64_t &first, uint64_t &end) const;
+    [[nodiscard]] bool host_span(uint64_t &end) const;
 
 private:
     static constexpr size_t most_countable = 0xFFFFFFFFu;

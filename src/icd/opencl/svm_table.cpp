@@ -31,17 +31,22 @@ uint32_t SvmTable::row_below(uint64_t key) const
     return SortedSearch<uint64_t>(bases_).at_or_below(key);
 }
 
-void *SvmTable::take(uint64_t host_base, size_t bytes)
+void *SvmTable::take(uint64_t host_base, size_t bytes, size_t alignment)
 {
     AV_SCOPE("SvmTable::take");
     if (host_base == 0u || bytes == 0u) return nullptr;
     if (static_cast<uint64_t>(bytes) > ~uint64_t{0} - host_base) return nullptr;
+    const size_t aligned = alignment > minimum_alignment ? alignment : minimum_alignment;
+    if (bytes > ~size_t{0} - aligned) return nullptr;
     if (allocations_.reserve(allocations_.count() + 1u) != Status::ok || bases_.reserve(bases_.size() + 1u) != Status::ok)
         return nullptr;
-    uint8_t *const mirror = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
-    if (mirror == nullptr) return nullptr;
+    uint8_t *const raw = static_cast<uint8_t *>(memory_.allocate(bytes + aligned, Pool::paged));
+    if (raw == nullptr) return nullptr;
+    const uintptr_t start = (reinterpret_cast<uintptr_t>(raw) + aligned - 1u) & ~(static_cast<uintptr_t>(aligned) - 1u);
+    uint8_t *const  mirror = reinterpret_cast<uint8_t *>(start);
+    __builtin_memset(mirror, 0, bytes);
     SvmAllocation allocation;
-    allocation.take(host_base, mirror, bytes);
+    allocation.take(host_base, mirror, bytes, raw);
     uint32_t slot = 0u;
     static_cast<void>(allocations_.insert(key_of(mirror), allocation, slot));
     const uint32_t below = row_below(key_of(mirror));
@@ -55,14 +60,14 @@ uint64_t SvmTable::give_back(const void *mirror)
     SvmAllocation allocation;
     if (mirror == nullptr || !allocations_.take(key_of(mirror), allocation)) return 0u;
     bases_.remove_at(row_below(key_of(mirror)));
-    memory_.release(allocation.mirror());
+    memory_.release(allocation.raw());
     return allocation.host_base();
 }
 
 void SvmTable::give_back_all()
 {
     AV_SCOPE("SvmTable::give_back_all");
-    allocations_.for_each([this](uint64_t, SvmAllocation &allocation) { memory_.release(allocation.mirror()); });
+    allocations_.for_each([this](uint64_t, SvmAllocation &allocation) { memory_.release(allocation.raw()); });
     allocations_.clear();
     bases_.clear();
 }

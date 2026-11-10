@@ -20,4 +20,10 @@ void ClContextNotify::say(const char *text) const
     if (callback_ != nullptr) callback_(text, nullptr, 0u, user_data_);
 }
 
+bool ClContextNotify::valid() const
+{
+    AV_SCOPE("ClContextNotify::valid");
+    return callback_ != nullptr || user_data_ == nullptr;
+}
+
 }

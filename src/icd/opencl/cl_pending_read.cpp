@@ -5,14 +5,14 @@
 namespace av::clicd {
 
 ClPendingRead::ClPendingRead()
-    : into_(nullptr), event_(0u), queue_(0u), buffer_(0u), offset_(0u), bytes_(0u),
+    : into_(nullptr), event_(0u), queue_(0u), buffer_(0u), scratch_(0u), offset_(0u), bytes_(0u),
       ours_(false), held_(false)
 {
     AV_SCOPE("ClPendingRead::ClPendingRead");
 }
 
 bool ClPendingRead::take(uint64_t event, uint64_t queue, uint64_t buffer, size_t offset,
-                         size_t bytes, void *into, bool ours)
+                         size_t bytes, void *into, bool ours, uint64_t scratch)
 {
     AV_SCOPE("ClPendingRead::take");
     if (event == 0u || queue == 0u || buffer == 0u || bytes == 0u || into == nullptr) return false;
@@ -23,6 +23,7 @@ bool ClPendingRead::take(uint64_t event, uint64_t queue, uint64_t buffer, size_t
     offset_ = offset;
     bytes_ = bytes;
     ours_ = ours;
+    scratch_ = scratch;
     held_ = true;
     return true;
 }
@@ -37,6 +38,7 @@ void ClPendingRead::give_up()
     offset_ = 0u;
     bytes_ = 0u;
     ours_ = false;
+    scratch_ = 0u;
     held_ = false;
 }
 
@@ -47,6 +49,7 @@ uint64_t ClPendingRead::buffer() const { AV_SCOPE("ClPendingRead::buffer"); retu
 size_t   ClPendingRead::offset() const { AV_SCOPE("ClPendingRead::offset"); return offset_; }
 size_t   ClPendingRead::bytes() const { AV_SCOPE("ClPendingRead::bytes"); return bytes_; }
 void    *ClPendingRead::into() const { AV_SCOPE("ClPendingRead::into"); return into_; }
+uint64_t ClPendingRead::scratch() const { AV_SCOPE("ClPendingRead::scratch"); return scratch_; }
 bool     ClPendingRead::ours() const { AV_SCOPE("ClPendingRead::ours"); return ours_; }
 
 bool ClPendingRead::invariants_hold() const

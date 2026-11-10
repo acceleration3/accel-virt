@@ -3,6 +3,7 @@
 
 #include "icd/common/id_mint.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
+#include "icd/opencl/cl_mem_extent.hpp"
 
 #include <CL/cl.h>
 #include <CL/cl_icd.h>
@@ -15,6 +16,7 @@ class HostAllocation;
 
 namespace av::clicd {
 
+class ClKernelShape;
 class GuestClContext;
 
 struct ClObjectProbe;
@@ -50,6 +52,21 @@ public:
 
     ClObject *nearest(Kind kind);
 
+    static constexpr uint32_t program_typed_arguments = 1u;
+    static constexpr uint32_t program_arguments_asked = 2u;
+    static constexpr uint32_t program_non_uniform = 4u;
+
+    void            keep_shape(ClKernelShape *shape);
+    ClKernelShape  *shape() const;
+    ClMemExtent    &extent();
+    const ClMemExtent &extent() const;
+    void            keep_flags(uint64_t flags);
+    uint64_t        flags() const;
+    void            keep_command_type(uint32_t type);
+    uint32_t        command_type() const;
+    void            keep_traits(uint32_t traits);
+    uint32_t        traits() const;
+
     void     retain();
     bool     release();
     uint32_t references() const;
@@ -81,6 +98,11 @@ private:
     uint8_t               *application_memory_;
     HostAllocation        *lent_;
     ClObject              *sliced_from_;
+    ClKernelShape         *shape_;
+    uint64_t               flags_;
+    ClMemExtent            extent_;
+    uint32_t               command_type_;
+    uint32_t               traits_;
     uint32_t               references_;
     uint32_t               children_;
     Kind                   kind_;

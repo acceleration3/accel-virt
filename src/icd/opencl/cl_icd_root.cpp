@@ -13,7 +13,9 @@
 #include "icd/common/adapter_facts.hpp"
 #include "icd/common/adapter_memory.hpp"
 
+#include "icd/opencl/cl_build_options.hpp"
 #include "icd/opencl/cl_info_request.hpp"
+#include "icd/opencl/cl_mem_flags.hpp"
 
 #include "guest/transport/host_allocation.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
@@ -76,7 +78,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock,
                      ClIcdBinding &binding)
     : lock_(lock), lines_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(memory, kmt),
-      shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
+      shared_handles_(kmt, lock, memory), contexts_(memory), shapes_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
       watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), refused_(lines_), refusals_(lines_),
       destructor_callbacks_(memory)
 {
@@ -260,7 +262,9 @@ cl_int ClIcdRoot::device_ids(cl_platform_id platform, cl_device_type type, cl_ui
         (devices != nullptr && num_entries == 0u)) {
         return CL_INVALID_VALUE;
     }
-    if (type == 0u) return CL_INVALID_DEVICE_TYPE;
+    constexpr cl_device_type known_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU |
+                                           CL_DEVICE_TYPE_ACCELERATOR | CL_DEVICE_TYPE_CUSTOM;
+    if (type == 0u || (type != CL_DEVICE_TYPE_ALL && (type & ~known_types) != 0u)) return CL_INVALID_DEVICE_TYPE;
     const bool wants_gpu = (type & (CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_DEFAULT)) != 0u;
     if (!wants_gpu) {
         if (num_devices != nullptr) *num_devices = 0u;
@@ -495,6 +499,10 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
                                      cl_uint num_devices, cl_int *error, const ClContextNotify &notify)
 {
     AV_SCOPE("ClIcdRoot::create_context");
+    if (!notify.valid()) {
+        report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
     static constexpr uint64_t allowed[] = {
         static_cast<uint64_t>(CL_CONTEXT_PLATFORM), static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC),
         static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR),
@@ -664,6 +672,10 @@ ClObject *ClIcdRoot::drop_reference(void *object, ClObject &held, ClObject::Kind
         }
     }
     if (twin != nullptr) d3d11_.let_go(twin);
+    if (last && kind == ClObject::Kind::kernel && held.shape() != nullptr) {
+        static_cast<void>(shapes_.destroy(held.shape()));
+        held.keep_shape(nullptr);
+    }
     GuestClContext *freed = nullptr;
     const void     *gone[ClDestructorCallbacks::max_gone] = {};
     uint32_t        went = 0u;
@@ -708,7 +720,7 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
     ClPropertyList            list;
     const cl_int              judged_list = judge(properties, allowed, 2u, list);
     if (judged_list != CL_SUCCESS) {
-        report_error(error, judged_list);
+        report_error(error, judged_list == CL_INVALID_PROPERTY ? CL_INVALID_VALUE : judged_list);
         return nullptr;
     }
     ClObject *const held = judged(context, ClObject::Kind::context);
@@ -758,6 +770,24 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
                                 void *host_pointer, const uint64_t *properties, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_buffer");
+    const ClMemFlags asked(flags);
+    const cl_int     judged_flags = asked.judge();
+    if (judged_flags != CL_SUCCESS) {
+        report_error(error, judged_flags);
+        return nullptr;
+    }
+    cl_mem const made = create_buffer_for_host(context, asked.for_host(), bytes, host_pointer, properties, error);
+    if (made == nullptr) return nullptr;
+    ClObject *const object = static_cast<ClObject *>(static_cast<void *>(made));
+    object->keep_flags(asked.asked());
+    object->extent().as_buffer(0u, bytes);
+    return made;
+}
+
+cl_mem ClIcdRoot::create_buffer_for_host(cl_context context, cl_mem_flags flags, size_t bytes,
+                                         void *host_pointer, const uint64_t *properties, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_buffer_for_host");
     static constexpr uint64_t allowed[] = {
         ClExternalMemory::handle_properties[0], ClExternalMemory::handle_properties[1],
         ClExternalMemory::handle_properties[2], ClExternalMemory::handle_properties[3],
@@ -963,6 +993,11 @@ cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t by
     if (held == nullptr) return CL_INVALID_KERNEL;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    ClKernelShape *const shape = kernel_shape(*held, *wire);
+    if (shape != nullptr) {
+        const cl_int judged_argument = judge_kernel_argument(*shape, index, bytes, value);
+        if (judged_argument != CL_SUCCESS) return judged_argument;
+    }
     icd::UnansweredTransport unanswered(*wire);
     if (bytes == sizeof(cl_mem) && value != nullptr) {
         void *named = nullptr;
@@ -975,11 +1010,15 @@ cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t by
         if (object == nullptr) object = judged(named, ClObject::Kind::sampler);
         if (object != nullptr) {
             const uint64_t handle = object->wire();
-            return av::clproto::av_clSetKernelArg(unanswered, held->wire(), index, sizeof handle,
-                                                   &handle);
+            const cl_int   sent = av::clproto::av_clSetKernelArg(unanswered, held->wire(), index, sizeof handle,
+                                                                 &handle);
+            if (sent == CL_SUCCESS && shape != nullptr) shape->note_set(index, bytes, value);
+            return sent;
         }
     }
-    return av::clproto::av_clSetKernelArg(unanswered, held->wire(), index, bytes, value);
+    const cl_int sent = av::clproto::av_clSetKernelArg(unanswered, held->wire(), index, bytes, value);
+    if (sent == CL_SUCCESS && shape != nullptr) shape->note_set(index, bytes, value);
+    return sent;
 }
 
 cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_uint dimensions,
@@ -993,10 +1032,18 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
     if (named == nullptr) return CL_INVALID_KERNEL;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    if (named->context() != held->context()) return CL_INVALID_CONTEXT;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
     const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
+    const ClKernelShape *const shape = kernel_shape(*named, *wire);
+    if (shape != nullptr) {
+        const ClObject *const owner = named->parent();
+        const bool            non_uniform = owner != nullptr && (owner->traits() & ClObject::program_non_uniform) != 0u;
+        const cl_int          judged_launch = shape->judge_launch(dimensions, offset, global, local, non_uniform);
+        if (judged_launch != CL_SUCCESS) return judged_launch;
+    }
     uint64_t     produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
     const cl_int ran = av::clproto::av_clEnqueueNDRangeKernel(
@@ -1048,6 +1095,10 @@ cl_int ClIcdRoot::enqueue_external(cl_command_queue queue, cl_uint count, const 
     return CL_SUCCESS;
 }
 
+namespace {
+constexpr size_t snapshot_limit = size_t{16} << 20u;
+}
+
 cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
                                size_t offset, size_t bytes, void *into, cl_event *event, const ClWaitList &waits)
 {
@@ -1056,6 +1107,14 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int allowed = judge_host_transfer(*held, *named, true);
+        if (allowed != CL_SUCCESS) return allowed;
+    }
+    {
+        const cl_int in_range = judge_buffer_range(*named, offset, bytes);
+        if (in_range != CL_SUCCESS) return in_range;
+    }
     if (into == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -1064,33 +1123,45 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
-    if (blocking != CL_TRUE) {
+    if (blocking != CL_TRUE && bytes <= snapshot_limit) {
         held->busy();
-        const cl_int marked = av::clproto::av_clEnqueueMarkerWithWaitList(
-            *wire, held->wire(), waits.count(), waits.count() != 0u ? listed : nullptr, &produced);
-        if (marked != CL_SUCCESS) return marked;
-        bool recorded = false;
-        {
-            const ThreadLockHold locked(lock_);
-            recorded = reads_.record(produced, held->wire(), named->wire(), offset, bytes, into, event == nullptr);
-        }
-        if (recorded) {
-            if (event != nullptr) {
-                *event = static_cast<cl_event>(
-                    wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
+        cl_int         made = CL_SUCCESS;
+        const uint64_t scratch = av::clproto::av_clCreateBuffer(*wire, held->nearest(ClObject::Kind::context)->wire(),
+                                                                CL_MEM_READ_WRITE, bytes, nullptr, &made);
+        if (scratch != 0u) {
+            icd::UnansweredTransport unanswered(*wire);
+            const cl_int copied = av::clproto::av_clEnqueueCopyBuffer(
+                unanswered, held->wire(), named->wire(), scratch, offset, 0u, bytes, waits.count(),
+                waits.count() != 0u ? listed : nullptr, nullptr);
+            const cl_int marked = copied == CL_SUCCESS ? av::clproto::av_clEnqueueMarkerWithWaitList(
+                                                             *wire, held->wire(), 0u, nullptr, &produced)
+                                                       : copied;
+            bool recorded = false;
+            if (marked == CL_SUCCESS) {
+                const ThreadLockHold locked(lock_);
+                recorded = reads_.record(produced, held->wire(), scratch, 0u, bytes, into, event == nullptr, scratch);
             }
-            return CL_SUCCESS;
+            if (recorded) {
+                if (event != nullptr) {
+                    void *const made_event =
+                        wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr);
+                    if (made_event != nullptr)
+                        static_cast<ClObject *>(made_event)->keep_command_type(CL_COMMAND_READ_BUFFER);
+                    *event = static_cast<cl_event>(made_event);
+                }
+                return CL_SUCCESS;
+            }
+            if (marked == CL_SUCCESS) static_cast<void>(av::clproto::av_clReleaseEvent(*wire, produced));
+            give_back_to_host(*wire, ClObject::Kind::mem, scratch);
+            produced = 0u;
         }
-        static_cast<void>(av::clproto::av_clReleaseEvent(*wire, produced));
-        lines_.write("too many reads outstanding; this one blocks");
-        produced = 0u;
     }
     const cl_int drained = settle(*wire, *held, waits);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     ran = chunks.read(named->wire(), offset, bytes, into);
     if (ran != CL_SUCCESS) return ran;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_READ_BUFFER);
 }
 
 cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -1102,16 +1173,42 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int allowed = judge_host_transfer(*held, *named, false);
+        if (allowed != CL_SUCCESS) return allowed;
+    }
+    {
+        const cl_int in_range = judge_buffer_range(*named, offset, bytes);
+        if (in_range != CL_SUCCESS) return in_range;
+    }
     if (from == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    static_cast<void>(blocking);
+    if (blocking != CL_TRUE && waits.count() != 0u && bytes <= wire->room().inline_write()) {
+        ClHostNumbers listed_room(memory_);
+        uint64_t     *listed = nullptr;
+        const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+        if (judged_list != CL_SUCCESS) return judged_list;
+        held->busy();
+        uint64_t     produced = 0u;
+        const cl_int sent = av::clproto::av_clEnqueueWriteBuffer(*wire, held->wire(), named->wire(), CL_FALSE, offset,
+                                                                  bytes, from, waits.count(), listed, &produced);
+        if (sent != CL_SUCCESS) return sent;
+        if (event != nullptr) {
+            void *const made = wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr);
+            if (made != nullptr) static_cast<ClObject *>(made)->keep_command_type(CL_COMMAND_WRITE_BUFFER);
+            *event = static_cast<cl_event>(made);
+        } else {
+            static_cast<void>(av::clproto::av_clReleaseEvent(*wire, produced));
+        }
+        return CL_SUCCESS;
+    }
     const cl_int drained = settle(*wire, *held, waits);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     ran = chunks.write(named->wire(), offset, bytes, from);
     if (ran != CL_SUCCESS) return ran;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_WRITE_BUFFER);
 }
 
 cl_int ClIcdRoot::finish(cl_command_queue queue)
@@ -1157,6 +1254,18 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
     if (bytes == 0u) {
         report_error(error, CL_INVALID_VALUE);
         return nullptr;
+    }
+    {
+        const cl_int allowed = judge_host_map(*held, *named, flags);
+        if (allowed != CL_SUCCESS) {
+            report_error(error, allowed);
+            return nullptr;
+        }
+        const cl_int in_range = judge_buffer_range(*named, offset, bytes);
+        if (in_range != CL_SUCCESS) {
+            report_error(error, in_range);
+            return nullptr;
+        }
     }
     GuestClContext *const context = held->context();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
@@ -1307,12 +1416,18 @@ void *ClIcdRoot::svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t by
     AV_SCOPE("ClIcdRoot::svm_alloc");
     ClObject *const held = judged(context, ClObject::Kind::context);
     if (held == nullptr || bytes == 0u) return nullptr;
+    constexpr cl_svm_mem_flags device_access = CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY;
+    constexpr cl_svm_mem_flags known = device_access | CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS;
+    if ((flags & ~known) != 0u || (flags & (CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS)) != 0u) return nullptr;
+    const cl_svm_mem_flags access = flags & device_access;
+    if ((access & (access - 1u)) != 0u) return nullptr;
+    if (alignment != 0u && (alignment & (alignment - 1u)) != 0u) return nullptr;
     GuestClContext *const owner = held->context();
     ClientTransport *const wire = owner != nullptr ? owner->wire() : nullptr;
     if (wire == nullptr) return nullptr;
     const uint64_t host = av::clproto::av_clSVMAlloc(*wire, held->wire(), flags, bytes, alignment);
     if (host == 0u) return nullptr;
-    void *const mirror = owner->svm().take(host, bytes);
+    void *const mirror = owner->svm().take(host, bytes, alignment);
     if (mirror == nullptr) {
         av::clproto::av_clSVMFree(*wire, held->wire(), host);
         return nullptr;
@@ -1361,9 +1476,16 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
         *wire, held->wire(), blocking, flags, host, bytes, host_waits, host_waits != 0u ? listed : nullptr,
         event != nullptr ? &produced : nullptr);
     if (mapped != CL_SUCCESS) return mapped;
-    if (allocation->map_depth() == 0u) {
-        lines_.write("shared memory is mapped, and the mirror is not synchronised yet");
+    const uint64_t offset = static_cast<uint64_t>(static_cast<const uint8_t *>(pointer) - allocation->mirror());
+    const bool     reads = (flags & CL_MAP_WRITE_INVALIDATE_REGION) == 0u;
+    if (reads) {
+        const cl_int settled = settle(*wire, *held, ClWaitList());
+        if (settled != CL_SUCCESS) return settled;
+        const cl_int copied =
+            svm_to_guest(*wire, *held, const_cast<void *>(pointer), context->svm().host_address_of(pointer), bytes);
+        if (copied != CL_SUCCESS) return copied;
     }
+    allocation->note_region(offset, bytes, (flags & (CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION)) != 0u);
     allocation->mapped();
     if (event != nullptr) {
         *event = static_cast<cl_event>(wrap(*wire, ClObject::Kind::event, produced, context, held, nullptr));
@@ -1387,6 +1509,17 @@ cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *eve
     uint64_t     *listed = nullptr;
     const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
+    {
+        const uint64_t offset = static_cast<uint64_t>(static_cast<const uint8_t *>(pointer) - allocation->mirror());
+        uint64_t       bytes = 0u;
+        bool           writes = false;
+        if (allocation->take_region(offset, bytes, writes) && writes) {
+            const cl_int settled = settle(*wire, *held, ClWaitList());
+            if (settled != CL_SUCCESS) return settled;
+            const cl_int copied = svm_from_guest(*wire, *held, host, pointer, static_cast<size_t>(bytes));
+            if (copied != CL_SUCCESS) return copied;
+        }
+    }
     uint64_t     produced = 0u;
     const cl_int unmapped = av::clproto::av_clEnqueueSVMUnmap(
         *wire, held->wire(), host, waits.count(), waits.count() != 0u ? listed : nullptr,
@@ -1412,7 +1545,11 @@ cl_int ClIcdRoot::set_kernel_svm_argument(cl_kernel kernel, cl_uint index, const
     if (host == 0u) return CL_INVALID_ARG_VALUE;
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    return av::clproto::av_clSetKernelArgSVMPointer(*wire, held->wire(), index, host);
+    ClKernelShape *const shape = kernel_shape(*held, *wire);
+    if (shape != nullptr && index >= shape->count()) return CL_INVALID_ARG_INDEX;
+    const cl_int sent = av::clproto::av_clSetKernelArgSVMPointer(*wire, held->wire(), index, host);
+    if (sent == CL_SUCCESS && shape != nullptr) shape->note_set_pointer(index);
+    return sent;
 }
 
 
@@ -1468,7 +1605,15 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int reached = waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever, context->wakes());
     const cl_int delivered = deliver_reads(*wire, context->staging(), handles, waited);
-    return reached != CL_SUCCESS ? reached : delivered;
+    if (reached != CL_SUCCESS) return reached;
+    for (cl_uint index = 0u; index < waited; ++index) {
+        cl_int status = CL_COMPLETE;
+        if (av::clproto::av_clGetEventInfo(*wire, handles[index], CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status,
+                                           &status, nullptr) == CL_SUCCESS &&
+            status < 0)
+            return CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST;
+    }
+    return delivered;
 }
 
 cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
@@ -1477,6 +1622,24 @@ cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_by
     AV_SCOPE("ClIcdRoot::event_info");
     ClObject *const held = judged(event, ClObject::Kind::event);
     if (held == nullptr) return CL_INVALID_EVENT;
+    {
+        const ClInfoRequest guest_asked(value_bytes, value, size_ret);
+        if (name == CL_EVENT_COMMAND_QUEUE) {
+            const ClObject *const owner = held->parent();
+            const cl_command_queue queue = owner != nullptr && owner->kind() == ClObject::Kind::command_queue
+                                               ? reinterpret_cast<cl_command_queue>(const_cast<ClObject *>(owner))
+                                               : nullptr;
+            return guest_asked.give(&queue, sizeof queue);
+        }
+        if (name == CL_EVENT_CONTEXT) {
+            const cl_context owner = reinterpret_cast<cl_context>(held->nearest(ClObject::Kind::context));
+            return guest_asked.give(&owner, sizeof owner);
+        }
+        if (name == CL_EVENT_COMMAND_TYPE && held->command_type() != 0u) {
+            const cl_command_type type = held->command_type();
+            return guest_asked.give(&type, sizeof type);
+        }
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int asked =
@@ -1617,6 +1780,8 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
         if (held->application_memory() != nullptr)
             made = (made & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR)) |
                    static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR);
+        made |= held->flags() &
+                static_cast<cl_mem_flags>(CL_MEM_HOST_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_NO_ACCESS);
         return asked.give(&made, sizeof made);
     }
     default:
@@ -1711,6 +1876,7 @@ cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, ClArenaBlocks &blocks, co
             chunks.read(waiting->buffer(), waiting->offset(), waiting->bytes(), waiting->into());
         if (waiting->ours())
             static_cast<void>(av::clproto::av_clReleaseEvent(wire, waiting->event()));
+        if (waiting->scratch() != 0u) give_back_to_host(wire, ClObject::Kind::mem, waiting->scratch());
         waiting->give_up();
         reads_.count_delivery();
         if (read != CL_SUCCESS && answer == CL_SUCCESS) answer = read;
@@ -1802,7 +1968,7 @@ void ClIcdRoot::let_go_of_memory(GuestClContext &context, ClObject &buffer)
     if (buffer.lent() != nullptr) context.give_back_lent(*buffer.lent());
 }
 
-cl_int ClIcdRoot::marker_event(ClientTransport &wire, ClObject &queue, cl_event *event)
+cl_int ClIcdRoot::marker_event(ClientTransport &wire, ClObject &queue, cl_event *event, cl_command_type type)
 {
     AV_SCOPE("ClIcdRoot::marker_event");
     if (event == nullptr) return CL_SUCCESS;
@@ -1810,8 +1976,9 @@ cl_int ClIcdRoot::marker_event(ClientTransport &wire, ClObject &queue, cl_event 
     const cl_int marked =
         av::clproto::av_clEnqueueMarkerWithWaitList(wire, queue.wire(), 0u, nullptr, &produced);
     if (marked != CL_SUCCESS) return marked;
-    *event = static_cast<cl_event>(
-        wrap(wire, ClObject::Kind::event, produced, queue.context(), &queue, nullptr));
+    void *const made = wrap(wire, ClObject::Kind::event, produced, queue.context(), &queue, nullptr);
+    if (made != nullptr) static_cast<ClObject *>(made)->keep_command_type(type);
+    *event = static_cast<cl_event>(made);
     return CL_SUCCESS;
 }
 
@@ -1839,8 +2006,29 @@ cl_int ClIcdRoot::program_build_info(cl_program program, cl_device_id device,
         return CL_INVALID_DEVICE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    return av::clproto::av_clGetProgramBuildInfo(*wire, held->wire(), host_device, name, value_bytes, value,
-                                                  size_ret);
+    const bool appended = name == CL_PROGRAM_BUILD_OPTIONS && (held->traits() & ClObject::program_typed_arguments) != 0u &&
+                          (held->traits() & ClObject::program_arguments_asked) == 0u;
+    if (!appended)
+        return av::clproto::av_clGetProgramBuildInfo(*wire, held->wire(), host_device, name, value_bytes, value,
+                                                      size_ret);
+    size_t size = 0u;
+    const cl_int sized =
+        av::clproto::av_clGetProgramBuildInfo(*wire, held->wire(), host_device, name, 0u, nullptr, &size);
+    if (sized != CL_SUCCESS) return sized;
+    char *const text = static_cast<char *>(memory_.allocate(size + 1u, Pool::paged));
+    if (text == nullptr) return CL_OUT_OF_HOST_MEMORY;
+    ScopeExit given_back([&] { memory_.release(text); });
+    text[0] = '\0';
+    if (size != 0u) {
+        const cl_int read =
+            av::clproto::av_clGetProgramBuildInfo(*wire, held->wire(), host_device, name, size, text, nullptr);
+        if (read != CL_SUCCESS) return read;
+    }
+    text[size] = '\0';
+    size_t length = 0u;
+    while (text[length] != '\0') ++length;
+    length = ClBuildOptions::without_arguments_option(text, length);
+    return ClInfoRequest(value_bytes, value, size_ret).give(text, length + 1u);
 }
 
 cl_int ClIcdRoot::kernel_work_group_info(cl_kernel kernel, cl_device_id device,
@@ -1872,6 +2060,14 @@ cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_me
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
+    {
+        const cl_int from_range = judge_buffer_range(*source, from_offset, bytes);
+        if (from_range != CL_SUCCESS) return from_range;
+        const cl_int to_range = judge_buffer_range(*target, to_offset, bytes);
+        if (to_range != CL_SUCCESS) return to_range;
+        if (buffer_ranges_overlap(*source, from_offset, *target, to_offset, bytes)) return CL_MEM_COPY_OVERLAP;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -1900,6 +2096,11 @@ cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, con
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     if (pattern == nullptr || pattern_bytes == 0u) return CL_INVALID_VALUE;
+    if (named->context() != held->context()) return CL_INVALID_CONTEXT;
+    {
+        const cl_int judged_fill = judge_fill(*named, pattern_bytes, offset, bytes);
+        if (judged_fill != CL_SUCCESS) return judged_fill;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -1929,6 +2130,19 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
     ClObject *const target = judged(to, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
+    if (source->extent().shape() == ClMemExtent::Shape::buffer ||
+        target->extent().shape() == ClMemExtent::Shape::buffer)
+        return CL_INVALID_MEM_OBJECT;
+    {
+        if (!source->extent().same_format(target->extent())) return CL_IMAGE_FORMAT_MISMATCH;
+        const cl_int from_region = source->extent().judge_region(from_origin, region);
+        if (from_region != CL_SUCCESS) return from_region;
+        const cl_int to_region = target->extent().judge_region(to_origin, region);
+        if (to_region != CL_SUCCESS) return to_region;
+        if (source == target && source->extent().regions_overlap(from_origin, target->extent(), to_origin, region))
+            return CL_MEM_COPY_OVERLAP;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -2041,6 +2255,12 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
         report_error(error, CL_INVALID_CONTEXT);
         return nullptr;
     }
+    const ClMemFlags asked_flags(flags);
+    const cl_int     judged_flags = asked_flags.judge();
+    if (judged_flags != CL_SUCCESS) {
+        report_error(error, judged_flags);
+        return nullptr;
+    }
     if (format == nullptr) {
         report_error(error, CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
         return nullptr;
@@ -2075,7 +2295,7 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
     }
     cl_int         host_error = CL_SUCCESS;
     const uint64_t image = av::clproto::av_clCreateImage(
-        *wire, held->wire(), flags & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR), format,
+        *wire, held->wire(), asked_flags.for_host() & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR), format,
         &described, nullptr, 0u, &host_error);
     if (image == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
@@ -2090,7 +2310,14 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
             return nullptr;
         }
     }
-    return static_cast<cl_mem>(wrap(*wire, ClObject::Kind::mem, image, held->context(), held, error));
+    void *const made = wrap(*wire, ClObject::Kind::mem, image, held->context(), held, error);
+    if (made != nullptr) {
+        ClObject *const object = static_cast<ClObject *>(made);
+        object->keep_flags(asked_flags.asked());
+        object->extent().as_image(desc->image_type, desc->image_width, desc->image_height, desc->image_depth,
+                                  desc->image_array_size, *format);
+    }
+    return static_cast<cl_mem>(made);
 }
 
 cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const size_t *origin,
@@ -2102,7 +2329,16 @@ cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(image, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int allowed = judge_host_transfer(*held, *named, true);
+        if (allowed != CL_SUCCESS) return allowed;
+    }
     if (origin == nullptr || region == nullptr || into == nullptr) return CL_INVALID_VALUE;
+    if (named->extent().shape() == ClMemExtent::Shape::buffer) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int in_region = named->extent().judge_region(origin, region);
+        if (in_region != CL_SUCCESS) return in_region;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const ClImageRegion described(origin, region, row_pitch, slice_pitch,
@@ -2113,7 +2349,7 @@ cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const
     ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     read = chunks.read_image(named->wire(), described, into);
     if (read != CL_SUCCESS) return read;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_READ_IMAGE);
 }
 
 cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, const size_t *origin,
@@ -2125,7 +2361,16 @@ cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, cons
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(image, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int allowed = judge_host_transfer(*held, *named, false);
+        if (allowed != CL_SUCCESS) return allowed;
+    }
     if (origin == nullptr || region == nullptr || from == nullptr) return CL_INVALID_VALUE;
+    if (named->extent().shape() == ClMemExtent::Shape::buffer) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int in_region = named->extent().judge_region(origin, region);
+        if (in_region != CL_SUCCESS) return in_region;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const ClImageRegion described(origin, region, row_pitch, slice_pitch,
@@ -2136,7 +2381,7 @@ cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, cons
     ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     written = chunks.write_image(named->wire(), described, from);
     if (written != CL_SUCCESS) return written;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_WRITE_IMAGE);
 }
 
 cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect,
@@ -2147,9 +2392,17 @@ cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int allowed = judge_host_transfer(*held, *named, true);
+        if (allowed != CL_SUCCESS) return allowed;
+    }
     if (into == nullptr) return CL_INVALID_VALUE;
     const cl_int checked = rect.check();
     if (checked != CL_SUCCESS) return checked;
+    {
+        const cl_int in_range = judge_rect_transfer(*named, rect);
+        if (in_range != CL_SUCCESS) return in_range;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int drained = settle(*wire, *held, waits);
@@ -2157,7 +2410,7 @@ cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer
     ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     read = chunks.read_buffer_rect(named->wire(), rect, into);
     if (read != CL_SUCCESS) return read;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_READ_BUFFER_RECT);
 }
 
 cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect,
@@ -2168,9 +2421,17 @@ cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffe
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int allowed = judge_host_transfer(*held, *named, false);
+        if (allowed != CL_SUCCESS) return allowed;
+    }
     if (from == nullptr) return CL_INVALID_VALUE;
     const cl_int checked = rect.check();
     if (checked != CL_SUCCESS) return checked;
+    {
+        const cl_int in_range = judge_rect_transfer(*named, rect);
+        if (in_range != CL_SUCCESS) return in_range;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int drained = settle(*wire, *held, waits);
@@ -2178,7 +2439,7 @@ cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffe
     ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     written = chunks.write_buffer_rect(named->wire(), rect, from);
     if (written != CL_SUCCESS) return written;
-    return marker_event(*wire, *held, event);
+    return marker_event(*wire, *held, event, CL_COMMAND_WRITE_BUFFER_RECT);
 }
 
 cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, cl_mem to,
@@ -2193,6 +2454,12 @@ cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, 
     ClObject *const target = judged(to, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
+    {
+        const cl_int judged_rect = judge_rect_copy(*source, *target, from_origin, to_origin, region, from_row_pitch,
+                                                   from_slice_pitch, to_row_pitch, to_slice_pitch);
+        if (judged_rect != CL_SUCCESS) return judged_rect;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
@@ -2474,7 +2741,7 @@ cl_int ClIcdRoot::enqueue_gl_objects(GlObjectsCommand command, cl_command_queue 
     GuestClContext *const context = held->context();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    if (count != 0u && objects == nullptr) return CL_INVALID_VALUE;
+    if ((count == 0u) != (objects == nullptr)) return CL_INVALID_VALUE;
     ClHostNumbers   named_room(memory_);
     uint64_t *const named = named_room.room(count);
     if (named == nullptr) return CL_OUT_OF_HOST_MEMORY;

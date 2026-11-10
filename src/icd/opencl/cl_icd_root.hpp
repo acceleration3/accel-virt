@@ -14,6 +14,7 @@
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
+#include "icd/opencl/cl_kernel_shape.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
 #include "icd/opencl/cl_refusal_log.hpp"
@@ -102,6 +103,8 @@ public:
                                   const uint64_t *properties, cl_int *error);
     cl_mem           create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
                                    void *host_pointer, const uint64_t *properties, cl_int *error);
+    cl_mem           create_buffer_for_host(cl_context context, cl_mem_flags flags, size_t bytes,
+                                            void *host_pointer, const uint64_t *properties, cl_int *error);
     cl_mem           create_over_application(ClObject &context, ClientTransport &wire, cl_mem_flags flags,
                                              size_t bytes, void *host_pointer, cl_int *error);
     cl_program       create_program(cl_context context, cl_uint count, const char **sources,
@@ -379,7 +382,20 @@ private:
     void             let_go_of_memory(GuestClContext &context, ClObject &buffer);
     [[nodiscard]] cl_int drain_unless_idle(ClientTransport &wire, ClObject &queue);
     ClObject        *busied(cl_command_queue queue);
-    cl_int           marker_event(ClientTransport &wire, ClObject &queue, cl_event *event);
+    [[nodiscard]] cl_int judge_host_transfer(const ClObject &queue, const ClObject &mem, bool host_reads);
+    [[nodiscard]] cl_int judge_host_map(const ClObject &queue, const ClObject &mem, cl_map_flags map_flags);
+    [[nodiscard]] cl_int judge_buffer_range(const ClObject &mem, uint64_t offset, uint64_t bytes);
+    bool                 same_backing(const ClObject &first, const ClObject &second);
+    bool                 buffer_ranges_overlap(const ClObject &first, uint64_t first_offset, const ClObject &second,
+                                               uint64_t second_offset, uint64_t bytes);
+    [[nodiscard]] cl_int judge_rect_copy(const ClObject &source, const ClObject &target, const size_t *from_origin,
+                                         const size_t *to_origin, const size_t *region, size_t from_row_pitch,
+                                         size_t from_slice_pitch, size_t to_row_pitch, size_t to_slice_pitch);
+    [[nodiscard]] cl_int judge_rect_transfer(const ClObject &mem, const ClBufferRect &rect);
+    [[nodiscard]] cl_int judge_fill(const ClObject &mem, size_t pattern_bytes, size_t offset, size_t bytes);
+    ClKernelShape   *kernel_shape(ClObject &kernel, ClientTransport &wire);
+    [[nodiscard]] cl_int judge_kernel_argument(ClKernelShape &shape, uint32_t index, size_t bytes, const void *value);
+    cl_int           marker_event(ClientTransport &wire, ClObject &queue, cl_event *event, cl_command_type type = 0u);
     cl_int           wait_list(GuestClContext &context, cl_uint count, const cl_event *events, ClHostNumbers &room,
                                uint64_t *&into);
     cl_int           gl_share_for(const ClPropertyList &list, uint32_t &share);
@@ -434,6 +450,7 @@ private:
     ClDevices              devices_;
     icd::SharedHandles     shared_handles_;
     ObjectPool<GuestClContext> contexts_;
+    ObjectPool<ClKernelShape>  shapes_;
     BlockSource           &memory_;
     ThreadLock            &send_lock_;
     ThreadLock            &blocks_lock_;

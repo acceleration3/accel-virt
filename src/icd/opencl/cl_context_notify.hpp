@@ -15,6 +15,7 @@ public:
     ClContextNotify(Callback callback, void *user_data);
 
     void say(const char *text) const;
+    bool valid() const;
 
 private:
     Callback callback_;
