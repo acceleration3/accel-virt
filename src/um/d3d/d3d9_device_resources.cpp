@@ -210,7 +210,7 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     resource.subresources = nullptr;
     if (resource.lent != nullptr) lender_.retire(*resource.lent);
     resource.lent = nullptr;
-    if (!resource.opened) allocations_.give_back(resource.allocation, resource.allocation_resource);
+    if (resource.allocation != 0u) allocations_.give_back(resource.allocation, resource.allocation_resource);
 }
 
 HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
@@ -263,6 +263,7 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     made->allocation = info.hAllocation;
     made->allocation_pitch = layout.pitch();
     made->opened = true;
+    made->allocation_resource = made->runtime;
     made->cross_adapter = descriptor.kind() == AllocationKind::cross_adapter;
     if (made->cross_adapter) {
         if (lender_.lend(made->allocation, descriptor.size(), made->lent) != Status::ok) {

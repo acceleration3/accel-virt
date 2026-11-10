@@ -405,15 +405,20 @@ D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_opened_heap_and_resou
 }
 
 HRESULT D3d12Device::open_heap_and_resource(const D3D12DDIARG_OPENHEAP_0003 *args, D3D12DDI_HHEAP heap_handle,
-                                            D3D12DDI_HRTRESOURCE, D3D12DDI_HPROTECTEDRESOURCESESSION_0030,
+                                            D3D12DDI_HRTRESOURCE runtime, D3D12DDI_HPROTECTEDRESOURCESESSION_0030,
                                             D3D12DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d12Device::open_heap_and_resource");
     if (args == nullptr || heap_handle.pDrvPrivate == nullptr || handle.pDrvPrivate == nullptr ||
         args->NumAllocations != 1u || args->pOpenAllocationInfo == nullptr)
         return E_INVALIDARG;
-    return open_existing(*args, *static_cast<HeapRecord *>(heap_handle.pDrvPrivate),
-                         *static_cast<ResourceRecord *>(handle.pDrvPrivate));
+    ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
+    const HRESULT   opened = open_existing(*args, *static_cast<HeapRecord *>(heap_handle.pDrvPrivate), resource);
+    if (SUCCEEDED(opened)) {
+        resource.allocation = args->pOpenAllocationInfo[0].hAllocation;
+        resource.runtime_resource = runtime.handle;
+    }
+    return opened;
 }
 
 HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap, ResourceRecord &resource)

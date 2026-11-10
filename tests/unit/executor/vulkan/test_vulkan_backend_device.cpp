@@ -1,6 +1,7 @@
 #include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "executor/vram_ledger.hpp"
 #include "executor/executor_log.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
@@ -1747,3 +1748,75 @@ TEST(vulkan_backend_device, a_required_handle_named_null_is_refused_before_the_d
   }
 }
 
+
+TEST(vulkan_backend_device, device_local_memory_freed_after_its_work_ran_is_given_back_to_the_ledger_at_once)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      av::VramLedger ledger;
+      ledger.learn(uint64_t{8} << 30u);
+      made.backend().use_vram(&ledger, nullptr);
+      BackendTransport wire(made.backend());
+      const VkDevice device = as_handle<VkDevice>(made.device());
+      const VkPhysicalDeviceMemoryProperties guest = wire_memory(wire, made.physical());
+      std::uint32_t local = VK_MAX_MEMORY_TYPES;
+      for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++)
+          if (local == VK_MAX_MEMORY_TYPES && guest.memoryTypes[type].propertyFlags == VkMemoryPropertyFlags{VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT})
+              local = type;
+      if (local == VK_MAX_MEMORY_TYPES) continue;
+      VkBufferCreateInfo create = {};
+      create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+      create.size = std::uint64_t{4} << 20u;
+      create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+      VkBuffer buffers[2] = {};
+      VkDeviceMemory memories[2] = {};
+      for (std::uint32_t b = 0u; b < 2u; b++) {
+          CHECK_EQ(vkproto::av_vkCreateBuffer(wire, translation, device, &create, nullptr, &buffers[b]), VK_SUCCESS);
+          VkMemoryRequirements requirements = {};
+          vkproto::av_vkGetBufferMemoryRequirements(wire, translation, device, buffers[b], &requirements);
+          VkMemoryAllocateInfo allocate = {};
+          allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+          allocate.allocationSize = requirements.size;
+          allocate.memoryTypeIndex = local;
+          CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &allocate, nullptr, &memories[b]), VK_SUCCESS);
+          CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, translation, device, buffers[b], memories[b], 0u), VK_SUCCESS);
+      }
+      CHECK(ledger.used() >= std::uint64_t{8} << 20u);
+      std::uint64_t queue = 0u;
+      vkproto::av_vkGetDeviceQueue(wire, translation, device, 0u, 0u, &queue);
+      VkCommandPoolCreateInfo pool_create = {};
+      pool_create.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+      VkCommandPool pool = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkCreateCommandPool(wire, translation, device, &pool_create, nullptr, &pool), VK_SUCCESS);
+      VkCommandBufferAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+      allocate.commandPool = pool;
+      allocate.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+      allocate.commandBufferCount = 1u;
+      std::uint64_t commands_raw = 0u;
+      CHECK_EQ(vkproto::av_vkAllocateCommandBuffers(wire, translation, device, &allocate, &commands_raw), VK_SUCCESS);
+      const VkCommandBuffer commands = as_handle<VkCommandBuffer>(commands_raw);
+      VkCommandBufferBeginInfo begin = {};
+      begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+      CHECK_EQ(vkproto::av_vkBeginCommandBuffer(wire, translation, commands, &begin), VK_SUCCESS);
+      const VkBufferCopy region = {0u, 0u, std::uint64_t{4} << 20u};
+      vkproto::av_vkCmdCopyBuffer(wire, translation, commands, buffers[0], buffers[1], 1u, &region);
+      CHECK_EQ(vkproto::av_vkEndCommandBuffer(wire, translation, commands), VK_SUCCESS);
+      VkSubmitInfo submit = {};
+      submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+      submit.commandBufferCount = 1u;
+      submit.pCommandBuffers = &commands;
+      CHECK_EQ(vkproto::av_vkQueueSubmit(wire, translation, as_handle<VkQueue>(queue), 1u, &submit, VK_NULL_HANDLE), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkQueueWaitIdle(wire, translation, as_handle<VkQueue>(queue)), VK_SUCCESS);
+      vkproto::av_vkDestroyCommandPool(wire, translation, device, pool, nullptr);
+      for (std::uint32_t b = 0u; b < 2u; b++) {
+          vkproto::av_vkDestroyBuffer(wire, translation, device, buffers[b], nullptr);
+          vkproto::av_vkFreeMemory(wire, translation, device, memories[b], nullptr);
+      }
+      made.backend().end_batch();
+      vkproto::av_vkGetDeviceQueue(wire, translation, device, 0u, 0u, &queue);
+      CHECK_EQ(ledger.used(), std::uint64_t{0});
+      made.backend().use_vram(nullptr, nullptr);
+  }
+}
