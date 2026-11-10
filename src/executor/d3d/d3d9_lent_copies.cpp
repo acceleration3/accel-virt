@@ -12,7 +12,14 @@ namespace {
 
 }
 
-D3d9LentCopies::D3d9LentCopies(BlockSource &blocks) : tickets_(0u), copiers_(blocks), copier_of_(blocks, Pool::paged)
+D3d9LentCopies::Copier::Copier(BlockSource &blocks)
+    : vulkan_(), done_(), held_(blocks), signalled_(0u), known_(0u), uses_(0u), storages_(), refused_(false)
+{
+    AV_SCOPE("D3d9LentCopies::Copier::Copier");
+}
+
+D3d9LentCopies::D3d9LentCopies(BlockSource &blocks)
+    : blocks_(blocks), tickets_(0u), copiers_(blocks), copier_of_(blocks, Pool::paged)
 {
     AV_SCOPE("D3d9LentCopies::D3d9LentCopies");
 }
@@ -59,7 +66,23 @@ Status D3d9LentCopies::copy(IDirect3DDevice9 *device, IDirect3DSurface9 *source,
         return Status::invalid_state;
     tickets_ = value;
     copier->signalled_ = value;
+    reap(*copier);
+    constexpr uint64_t unretained_wait_nanoseconds = 1000000000u;
+    if (copier->held_.hold(source, value) != Status::ok)
+        static_cast<void>(copier->done_.wait(value, unretained_wait_nanoseconds));
     return Status::ok;
+}
+
+void D3d9LentCopies::reap(Copier &copier)
+{
+    AV_SCOPE("D3d9LentCopies::reap");
+    while (copier.held_.pending() != 0u && copier.done_.wait(copier.held_.oldest(), 0u)) copier.held_.release_oldest();
+}
+
+void D3d9LentCopies::reap()
+{
+    AV_SCOPE("D3d9LentCopies::reap");
+    copier_of_.for_each([this](uint64_t, Copier *copier) { reap(*copier); });
 }
 
 D3d9LentCopies::Copier *D3d9LentCopies::copier_for(IDirect3DDevice9 *device)
@@ -70,7 +93,7 @@ D3d9LentCopies::Copier *D3d9LentCopies::copier_for(IDirect3DDevice9 *device)
     if (known != nullptr) return (*known)->refused_ ? nullptr : *known;
     if (copier_of_.reserve(copier_of_.count() + 1u) != Status::ok) return nullptr;
     Copier *made = nullptr;
-    if (copiers_.create(made) != Status::ok) return nullptr;
+    if (copiers_.create(made, blocks_) != Status::ok) return nullptr;
     made->signalled_ = 0u;
     made->known_ = 0u;
     made->uses_ = 0u;
@@ -117,6 +140,7 @@ void D3d9LentCopies::close(Copier &copier)
 {
     AV_SCOPE("D3d9LentCopies::close");
     copier.vulkan_.work().idle();
+    copier.held_.release_all();
     for (Storage &held : copier.storages_) {
         held.buffer_.release();
         held.memory_ = nullptr;

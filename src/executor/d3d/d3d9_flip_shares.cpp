@@ -38,7 +38,7 @@ D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint3
 }
 
 D3d9FlipShares::D3d9FlipShares(BlockSource &blocks)
-    : device11_(nullptr), shares_(nullptr), lanes_(blocks), lane_of_(blocks, Pool::paged), flips_(0u), cpu_frames_(), clock_()
+    : blocks_(blocks), device11_(nullptr), shares_(nullptr), lanes_(blocks), lane_of_(blocks, Pool::paged), flips_(0u), cpu_frames_(), clock_()
 {
     AV_SCOPE("D3d9FlipShares::D3d9FlipShares");
     for (Primary &primary : primaries_) {
@@ -48,6 +48,12 @@ D3d9FlipShares::D3d9FlipShares(BlockSource &blocks)
         primary.device_ = nullptr;
         primary.width_ = primary.height_ = primary.format_ = 0u;
     }
+}
+
+D3d9FlipShares::Lane::Lane(BlockSource &blocks)
+    : vulkan_(), timeline_(), signalled_(), consumed_(), reusable_(), order_(), held_(blocks), refused_(false)
+{
+    AV_SCOPE("D3d9FlipShares::Lane::Lane");
 }
 
 D3d9FlipShares::~D3d9FlipShares()
@@ -88,13 +94,15 @@ Status D3d9FlipShares::flip_on_gpu(Primary &shown, IDirect3DSurface9 *source)
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     device11_->lock(nullptr);
     ScopeExit unlock([this] { device11_->unlock(); });
-    if (!device11_->vulkan().signal(lane.consumed_, lane.order_.next()) ||
-        !lane.vulkan_.work().wait(lane.reusable_, lane.order_.next()) ||
+    reap(lane);
+    const uint64_t value = lane.order_.next();
+    if (!device11_->vulkan().signal(lane.consumed_, value) || !lane.vulkan_.work().wait(lane.reusable_, value) ||
         !lane.vulkan_.surface_image(source, image, layout) ||
-        !lane.vulkan_.work().copy(image, layout, shown.adopted_.image(), shown.width_, shown.height_,
-                                  lane.signalled_, lane.order_.next()) ||
-        !lane.order_.presented())
+        !lane.vulkan_.work().copy(image, layout, shown.adopted_.image(), shown.width_, shown.height_, lane.signalled_,
+                                  value))
         return Status::invalid_state;
+    retain(lane, source, value);
+    if (!lane.order_.presented()) return Status::invalid_state;
     shares_->written(shown.key_);
     return Status::ok;
 }
@@ -124,6 +132,26 @@ Status D3d9FlipShares::flip_on_cpu(Primary &shown, IDirect3DSurface9 *source, bo
     return Status::invalid_state;
 }
 
+void D3d9FlipShares::reap(Lane &lane)
+{
+    AV_SCOPE("D3d9FlipShares::reap");
+    while (lane.held_.pending() != 0u && lane.signalled_.wait(lane.held_.oldest(), 0u)) lane.held_.release_oldest();
+}
+
+void D3d9FlipShares::reap()
+{
+    AV_SCOPE("D3d9FlipShares::reap");
+    lane_of_.for_each([this](uint64_t, Lane *lane) { reap(*lane); });
+}
+
+void D3d9FlipShares::retain(Lane &lane, IDirect3DSurface9 *source, uint64_t value)
+{
+    AV_SCOPE("D3d9FlipShares::retain");
+    constexpr uint64_t unretained_wait_nanoseconds = 1000000000u;
+    if (lane.held_.hold(source, value) != Status::ok)
+        static_cast<void>(lane.signalled_.wait(value, unretained_wait_nanoseconds));
+}
+
 D3d9FlipShares::Lane *D3d9FlipShares::lane_for(IDirect3DDevice9 *device)
 {
     AV_SCOPE("D3d9FlipShares::lane_for");
@@ -134,7 +162,7 @@ D3d9FlipShares::Lane *D3d9FlipShares::lane_for(IDirect3DDevice9 *device)
     if (compositor == nullptr || !compositor->opened() || lane_of_.reserve(lane_of_.count() + 1u) != Status::ok)
         return nullptr;
     Lane *made = nullptr;
-    if (lanes_.create(made) != Status::ok) return nullptr;
+    if (lanes_.create(made, blocks_) != Status::ok) return nullptr;
     uint32_t slot = 0u;
     static_cast<void>(lane_of_.insert(key, made, slot));
     return connect(device, *made, *compositor);
@@ -164,6 +192,7 @@ void D3d9FlipShares::close_lane(Lane &lane)
     AV_SCOPE("D3d9FlipShares::close_lane");
     lane.order_.release();
     lane.vulkan_.work().idle();
+    lane.held_.release_all();
     lane.reusable_.release();
     lane.consumed_.release();
     lane.signalled_.release();

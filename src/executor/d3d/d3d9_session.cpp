@@ -68,6 +68,8 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     arena_ = &arena;
     const bool ran = d3d9proto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
+    flips_.reap();
+    lent_.reap();
     if (device() != nullptr && device()->TestCooperativeLevel() == D3DERR_DEVICELOST && !lost_) {
         lines_.write("a device's host Direct3D 9 device was lost; the session is faulted");
         lost_ = true;

@@ -4,6 +4,7 @@
 #include "core/support/keyed_slots.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "executor/d3d/d3d9_surface_holds.hpp"
 #include "executor/shim/compose_order.hpp"
 #include "executor/shim/d3d9_vulkan_lane.hpp"
 #include "executor/shim/d3d9_frame_pool.hpp"
@@ -36,16 +37,19 @@ public:
     void bind(D3d11HostDevice *device11, SessionShares *shares);
     [[nodiscard]] Status flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint64_t key);
     void forget_device(IDirect3DDevice9 *device);
+    void reap();
     void release();
 
 private:
     struct Lane {
+        explicit Lane(BlockSource &blocks);
         D3d9VulkanLane vulkan_;
         VulkanTimeline timeline_;
         VulkanTimeline signalled_;
         VulkanTimeline consumed_;
         VulkanTimeline reusable_;
         ComposeOrder   order_;
+        D3d9SurfaceHolds held_;
         bool             refused_;
     };
     struct Primary {
@@ -64,6 +68,8 @@ private:
     Lane    *lane_for(IDirect3DDevice9 *device);
     Lane    *connect(IDirect3DDevice9 *device, Lane &lane, CompositorDevice &compositor);
     void     close_lane(Lane &lane);
+    void     reap(Lane &lane);
+    void     retain(Lane &lane, IDirect3DSurface9 *source, uint64_t value);
     Primary *primary(IDirect3DDevice9 *device, uint64_t key, uint32_t width, uint32_t height, uint32_t format);
     [[nodiscard]] bool make_on_gpu(Primary &made, Lane &lane);
     [[nodiscard]] bool make_on_cpu(Primary &made);
@@ -71,6 +77,7 @@ private:
     [[nodiscard]] Status flip_on_gpu(Primary &shown, IDirect3DSurface9 *source);
     [[nodiscard]] Status flip_on_cpu(Primary &shown, IDirect3DSurface9 *source, bool multisampled);
 
+    BlockSource     &blocks_;
     D3d11HostDevice *device11_;
     SessionShares   *shares_;
     ObjectPool<Lane>            lanes_;
