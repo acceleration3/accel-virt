@@ -129,7 +129,7 @@ OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), pacer_(), shared_fences_(nullptr), progress_(gl_, natives_, wake_), pending_(gl_, errors_), vram_guard_(blocks, gl_, pending_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
       textures_(blocks, gl_, memories_, images_, pending_), guest_(), region_(guest_, lines), published_(guest_), errors_(),
       resolved_(0u), ran_(0u), submitted_(0u), fenced_at_(0u), drained_at_(0u), drain_fence_(nullptr),
-      current_(false), poll_failure_logged_(false), lines_(lines)
+      current_(false), fence_owed_(false), poll_failure_logged_(false), lines_(lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
     import_.attach(images_);
@@ -238,6 +238,8 @@ void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
     vram_guard_.clear();
+    occlusion_.clear();
+    fence_owed_ = false;
     if (context_.make_current()) {
         if (drain_fence_ != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
         if (gl_.glFinish != nullptr && drained_at_ != submitted_) gl_.glFinish();
@@ -311,6 +313,11 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         return false;
     }
     pacer_.ran(gl_, command_id, peek);
+    occlusion_.ran(command_id, peek);
+    if (fence_owed_ && !occlusion_.open()) {
+        progress_.fence();
+        fence_owed_ = false;
+    }
     ran_++;
     return true;
 }
@@ -329,6 +336,10 @@ bool OpenGlBackend::poll()
                 .number(static_cast<uint32_t>(Status::invalid_state))
                 .write();
         poll_failure_logged_ = true;
+        wake_.retry_later();
+        return true;
+    }
+    if (occlusion_.open()) {
         wake_.retry_later();
         return true;
     }
@@ -358,7 +369,12 @@ void OpenGlBackend::end_batch()
     AV_SCOPE("OpenGlBackend::end_batch");
     if (current_ && context_.make_current()) {
         publish_errors();
-        progress_.fence();
+        if (occlusion_.open()) {
+            fence_owed_ = true;
+        } else {
+            progress_.fence();
+            fence_owed_ = false;
+        }
         memories_.reclaim(import_);
         pack_.sweep();
     }

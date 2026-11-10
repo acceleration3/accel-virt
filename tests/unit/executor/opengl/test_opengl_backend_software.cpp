@@ -302,6 +302,30 @@ TEST(opengl_backend_software, drain_finishes_the_work_and_brings_the_reached_mar
   CHECK_EQ(reached, 1u);
   backend.shut_down(); }
 
+TEST(opengl_backend_software, no_fence_is_made_while_an_occlusion_query_is_open_and_the_owed_one_follows_its_end)
+{ if (skipped()) return;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr));
+  const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+  constexpr std::uint64_t samples_passed = 0x8914u;
+  GLuint query = 0u;
+  gl.glGenQueries(1, &query);
+  CHECK(Command(av::glproto::kCmd_glBeginQuery).varint(samples_passed).varint(query).run(backend));
+  backend.end_batch();
+  std::uint64_t marked = 0u, reached = 0u;
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 0u);
+  backend.end_batch();
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 0u);
+  CHECK(Command(av::glproto::kCmd_glEndQuery).varint(samples_passed).run(backend));
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 1u);
+  backend.end_batch();
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 2u);
+  backend.shut_down(); }
+
 namespace {
 
 GLenum (*real_wait)(GLsync, GLbitfield, GLuint64) = nullptr;

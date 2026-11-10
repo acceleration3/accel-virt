@@ -11,6 +11,7 @@
 #include "executor/budgeted_heap.hpp"
 #include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/gl_buffer_slices.hpp"
+#include "executor/opengl/gl_occlusion_queries.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_memory_objects.hpp"
 #include "executor/opengl/gl_texture_slices.hpp"
@@ -103,6 +104,7 @@ private:
     GlPackBuffer    pack_;
     SyncTokens  fences_;
     GlTransferPacer pacer_;
+    GlOcclusionQueries occlusion_;
     GlSharedFences *shared_fences_;
     GlBatchProgress progress_;
     GlErrorQueue    pending_;
@@ -122,6 +124,7 @@ private:
     uint64_t    drained_at_;
     void       *drain_fence_;
     bool        current_;
+    bool        fence_owed_;
     bool        poll_failure_logged_;
     DriverLog  &lines_;
 
