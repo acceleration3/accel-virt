@@ -8,9 +8,9 @@
 namespace av {
 
 ClIcdLibrary::Seams::Seams()
-    : process(L"avcl", "avcl: "), lock(), send_lock(), objects_lock(), blocks_lock(), watcher(), gl_share(), d3d_adapters(),
+    : process(L"avcl", "avcl: "), lock(), send_lock(), objects_lock(), blocks_lock(), watcher(), gl_share(), headers(), d3d_adapters(),
       d3d11(process.kmt()), root(process.heap(), process.kmt(), lock, send_lock, objects_lock, blocks_lock, process.log(), watcher,
-                    gl_share, d3d_adapters, d3d11, clicd::cl_icd_binding)
+                    gl_share, d3d_adapters, d3d11, headers, clicd::cl_icd_binding)
 {
     AV_SCOPE("ClIcdLibrary::Seams::Seams");
 }

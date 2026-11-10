@@ -11,6 +11,7 @@
 #include "harness/icd/scripted_d3d11_bridge.hpp"
 #include "harness/icd/scripted_d3d_adapter_source.hpp"
 #include "harness/icd/scripted_gl_share_source.hpp"
+#include "harness/icd/scripted_header_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -113,7 +114,7 @@ public:
     explicit ClProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'), lines_(memory_, log_, "avcl: "),
           root_(memory_, kmt, lock_, send_lock_, objects_lock_, blocks_lock_, lines_, watcher_, gl_share_, d3d_adapters_,
-                d3d11_, av::clicd::cl_icd_binding),
+                d3d11_, headers_, av::clicd::cl_icd_binding),
           loader_(root_)
     {
     }
@@ -138,6 +139,7 @@ private:
     av::KeyedLog        lines_;
     ScriptedThread      watcher_;
     av::ScriptedGlShareSource gl_share_;
+    av::ScriptedHeaderSource  headers_;
     av::ScriptedD3dAdapterSource d3d_adapters_;
     av::ScriptedD3d11Bridge      d3d11_;
     ClIcdRoot           root_;

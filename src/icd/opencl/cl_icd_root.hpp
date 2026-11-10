@@ -15,6 +15,7 @@
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
 #include "icd/opencl/cl_kernel_shape.hpp"
+#include "icd/opencl/cl_program_source.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
 #include "icd/opencl/cl_refusal_log.hpp"
@@ -56,6 +57,7 @@ class D3d11Bridge;
 class D3d11Object;
 class D3dAdapterSource;
 class GlShareSource;
+class HeaderSource;
 struct ClIcdRootProbe;
 
 class ClIcdRoot final : public StateReporter, public ClEventOwner {
@@ -65,7 +67,7 @@ public:
 
     ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
               ThreadLock &objects_lock, ThreadLock &blocks_lock, KeyedLog &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
-              D3dAdapterSource &d3d_adapters, D3d11Bridge &d3d11,
+              D3dAdapterSource &d3d_adapters, D3d11Bridge &d3d11, HeaderSource &headers,
               ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;
@@ -435,6 +437,7 @@ private:
     void            *wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t wire,
                           GuestClContext *context,
                           ClObject *parent, cl_int *error);
+    cl_int           build_with_includes(ClObject &program, ClientTransport &wire, const char *options);
     cl_int           refusal_for(ClObject::Kind kind) const;
     ClObject        *drop_reference(void *object, ClObject &held, ClObject::Kind kind, ClDestructorCallbacks::Due &due);
     cl_uint          reference_count(const ClObject &held);
@@ -444,6 +447,7 @@ private:
     GlShareSource         &gl_share_;
     D3dAdapterSource      &d3d_adapters_;
     D3d11Bridge           &d3d11_;
+    HeaderSource          &headers_;
     ClIcdBinding          &binding_;
     ClDispatchTable        dispatch_;
     ClPlatform             platform_;
@@ -453,6 +457,7 @@ private:
     icd::SharedHandles     shared_handles_;
     ObjectPool<GuestClContext> contexts_;
     ObjectPool<ClKernelShape>  shapes_;
+    ObjectPool<ClProgramSource> sources_;
     BlockSource           &memory_;
     ThreadLock            &send_lock_;
     ThreadLock            &blocks_lock_;

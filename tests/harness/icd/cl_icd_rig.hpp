@@ -11,6 +11,7 @@
 #include "harness/icd/scripted_d3d11_bridge.hpp"
 #include "harness/icd/scripted_d3d_adapter_source.hpp"
 #include "harness/icd/scripted_gl_share_source.hpp"
+#include "harness/icd/scripted_header_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -36,6 +37,7 @@ public:
     RecordingLog        &log();
     ScriptedThread      &watcher();
     ScriptedGlShareSource &gl_share();
+    ScriptedHeaderSource  &headers();
     ScriptedD3dAdapterSource &d3d_adapters();
     ScriptedD3d11Bridge &d3d11();
     clicd::ClIcdRoot    &root();
@@ -54,6 +56,7 @@ private:
     KeyedLog             lines_;
     ScriptedThread       watcher_;
     ScriptedGlShareSource gl_share_;
+    ScriptedHeaderSource  headers_;
     ScriptedD3dAdapterSource d3d_adapters_;
     ScriptedD3d11Bridge  d3d11_;
     clicd::ClIcdRoot     root_;

@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire,
                    GuestClContext *context, ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), companion_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), source_(nullptr), companion_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -178,6 +178,24 @@ uint64_t ClObject::ordinal() const
 {
     AV_SCOPE("ClObject::ordinal");
     return ordinal_;
+}
+
+void ClObject::keep_source(ClProgramSource *source)
+{
+    AV_SCOPE("ClObject::keep_source");
+    source_ = source;
+}
+
+ClProgramSource *ClObject::source() const
+{
+    AV_SCOPE("ClObject::source");
+    return source_;
+}
+
+void ClObject::rewire(uint64_t wire)
+{
+    AV_SCOPE("ClObject::rewire");
+    wire_ = wire;
 }
 
 void ClObject::keep_shape(ClKernelShape *shape)

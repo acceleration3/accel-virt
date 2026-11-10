@@ -17,6 +17,7 @@ class HostAllocation;
 namespace av::clicd {
 
 class ClKernelShape;
+class ClProgramSource;
 class GuestClContext;
 
 struct ClObjectProbe;
@@ -58,6 +59,9 @@ public:
     static constexpr uint32_t kernel_unshaped = 8u;
     static constexpr uint32_t program_from_source = 16u;
 
+    void            keep_source(ClProgramSource *source);
+    ClProgramSource *source() const;
+    void            rewire(uint64_t wire);
     void            keep_shape(ClKernelShape *shape);
     ClKernelShape  *shape() const;
     ClMemExtent    &extent();
@@ -103,6 +107,7 @@ private:
     HostAllocation        *lent_;
     ClObject              *sliced_from_;
     ClKernelShape         *shape_;
+    ClProgramSource       *source_;
     ClObject              *companion_;
     uint64_t               flags_;
     ClMemExtent            extent_;

@@ -6,6 +6,7 @@
 #include "um/opencl/windows_d3d_adapter_source.hpp"
 #include "um/opencl/windows_d3d11_bridge.hpp"
 #include "um/opencl/windows_gl_share_source.hpp"
+#include "um/opencl/windows_header_source.hpp"
 #include "um/common/lazy_driver.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/common/windows_service_thread.hpp"
@@ -40,6 +41,7 @@ private:
         SrwLock          blocks_lock;
         WindowsServiceThread watcher;
         WindowsGlShareSource gl_share;
+        WindowsHeaderSource  headers;
         WindowsD3dAdapterSource d3d_adapters;
         WindowsD3d11Bridge d3d11;
         clicd::ClIcdRoot root;

@@ -60,6 +60,9 @@ EXCLUDE = {
                              "share name, implemented by WindowsGlShareSource in src/um and by "
                              "ScriptedGlShareSource in tests/harness, and exercised through every "
                              "cl_gl_sharing test",
+    "src/icd/opencl/header_source.hpp": "the guest file system the OpenCL ICD reads include files from, implemented by "
+                             "WindowsHeaderSource in src/um and by ScriptedHeaderSource in tests/harness, and "
+                             "exercised through every cl_include_inliner test",
     "src/icd/opencl/d3d11_bridge.hpp": "the Direct3D 11 the OpenCL ICD copies through, implemented by "
                              "WindowsD3d11Bridge in src/um and by ScriptedD3d11Bridge in tests/harness, and "
                              "exercised through every cl_d3d11_sharing test",

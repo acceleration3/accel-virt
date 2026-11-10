@@ -5,6 +5,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_build_options.hpp"
+#include "icd/opencl/cl_include_inliner.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -18,6 +19,29 @@ void report_program_error(cl_int *error, cl_int value)
     if (error != nullptr) *error = value;
 }
 
+}
+
+cl_int ClIcdRoot::build_with_includes(ClObject &program, ClientTransport &wire, const char *options)
+{
+    AV_SCOPE("ClIcdRoot::build_with_includes");
+    ClIncludeInliner inliner(memory_, headers_);
+    if (inliner.read_options(options) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+    if (inliner.directories() == 0u) return CL_SUCCESS;
+    ClProgramSource *const source = program.source();
+    if (inliner.expand(source->text(), source->text_bytes()) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+    if (!source->keep_options(options) || !source->keep_host_options(inliner.host_options()))
+        return CL_OUT_OF_HOST_MEMORY;
+    const char *text = inliner.text();
+    const size_t      bytes = inliner.text_bytes();
+    cl_int            host_error = CL_SUCCESS;
+    const uint64_t    fresh = av::clproto::av_clCreateProgramWithSource(wire, program.context() != nullptr
+                                                                                  ? program.nearest(ClObject::Kind::context)->wire()
+                                                                                  : 0u,
+                                                                        1u, &text, &bytes, &host_error);
+    if (fresh == 0u) return host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES;
+    static_cast<void>(av::clproto::av_clReleaseProgram(wire, program.wire()));
+    program.rewire(fresh);
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::program_devices(ClObject &context, cl_uint num_devices, const cl_device_id *device_list)
@@ -59,7 +83,13 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     if (devices != CL_SUCCESS) return devices;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const ClBuildOptions sent(memory_, options);
+    if (held->source() != nullptr) {
+        const cl_int inlined = build_with_includes(*held, *wire, options);
+        if (inlined != CL_SUCCESS) return inlined;
+    }
+    const ClBuildOptions sent(memory_, held->source() != nullptr && held->source()->options() != nullptr
+                                           ? held->source()->host_options()
+                                           : options);
     if (!sent.usable()) return CL_OUT_OF_HOST_MEMORY;
     const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, sent.for_host());
     if (built == CL_SUCCESS) held->keep_traits(sent.traits() | (held->traits() & ClObject::program_from_source));

@@ -10,6 +10,7 @@
 #include "harness/icd/scripted_d3d11_bridge.hpp"
 #include "harness/icd/scripted_d3d_adapter_source.hpp"
 #include "harness/icd/scripted_gl_share_source.hpp"
+#include "harness/icd/scripted_header_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -257,10 +258,11 @@ int main(int argc, char **argv)
         av::KeyedLog              icd_lines(memory, icd_log, "avcl: ");
         av::ScriptedThread        watcher;
         av::ScriptedGlShareSource no_gl;
+        av::ScriptedHeaderSource  no_headers;
         av::ScriptedD3dAdapterSource no_d3d;
         av::ScriptedD3d11Bridge      no_d3d11;
         av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, objects_lock, blocks_lock, icd_lines, watcher, no_gl, no_d3d,
-                                       no_d3d11,
+                                       no_d3d11, no_headers,
                                        av::clicd::cl_icd_binding);
         samples::icd = &root;
         code = samples::run(argc, argv);

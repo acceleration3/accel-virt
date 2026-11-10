@@ -40,6 +40,7 @@
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "icd/opencl/d3d_adapter_source.hpp"
 #include "icd/opencl/gl_share_source.hpp"
+#include "icd/opencl/header_source.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
@@ -74,11 +75,11 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock,
                      ThreadLock &send_lock, ThreadLock &objects_lock, ThreadLock &blocks_lock,
                      KeyedLog &log,
                      icd::ServiceThread &watcher_thread, GlShareSource &gl_share, D3dAdapterSource &d3d_adapters,
-                     D3d11Bridge &d3d11,
+                     D3d11Bridge &d3d11, HeaderSource &headers,
                      ClIcdBinding &binding)
-    : lock_(lock), lines_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
+    : lock_(lock), lines_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), headers_(headers), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(memory, kmt),
-      shared_handles_(kmt, lock, memory), contexts_(memory), shapes_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
+      shared_handles_(kmt, lock, memory), contexts_(memory), shapes_(memory), sources_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
       watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), refused_(lines_), refusals_(lines_),
       destructor_callbacks_(memory)
 {
@@ -684,6 +685,10 @@ ClObject *ClIcdRoot::drop_reference(void *object, ClObject &held, ClObject::Kind
         }
     }
     if (twin != nullptr) d3d11_.let_go(twin);
+    if (last && kind == ClObject::Kind::program && held.source() != nullptr) {
+        static_cast<void>(sources_.destroy(held.source()));
+        held.keep_source(nullptr);
+    }
     if (last && kind == ClObject::Kind::kernel && held.shape() != nullptr) {
         static_cast<void>(shapes_.destroy(held.shape()));
         held.keep_shape(nullptr);
@@ -969,7 +974,23 @@ cl_program ClIcdRoot::create_program(cl_context context, cl_uint count, const ch
         return nullptr;
     }
     void *const made = wrap(*wire, ClObject::Kind::program, program, held->context(), held, error);
-    if (made != nullptr) static_cast<ClObject *>(made)->keep_traits(ClObject::program_from_source);
+    if (made == nullptr) return nullptr;
+    ClObject *const object = static_cast<ClObject *>(made);
+    object->keep_traits(ClObject::program_from_source);
+    bool includes = false;
+    for (cl_uint index = 0u; index < count && !includes; ++index) {
+        const char *const text = sources[index];
+        const size_t      bytes = text == nullptr ? 0u : lengths != nullptr && lengths[index] != 0u ? lengths[index] : ~size_t{0};
+        for (size_t at = 0u; text != nullptr && at < bytes && text[at] != '\0' && !includes; ++at)
+            includes = text[at] == '#' && at + 8u < bytes && __builtin_memcmp(text + at, "#include", 8u) == 0;
+    }
+    if (includes) {
+        ClProgramSource *kept = nullptr;
+        if (sources_.create(kept, memory_) == Status::ok) {
+            if (kept->keep_text(sources, lengths, count)) object->keep_source(kept);
+            else static_cast<void>(sources_.destroy(kept));
+        }
+    }
     return static_cast<cl_program>(made);
 }
 
@@ -2034,6 +2055,12 @@ cl_int ClIcdRoot::program_build_info(cl_program program, cl_device_id device,
         return CL_INVALID_DEVICE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    if (name == CL_PROGRAM_BUILD_OPTIONS && held->source() != nullptr && held->source()->options() != nullptr) {
+        const char *const kept_options = held->source()->options();
+        size_t            kept_length = 0u;
+        while (kept_options[kept_length] != '\0') ++kept_length;
+        return ClInfoRequest(value_bytes, value, size_ret).give(kept_options, kept_length + 1u);
+    }
     const bool appended = name == CL_PROGRAM_BUILD_OPTIONS && (held->traits() & ClObject::program_typed_arguments) != 0u &&
                           (held->traits() & ClObject::program_arguments_asked) == 0u;
     if (!appended)

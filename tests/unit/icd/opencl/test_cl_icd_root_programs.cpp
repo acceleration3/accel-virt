@@ -422,3 +422,31 @@ TEST(cl_icd_root_programs, a_host_that_makes_more_kernels_than_there_is_room_for
   CHECK(kernels[0] != nullptr && kernels[1] != nullptr && kernels[2] != nullptr);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_programs, a_build_with_an_include_directory_reads_the_headers_here_and_reads_back_the_options_as_given)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  rig.headers().add("D:\\inc", "lsw_header.h", "#define LSW 7\n");
+  const char *source = "#include \"lsw_header.h\"\nint v = LSW;\n";
+  rig.host().cl_handle(host_other_program, CL_SUCCESS);
+  cl_int error = CL_SUCCESS;
+  const cl_program program = rig.root().create_program(run.context(), 1u, &source, nullptr, &error);
+  CHECK(program != nullptr);
+  if (program == nullptr) return;
+  rig.host().cl_handle(host_other_program + 1u, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  const char *const options = "-D X=1 -I D:\\inc";
+  CHECK_EQ(rig.root().build_program(program, 0u, nullptr, options), CL_SUCCESS);
+  CHECK(rig.headers().asked() > 0u);
+  char   text[64] = {};
+  size_t bytes = 0u;
+  cl_device_id device = nullptr;
+  CHECK_EQ(rig.root().context_info(run.context(), CL_CONTEXT_DEVICES, sizeof device, &device, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.root().program_build_info(program, device, CL_PROGRAM_BUILD_OPTIONS, sizeof text, text, &bytes),
+           CL_SUCCESS);
+  CHECK_EQ(std::strcmp(text, options), 0);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }

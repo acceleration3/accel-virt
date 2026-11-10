@@ -134,6 +134,10 @@ TEST(cl_object, an_object_keeps_the_notes_the_icd_makes_about_it)
   CHECK_EQ(kernel->traits(), ClObject::kernel_unshaped);
   CHECK(kernel->shape() == nullptr);
   kernel->keep_shape(nullptr);
+  CHECK(kernel->source() == nullptr);
+  kernel->keep_source(nullptr);
+  kernel->rewire(0x905u);
+  CHECK_EQ(kernel->wire(), 0x905u);
   CHECK(kernel->invariants_hold()); }
 
 TEST(cl_object_table, an_object_of_another_kind_is_not_that_object)

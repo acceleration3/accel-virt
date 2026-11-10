@@ -9,9 +9,9 @@ namespace av {
 
 ClIcdRig::ClIcdRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'),
-      objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'), log_(), lines_(platform_, log_, "avcl: "), watcher_(), gl_share_(), d3d_adapters_(), d3d11_(),
+      objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'), log_(), lines_(platform_, log_, "avcl: "), watcher_(), gl_share_(), headers_(), d3d_adapters_(), d3d11_(),
       root_(platform_, kmt_, lock_, send_lock_, objects_lock_, blocks_lock_, lines_, watcher_, gl_share_, d3d_adapters_, d3d11_,
-            clicd::cl_icd_binding),
+            headers_, clicd::cl_icd_binding),
       loader_(root_)
 {
     const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
@@ -31,6 +31,7 @@ RecordingThreadLock &ClIcdRig::send_lock() { return send_lock_; }
 RecordingLog        &ClIcdRig::log() { return log_; }
 ScriptedThread      &ClIcdRig::watcher() { return watcher_; }
 ScriptedGlShareSource &ClIcdRig::gl_share() { return gl_share_; }
+ScriptedHeaderSource  &ClIcdRig::headers() { return headers_; }
 ScriptedD3dAdapterSource &ClIcdRig::d3d_adapters() { return d3d_adapters_; }
 
 ScriptedD3d11Bridge &ClIcdRig::d3d11() { return d3d11_; }
