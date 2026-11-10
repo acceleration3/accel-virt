@@ -13,6 +13,7 @@ namespace {
 constexpr uint32_t level_12_2 = 0xc200u;
 constexpr uint32_t shader_model_6_8 = 0x68u;
 constexpr int      feature_options9 = 37;
+constexpr int      feature_options11 = 40;
 constexpr int      feature_options14 = 43;
 constexpr int      feature_options21 = 53;
 constexpr uint32_t descriptor_heap_types = 4u;
@@ -30,6 +31,10 @@ struct Options9 {
     BOOL atomic_int64_on_group_shared;
     BOOL derivatives_in_mesh_and_amplification_shaders;
     int  wave_mma_tier;
+};
+
+struct Options11 {
+    BOOL atomic_int64_on_descriptor_heap_resource;
 };
 
 struct Options14 {
@@ -138,6 +143,9 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
         caps_.atomic_int64_typed = options9.atomic_int64_on_typed_resource ? 1u : 0u;
         caps_.atomic_int64_group_shared = options9.atomic_int64_on_group_shared ? 1u : 0u;
     }
+    Options11 options11;
+    if (ask(device, feature_options11, options11))
+        caps_.atomic_int64_heap = options11.atomic_int64_on_descriptor_heap_resource ? 1u : 0u;
     Options14 options14;
     if (ask(device, feature_options14, options14)) {
         caps_.advanced_texture_ops = options14.advanced_texture_ops ? 1u : 0u;

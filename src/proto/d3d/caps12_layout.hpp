@@ -5,7 +5,7 @@
 
 namespace av {
 
-inline constexpr uint32_t caps12_layout = 0x43503105u;
+inline constexpr uint32_t caps12_layout = 0x43503106u;
 
 }
 
