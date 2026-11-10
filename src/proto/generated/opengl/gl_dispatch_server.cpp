@@ -37567,6 +37567,20 @@ static bool decode_glIsProgramARB(const RealGl& av_gl, ::av::WireReader& av_r, :
     return true;
 }
 
+static bool decode_glSubpixelPrecisionBiasNV(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glSubpixelPrecisionBiasNV");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint xbits{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      xbits = static_cast<GLuint>(av_v); }
+    GLuint ybits{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      ybits = static_cast<GLuint>(av_v); }
+    if (av_gl.glSubpixelPrecisionBiasNV == nullptr) return false;
+    av_gl.glSubpixelPrecisionBiasNV(xbits, ybits);
+    return true;
+}
+
 static bool decode_glBlendBarrierKHR(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
     AV_SCOPE("server:glBlendBarrierKHR");
     (void)av_arena; (void)av_reply; (void)av_r;
@@ -52673,6 +52687,7 @@ bool dispatch_command(const RealGl& av_gl, uint32_t cmd_id,
         case kCmd_glGetVertexAttribfvARB: return decode_glGetVertexAttribfvARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glGetVertexAttribivARB: return decode_glGetVertexAttribivARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glIsProgramARB: return decode_glIsProgramARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glSubpixelPrecisionBiasNV: return decode_glSubpixelPrecisionBiasNV(av_gl, av_r, av_reply, av_arena);
         case kCmd_glBlendBarrierKHR: return decode_glBlendBarrierKHR(av_gl, av_r, av_reply, av_arena);
         case kCmd_glDeleteObjectARB: return decode_glDeleteObjectARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glGetHandleARB: return decode_glGetHandleARB(av_gl, av_r, av_reply, av_arena);

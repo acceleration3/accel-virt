@@ -1194,6 +1194,7 @@ struct RealGl {
     void (*glGetVertexAttribfvARB)(GLuint, GLenum, GLfloat*) = nullptr;
     void (*glGetVertexAttribivARB)(GLuint, GLenum, GLint*) = nullptr;
     GLboolean (*glIsProgramARB)(GLuint) = nullptr;
+    void (*glSubpixelPrecisionBiasNV)(GLuint, GLuint) = nullptr;
     void (*glBlendBarrierKHR)(void) = nullptr;
     void (*glDeleteObjectARB)(GLhandleARB) = nullptr;
     GLhandleARB (*glGetHandleARB)(GLenum) = nullptr;
@@ -3766,6 +3767,8 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glGetVertexAttribivARB != nullptr) ++found;
     gl.glIsProgramARB = reinterpret_cast<GLboolean (*)(GLuint)>(load("glIsProgramARB", user));
     if (gl.glIsProgramARB != nullptr) ++found;
+    gl.glSubpixelPrecisionBiasNV = reinterpret_cast<void (*)(GLuint, GLuint)>(load("glSubpixelPrecisionBiasNV", user));
+    if (gl.glSubpixelPrecisionBiasNV != nullptr) ++found;
     gl.glBlendBarrierKHR = reinterpret_cast<void (*)(void)>(load("glBlendBarrierKHR", user));
     if (gl.glBlendBarrierKHR != nullptr) ++found;
     gl.glDeleteObjectARB = reinterpret_cast<void (*)(GLhandleARB)>(load("glDeleteObjectARB", user));

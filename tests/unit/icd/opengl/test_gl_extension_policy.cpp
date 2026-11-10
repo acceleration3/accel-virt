@@ -11,6 +11,8 @@
 #include <cstring>
 #include <memory>
 
+#include "gl_tier.h"
+
 using av::GlContextOptions;
 using av::GlContextRig;
 using av::Status;
@@ -234,3 +236,6 @@ TEST(gl_extension_policy_invariants, fail_for_rows_of_the_wrong_kind_or_a_string
   GlExtensionPolicy wgl_over(nullptr, 0u, nullptr, 0u);
   av::glicd::GlExtensionPolicyProbe::overfill_wgl(wgl_over, many, GlExtensionPolicy::max_rows + 1u);
   CHECK(!wgl_over.invariants_hold()); }
+
+TEST(gl_extension_policy, the_tier_carries_every_command_of_nv_conservative_raster)
+{ CHECK(av::glproto::extension_is_carried("GL_NV_conservative_raster")); }

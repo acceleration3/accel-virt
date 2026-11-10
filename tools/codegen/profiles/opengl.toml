@@ -16,6 +16,7 @@ extra = [
     "glGetProgramEnvParameterfvARB", "glGetProgramLocalParameterdvARB", "glGetProgramLocalParameterfvARB",
     "glGetProgramivARB", "glGetProgramStringARB", "glGetVertexAttribdvARB", "glGetVertexAttribfvARB",
     "glGetVertexAttribivARB", "glGetVertexAttribPointervARB", "glIsProgramARB",
+    "glSubpixelPrecisionBiasNV",
     "glGetString", "glGetStringi", "glGetError",
     "glGetIntegerv", "glGetFloatv", "glGetBooleanv",
 

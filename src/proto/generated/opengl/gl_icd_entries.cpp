@@ -8924,6 +8924,13 @@ GLboolean APIENTRY Wrap_glIsProgramARB(GLuint program) {
     return ::av::glproto::av_glIsProgramARB(*av_t, program);
 }
 
+void APIENTRY Wrap_glSubpixelPrecisionBiasNV(GLuint xbits, GLuint ybits) {
+    AV_SCOPE("glSubpixelPrecisionBiasNV");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glSubpixelPrecisionBiasNV(*av_t, xbits, ybits);
+}
+
 void APIENTRY Wrap_glBlendBarrierKHR(void) {
     AV_SCOPE("glBlendBarrierKHR");
     auto* av_t = ::av::glicd::wire();

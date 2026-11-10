@@ -1095,6 +1095,7 @@ void APIENTRY Wrap_glGetVertexAttribdvARB(GLuint index, GLenum pname, GLdouble* 
 void APIENTRY Wrap_glGetVertexAttribfvARB(GLuint index, GLenum pname, GLfloat* params);
 void APIENTRY Wrap_glGetVertexAttribivARB(GLuint index, GLenum pname, GLint* params);
 GLboolean APIENTRY Wrap_glIsProgramARB(GLuint program);
+void APIENTRY Wrap_glSubpixelPrecisionBiasNV(GLuint xbits, GLuint ybits);
 void APIENTRY Wrap_glBlendBarrierKHR(void);
 void APIENTRY Wrap_glDeleteObjectARB(GLhandleARB obj);
 GLhandleARB APIENTRY Wrap_glGetHandleARB(GLenum pname);

@@ -1098,6 +1098,7 @@ void av_glGetVertexAttribdvARB(::av::ClientTransport& av_t, GLuint index, GLenum
 void av_glGetVertexAttribfvARB(::av::ClientTransport& av_t, GLuint index, GLenum pname, GLfloat* params);
 void av_glGetVertexAttribivARB(::av::ClientTransport& av_t, GLuint index, GLenum pname, GLint* params);
 GLboolean av_glIsProgramARB(::av::ClientTransport& av_t, GLuint program);
+void av_glSubpixelPrecisionBiasNV(::av::ClientTransport& av_t, GLuint xbits, GLuint ybits);
 void av_glBlendBarrierKHR(::av::ClientTransport& av_t);
 void av_glDeleteObjectARB(::av::ClientTransport& av_t, GLhandleARB obj);
 GLhandleARB av_glGetHandleARB(::av::ClientTransport& av_t, GLenum pname);

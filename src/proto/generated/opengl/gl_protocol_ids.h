@@ -1093,6 +1093,7 @@ inline constexpr uint32_t kCmd_glGetVertexAttribdvARB = 0x000305af;
 inline constexpr uint32_t kCmd_glGetVertexAttribfvARB = 0x000305b0;
 inline constexpr uint32_t kCmd_glGetVertexAttribivARB = 0x000305b1;
 inline constexpr uint32_t kCmd_glIsProgramARB = 0x000305b2;
+inline constexpr uint32_t kCmd_glSubpixelPrecisionBiasNV = 0x000305b3;
 inline constexpr uint32_t kCmd_glBlendBarrierKHR = 0x00030575;
 inline constexpr uint32_t kCmd_glDeleteObjectARB = 0x000303b9;
 inline constexpr uint32_t kCmd_glGetHandleARB = 0x000303ba;

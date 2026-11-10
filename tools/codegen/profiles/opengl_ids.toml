@@ -1462,3 +1462,4 @@
 "glGetVertexAttribfvARB" = 198064
 "glGetVertexAttribivARB" = 198065
 "glIsProgramARB" = 198066
+"glSubpixelPrecisionBiasNV" = 198067

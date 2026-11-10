@@ -1095,6 +1095,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_glGetVertexAttribfvARB: return "glGetVertexAttribfvARB";
         case kCmd_glGetVertexAttribivARB: return "glGetVertexAttribivARB";
         case kCmd_glIsProgramARB: return "glIsProgramARB";
+        case kCmd_glSubpixelPrecisionBiasNV: return "glSubpixelPrecisionBiasNV";
         case kCmd_glBlendBarrierKHR: return "glBlendBarrierKHR";
         case kCmd_glDeleteObjectARB: return "glDeleteObjectARB";
         case kCmd_glGetHandleARB: return "glGetHandleARB";
@@ -2556,6 +2557,7 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case kCmd_glGetVertexAttribfvARB:
         case kCmd_glGetVertexAttribivARB:
         case kCmd_glIsProgramARB:
+        case kCmd_glSubpixelPrecisionBiasNV:
         case kCmd_glBlendBarrierKHR:
         case kCmd_glDeleteObjectARB:
         case kCmd_glGetHandleARB:

@@ -450,6 +450,7 @@ inline constexpr const char* kCarriedExtensions[] = {
     "GL_NV_compute_program5",
     "GL_NV_compute_shader_derivatives",
     "GL_NV_conditional_render",
+    "GL_NV_conservative_raster",
     "GL_NV_conservative_raster_pre_snap",
     "GL_NV_conservative_raster_underestimation",
     "GL_NV_copy_buffer",

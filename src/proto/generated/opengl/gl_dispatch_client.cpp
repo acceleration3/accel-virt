@@ -31281,6 +31281,20 @@ GLboolean av_glIsProgramARB(::av::ClientTransport& av_t, GLuint program) {
     return static_cast<GLboolean>(av_ret);
 }
 
+void av_glSubpixelPrecisionBiasNV(::av::ClientTransport& av_t, GLuint xbits, GLuint ybits) {
+    AV_SCOPE("av_glSubpixelPrecisionBiasNV");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(xbits));
+    av_b.write_varint(static_cast<uint64_t>(ybits));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glSubpixelPrecisionBiasNV",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glSubpixelPrecisionBiasNV, av_b);
+}
+
 void av_glBlendBarrierKHR(::av::ClientTransport& av_t) {
     AV_SCOPE("av_glBlendBarrierKHR");
     ::av::WireWriter av_b = av_t.request_writer();
