@@ -405,6 +405,7 @@ private:
                                uint64_t *&into);
     cl_int           gl_share_for(const ClPropertyList &list, uint32_t &share);
     ClObject        *gl_sharing(cl_context context, cl_int *error);
+    bool             source_needs_unreported_extension(ClObject &program);
     uint64_t         failed_link_stand_in(ClientTransport &wire, uint64_t context);
     void             note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options);
     cl_int           program_devices(ClObject &context, cl_uint num_devices, const cl_device_id *device_list);

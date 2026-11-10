@@ -7,6 +7,9 @@
 #include "icd/opencl/cl_build_options.hpp"
 #include "icd/opencl/cl_include_inliner.hpp"
 #include "icd/opencl/cl_option_judge.hpp"
+#include "icd/opencl/cl_pragma_judge.hpp"
+#include "core/support/extension_words.hpp"
+#include "icd/opencl/cl_device.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -89,6 +92,11 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
         const cl_int inlined = build_with_includes(*held, *wire, options);
         if (inlined != CL_SUCCESS) return inlined;
     }
+    if (held->source() != nullptr && source_needs_unreported_extension(*held)) {
+        held->keep_traits(held->traits() | ClObject::program_failed);
+        notify.tell(program);
+        return CL_BUILD_PROGRAM_FAILURE;
+    }
     const ClBuildOptions sent(memory_, held->source() != nullptr && held->source()->options() != nullptr
                                            ? held->source()->host_options()
                                            : options);
@@ -99,6 +107,25 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
     if (built == CL_SUCCESS || built == CL_BUILD_PROGRAM_FAILURE) notify.tell(program);
     return built;
+}
+
+bool ClIcdRoot::source_needs_unreported_extension(ClObject &program)
+{
+    AV_SCOPE("ClIcdRoot::source_needs_unreported_extension");
+    GuestClContext *const context = program.context();
+    ClDevice *const       device = context != nullptr ? devices_.running(*context) : nullptr;
+    if (device == nullptr) return false;
+    const ClPragmaJudge judge(program.source()->text(), program.source()->text_bytes());
+    static const char *const gated[] = {"cl_khr_fp16", "cl_khr_fp64"};
+    ExtensionWords           host(memory_, Pool::paged);
+    bool                     listed = false;
+    for (const char *const name : gated) {
+        if (!judge.enables(name)) continue;
+        if (!listed && host_extensions(*device, host) != CL_SUCCESS) return false;
+        listed = true;
+        if (!device->extensions().reports(host, name)) return true;
+    }
+    return false;
 }
 
 uint64_t ClIcdRoot::failed_link_stand_in(ClientTransport &wire, uint64_t context)
@@ -283,6 +310,10 @@ cl_int ClIcdRoot::compile_program(cl_program program, cl_uint num_devices, const
     if (listed != CL_SUCCESS) return listed;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    if (held->source() != nullptr && source_needs_unreported_extension(*held)) {
+        notify.tell(program);
+        return CL_COMPILE_PROGRAM_FAILURE;
+    }
     const ClBuildOptions sent(memory_, options);
     if (!sent.usable()) return CL_OUT_OF_HOST_MEMORY;
     const cl_int compiled = av::clproto::av_clCompileProgram(*wire, held->wire(), 0u, nullptr, sent.for_host(),
