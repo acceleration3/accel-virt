@@ -22,8 +22,13 @@ void *run_clock_hold(void *hold)
 
 }
 
-GpuClockHold::GpuClockHold()
-    : clock_(), fd_(-1), context_(0u), thread_{}, lock_(), wake_(lock_),
+GpuClockHold::GpuClockHold() : GpuClockHold("/sys/class/drm")
+{
+    AV_SCOPE("GpuClockHold::GpuClockHold");
+}
+
+GpuClockHold::GpuClockHold(const char *class_directory)
+    : clock_(), drivers_(class_directory), declined_(-1), fd_(-1), context_(0u), thread_{}, lock_(), wake_(lock_),
       last_busy_(0u), held_since_(0u), hold_for_(0u), peak_mhz_(0u), slow_(0u), held_(false), wanted_(false), stopping_(false), open_(false)
 {
     AV_SCOPE("GpuClockHold::GpuClockHold");
@@ -39,13 +44,17 @@ bool GpuClockHold::open(int32_t render_minor)
 {
     AV_SCOPE("GpuClockHold::open");
     const ThreadLockHold locked(lock_);
-    return open_ || start(render_minor);
+    if (open_) return true;
+    if (render_minor == declined_) return false;
+    if (start(render_minor)) return true;
+    declined_ = render_minor;
+    return false;
 }
 
 bool GpuClockHold::start(int32_t render_minor)
 {
     AV_SCOPE("GpuClockHold::start");
-    if (render_minor < 0) return false;
+    if (render_minor < 0 || !drivers_.named(render_minor, "amdgpu")) return false;
     char path[32];
     snprintf(path, sizeof path, "/dev/dri/renderD%d", render_minor);
     fd_ = ::open(path, O_RDWR | O_CLOEXEC);

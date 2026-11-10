@@ -4,6 +4,7 @@
 #include "device/shim/posix_condition.hpp"
 #include "device/shim/posix_lock.hpp"
 #include "executor/monotonic_clock.hpp"
+#include "executor/render_node_driver.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -13,6 +14,7 @@ namespace av {
 class GpuClockHold {
 public:
     GpuClockHold();
+    explicit GpuClockHold(const char *class_directory);
     ~GpuClockHold();
     GpuClockHold(const GpuClockHold &) = delete;
     GpuClockHold &operator=(const GpuClockHold &) = delete;
@@ -37,7 +39,9 @@ private:
     void     take();
     void     let_go();
 
-    MonotonicClock  clock_;
+    MonotonicClock   clock_;
+    RenderNodeDriver drivers_;
+    int32_t          declined_;
     int             fd_;
     uint32_t        context_;
     pthread_t       thread_;
