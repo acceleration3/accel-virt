@@ -245,7 +245,6 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_KHR_ray_tracing_maintenance1", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_KHR_ray_tracing_position_fetch", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_EXT_pipeline_library_group_handles", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
-    {"VK_EXT_descriptor_buffer", 1u, "vulkan_addresses.a_descriptor_naming_an_address_outside_every_buffer_is_refused_and_a_null_one_passes"},
     {"VK_EXT_host_image_copy", 1u, "generated_host_copy.a_memory_to_image_copy_sends_exactly_the_bytes_the_region_touches"},
     {"VK_EXT_multi_draw", 1u, "generated_multi_draw.a_strided_array_arrives_at_the_host_packed_with_the_host_s_own_stride"},
     {"VK_EXT_color_write_enable", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},

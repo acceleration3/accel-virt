@@ -55,7 +55,7 @@ uint64_t extension_mask(const char *const *names, uint32_t count, Slot slot_of)
 }
 
 constexpr const char *const withheld_extensions[] = {
-    "VK_EXT_device_generated_commands"};
+    "VK_EXT_device_generated_commands", "VK_EXT_descriptor_buffer"};
 
 bool names_withheld(const char *const *names, uint32_t count)
 {
