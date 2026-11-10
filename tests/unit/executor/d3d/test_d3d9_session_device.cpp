@@ -323,6 +323,53 @@ TEST(d3d9_session_device, a_pretransformed_triangle_needs_no_shader)
     CHECK_EQ(wire.refused(), 0u);
 }
 
+TEST(d3d9_session_device, the_last_pixel_of_a_line_is_drawn_only_while_last_pixel_is_on)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice    *device11 = nullptr;
+    av::D3d9HostDevice     *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
+    make_target(wire);
+
+    constexpr std::uint32_t line_list = 2u;
+    constexpr std::uint32_t line_strip = 3u;
+    constexpr std::uint32_t render_state_last_pixel = 16u;
+    const ScreenVertex lines[4] = {{10.0f, 10.0f, 0.5f, 1.0f, green},
+                                   {30.0f, 10.0f, 0.5f, 1.0f, green},
+                                   {10.0f, 20.0f, 0.5f, 1.0f, green},
+                                   {30.0f, 20.0f, 0.5f, 1.0f, green}};
+    CHECK(av_d3d9_CreateVertexBuffer9(wire, vertices, sizeof(lines), usage_write_only, fvf_xyzrhw_diffuse,
+                                      pool_managed));
+    CHECK(av_d3d9_WriteBuffer9(wire, vertices, 0u, 0u, reinterpret_cast<const std::uint8_t *>(lines), sizeof(lines)));
+    CHECK(av_d3d9_SetFvf9(wire, fvf_xyzrhw_diffuse));
+    CHECK(av_d3d9_SetStreamSource9(wire, 0u, vertices, 0u, sizeof(ScreenVertex)));
+    const std::uint32_t off[] = {render_state_last_pixel, 0u};
+    CHECK(av_d3d9_SetRenderStates9(wire, 2u, off));
+    CHECK(av_d3d9_DrawPrimitive9(wire, line_list, 0u, 2u));
+    Pixels pixels;
+    CHECK(read(wire, draw_target, pixels));
+    CHECK_EQ(pixels.at(20u, 10u), green);
+    CHECK_EQ(pixels.at(30u, 10u), black);
+    CHECK_EQ(pixels.at(30u, 20u), black);
+    const std::uint32_t on[] = {render_state_last_pixel, 1u};
+    CHECK(av_d3d9_SetRenderStates9(wire, 2u, on));
+    CHECK(av_d3d9_DrawPrimitive9(wire, line_list, 0u, 2u));
+    CHECK(read(wire, draw_target, pixels));
+    CHECK_EQ(pixels.at(30u, 10u), green);
+    CHECK_EQ(pixels.at(30u, 20u), green);
+    CHECK_EQ(pixels.at(31u, 10u), black);
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, black, 1.0f, 0u));
+    CHECK(av_d3d9_DrawPrimitive9(wire, line_strip, 1u, 2u));
+    CHECK(read(wire, draw_target, pixels));
+    CHECK_EQ(pixels.at(30u, 20u), green);
+    CHECK_EQ(wire.refused(), 0u);
+}
+
 TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
 {
     av::ExecutorLogRig rig;

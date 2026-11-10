@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d9_lanes.hpp"
+#include "executor/d3d/d3d9_line_ends.hpp"
 #include "executor/d3d/d3d9_lent_copies.hpp"
 #include "executor/d3d/d3d9_flip_shares.hpp"
 #include "executor/d3d/d3d9_refused_queries.hpp"
@@ -175,6 +176,7 @@ private:
     WireArena      *arena_;
     D3d9Lanes       lanes_;
     D3d9Slices      slices_;
+    D3d9LineEnds    line_ends_;
     D3d9RefusedQueries refused_;
     MonotonicClock  clock_;
     bool            lost_;

@@ -18,7 +18,7 @@ namespace av {
 D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks,
                          SliceStorages &storages, EventfdWake &wake, DriverLog &lines)
     : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), lent_(blocks), imports_(nullptr), objects_(objects), blocks_(blocks),
-      devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), lanes_(blocks, wake, lines_), slices_(blocks, storages, lanes_, lines_),
+      devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), lanes_(blocks, wake, lines_), slices_(blocks, storages, lanes_, lines_), line_ends_(),
       refused_(blocks), clock_(), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");

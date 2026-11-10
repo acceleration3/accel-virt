@@ -189,8 +189,10 @@ bool D3d9Session::on_SetRenderStates9(uint32_t value_count, const uint32_t *valu
     if (device() == nullptr || value_count % pair != 0u) return false;
     for (uint32_t index = 0u; index < value_count; index += pair)
         if (values[index] > max_render_state) return false;
-    for (uint32_t index = 0u; index < value_count; index += pair)
+    for (uint32_t index = 0u; index < value_count; index += pair) {
         device()->SetRenderState(static_cast<D3DRENDERSTATETYPE>(values[index]), values[index + 1u]);
+        line_ends_.render_state(values[index], values[index + 1u]);
+    }
     return true;
 }
 
@@ -318,8 +320,10 @@ bool D3d9Session::on_DrawPrimitive9(uint32_t type, uint32_t start_vertex, uint32
     lanes_.touch(device());
     if (device() == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
     slices_.copy_in_use(device());
-    return SUCCEEDED(
-        device()->DrawPrimitive(static_cast<D3DPRIMITIVETYPE>(type), start_vertex, primitive_count));
+    if (FAILED(device()->DrawPrimitive(static_cast<D3DPRIMITIVETYPE>(type), start_vertex, primitive_count)))
+        return false;
+    line_ends_.draw(*device(), type, start_vertex, primitive_count);
+    return true;
 }
 
 bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, uint32_t min_index,
@@ -329,9 +333,11 @@ bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, u
     lanes_.touch(device());
     if (device() == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
     slices_.copy_in_use(device());
-    return SUCCEEDED(device()->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), base_vertex,
-                                                              min_index, vertex_count, start_index,
-                                                              primitive_count));
+    if (FAILED(device()->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), base_vertex, min_index,
+                                              vertex_count, start_index, primitive_count)))
+        return false;
+    line_ends_.draw_indexed(*device(), type, base_vertex, min_index, vertex_count, start_index, primitive_count);
+    return true;
 }
 
 bool D3d9Session::on_CreateQuery9(uint32_t query, uint32_t type)
