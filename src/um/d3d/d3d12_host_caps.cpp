@@ -273,6 +273,11 @@ HRESULT D3d12HostCaps::answer_options(const D3D12DDIARG_GETCAPS &args) const
         answer.WriteableMSAATexturesSupported = caps_.writeable_msaa_textures != 0u;
         return fill(args.pData, bytes, &answer, sizeof(answer));
     }
+    case D3D12DDI_FEATURE_HARDWARE_COPY_106: {
+        D3D12DDI_FEATURE_DATA_HARDWARE_COPY_106 answer = {};
+        answer.Supported = FALSE;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
     case D3D12DDICAPS_TYPE_SHADER_MODEL_6_8_OPTIONS_0110: {
         D3D12DDI_SHADER_MODEL_6_8_OPTIONS_0110 answer = {};
         answer.SampleCmpGradientAndBiasSupported = caps_.sample_cmp_gradient_bias != 0u;
@@ -289,7 +294,6 @@ HRESULT D3d12HostCaps::answer_options(const D3D12DDIARG_GETCAPS &args) const
     case D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS:
     case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPE_COUNT:
     case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPES:
-    case D3D12DDI_FEATURE_HARDWARE_COPY_106:
     case D3D12DDICAPS_TYPE_SWIZZLE_PATTERN:
     case D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN:
     case D3D12DDICAPS_TYPE_0030_CRYPTO_SESSION_SUPPORT:
