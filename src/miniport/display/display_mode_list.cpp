@@ -46,27 +46,55 @@ Status DisplayModeList::follow(const DisplayInfoResponse &info, uint32_t scanout
     return Status::ok;
 }
 
+void DisplayModeList::insert(DisplayMode *taken, uint32_t &count, uint32_t &preferred, const DisplayMode &mode, bool chosen) const
+{
+    AV_SCOPE("DisplayModeList::insert");
+    for (uint32_t index = 0u; index < count; index++) {
+        const DisplayMode &held = taken[index];
+        if (held.width() != mode.width() || held.height() != mode.height()) continue;
+        const uint32_t apart = held.refresh_millihz() > mode.refresh_millihz() ? held.refresh_millihz() - mode.refresh_millihz()
+                                                                                : mode.refresh_millihz() - held.refresh_millihz();
+        if (apart < refresh_tolerance_millihz) {
+            if (chosen) preferred = index;
+            return;
+        }
+    }
+    if (count == list_capacity) return;
+    uint32_t at = count;
+    while (at != 0u && (area_of(taken[at - 1u]) > area_of(mode) ||
+                        (area_of(taken[at - 1u]) == area_of(mode) && taken[at - 1u].refresh_millihz() > mode.refresh_millihz()))) {
+        taken[at] = taken[at - 1u];
+        at--;
+    }
+    taken[at] = mode;
+    if (preferred != list_capacity && preferred >= at) preferred++;
+    if (chosen) preferred = at;
+    count++;
+}
+
 Status DisplayModeList::adopt(const DisplayModeSet &set)
 {
     AV_SCOPE("DisplayModeList::adopt");
-    DisplayMode taken[max_modes];
+    DisplayMode taken[list_capacity];
     uint32_t    count = 0u;
-    uint32_t    preferred = max_modes;
+    uint32_t    preferred = list_capacity;
     for (uint32_t index = 0u; index < set.count(); index++) {
         const DisplayMode mode(set.width(index), set.height(index), set.refresh_millihz());
         if (!mode.offerable()) continue;
-        uint32_t at = count;
-        while (at != 0u && area_of(taken[at - 1u]) > area_of(mode)) {
-            taken[at] = taken[at - 1u];
-            at--;
-        }
-        taken[at] = mode;
-        if (preferred != max_modes && preferred >= at) preferred++;
-        if (index == set.preferred()) preferred = at;
-        count++;
+        insert(taken, count, preferred, mode, index == set.preferred());
     }
     if (count == 0u) return Status::not_found;
-    if (preferred == max_modes) preferred = count - 1u;
+    const DisplayMode largest = taken[preferred == list_capacity ? count - 1u : preferred];
+    for (const DisplayMode &standard : standard_)
+        if (standard.width() <= largest.width() && standard.height() <= largest.height())
+            insert(taken, count, preferred, DisplayMode(standard.width(), standard.height(), set.refresh_millihz()), false);
+    const uint32_t hosted = count;
+    DisplayMode    hosts[list_capacity];
+    for (uint32_t index = 0u; index < hosted; index++) hosts[index] = taken[index];
+    for (uint32_t index = 0u; index < hosted; index++)
+        for (const uint32_t rate : offered_rates)
+            insert(taken, count, preferred, DisplayMode(hosts[index].width(), hosts[index].height(), rate), false);
+    if (preferred == list_capacity) preferred = count - 1u;
     for (uint32_t index = 0u; index < count; index++) modes_[index] = taken[index];
     count_ = count;
     preferred_index_ = preferred;
@@ -100,9 +128,19 @@ bool DisplayModeList::is_preferred(const DisplayMode &mode) const
 const DisplayMode *DisplayModeList::find(const D3dkmdtVidPnSourceModeRecord &source) const
 {
     AV_SCOPE("DisplayModeList::find");
-    for (uint32_t index = 0u; index < count_; index++)
-        if (modes_[index].matches(source)) return &modes_[index];
-    return nullptr;
+    const DisplayMode *best = nullptr;
+    uint32_t           best_apart = 0u;
+    const uint32_t     wanted = modes_[preferred_index_].refresh_millihz();
+    for (uint32_t index = 0u; index < count_; index++) {
+        if (!modes_[index].matches(source)) continue;
+        const uint32_t rate = modes_[index].refresh_millihz();
+        const uint32_t apart = rate > wanted ? rate - wanted : wanted - rate;
+        if (best == nullptr || apart < best_apart) {
+            best = &modes_[index];
+            best_apart = apart;
+        }
+    }
+    return best;
 }
 
 const DisplayMode *DisplayModeList::find(const D3dkmdtVideoSignalInfoRecord &signal) const

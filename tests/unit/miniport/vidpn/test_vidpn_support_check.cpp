@@ -136,7 +136,7 @@ TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_does_not_offer_
       CHECK_EQ(supported, 0u);
   } }
 
-TEST(vidpn_support_check_visit, a_pinned_target_mode_at_another_refresh_is_not_supported)
+TEST(vidpn_support_check_visit, a_pinned_target_mode_at_a_refresh_nobody_offers_is_not_supported)
 { DisplayModeList modes;
   av::DisplayModeSet set;
   CHECK_STATUS(set.add(1024u, 768u), av::Status::ok);
@@ -162,7 +162,7 @@ TEST(vidpn_support_check_visit, a_pinned_target_mode_at_another_refresh_is_not_s
   CHECK_EQ(decide_with(144000u, true, refusal), 1u);
   CHECK(refusal == nullptr);
   CHECK_EQ(decide_with(0u, false, refusal), 1u);
-  CHECK_EQ(decide_with(60000u, true, refusal), 0u);
+  CHECK_EQ(decide_with(50000u, true, refusal), 0u);
   CHECK(std::strcmp(refusal, "target mode") == 0); }
 
 TEST(vidpn_support_check_visit, a_source_mode_set_it_cannot_read_fails)

@@ -1360,7 +1360,24 @@ Status Adapter::follow_commit(uint32_t source)
 {
     AV_SCOPE("Adapter::follow_commit");
     const DisplayMode *mode = sources_.committed_mode(source);
-    return mode != nullptr ? scanout_.configure(source, *mode) : scanout_.disable(source);
+    if (mode == nullptr) return scanout_.disable(source);
+    const Status configured = scanout_.configure(source, *mode);
+    if (configured == Status::ok) retime_display(source, *mode);
+    return configured;
+}
+
+void Adapter::retime_display(uint32_t source, const DisplayMode &mode)
+{
+    AV_SCOPE("Adapter::retime_display");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::retime_display");
+    if (!device_.constructed()) return;
+    uint8_t          request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter  writer(request, sizeof request);
+    uint8_t          answer[DisplayModeSet::max_encoded_size] = {};
+    uint32_t         written = 0u;
+    if (writer.display_timing(source, mode.refresh_millihz()) != Status::ok) return;
+    if (device_.object().ask_control(request, writer.length(), answer, sizeof answer, written) == Status::ok)
+        platform_.store_atomic(scanout_period_, mode.period());
 }
 
 int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path)

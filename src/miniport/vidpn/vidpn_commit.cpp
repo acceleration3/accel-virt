@@ -36,6 +36,12 @@ NtStatus VidPnCommit::apply()
     if (status != Status::ok) return NtStatus(status);
     const DisplayMode *mode = modes_.find(pinned);
     if (mode == nullptr) return NtStatus(NtStatus::invalid_video_present_source_mode);
+    TargetModeSet                targets(platform_, vidpn_, source);
+    D3dkmdtVidPnTargetModeRecord target = {};
+    if (targets.acquire() == Status::ok && targets.copy_pinned(target) == Status::ok) {
+        const DisplayMode *timed = modes_.find(target.VideoSignalInfo);
+        if (timed != nullptr && timed->width() == mode->width() && timed->height() == mode->height()) mode = timed;
+    }
     return NtStatus(sources_.commit(source, mode));
 }
 

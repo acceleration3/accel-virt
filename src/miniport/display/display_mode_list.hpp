@@ -15,8 +15,9 @@ struct DisplayModeListProbe;
 class DisplayModeList {
 public:
     static constexpr uint32_t standard_count = 11u;
-    static constexpr uint32_t max_modes = DisplayModeSet::max_modes;
-    static_assert(standard_count + 1u <= max_modes, "the standard list and the device's size fit");
+    static constexpr uint32_t max_modes = 96u;
+    static constexpr uint32_t list_capacity = max_modes;
+    static_assert(DisplayModeSet::max_modes + standard_count <= max_modes, "the device's modes and the standard list fit");
 
     DisplayModeList();
     DisplayModeList(const DisplayModeList &) = delete;
@@ -36,8 +37,11 @@ public:
 
 private:
     static constexpr uint32_t default_preferred_index = 4u;
+    static constexpr uint32_t refresh_tolerance_millihz = 500u;
+    static constexpr uint32_t offered_rates[4] = {60000u, 75000u, 120000u, 144000u};
 
     uint64_t area_of(const DisplayMode &mode) const;
+    void     insert(DisplayMode *taken, uint32_t &count, uint32_t &preferred, const DisplayMode &mode, bool chosen) const;
 
     DisplayMode standard_[standard_count];
     DisplayMode modes_[max_modes];

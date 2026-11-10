@@ -334,6 +334,7 @@ private:
     void                 restore_scanouts();
     [[nodiscard]] Status power_down();
     [[nodiscard]] Status follow_commit(uint32_t source);
+    void                 retime_display(uint32_t source, const DisplayMode &mode);
     void                 follow_output_count(uint32_t outputs);
     void                 log_unlike_outputs();
     [[nodiscard]] Status follow_display_info();

@@ -76,6 +76,11 @@ Status CofuncModality::offer_sources(uint32_t source)
     Status status = set.create();
     for (const int32_t format : DisplayMode::source_formats)
         for (uint32_t index = 0u; status == Status::ok && index < modes_.count(); index++) {
+            bool repeated = false;
+            for (uint32_t earlier = 0u; earlier < index; earlier++)
+                repeated = repeated || (modes_.mode(earlier).width() == modes_.mode(index).width() &&
+                                        modes_.mode(earlier).height() == modes_.mode(index).height());
+            if (repeated) continue;
             D3dkmdtVidPnSourceModeRecord description = {};
             modes_.mode(index).describe(description, format);
             status = set.add(description);
@@ -92,7 +97,7 @@ Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceMo
     Status        status = set.create();
     for (uint32_t index = 0u; status == Status::ok && index < modes_.count(); index++) {
         const DisplayMode &mode = modes_.mode(index);
-        if (pinned_source != nullptr && &mode != only) continue;
+        if (pinned_source != nullptr && (mode.width() != only->width() || mode.height() != only->height())) continue;
         D3dkmdtVidPnTargetModeRecord description = {};
         mode.describe(description.VideoSignalInfo);
         description.WireFormatAndPreference = (modes_.is_preferred(mode) ? preferred : not_preferred) |

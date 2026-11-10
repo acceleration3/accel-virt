@@ -1198,7 +1198,7 @@ TEST(adapter_set_power_state, what_was_scanning_out_before_d3_is_scanning_out_af
   CHECK_EQ(fixture.start(), success);
   av::FakeVirtqueueDevice &control = fixture.control();
   CHECK_EQ(commit(fixture, 1280u, 800u), success);
-  CHECK_EQ(control.respond_all(0x1100u), 1u);
+  CHECK_EQ(control.respond_all(0x1100u), 2u);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.forget_control();
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
@@ -1255,13 +1255,14 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
   const std::uint32_t after_commit = control.respond_all(0x1100u);
-  CHECK_EQ(after_commit, 5u);
+  CHECK_EQ(after_commit, 6u);
   CHECK_EQ(control.request_type(0u), 0x02F4u);
   CHECK_EQ(control.request_type(5u), 0x0101u);
-  CHECK_EQ(control.request_type(6u), 0x0106u);
-  CHECK_EQ(control.request_type(7u), 0x0103u);
-  CHECK_EQ(control.request_type(8u), 0x0105u);
-  CHECK_EQ(control.request_type(9u), 0x0104u);
+  CHECK_EQ(control.request_type(6u), 0x02F5u);
+  CHECK_EQ(control.request_type(7u), 0x0106u);
+  CHECK_EQ(control.request_type(8u), 0x0103u);
+  CHECK_EQ(control.request_type(9u), 0x0105u);
+  CHECK_EQ(control.request_type(10u), 0x0104u);
   fixture.platform().advance_time(display_period);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
@@ -1367,7 +1368,7 @@ TEST(adapter_commit_vidpn, a_path_that_is_gone_scans_out_nothing)
   CHECK_EQ(fixture.start(), success);
   av::FakeVirtqueueDevice &control = fixture.control();
   CHECK_EQ(commit(fixture, 1280u, 800u), success);
-  CHECK_EQ(control.respond_all(0x1100u), 1u);
+  CHECK_EQ(control.respond_all(0x1100u), 2u);
   av::FakeVidPn empty;
   const av::DxgkargCommitVidPnRecord request = {&empty, 0u, 0, nullptr, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().commit_vidpn(&request)), success);
@@ -4513,13 +4514,14 @@ TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
-  CHECK_EQ(control.respond_all(0x1100u), 5u);
+  CHECK_EQ(control.respond_all(0x1100u), 6u);
   CHECK_EQ(control.request_type(5u), 0x0101u);
   CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(u32(control.request(5u), 32u), 1024u);
-  CHECK_EQ(control.request_type(7u), 0x0103u);
-  CHECK_EQ(u32(control.request(7u), 40u), 1u);
-  CHECK_EQ(u32(control.request(7u), 44u), av::ScanoutResource::first_resource_id + 1u); }
+  CHECK_EQ(control.request_type(6u), 0x02F5u);
+  CHECK_EQ(control.request_type(8u), 0x0103u);
+  CHECK_EQ(u32(control.request(8u), 40u), 1u);
+  CHECK_EQ(u32(control.request(8u), 44u), av::ScanoutResource::first_resource_id + 1u); }
 
 TEST(adapter_start_device, says_when_the_displays_are_not_all_one_size)
 { Fixture fixture;
@@ -5776,7 +5778,7 @@ std::uint32_t edid_preferred_width(Fixture &fixture)
 
 }
 
-TEST(adapter_start_device, offers_the_hosts_own_modes_whatever_their_size)
+TEST(adapter_start_device, offers_the_hosts_own_modes_and_the_standard_ones_below_the_largest)
 { Fixture fixture;
   fixture.offer_modes(host_modes({{1920u, 1080u}, {100u, 100u}, {2560u, 1440u}, {5120u, 2880u}, {80u, 80u}}, 2u));
   CHECK_EQ(fixture.start(), success);
@@ -5785,10 +5787,11 @@ TEST(adapter_start_device, offers_the_hosts_own_modes_whatever_their_size)
   vidpn.add_path(0u, 0u);
   const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
-  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u * av::DisplayMode::source_format_count);
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 13u * av::DisplayMode::source_format_count);
   CHECK_EQ(commit(fixture, 100u, 100u), success);
   CHECK_EQ(commit(fixture, 80u, 80u), invalid_source_mode);
-  CHECK_EQ(commit(fixture, 1280u, 800u), invalid_source_mode); }
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
+  CHECK_EQ(commit(fixture, 1000u, 700u), invalid_source_mode); }
 
 TEST(adapter_dpc_routine, a_display_event_is_cleared_and_each_monitor_replugged)
 { Fixture fixture;
@@ -6639,7 +6642,7 @@ TEST(adapter_start_device, the_modes_a_host_offers_are_said_unless_the_log_is_sp
       fixture.offer_modes(host_modes({{1920u, 1080u}}, 0u));
       if (spent) spend_log_budget(fixture);
       CHECK_EQ(fixture.start(), success);
-      CHECK_EQ(fixture.platform().logged_line("avgpu: the host offers 1 modes, 1 taken, preferred 1920x1080"), !spent);
+      CHECK_EQ(fixture.platform().logged_line("avgpu: the host offers 1 modes, "), !spent);
   } }
 
 TEST(adapter_is_supported_vidpn, a_refusal_names_the_pinned_mode_it_could_not_take_unless_the_log_is_spent)

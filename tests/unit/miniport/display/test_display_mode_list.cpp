@@ -205,55 +205,86 @@ av::DisplayModeSet offered(std::initializer_list<std::pair<std::uint32_t, std::u
 
 }
 
-TEST(display_mode_list_adopt, the_hosts_modes_in_ascending_area_with_its_preferred_one)
+bool holds(const DisplayModeList &modes, std::uint32_t width, std::uint32_t height, std::uint32_t millihz = 0u)
+{ for (std::uint32_t index = 0u; index < modes.count(); index++) {
+      const av::DisplayMode &mode = modes.mode(index);
+      if (mode.width() == width && mode.height() == height && (millihz == 0u || mode.refresh_millihz() == millihz)) return true;
+  }
+  return false; }
+
+TEST(display_mode_list_adopt, the_hosts_modes_are_kept_in_ascending_area_with_its_preferred_one)
 { DisplayModeList modes;
   CHECK_STATUS(modes.adopt(offered({{2560u, 1440u}, {100u, 100u}, {1920u, 1080u}, {1080u, 1920u}}, 0u)), av::Status::ok);
-  CHECK_EQ(modes.count(), 4u);
-  CHECK_EQ(modes.mode(0u).width(), 100u);
-  CHECK_EQ(modes.mode(1u).width(), 1920u);
-  CHECK_EQ(modes.mode(2u).width(), 1080u);
-  CHECK_EQ(modes.mode(3u).width(), 2560u);
+  CHECK(holds(modes, 100u, 100u, 60000u));
+  CHECK(holds(modes, 1920u, 1080u, 60000u));
+  CHECK(holds(modes, 1080u, 1920u, 60000u));
+  CHECK(holds(modes, 2560u, 1440u, 60000u));
   CHECK_EQ(modes.preferred().width(), 2560u);
-  CHECK(modes.is_preferred(modes.mode(3u)));
+  CHECK_EQ(modes.preferred().refresh_millihz(), 60000u);
+  CHECK(modes.is_preferred(modes.preferred()));
   CHECK_STATUS(modes.adopt(offered({{2560u, 1440u}, {100u, 100u}}, 1u)), av::Status::ok);
   CHECK_EQ(modes.preferred().width(), 100u);
   CHECK(modes.invariants_hold()); }
 
-TEST(display_mode_list_adopt, every_mode_runs_at_the_refresh_the_set_says)
+TEST(display_mode_list_adopt, every_resolution_runs_at_the_hosts_refresh_and_at_the_standard_ones)
 { DisplayModeList modes;
   av::DisplayModeSet set = offered({{3840u, 2160u}, {1920u, 1080u}}, 0u);
   CHECK_STATUS(set.set_refresh(359980u), av::Status::ok);
   CHECK_STATUS(modes.adopt(set), av::Status::ok);
-  CHECK_EQ(modes.count(), 2u);
-  CHECK_EQ(modes.mode(0u).refresh_millihz(), 359980u);
-  CHECK_EQ(modes.mode(1u).refresh_millihz(), 359980u);
+  CHECK(holds(modes, 3840u, 2160u, 359980u));
+  CHECK(holds(modes, 1920u, 1080u, 359980u));
+  for (const std::uint32_t rate : {60000u, 75000u, 120000u, 144000u}) {
+      CHECK(holds(modes, 3840u, 2160u, rate));
+      CHECK(holds(modes, 1920u, 1080u, rate));
+  }
   CHECK_EQ(modes.preferred().refresh_millihz(), 359980u);
+  CHECK_EQ(modes.preferred().width(), 3840u);
   D3dkmdtVideoSignalInfoRecord signal = {};
-  av::DisplayMode(1920u, 1080u).describe(signal);
-  CHECK(modes.find(signal) == nullptr);
   av::DisplayMode(1920u, 1080u, 359980u).describe(signal);
-  CHECK(modes.find(signal) == &modes.mode(0u));
+  CHECK(modes.find(signal) != nullptr);
+  CHECK_EQ(modes.find(signal)->refresh_millihz(), 359980u);
+  av::DisplayMode(1920u, 1080u, 50000u).describe(signal);
+  CHECK(modes.find(signal) == nullptr);
+  D3dkmdtVidPnSourceModeRecord source = {};
+  av::DisplayMode(1920u, 1080u).describe(source, av::DisplayMode::source_formats[0]);
+  CHECK_EQ(modes.find(source)->refresh_millihz(), 359980u);
   CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}}, 0u)), av::Status::ok);
   CHECK_EQ(modes.preferred().refresh_millihz(), 60000u);
+  CHECK(modes.invariants_hold()); }
+
+TEST(display_mode_list_adopt, the_standard_resolutions_up_to_the_largest_are_offered_too)
+{ DisplayModeList modes;
+  CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}}, 0u)), av::Status::ok);
+  CHECK(holds(modes, 640u, 480u, 60000u));
+  CHECK(holds(modes, 1280u, 720u, 60000u));
+  CHECK(holds(modes, 1920u, 1080u, 60000u));
+  CHECK_STATUS(modes.adopt(offered({{1024u, 768u}}, 0u)), av::Status::ok);
+  CHECK(holds(modes, 800u, 600u));
+  CHECK(!holds(modes, 1280u, 720u));
   CHECK(modes.invariants_hold()); }
 
 TEST(display_mode_list_adopt, a_mode_windows_refuses_as_too_small_is_left_out)
 { DisplayModeList modes;
   CHECK_STATUS(modes.adopt(offered({{80u, 80u}, {1920u, 1080u}, {99u, 1080u}, {1280u, 720u}}, 0u)), av::Status::ok);
-  CHECK_EQ(modes.count(), 2u);
-  CHECK_EQ(modes.mode(0u).width(), 1280u);
+  CHECK(!holds(modes, 80u, 80u));
+  CHECK(!holds(modes, 99u, 1080u));
+  CHECK(holds(modes, 1280u, 720u));
   CHECK_EQ(modes.preferred().width(), 1920u);
+  const std::uint32_t before = modes.count();
   CHECK_STATUS(modes.adopt(offered({{80u, 80u}}, 0u)), av::Status::not_found);
-  CHECK_EQ(modes.count(), 2u);
+  CHECK_EQ(modes.count(), before);
   CHECK(modes.invariants_hold()); }
 
 TEST(display_mode_list_adopt, a_mode_the_edid_cannot_describe_is_left_out)
 { DisplayModeList modes;
   CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}, {4096u, 2160u}, {3840u, 2160u}, {5120u, 2880u}}, 3u)),
                av::Status::ok);
-  CHECK_EQ(modes.count(), 2u);
+  CHECK(!holds(modes, 4096u, 2160u));
+  CHECK(!holds(modes, 5120u, 2880u));
+  CHECK(holds(modes, 1920u, 1080u));
   CHECK_EQ(modes.preferred().width(), 3840u);
+  const std::uint32_t before = modes.count();
   CHECK_STATUS(modes.adopt(offered({{4096u, 4096u}, {8000u, 100u}}, 0u)), av::Status::not_found);
-  CHECK_EQ(modes.count(), 2u);
+  CHECK_EQ(modes.count(), before);
   CHECK_EQ(modes.preferred().width(), 3840u);
   CHECK(modes.invariants_hold()); }

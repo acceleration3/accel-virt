@@ -53,7 +53,7 @@ inline bool stamp_intact(const D3dkmdtVidPnTargetModeRecord &mode)
 template <typename Mode>
 class FakeModeSet {
 public:
-    static constexpr std::uint32_t capacity = 32u;
+    static constexpr std::uint32_t capacity = 128u;
     static constexpr std::int32_t  mode_already_in_mode_set = static_cast<std::int32_t>(0xC01E0314u);
     static constexpr std::int32_t  mode_not_in_mode_set = static_cast<std::int32_t>(0xC01E034Au);
     static constexpr std::int32_t  dataset_is_empty = 0x401E034B;
