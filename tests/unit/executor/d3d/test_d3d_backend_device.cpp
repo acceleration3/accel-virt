@@ -22,6 +22,7 @@
 
 #include <atomic>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -634,6 +635,103 @@ TEST(d3d_backend_device, a_geometry_shader_streams_each_of_its_four_streams_to_i
         std::fprintf(stderr, "stream %u: sum %f first %f %f %f %f\n", stream, sum, streamed_out[0], streamed_out[1], streamed_out[2], streamed_out[3]);
         CHECK(sum > 0.0f);
     }
+    CHECK_EQ(wire.refused(), 0u);
+}
+
+
+namespace {
+
+constexpr std::uint32_t rov_tokens[] = {0x00000050u, 0x0000004au, 0x0100086au, 0x0402189cu, 0x0011e000u, 0x00000001u, 0x00005555u, 0x04002064u, 0x00101032u, 0x00000000u, 0x00000001u, 0x03001062u, 0x00101012u, 0x00000001u, 0x03000065u, 0x001020f2u, 0x00000000u, 0x02000068u, 0x00000002u, 0x0500001cu, 0x001000f2u, 0x00000000u, 0x00101546u, 0x00000000u, 0x890000a3u, 0x800000c2u, 0x00155543u, 0x00100012u, 0x00000001u, 0x00100fc6u, 0x00000000u, 0x0011ee46u, 0x00000001u, 0x09000032u, 0x00100022u, 0x00000001u, 0x0010100au, 0x00000001u, 0x00004001u, 0x3f333333u, 0x00004001u, 0x3e99999au, 0x07000038u, 0x00100022u, 0x00000001u, 0x0010001au, 0x00000001u, 0x00004001u, 0x3eb33333u, 0x09000032u, 0x00100012u, 0x00000001u, 0x0010000au, 0x00000001u, 0x00004001u, 0x3f000000u, 0x0010001au, 0x00000001u, 0x070000a4u, 0x0011e0f2u, 0x00000001u, 0x00100e46u, 0x00000000u, 0x00100006u, 0x00000001u, 0x08000036u, 0x001020f2u, 0x00000000u, 0x00004002u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3f800000u, 0x0100003eu};
+
+}
+
+TEST(d3d_backend_device, a_rasterizer_ordered_view_blends_overlapping_triangles_in_draw_order)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend, rig.log);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device));
+    av::D3dLoopback wire(backend, rig.imports);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    constexpr std::uint32_t layers = 6u, format_r32_float = 41u, bind_unordered = 0x80u, uav_texture2d = 4u;
+    ResourceDesc texture = {};
+    texture.dimension = 3u;
+    texture.width = size;
+    texture.height = size;
+    texture.depth_or_array = 1u;
+    texture.mip_levels = 1u;
+    texture.format = format_r32_float;
+    texture.sample_count = 1u;
+    texture.bind_flags = bind_unordered;
+    CHECK(av_d3d_CreateResource(wire, 20u, texture, 0u, 0u, 0u));
+    ViewDesc uav = {};
+    uav.resource = 20u;
+    uav.format = format_r32_float;
+    uav.dimension = uav_texture2d;
+    CHECK(av_d3d_CreateUnorderedAccessView(wire, 21u, uav));
+    const SignatureEntry rov_inputs[2] = {{1u, 0u, 15u, 3u, 0u, 0u}, {0u, 1u, 15u, 3u, 0u, 0u}};
+    const SignatureEntry rov_outputs[1] = {{0u, 0u, 15u, 3u, 0u, 0u}};
+    CHECK(av_d3d_CreateShader(wire, 22u, 4u, 2u, rov_inputs, 1u, rov_outputs, 0u, nullptr, 0u, nullptr, 0u, nullptr,
+                              0xffffffffu, rov_tokens, sizeof rov_tokens));
+    Vertex vertices[3u * layers] = {};
+    for (std::uint32_t layer = 0u; layer < layers; layer++) {
+        const float radius = 0.9f - 0.08f * float(layer);
+        for (std::uint32_t corner = 0u; corner < 3u; corner++) {
+            const float angle = float(layer) * 0.7f - float(corner) * 2.0943951f;
+            vertices[layer * 3u + corner] = Vertex{radius * std::cos(angle), radius * std::sin(angle), float(layer) * 0.19f, 0.0f, 0.0f, 1.0f};
+        }
+    }
+    ResourceDesc buffer = {};
+    buffer.dimension = 1u;
+    buffer.width = sizeof vertices;
+    buffer.bind_flags = bind_vertex;
+    CHECK(av_d3d_CreateResource(wire, 23u, buffer, 0u, 0u, 0u));
+    CHECK(av_d3d_UpdateSubresource(wire, 23u, 0u, 0u, Box{}, 0u, 0u, 0u, vertices, sizeof vertices));
+    const std::uint32_t targets[1] = {2u};
+    const UavBinding uavs[1] = {{21u, 0xFFFFFFFFu}};
+    CHECK(av_d3d_SetRenderTargets(wire, 1u, targets, 0u, 1u, 1u, uavs));
+    const Viewport viewport = {0.0f, 0.0f, float(size), float(size), 0.0f, 1.0f};
+    CHECK(av_d3d_SetViewports(wire, 1u, &viewport));
+    CHECK(av_d3d_SetInputLayout(wire, 7u));
+    const VertexBufferBinding binding = {23u, sizeof(Vertex), 0u};
+    CHECK(av_d3d_SetVertexBuffers(wire, 0u, 1u, &binding));
+    CHECK(av_d3d_SetTopology(wire, topology_triangles));
+    CHECK(av_d3d_SetShader(wire, 0u, 5u));
+    CHECK(av_d3d_SetShader(wire, 4u, 22u));
+    CHECK(av_d3d_Draw(wire, 3u * layers, 0u));
+    static float result[size * size];
+    std::uint32_t row_pitch = 0u, depth_pitch = 0u;
+    std::uint64_t read = 0u;
+    CHECK(av_d3d_ReadSubresource(wire, 20u, 0u, &hresult, &row_pitch, &depth_pitch, result, sizeof result, &read));
+    CHECK_EQ(hresult, 0u);
+    std::uint32_t wrong = 0u, judged = 0u;
+    for (std::uint32_t y = 0u; y < size; y++)
+        for (std::uint32_t x = 0u; x < size; x++) {
+            const float px = (float(x) + 0.5f) / float(size) * 2.0f - 1.0f, py = 1.0f - (float(y) + 0.5f) / float(size) * 2.0f;
+            float expected = 0.0f;
+            bool near_edge = false;
+            for (std::uint32_t layer = 0u; layer < layers; layer++) {
+                float d[3];
+                for (std::uint32_t corner = 0u; corner < 3u; corner++) {
+                    const Vertex &a = vertices[layer * 3u + corner], &b = vertices[layer * 3u + (corner + 1u) % 3u];
+                    d[corner] = (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x);
+                }
+                for (const float value : d) near_edge = near_edge || std::fabs(value) < 0.05f;
+                const bool inside = (d[0] > 0 && d[1] > 0 && d[2] > 0) || (d[0] < 0 && d[1] < 0 && d[2] < 0);
+                if (inside) expected = expected * 0.5f + 0.35f * (0.3f + 0.7f * float(layer) * 0.19f);
+            }
+            if (near_edge) continue;
+            judged++;
+            if (std::fabs(result[y * size + x] - expected) > 1e-4f) wrong++;
+        }
+    std::fprintf(stderr, "rov: %u of %u judged pixels wrong\n", wrong, judged);
+    CHECK_EQ(wrong, 0u);
     CHECK_EQ(wire.refused(), 0u);
 }
 

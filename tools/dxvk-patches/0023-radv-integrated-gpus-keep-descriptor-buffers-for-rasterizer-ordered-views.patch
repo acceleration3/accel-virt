@@ -1,0 +1,24 @@
+From: accel-virt
+Subject: [PATCH] Descriptor heaps are not used on RADV integrated GPUs
+
+A draw whose pixel shader uses a rasterizer ordered view lost writes of an
+earlier primitive, run to run, when the descriptors came from a descriptor heap
+on a RADV integrated GPU. Descriptor buffers give the ordered result.
+---
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index a03693b..8328443 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -510,6 +510,12 @@ namespace dxvk {
+       if (m_properties.vk12.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY)
+         enableDescriptorHeap = m_properties.driverVersion >= Version(595u, 84u, 0u);
+ 
++      // Rasterizer ordered views lose writes through descriptor heaps on the
++      // RADV integrated GPUs this was seen on, so keep them on descriptor buffers.
++      if (m_properties.vk12.driverID == VK_DRIVER_ID_MESA_RADV
++       && m_properties.core.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
++        enableDescriptorHeap = false;
++
+       applyTristate(enableDescriptorHeap, instance.options().enableDescriptorHeap);
+ 
+       if (!enableDescriptorHeap)
