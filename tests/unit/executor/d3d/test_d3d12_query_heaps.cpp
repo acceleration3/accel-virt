@@ -64,3 +64,13 @@ TEST(d3d12_query_heaps, a_heap_never_made_or_forgotten_admits_nothing)
   CHECK_EQ(heaps.known(), 0u);
   platform.fail_allocation_at(1u);
   CHECK_STATUS(heaps.remember(3u, occlusion_heap, 8u), av::Status::no_memory); }
+
+TEST(d3d12_query_heaps, the_copy_queue_timestamp_heap_is_not_served_and_every_other_kind_is)
+{ av::MockPlatform platform;
+  D3d12QueryHeaps heaps(platform);
+  CHECK(heaps.serves(occlusion_heap));
+  CHECK(heaps.serves(timestamp_heap));
+  CHECK(heaps.serves(statistics_heap));
+  CHECK(heaps.serves(stream_heap));
+  CHECK(heaps.serves(video_heap));
+  CHECK(!heaps.serves(copy_timestamp_heap)); }

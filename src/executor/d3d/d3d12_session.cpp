@@ -1109,7 +1109,8 @@ bool D3d12Session::on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t c
     AV_SCOPE("D3d12Session::on_CreateQueryHeap12");
     constexpr uint32_t most_query_heap_type = 5u;
     constexpr uint32_t most_queries = 65536u;
-    if (device_ == nullptr || type > most_query_heap_type || count == 0u || count > most_queries) return false;
+    if (device_ == nullptr || type > most_query_heap_type || !queries_.serves(type) || count == 0u || count > most_queries)
+        return false;
     D3D12_QUERY_HEAP_DESC desc = {};
     desc.Type = static_cast<D3D12_QUERY_HEAP_TYPE>(type);
     desc.Count = count;

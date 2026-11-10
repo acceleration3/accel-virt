@@ -104,7 +104,6 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3)))) {
         caps_.barycentrics = options3.BarycentricsSupported ? 1u : 0u;
         caps_.view_instancing_tier = static_cast<uint32_t>(options3.ViewInstancingTier);
-        caps_.copy_queue_timestamps = options3.CopyQueueTimestampQueriesSupported ? 1u : 0u;
         const uint32_t lists = static_cast<uint32_t>(options3.WriteBufferImmediateSupportFlags);
         caps_.write_immediate_queues = ((lists & queue_list_direct) != 0u ? queue_3d : 0u) |
                                        ((lists & queue_list_compute) != 0u ? queue_compute : 0u) |

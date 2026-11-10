@@ -478,6 +478,17 @@ TEST(d3d12_session_isolation, a_query_must_name_a_slot_of_a_heap_of_its_kind)
   CHECK(!scene.session().on_ResolveQueryData12(list, queries, 2u, 0u, 1u, target, 0u));
   CHECK(!scene.session().on_ResolveQueryData12(list, queries, 0u, 0xFFFFFFFFu, 2u, target, 0u)); }
 
+TEST(d3d12_session_isolation, a_copy_list_records_no_query_whatever_the_heap_holds)
+{ Scene scene;
+  scene.commands.type = D3D12_COMMAND_LIST_TYPE_COPY;
+  CHECK(!scene.session().on_EndQuery12(list, queries, 1u, 0u));
+  CHECK(!scene.session().on_ResolveQueryData12(list, queries, 0u, 8u, 8u, target, 0u));
+  scene.commands.type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+  CHECK(scene.session().on_EndQuery12(list, queries, 1u, 0u));
+  CHECK(scene.session().on_ResolveQueryData12(list, queries, 0u, 8u, 8u, target, 0u));
+  scene.commands.type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
+  CHECK(scene.session().on_EndQuery12(list, queries, 1u, 0u)); }
+
 TEST(d3d12_session_isolation, a_resolve_names_subresources_of_one_size_and_samples_that_resolve)
 { Scene scene;
   scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UNORM, 16u, 16u, 4u);

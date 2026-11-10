@@ -20,6 +20,7 @@ public:
     void                 forget(uint32_t heap);
     void                 clear();
 
+    bool serves(uint32_t heap_type) const;
     bool admits(uint32_t heap, uint32_t query_type, uint32_t first, uint32_t count) const;
     uint32_t known() const;
 

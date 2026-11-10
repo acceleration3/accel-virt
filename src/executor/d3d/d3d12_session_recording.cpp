@@ -682,7 +682,7 @@ bool D3d12Session::on_EndQuery12(uint32_t id, uint32_t heap, uint32_t type, uint
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
     if (recorded == nullptr || queries == nullptr || type > most_query_type || !queries_.admits(heap, type, index, 1u) ||
-        !retain(id, queries, nullptr))
+        recorded->GetType() == D3D12_COMMAND_LIST_TYPE_COPY || !retain(id, queries, nullptr))
         return false;
     recorded->EndQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
@@ -697,7 +697,7 @@ bool D3d12Session::on_ResolveQueryData12(uint32_t id, uint32_t heap, uint32_t ty
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
     ID3D12Resource  *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
     if (recorded == nullptr || queries == nullptr || to == nullptr || type > most_query_type ||
-        !queries_.admits(heap, type, first, count))
+        !queries_.admits(heap, type, first, count) || recorded->GetType() == D3D12_COMMAND_LIST_TYPE_COPY)
         return false;
     const D3D12_RESOURCE_DESC desc = to->GetDesc();
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || offset % 8u != 0u || offset > desc.Width ||

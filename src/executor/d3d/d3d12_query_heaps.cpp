@@ -44,6 +44,12 @@ void D3d12QueryHeaps::clear()
     heaps_.clear();
 }
 
+bool D3d12QueryHeaps::serves(uint32_t heap_type) const
+{
+    AV_SCOPE("D3d12QueryHeaps::serves");
+    return heap_type != heap_copy_timestamp;
+}
+
 bool D3d12QueryHeaps::admits(uint32_t heap, uint32_t query_type, uint32_t first, uint32_t count) const
 {
     AV_SCOPE("D3d12QueryHeaps::admits");
