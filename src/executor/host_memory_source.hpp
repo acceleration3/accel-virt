@@ -62,7 +62,7 @@ public:
 private:
     static constexpr uint64_t page_bytes = 4096u;
 
-    static constexpr uint32_t most_choices = 6u;
+    static constexpr uint32_t most_choices = 32u;
 
     struct Placed {
         Placed(uint64_t owner, uint64_t handle, uint32_t type, uint64_t size, uint32_t caching, uint64_t sequence)

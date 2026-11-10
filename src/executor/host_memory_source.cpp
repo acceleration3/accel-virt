@@ -113,6 +113,13 @@ uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[
         for (uint32_t earlier = 0u; earlier < count; earlier++) seen = seen || types[earlier] == type;
         if (!seen) types[count++] = type;
     }
+    if (request.kind() == HostMemoryRequest::Kind::vulkan) return count;
+    for (const uint32_t group : groups)
+        for (uint32_t type = 0u; type < HostMemoryRequest::memory_types && count < most_choices; type++) {
+            bool seen = (group & (1u << type)) == 0u || !system_type(type);
+            for (uint32_t earlier = 0u; earlier < count; earlier++) seen = seen || types[earlier] == type;
+            if (!seen) types[count++] = type;
+        }
     return count;
 }
 

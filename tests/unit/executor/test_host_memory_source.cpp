@@ -277,6 +277,21 @@ TEST(host_memory_source_choice, upload_refused_by_every_choice_is_no_memory_and_
   rig.source.free(domain, 1u);
   CHECK_EQ(rig.exporter.live(), 0u); }
 
+TEST(host_memory_source_choice, upload_refused_by_two_types_is_tried_on_a_third_the_preferences_did_not_name)
+{ Rig rig;
+  const std::uint32_t card = rig.exporter.add_heap(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, 1u << 30);
+  const std::uint32_t system = rig.exporter.add_heap(0u, 2u << 30);
+  rig.exporter.add_type(visible | coherent, true, system);
+  rig.exporter.add_type(visible | coherent | cached, true, system);
+  rig.exporter.add_type(local | visible | coherent, true, card);
+  AvHostMemory memory = {};
+  CHECK_EQ(rig.source.mappable_types(), 0x7u);
+  rig.exporter.fail_allocations(2u);
+  CHECK_STATUS(rig.allocate(1u, upload, memory), Status::ok);
+  CHECK(rig.exporter.last_type() != 2u);
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.exporter.live(), 0u); }
+
 TEST(host_memory_source_choice, readback_prefers_cached_written_back_and_falls_back_to_any)
 { Rig rig;
   rig.discrete();
