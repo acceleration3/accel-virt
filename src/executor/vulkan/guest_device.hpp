@@ -20,11 +20,14 @@ public:
     VulkanMemoryImport &memory();
     void                note_invalid_shader_extension(bool enabled);
     VkResult            shader_refusal() const;
+    void                enable_placement(bool enabled);
+    bool                placement() const;
 
 private:
     VulkanDeviceTable  table_;
     VulkanMemoryImport memory_;
     bool               invalid_shader_extension_;
+    bool               placement_;
 };
 
 }

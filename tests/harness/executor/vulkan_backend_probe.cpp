@@ -31,6 +31,12 @@ void VulkanBackendProbe::show_types(const VkPhysicalDeviceMemoryProperties &host
     backend.types_learnt_ = true;
 }
 
+void VulkanBackendProbe::enable_placement(VkDevice device)
+{
+    GuestDevice *const made = backend.device_of(reinterpret_cast<uint64_t>(device));
+    if (made != nullptr) made->enable_placement(true);
+}
+
 bool VulkanBackendProbe::memory_import() const { return backend.memory_import_; }
 
 void VulkanBackendProbe::begin_frame(bool recording) { backend.guard_.begin_frame(recording); }

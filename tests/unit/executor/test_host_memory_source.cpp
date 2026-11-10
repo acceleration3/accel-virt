@@ -379,7 +379,7 @@ TEST(host_memory_source_allocate, a_request_or_size_no_blob_can_have_is_refused_
 { Rig rig;
   rig.discrete();
   AvHostMemory memory = {};
-  const HostMemoryRequest garbage[] = {HostMemoryRequest(), HostMemoryRequest(4u), HostMemoryRequest(0x102u),
+  const HostMemoryRequest garbage[] = {HostMemoryRequest(), HostMemoryRequest(5u), HostMemoryRequest(0x102u),
                                        HostMemoryRequest(0x2003u), HostMemoryRequest(0xFFFFFFFFu)};
   for (const HostMemoryRequest &request : garbage)
       CHECK_STATUS(rig.allocate(1u, request, memory), Status::invalid_parameter);
@@ -977,3 +977,59 @@ TEST(host_memory_source_reuse, system_memory_is_never_cleared_because_the_kernel
   CHECK_EQ(first_byte_of(second), 0xABu);
   ::close(second.fd);
   rig.source.free(2u, 1u); }
+
+TEST(host_memory_source_placed, a_placed_allocation_is_taken_once_by_its_owner_and_the_type_and_pages_it_was_made_for)
+{ Rig rig;
+  int fds[2] = {-1, -1};
+  CHECK_EQ(::pipe(fds), 0);
+  CHECK_STATUS(rig.source.place(7u, 0x1000u, 3u, 2u * page - 5u, AV_MEMORY_WRITE_BACK, fds[0]), Status::ok);
+  CHECK_EQ(rig.source.placed(), 1u);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(rig.source.take_placed(8u, 3u, 2u * page, memory), Status::not_found);
+  CHECK_STATUS(rig.source.take_placed(7u, 4u, 2u * page, memory), Status::not_found);
+  CHECK_STATUS(rig.source.take_placed(7u, 3u, page, memory), Status::not_found);
+  CHECK_STATUS(rig.source.take_placed(7u, 3u, 2u * page, memory), Status::ok);
+  CHECK(memory.fd >= 0 && memory.fd != fds[0]);
+  CHECK_EQ(memory.size, 2u * page);
+  CHECK_EQ(memory.caching, static_cast<std::uint32_t>(AV_MEMORY_WRITE_BACK));
+  CHECK_EQ(rig.source.placed(), 0u);
+  CHECK_STATUS(rig.source.take_placed(7u, 3u, 2u * page, memory), Status::not_found);
+  ::close(memory.fd);
+  ::close(fds[0]);
+  ::close(fds[1]); }
+
+TEST(host_memory_source_placed, the_oldest_of_equal_allocations_is_taken_first_and_a_freed_one_is_never_taken)
+{ Rig rig;
+  const int first = ::open("/dev/null", O_RDONLY);
+  const int second = ::open("/dev/null", O_RDONLY);
+  CHECK_STATUS(rig.source.place(7u, 0x1000u, 3u, page, AV_MEMORY_WRITE_COMBINED, first), Status::ok);
+  CHECK_STATUS(rig.source.place(7u, 0x2000u, 3u, page, AV_MEMORY_WRITE_BACK, second), Status::ok);
+  rig.source.drop_placed(9u, 0x1000u);
+  CHECK_EQ(rig.source.placed(), 2u);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(rig.source.take_placed(7u, 3u, page, memory), Status::ok);
+  CHECK_EQ(memory.caching, static_cast<std::uint32_t>(AV_MEMORY_WRITE_COMBINED));
+  ::close(memory.fd);
+  rig.source.drop_placed(7u, 0x2000u);
+  CHECK_EQ(rig.source.placed(), 0u);
+  CHECK_STATUS(rig.source.take_placed(7u, 3u, page, memory), Status::not_found);
+  ::close(first);
+  ::close(second); }
+
+TEST(host_memory_source_placed, an_owner_keeps_a_bounded_number_and_gives_all_up_together_and_bad_arguments_are_refused)
+{ Rig rig;
+  const int fd = ::open("/dev/null", O_RDONLY);
+  for (std::uint64_t handle = 1u; handle <= 40u; handle++)
+      CHECK_STATUS(rig.source.place(7u, handle, 2u, page, AV_MEMORY_WRITE_COMBINED, fd), Status::ok);
+  CHECK_EQ(rig.source.placed(), 16u);
+  CHECK_STATUS(rig.source.place(8u, 1u, 2u, page, AV_MEMORY_WRITE_COMBINED, fd), Status::ok);
+  rig.source.drop_placed_of(7u);
+  CHECK_EQ(rig.source.placed(), 1u);
+  CHECK_STATUS(rig.source.place(0u, 1u, 2u, page, AV_MEMORY_WRITE_COMBINED, fd), Status::invalid_parameter);
+  CHECK_STATUS(rig.source.place(7u, 0u, 2u, page, AV_MEMORY_WRITE_COMBINED, fd), Status::invalid_parameter);
+  CHECK_STATUS(rig.source.place(7u, 1u, 32u, page, AV_MEMORY_WRITE_COMBINED, fd), Status::invalid_parameter);
+  CHECK_STATUS(rig.source.place(7u, 1u, 2u, 0u, AV_MEMORY_WRITE_COMBINED, fd), Status::invalid_parameter);
+  CHECK_STATUS(rig.source.place(7u, 1u, 2u, page, AV_MEMORY_WRITE_COMBINED, -1), Status::invalid_parameter);
+  CHECK_EQ(rig.source.placed(), 1u);
+  rig.source.drop_placed_of(8u);
+  ::close(fd); }

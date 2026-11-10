@@ -141,6 +141,18 @@ Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, const 
     return counted(settle(kept, kept->allocation_.object().open(bytes, memory), made));
 }
 
+Status HostChannel::place_memory(uint64_t bytes, HostMemoryRequest memory, const void *owner, uint64_t named,
+                                 HostAllocation *&made)
+{
+    AV_SCOPE("HostChannel::place_memory");
+    made = nullptr;
+    const ThreadLockHold release(lock_);
+    Kept                *kept = nullptr;
+    const Status         room = keep(owner, kept);
+    if (room != Status::ok) return counted(room);
+    return counted(settle(kept, kept->allocation_.object().place(bytes, memory, named), made));
+}
+
 Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, const void *owner,
                                  HostAllocation *&made)
 {

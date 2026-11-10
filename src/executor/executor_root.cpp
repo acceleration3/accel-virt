@@ -164,6 +164,12 @@ Status ExecutorRoot::allocate_memory(uint32_t domain, uint64_t key, uint64_t siz
     return source->allocate(domain, key, size, HostMemoryRequest(request), memory);
 }
 
+Status ExecutorRoot::place_memory(ContextSession *session, uint64_t size, uint32_t request, AvHostMemory &memory)
+{
+    AV_SCOPE("ExecutorRoot::place_memory");
+    return owns(session) ? session->place_memory(size, HostMemoryRequest(request), memory) : Status::not_found;
+}
+
 Status ExecutorRoot::alias_memory(uint32_t domain, uint64_t key, uint32_t from_domain, uint64_t from_key,
                                   AvHostMemory &memory)
 {

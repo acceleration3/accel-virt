@@ -55,6 +55,7 @@ bool ContextSession::release(TeardownBudget &budget)
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) retire_blob(blob->id());
     parked_count_ = 0u;
     if (backend_ != nullptr) backend_->shut_down();
+    if (source_ != nullptr) source_->drop_placed_of(placement_owner());
     clocks_ = nullptr;
     source_ = nullptr;
     domain_ = 0u;
@@ -331,6 +332,20 @@ uint64_t ContextSession::imported_handle(uint64_t blob_id)
     AV_SCOPE("ContextSession::imported_handle");
     const ImportedBlob *const blob = imports_.find(blob_id);
     return blob != nullptr ? blob->handle() : 0u;
+}
+
+Status ContextSession::place_memory(uint64_t size, HostMemoryRequest request, AvHostMemory &memory)
+{
+    AV_SCOPE("ContextSession::place_memory");
+    if (source_ == nullptr || faulted_ || !request.valid() || request.kind() != HostMemoryRequest::Kind::placed)
+        return Status::not_supported;
+    return source_->take_placed(placement_owner(), request.vulkan_type(), size, memory);
+}
+
+uint64_t ContextSession::placement_owner()
+{
+    AV_SCOPE("ContextSession::placement_owner");
+    return reinterpret_cast<uint64_t>(&imports_);
 }
 
 ImportTable &ContextSession::imports()

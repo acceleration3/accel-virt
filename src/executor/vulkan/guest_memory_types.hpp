@@ -20,6 +20,7 @@ public:
     uint32_t host_type(uint32_t guest) const;
     uint32_t heap_of(uint32_t guest) const;
     uint32_t source_type(uint32_t guest) const;
+    bool     placed(uint32_t guest) const;
     uint32_t guest_bits(uint32_t host_bits) const;
     uint32_t unmapped(uint32_t guest_bits) const;
 
@@ -41,6 +42,7 @@ private:
     uint32_t                         hosts_[VK_MAX_MEMORY_TYPES];
     uint32_t                         backed_;
     uint32_t                         host_types_;
+    uint32_t                         placed_;
 
     friend struct GuestMemoryTypesProbe;
 };

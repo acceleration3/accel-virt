@@ -54,6 +54,19 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         memory->held = false;
         mock.settle(*memory);
     };
+    table_.place_memory = [](void *opaque, AvExecutor *handle, std::uint64_t size, std::uint32_t request,
+                             AvHostMemory *memory) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        Executor *const  executor = mock.executor_of(handle);
+        if (executor == nullptr || memory == nullptr) return 1u;
+        {
+            Lock lock(mock.lock_);
+            mock.placements_++;
+            mock.last_placement_ = MemoryRequest{executor->domain, 0u, size, request};
+            if (mock.fires(mock.refuse_placement_)) return 1u;
+        }
+        return mock.allocate(executor->domain, 0x7000000000000000ull + mock.placements_, size, request, *memory);
+    };
     table_.import_blob = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id,
                             std::uint64_t memory_key, std::uint32_t role, std::uint64_t arena_base) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
@@ -497,6 +510,9 @@ void MockExecutorOps::withhold_memory_descriptor_at(std::uint32_t nth)
 void MockExecutorOps::shrink_memory_at(std::uint32_t nth) { Lock lock(lock_); shrink_memory_ = nth; }
 void MockExecutorOps::round_memory_to(std::uint64_t bytes) { Lock lock(lock_); memory_rounding_ = bytes; }
 void MockExecutorOps::set_memory_caching(std::uint32_t caching) { Lock lock(lock_); memory_caching_ = caching; }
+std::uint32_t MockExecutorOps::placements() { Lock lock(lock_); return placements_; }
+MockExecutorOps::MemoryRequest MockExecutorOps::last_placement() { Lock lock(lock_); return last_placement_; }
+void MockExecutorOps::refuse_placement_at(std::uint32_t nth) { Lock lock(lock_); refuse_placement_ = nth; }
 std::uint32_t MockExecutorOps::memory_allocations() { Lock lock(lock_); return memory_allocations_; }
 std::uint32_t MockExecutorOps::memory_frees() { Lock lock(lock_); return memory_frees_; }
 

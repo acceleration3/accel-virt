@@ -17,9 +17,11 @@
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <unistd.h>
 
 using av::BlobTable;
 using av::FenceInterrupts;
@@ -121,6 +123,32 @@ TEST(local_context_plane, starting_hands_the_executor_the_host_ram_floor_the_cap
   capset.floor_host_ram(7ull << 30);
   CHECK_STATUS(fixture.plane().start(other_gpu, capset), Status::ok);
   CHECK_EQ(fixture.ops().last_host_ram_floor_bytes(), 7ull << 30); }
+
+TEST(local_context_plane, a_placed_request_is_made_by_the_executor_of_the_context_that_asked_and_by_no_other)
+{ Fixture fixture;
+  AvHostMemory memory = {-1, 0u, 0u};
+  const std::uint32_t placed = av::HostMemoryRequest(av::HostMemoryRequest::Kind::placed, 3u).encoded();
+  CHECK_STATUS(fixture.plane().initialize(), Status::ok);
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, placed, memory), Status::not_found);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, placed, memory), Status::invalid_state);
+  CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
+  Status asked = Status::invalid_state;
+  for (std::uint32_t attempt = 0u; attempt < 5000u && asked == Status::invalid_state; attempt++) {
+      asked = fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, placed, memory);
+      if (asked == Status::invalid_state) ::usleep(1000u);
+  }
+  CHECK_STATUS(asked, Status::ok);
+  CHECK(fixture.host().descriptor_open(memory.fd));
+  CHECK_EQ(memory.size, 0x2000u);
+  CHECK_EQ(fixture.ops().placements(), 1u);
+  CHECK_EQ(fixture.ops().last_placement().request, placed);
+  CHECK_EQ(fixture.ops().last_placement().size, 0x2000u);
+  fixture.host().close_descriptor(memory.fd);
+  fixture.ops().refuse_placement_at(1u);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000001u, 0x2000u, placed, memory), Status::no_memory); }
 
 TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain)
 { Fixture fixture;

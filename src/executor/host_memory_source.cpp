@@ -13,7 +13,7 @@ namespace av {
 static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
-    : exporter_(exporter), memories_(blocks), aliases_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
+    : exporter_(exporter), memories_(blocks), aliases_(blocks), placed_(blocks), placed_sequence_(0u), lock_(), host_(), asked_(0u), mappable_(0u),
       visible_(0u), vulkan_(), vram_(), host_ram_(), device_ram_(), reuse_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
@@ -276,6 +276,82 @@ void HostMemorySource::free_domain(uint32_t domain)
         }
         lent->owner()->release(*lent);
     }
+}
+
+uint32_t HostMemorySource::placed_of(uint64_t owner) const
+{
+    AV_SCOPE("HostMemorySource::placed_of");
+    uint32_t count = 0u;
+    placed_.for_each([owner, &count](const Placed &held) { count += held.owner_ == owner ? 1u : 0u; });
+    return count;
+}
+
+void HostMemorySource::drop_oldest_placed(uint64_t owner)
+{
+    AV_SCOPE("HostMemorySource::drop_oldest_placed");
+    Placed *oldest = nullptr;
+    placed_.for_each([owner, &oldest](const Placed &held) {
+        if (held.owner_ == owner && (oldest == nullptr || held.sequence_ < oldest->sequence_))
+            oldest = const_cast<Placed *>(&held);
+    });
+    if (oldest != nullptr) static_cast<void>(placed_.destroy(oldest));
+}
+
+Status HostMemorySource::place(uint64_t owner, uint64_t handle, uint32_t type, uint64_t size, uint32_t caching, int fd)
+{
+    AV_SCOPE("HostMemorySource::place");
+    if (owner == 0u || handle == 0u || size == 0u || type >= HostMemoryRequest::memory_types || fd < 0)
+        return Status::invalid_parameter;
+    const ThreadLockHold held(lock_);
+    while (placed_of(owner) >= most_placed_per_owner) drop_oldest_placed(owner);
+    Placed *made = nullptr;
+    if (placed_.create(made, owner, handle, type, size, caching, placed_sequence_++) != Status::ok) return Status::no_memory;
+    if (!made->fd_.hold_copy(fd)) {
+        static_cast<void>(placed_.destroy(made));
+        return Status::no_memory;
+    }
+    return Status::ok;
+}
+
+Status HostMemorySource::take_placed(uint64_t owner, uint32_t type, uint64_t size, AvHostMemory &memory)
+{
+    AV_SCOPE("HostMemorySource::take_placed");
+    const ThreadLockHold held(lock_);
+    Placed *found = nullptr;
+    placed_.for_each([owner, type, size, &found](const Placed &candidate) {
+        const uint64_t rounded = (candidate.size_ + page_bytes - 1u) / page_bytes * page_bytes;
+        if (candidate.owner_ != owner || candidate.type_ != type || rounded != size) return;
+        if (found == nullptr || candidate.sequence_ < found->sequence_) found = const_cast<Placed *>(&candidate);
+    });
+    if (found == nullptr) return Status::not_found;
+    memory.fd = found->fd_.take();
+    memory.caching = found->caching_;
+    memory.size = size;
+    static_cast<void>(placed_.destroy(found));
+    return Status::ok;
+}
+
+void HostMemorySource::drop_placed(uint64_t owner, uint64_t handle)
+{
+    AV_SCOPE("HostMemorySource::drop_placed");
+    const ThreadLockHold held(lock_);
+    Placed *found = placed_.find_if([owner, handle](const Placed &candidate) {
+        return candidate.owner_ == owner && candidate.handle_ == handle;
+    });
+    if (found != nullptr) static_cast<void>(placed_.destroy(found));
+}
+
+void HostMemorySource::drop_placed_of(uint64_t owner)
+{
+    AV_SCOPE("HostMemorySource::drop_placed_of");
+    const ThreadLockHold held(lock_);
+    while (placed_of(owner) != 0u) drop_oldest_placed(owner);
+}
+
+uint32_t HostMemorySource::placed() const
+{
+    AV_SCOPE("HostMemorySource::placed");
+    return placed_.live();
 }
 
 SourceMemory *HostMemorySource::acquire(uint32_t domain, uint64_t key)

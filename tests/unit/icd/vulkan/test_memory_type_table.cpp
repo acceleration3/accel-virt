@@ -333,3 +333,15 @@ TEST(memory_type_table, the_usage_of_a_heap_is_the_larger_of_the_adapter_s_and_t
   CHECK_EQ(budget.heapBudget[0], 4096u * mib);
   CHECK_EQ(budget.heapUsage[2], 0u);
   CHECK_EQ(budget.heapBudget[2], 0u); }
+
+TEST(memory_type_table, the_host_visible_types_that_have_a_twin_are_placed_and_a_rebuild_forgets_them)
+{ TableRig      rig;
+  MemoryTypeTable table(rig.kmt(), rig.adapter());
+  for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++) CHECK(!table.placed(type));
+  CHECK_STATUS(table.build(intel()), Status::ok);
+  const bool placed[] = {false, true, true, false, false, true, true};
+  for (std::uint32_t type = 0u; type < 7u; type++) CHECK_EQ(table.placed(type), placed[type]);
+  CHECK(!table.placed(7u));
+  CHECK(!table.placed(VK_MAX_MEMORY_TYPES));
+  CHECK_STATUS(table.build(nvidia()), Status::ok);
+  for (std::uint32_t type = 0u; type < 6u; type++) CHECK(!table.placed(type)); }

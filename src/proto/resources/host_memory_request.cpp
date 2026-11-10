@@ -25,7 +25,8 @@ bool HostMemoryRequest::valid() const
     AV_SCOPE("HostMemoryRequest::valid");
     const uint32_t kind = encoded_ & kind_mask;
     const uint32_t type = encoded_ >> type_shift;
-    if (kind == static_cast<uint32_t>(Kind::vulkan)) return type < memory_types;
+    if (kind == static_cast<uint32_t>(Kind::vulkan) || kind == static_cast<uint32_t>(Kind::placed))
+        return type < memory_types;
     return (kind == static_cast<uint32_t>(Kind::upload) || kind == static_cast<uint32_t>(Kind::readback)) &&
            type == 0u;
 }

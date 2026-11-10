@@ -1,6 +1,7 @@
 #include "device/context/local_context_plane.hpp"
 
 #include "proto/context/capset_info.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_pair.hpp"
@@ -74,10 +75,14 @@ uint32_t LocalContextPlane::sub_apis() const
     return library_.sub_apis();
 }
 
-Status LocalContextPlane::allocate_memory(uint32_t, uint64_t key, uint64_t size, uint32_t request,
+Status LocalContextPlane::allocate_memory(uint32_t context, uint64_t key, uint64_t size, uint32_t request,
                                           AvHostMemory &memory)
 {
     AV_SCOPE("LocalContextPlane::allocate_memory");
+    if (HostMemoryRequest(request).kind() == HostMemoryRequest::Kind::placed) {
+        DeviceContext *const placing = contexts_.find(context);
+        return placing != nullptr ? placing->place_memory(size, request, memory) : Status::not_found;
+    }
     return library_.allocate_memory(key, size, request, memory);
 }
 

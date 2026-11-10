@@ -60,6 +60,7 @@ public:
     void     close_domain(uint32_t domain);
     [[nodiscard]] Status allocate_memory(uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
                                          AvHostMemory &memory);
+    [[nodiscard]] Status place_memory(ContextSession *session, uint64_t size, uint32_t request, AvHostMemory &memory);
     void                 free_memory(uint32_t domain, uint64_t key);
     [[nodiscard]] Status alias_memory(uint32_t domain, uint64_t key, uint32_t from_domain, uint64_t from_key,
                                       AvHostMemory &memory);

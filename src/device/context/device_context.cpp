@@ -121,6 +121,13 @@ const ContextBinding &DeviceContext::binding() const
     return binding_;
 }
 
+Status DeviceContext::place_memory(uint64_t size, uint32_t request, AvHostMemory &memory)
+{
+    AV_SCOPE("DeviceContext::place_memory");
+    if (!binding_.bound()) return Status::invalid_state;
+    return executor_.place(size, request, memory);
+}
+
 uint32_t DeviceContext::id() const
 {
     AV_SCOPE("DeviceContext::id");

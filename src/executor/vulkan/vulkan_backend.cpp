@@ -574,6 +574,7 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     if (made->load(instance, physicalDevice, *pDevice)) {
         adopting_ = made;
         made->note_invalid_shader_extension(enables(pCreateInfo, VK_NV_GLSL_SHADER_EXTENSION_NAME));
+        made->enable_placement(enables(pCreateInfo, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME));
         memory_import_ = made->memory().imports();
     } else {
         static_cast<void>(devices_.destroy(made));
@@ -899,6 +900,7 @@ void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, cons
 {
     AV_SCOPE("VulkanBackend::on_vkFreeMemory");
     const uint64_t            handle = reinterpret_cast<uint64_t>(memory);
+    if (source_ != nullptr && imports_ != nullptr) source_->drop_placed(reinterpret_cast<uint64_t>(imports_), handle);
     const SourceMemory *const imported = imports_ != nullptr ? imports_->named(handle) : nullptr;
     if (imported == nullptr) {
         guard_.destroy(VulkanDestroyKind::memory, reinterpret_cast<uint64_t>(device), 0u, handle);
@@ -975,6 +977,12 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
         LogLine(lines_).text("a memory allocation of ").number(pAllocateInfo->allocationSize).text(" bytes in heap ").number(heap).text(" refused by the ").text(vram_.system(heap) ? "host memory" : "video memory").text(" budget").write();
         return vram_.system(heap) ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
+    GuestDevice *const placing_device = device_of(reinterpret_cast<uint64_t>(device));
+    const bool         placing = placing_device != nullptr && placing_device->placement() && source_ != nullptr &&
+                         imports_ != nullptr && types_.placed(pAllocateInfo->memoryTypeIndex);
+    VkExportMemoryAllocateInfo exporting = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, allocate.pNext,
+                                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    if (placing && !exports_memory(pAllocateInfo->pNext)) allocate.pNext = &exporting;
     const VkResult made = RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
     if (made != VK_SUCCESS) {
         LogLine refusal(lines_);
@@ -1010,11 +1018,48 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
         vram_.refund(heap, pAllocateInfo->allocationSize);
         return made;
     }
-    if (vram_.commit(heap, reinterpret_cast<uint64_t>(*pMemory), pAllocateInfo->allocationSize) == Status::ok) return made;
+    if (vram_.commit(heap, reinterpret_cast<uint64_t>(*pMemory), pAllocateInfo->allocationSize) == Status::ok) {
+        if (!placing || place_exported(*placing_device, pAllocateInfo->memoryTypeIndex, reinterpret_cast<uint64_t>(*pMemory),
+                                       pAllocateInfo->allocationSize))
+            return made;
+        vram_.release(reinterpret_cast<uint64_t>(*pMemory));
+        RealVulkanDispatch::on_vkFreeMemory(device, *pMemory, nullptr);
+        *pMemory = VK_NULL_HANDLE;
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
     vram_.refund(heap, pAllocateInfo->allocationSize);
     RealVulkanDispatch::on_vkFreeMemory(device, *pMemory, nullptr);
     *pMemory = VK_NULL_HANDLE;
     return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+bool VulkanBackend::exports_memory(const void *next) const
+{
+    AV_SCOPE("VulkanBackend::exports_memory");
+    for (const auto *node = static_cast<const VkBaseInStructure *>(next); node != nullptr; node = node->pNext)
+        if (node->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO) return true;
+    return false;
+}
+
+bool VulkanBackend::place_exported(GuestDevice &device, uint32_t guest_type, uint64_t memory, uint64_t size)
+{
+    AV_SCOPE("VulkanBackend::place_exported");
+    OwnedFd descriptor;
+    if (!device.memory().export_memory(memory, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, descriptor)) {
+        lines_.write("placed memory the host driver would not export as a dma-buf; refused");
+        return false;
+    }
+    VkPhysicalDeviceMemoryProperties shown = {};
+    types_.properties(shown);
+    const bool     cached = guest_type < shown.memoryTypeCount &&
+                        (shown.memoryTypes[guest_type].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u;
+    const uint32_t caching = cached ? AV_MEMORY_WRITE_BACK : AV_MEMORY_WRITE_COMBINED;
+    if (source_->place(reinterpret_cast<uint64_t>(imports_), memory, guest_type, size, caching, descriptor.fd()) !=
+        Status::ok) {
+        lines_.write("placed memory the memory source would not keep; refused");
+        return false;
+    }
+    return true;
 }
 
 bool VulkanBackend::imports_nothing(const void *next) const

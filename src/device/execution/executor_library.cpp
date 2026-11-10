@@ -167,6 +167,13 @@ void ExecutorLibrary::release_blob(AvExecutor *executor, uint64_t blob_id) const
     ops_->release_blob(ops_->opaque, executor, blob_id);
 }
 
+Status ExecutorLibrary::place_memory(AvExecutor *executor, uint64_t size, uint32_t request, AvHostMemory &memory) const
+{
+    AV_SCOPE("ExecutorLibrary::place_memory");
+    if (ops_ == nullptr || ops_->place_memory == nullptr || executor == nullptr) return Status::not_supported;
+    return ops_->place_memory(ops_->opaque, executor, size, request, &memory) == 0u ? Status::ok : Status::no_memory;
+}
+
 void ExecutorLibrary::channel_stats(AvExecutor *executor, uint32_t context, const uint8_t *body, size_t size) const
 {
     AV_SCOPE("ExecutorLibrary::channel_stats");

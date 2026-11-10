@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <unistd.h>
 
 using av::ContextSession;
@@ -683,3 +684,24 @@ TEST(context_session_host_ram, a_decode_that_overflows_its_block_still_runs_whil
   CHECK_EQ(session.starved(), 0u);
   CHECK_EQ(ledger.tight_refusals(), 0u);
   CHECK_EQ(ledger.used(), 0u); }
+
+TEST(context_session, a_placed_request_takes_what_its_backend_registered_under_the_session_s_owner_and_nothing_else)
+{ Drawing drawing;
+  AvHostMemory memory = {-1, 0u, 0u};
+  const av::HostMemoryRequest placed(av::HostMemoryRequest::Kind::placed, 2u);
+  CHECK_STATUS(drawing.session().place_memory(4096u, placed, memory), Status::not_found);
+  CHECK_STATUS(drawing.session().place_memory(4096u, Drawing::upload(), memory), Status::not_supported);
+  const int fd = open("/dev/null", O_RDONLY);
+  CHECK_STATUS(drawing.source().place(drawing.session().placement_owner(), 0x90u, 2u, 4096u, AV_MEMORY_WRITE_BACK, fd),
+               Status::ok);
+  CHECK_STATUS(drawing.source().place(drawing.session().placement_owner() + 8u, 0x91u, 2u, 4096u, AV_MEMORY_WRITE_BACK, fd),
+               Status::ok);
+  CHECK_STATUS(drawing.session().place_memory(4096u, placed, memory), Status::ok);
+  CHECK(memory.fd >= 0);
+  close(memory.fd);
+  CHECK_STATUS(drawing.session().place_memory(4096u, placed, memory), Status::not_found);
+  CHECK_EQ(drawing.source().placed(), 1u);
+  close(fd);
+  static_cast<void>(drawing.session().release(av::GenerousBudget().budget()));
+  CHECK_EQ(drawing.source().placed(), 1u);
+  drawing.source().drop_placed_of(drawing.session().placement_owner() + 8u); }

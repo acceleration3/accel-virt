@@ -295,3 +295,32 @@ TEST(host_allocation, a_view_is_lent_only_inside_what_is_held)
   rig.host().nop();
   CHECK_STATUS(rig.allocation().close(), Status::ok);
   rig.check_nothing_is_held(); }
+
+TEST(host_allocation, a_placed_chunk_is_named_by_the_handle_it_is_given_and_asks_the_host_for_no_import)
+{ Rig rig;
+  const HostMemoryRequest placed(HostMemoryRequest::Kind::placed, 2u);
+  CHECK_STATUS(rig.allocation().place(mib, vulkan, imported_memory), Status::invalid_parameter);
+  CHECK_STATUS(rig.allocation().place(mib, placed, 0u), Status::invalid_parameter);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_STATUS(rig.allocation().place(3u * mib + 1u, placed, imported_memory), Status::ok);
+  CHECK(rig.allocation().invariants_hold());
+  CHECK(rig.allocation().held());
+  CHECK(rig.allocation().placed());
+  CHECK_EQ(rig.allocation().bytes(), 3u * mib + 4096u);
+  CHECK(rig.allocation().view() == rig.kmt().window_base());
+  CHECK_EQ(rig.allocation().handle(), imported_memory);
+  CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), placed.encoded());
+  CHECK_EQ(rig.kmt().commands(), 0u);
+  CHECK_STATUS(rig.allocation().place(mib, placed, imported_memory), Status::invalid_state);
+  CHECK_STATUS(rig.allocation().close(), Status::ok);
+  CHECK_EQ(rig.kmt().commands(), 0u);
+  CHECK(!rig.allocation().placed());
+  rig.check_nothing_is_held(); }
+
+TEST(host_allocation, an_abandoned_placed_chunk_lets_go_of_its_name)
+{ Rig rig;
+  const HostMemoryRequest placed(HostMemoryRequest::Kind::placed, 2u);
+  CHECK_STATUS(rig.allocation().place(mib, placed, imported_memory), Status::ok);
+  CHECK_STATUS(rig.allocation().abandon(), Status::ok);
+  CHECK(!rig.allocation().placed());
+  rig.check_nothing_is_held(); }

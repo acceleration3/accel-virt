@@ -11,7 +11,7 @@
 namespace av::icd {
 
 DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, DriverLog &log)
-    : connection_(connection), handles_(handles), lines_(log), types_(kmt, connection.adapter()), learnt_(false)
+    : connection_(connection), handles_(handles), lines_(log), types_(kmt, connection.adapter()), learnt_(false), placing_(false)
 {
     AV_SCOPE("DeviceMemory::DeviceMemory");
 }
@@ -43,6 +43,7 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
     for (auto *link = static_cast<const VkBaseInStructure *>(info.pNext); link != nullptr; link = link->pNext)
         if (link->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT)
             return lend(info, *reinterpret_cast<const VkImportMemoryHostPointerInfoEXT *>(link), memory);
+    if (placing_ && types_.placed(info.memoryTypeIndex)) return place(device, info, allocator, memory);
     if (!types_.host_visible(info.memoryTypeIndex)) {
         return vkproto::av_vkAllocateMemory(connection_.transport(), handles_, device, &info, allocator, &memory);
     }
@@ -56,6 +57,36 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
     }
     memory = HandleBits(made->handle()).as<VkDeviceMemory>();
     return VK_SUCCESS;
+}
+
+VkResult DeviceMemory::place(VkDevice device, const VkMemoryAllocateInfo &info, const VkAllocationCallbacks *allocator,
+                             VkDeviceMemory &memory)
+{
+    AV_SCOPE("DeviceMemory::place");
+    if (info.allocationSize == 0u) return refusal();
+    const VkResult made = vkproto::av_vkAllocateMemory(connection_.transport(), handles_, device, &info, allocator, &memory);
+    if (made != VK_SUCCESS) return made;
+    HostAllocation *view = nullptr;
+    const Status    opened = connection_.channel().place_memory(
+        info.allocationSize, HostMemoryRequest(HostMemoryRequest::Kind::placed, info.memoryTypeIndex), this,
+        HandleBits(memory).value(), view);
+    if (opened == Status::ok) return VK_SUCCESS;
+    lines_.note("vkAllocateMemory: the device mapped no placed memory, status", static_cast<uint64_t>(opened));
+    vkproto::av_vkFreeMemory(connection_.transport(), handles_, device, memory, allocator);
+    memory = VK_NULL_HANDLE;
+    return refusal(opened);
+}
+
+void DeviceMemory::enable_placement()
+{
+    AV_SCOPE("DeviceMemory::enable_placement");
+    placing_ = true;
+}
+
+bool DeviceMemory::placing() const
+{
+    AV_SCOPE("DeviceMemory::placing");
+    return placing_;
 }
 
 VkResult DeviceMemory::lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
@@ -121,7 +152,9 @@ void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocati
         vkproto::av_vkFreeMemory(connection_.transport(), handles_, device, memory, allocator);
         return;
     }
+    const bool    placed = held->placed();
     const Status released = connection_.channel().close_memory(*held);
+    if (placed) vkproto::av_vkFreeMemory(connection_.transport(), handles_, device, memory, allocator);
     if (released != Status::ok)
         lines_.note("vkFreeMemory: the host refused to release the memory, status", static_cast<uint64_t>(released));
 }

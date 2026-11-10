@@ -12,6 +12,7 @@
 #include "proto/renderer/context_message.hpp"
 #include "proto/renderer/export_image_message.hpp"
 #include "proto/renderer/allocate_memory_message.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/renderer/allocated_memory_message.hpp"
 #include "proto/renderer/free_memory_message.hpp"
 #include "proto/renderer/interrupt_lines_message.hpp"
@@ -133,6 +134,7 @@ Status RendererContextPlane::allocate_memory(uint32_t context, uint64_t key, uin
 {
     AV_SCOPE("RendererContextPlane::allocate_memory");
     host_.require_main_loop("RendererContextPlane::allocate_memory");
+    if (HostMemoryRequest(request).kind() == HostMemoryRequest::Kind::placed) return Status::not_supported;
     if (!alive_) return Status::no_memory;
     uint8_t body[AllocateMemoryMessage::encoded_size] = {};
     if (AllocateMemoryMessage(context, request, key, size).encode(body, sizeof body) != Status::ok)

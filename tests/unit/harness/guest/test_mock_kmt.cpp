@@ -714,7 +714,7 @@ TEST(mock_kmt_escape, a_window_chunk_keeps_the_memory_it_was_opened_as)
   CHECK(kmt.window_chunk_memory(MockKmt::first_window_resource + 1u) == kmt.window_base() + 4096u);
   CHECK(kmt.window_chunk_memory(MockKmt::first_window_resource + 2u) == nullptr);
   CHECK(kmt.window_chunk_memory(0u) == nullptr);
-  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record, av::HostMemoryRequest(0x104u));
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record, av::HostMemoryRequest(0x105u));
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.window_chunks(), 2u);
   CHECK_EQ(kmt.misuses(), 0u); }

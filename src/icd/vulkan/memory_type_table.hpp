@@ -28,6 +28,7 @@ public:
     void                 budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer,
                                 const VkPhysicalDeviceMemoryBudgetPropertiesEXT &hosted) const;
     bool                 host_visible(uint32_t type) const;
+    bool                 placed(uint32_t type) const;
     uint32_t             lendable_types() const;
 
     bool invariants_hold() const;
@@ -40,6 +41,7 @@ private:
     AdapterMemory                    memory_;
     VkPhysicalDeviceMemoryProperties properties_;
     uint64_t                         shared_budget_;
+    uint32_t                         placed_;
 
     friend struct MemoryTypeTableProbe;
 };

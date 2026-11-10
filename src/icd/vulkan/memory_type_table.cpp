@@ -1,10 +1,11 @@
 #include "icd/vulkan/memory_type_table.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/vulkan/placed_memory_types.hpp"
 
 namespace av::icd {
 
-MemoryTypeTable::MemoryTypeTable(Kmt &kmt, uint32_t adapter) : memory_(kmt, adapter), properties_(), shared_budget_(0u)
+MemoryTypeTable::MemoryTypeTable(Kmt &kmt, uint32_t adapter) : memory_(kmt, adapter), properties_(), shared_budget_(0u), placed_(0u)
 {
     AV_SCOPE("MemoryTypeTable::MemoryTypeTable");
 }
@@ -14,6 +15,7 @@ void MemoryTypeTable::clear()
     AV_SCOPE("MemoryTypeTable::clear");
     properties_ = VkPhysicalDeviceMemoryProperties();
     shared_budget_ = 0u;
+    placed_ = 0u;
 }
 
 bool MemoryTypeTable::acceptable(const VkPhysicalDeviceMemoryProperties &host) const
@@ -49,6 +51,7 @@ Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
         properties_.memoryHeaps[heap].size = host.memoryHeaps[heap].size;
     }
     shared_budget_ = memory_.budget(MemorySegmentGroup::non_local);
+    placed_ = PlacedMemoryTypes::mask(properties_);
     return Status::ok;
 }
 
@@ -80,6 +83,12 @@ bool MemoryTypeTable::host_visible(uint32_t type) const
     AV_SCOPE("MemoryTypeTable::host_visible");
     if (type >= properties_.memoryTypeCount) return false;
     return (properties_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
+}
+
+bool MemoryTypeTable::placed(uint32_t type) const
+{
+    AV_SCOPE("MemoryTypeTable::placed");
+    return type < properties_.memoryTypeCount && (placed_ & (1u << type)) != 0u;
 }
 
 uint32_t MemoryTypeTable::lendable_types() const

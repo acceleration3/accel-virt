@@ -38,6 +38,8 @@ public:
     VkResult map(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags flags,
                  void *&data) const;
     [[nodiscard]] Status release_all();
+    void                 enable_placement();
+    bool                 placing() const;
 
     void report(StateWriter &writer) const;
 
@@ -48,6 +50,8 @@ private:
 
     VkResult           lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
                             VkDeviceMemory &memory);
+    VkResult           place(VkDevice device, const VkMemoryAllocateInfo &info, const VkAllocationCallbacks *allocator,
+                             VkDeviceMemory &memory);
     VkResult           refusal(Status refused) const;
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
     VkResult           refusal() const;
@@ -58,6 +62,7 @@ private:
     DriverLog      &lines_;
     MemoryTypeTable types_;
     bool            learnt_;
+    bool            placing_;
 
     friend struct DeviceMemoryProbe;
 };

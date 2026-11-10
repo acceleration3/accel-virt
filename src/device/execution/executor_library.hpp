@@ -45,6 +45,7 @@ public:
     void        release_blob(AvExecutor *executor, uint64_t blob_id) const;
     uint64_t    imported_handle(AvExecutor *executor, uint64_t blob_id) const;
     [[nodiscard]] Status lose_device(AvExecutor *executor) const;
+    [[nodiscard]] Status place_memory(AvExecutor *executor, uint64_t size, uint32_t request, AvHostMemory &memory) const;
     void        channel_stats(AvExecutor *executor, uint32_t context, const uint8_t *body, size_t size) const;
     size_t      answer_part(AvExecutor *executor, uint64_t offset, uint8_t *out, size_t capacity,
                             uint64_t &length) const;

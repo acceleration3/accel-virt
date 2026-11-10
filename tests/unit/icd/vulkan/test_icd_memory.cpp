@@ -44,6 +44,8 @@ struct DeviceMemoryProbe {
 
 struct IcdRootProbe {
     static ObjectPool<DeviceMemory> &memories(IcdRoot &root) { return root.memories_; }
+    static void enable_placement(IcdRoot &root, VkDevice device)
+    { root.memory_of(*root.handle_of(device, LoaderHandle::Kind::device))->enable_placement(); }
 };
 
 }
@@ -428,6 +430,42 @@ TEST(icd_memory, a_device_local_allocation_is_the_host_s_and_cannot_be_mapped)
   const std::uint32_t commands = rig.kmt().commands();
   rig.free(VK_NULL_HANDLE);
   CHECK_EQ(rig.kmt().commands(), commands); }
+
+TEST(icd_memory, a_placed_allocation_is_made_by_the_host_and_mapped_through_a_placed_chunk_the_host_names_nothing_for)
+{ MemoryRig rig;
+  rig.host().vk_memory_properties(types, visible);
+  rig.host().vk_handle(0, allocated);
+  VkDeviceMemory plain = VK_NULL_HANDLE;
+  CHECK_EQ(rig.allocate(page, 0u, plain), VK_SUCCESS);
+  rig.free(plain);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  VkDeviceMemory unplaced = VK_NULL_HANDLE;
+  const VkMemoryAllocateInfo ordinary = allocation(page, 2u);
+  rig.host().blob_import(0u, imported);
+  CHECK_EQ(rig.entry<AllocateMemory>("vkAllocateMemory")(rig.device(), &ordinary, nullptr, &unplaced), VK_SUCCESS);
+  CHECK(unplaced == as_memory(imported));
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  rig.host().nop();
+  rig.free(unplaced);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+
+  IcdRootProbe::enable_placement(rig.rig().root(), rig.device());
+  rig.host().vk_handle(0, allocated + 16u);
+  VkDeviceMemory placed = VK_NULL_HANDLE;
+  CHECK_EQ(rig.allocate(2u * page, 1u, placed), VK_SUCCESS);
+  CHECK(placed == as_memory(allocated + 16u));
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkAllocateMemory));
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  const av::HostMemoryRequest asked(av::HostMemoryRequest::Kind::placed, 1u);
+  CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), asked.encoded());
+  const std::uint8_t *const chunk = rig.kmt().window_chunk_memory(MockKmt::first_window_resource);
+  void *data = nullptr;
+  CHECK_EQ(rig.map(placed, 8u, 16u, data), VK_SUCCESS);
+  CHECK(data == chunk + 8u);
+  rig.free(placed);
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkFreeMemory));
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_EQ(rig.map(placed, 0u, 1u, data), VK_ERROR_MEMORY_MAP_FAILED); }
 
 TEST(icd_memory, the_types_are_asked_for_once)
 { MemoryRig rig;

@@ -621,6 +621,61 @@ TEST(vulkan_backend_device, freeing_memory_that_is_not_an_import_frees_it)
   }
 }
 
+TEST(vulkan_backend_device, memory_of_a_placed_type_is_made_natively_exported_once_and_forgotten_when_freed)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u || made.source() == nullptr) continue;
+      made.probe().learn_types(as_handle<VkPhysicalDevice>(made.physical()));
+      VkPhysicalDeviceMemoryProperties shown = {};
+      made.probe().types().properties(shown);
+      std::uint32_t placed_type = shown.memoryTypeCount;
+      for (std::uint32_t type = 0u; type < shown.memoryTypeCount && placed_type == shown.memoryTypeCount; type++)
+          if (made.probe().types().placed(type) && made.probe().types().source_type(type) != av::GuestMemoryTypes::no_type)
+              placed_type = type;
+      if (placed_type == shown.memoryTypeCount) continue;
+      BackendTransport wire(made.backend());
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.allocationSize = 2u * page;
+      allocate.memoryTypeIndex = placed_type;
+      VkDeviceMemory memory = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
+               VK_SUCCESS);
+      CHECK_EQ(made.source()->placed(), 0u);
+      std::uint64_t raw = as_wire(memory);
+      CHECK(free_memory(wire, made.device(), raw));
+
+      made.probe().enable_placement(as_handle<VkDevice>(made.device()));
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
+               VK_SUCCESS);
+      raw = as_wire(memory);
+      CHECK_EQ(made.source()->placed(), 1u);
+      AvHostMemory taken = {-1, 0u, 0u};
+      const std::uint64_t owner = reinterpret_cast<std::uint64_t>(&made.imports());
+      CHECK_STATUS(made.source()->take_placed(owner + 8u, placed_type, 2u * page, taken), av::Status::not_found);
+      CHECK_STATUS(made.source()->take_placed(owner, placed_type, 2u * page, taken), av::Status::ok);
+      CHECK(taken.fd >= 0);
+      if (taken.fd >= 0) {
+          void *const window = ::mmap(nullptr, 2u * page, PROT_READ | PROT_WRITE, MAP_SHARED, taken.fd, 0);
+          CHECK(window != MAP_FAILED);
+          if (window != MAP_FAILED) ::munmap(window, 2u * page);
+          ::close(taken.fd);
+      }
+      CHECK_EQ(made.source()->placed(), 0u);
+      CHECK(made.backend().knows_handle(raw));
+      CHECK(free_memory(wire, made.device(), raw));
+      CHECK(!made.backend().knows_handle(raw));
+
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
+               VK_SUCCESS);
+      raw = as_wire(memory);
+      CHECK_EQ(made.source()->placed(), 1u);
+      CHECK(free_memory(wire, made.device(), raw));
+      CHECK_EQ(made.source()->placed(), 0u);
+  }
+}
+
 TEST(vulkan_backend_device, shutting_down_destroys_a_device_the_guest_never_did)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {

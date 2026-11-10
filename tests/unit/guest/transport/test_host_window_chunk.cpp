@@ -172,7 +172,7 @@ TEST(host_window_chunk, an_open_while_held_of_nothing_or_of_no_memory_asks_nothi
   CHECK_STATUS(chunk.open(0u, upload), Status::invalid_parameter);
   CHECK_STATUS(chunk.open(mib, HostMemoryRequest()), Status::invalid_parameter);
   CHECK_STATUS(chunk.open(mib, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, 32u)), Status::invalid_parameter);
-  CHECK_STATUS(chunk.open(mib, HostMemoryRequest(0x104u)), Status::invalid_parameter);
+  CHECK_STATUS(chunk.open(mib, HostMemoryRequest(0x105u)), Status::invalid_parameter);
   CHECK_STATUS(chunk.open(mib, HostMemoryRequest(0x1001u)), Status::invalid_parameter);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_STATUS(chunk.open(mib, upload), Status::ok);

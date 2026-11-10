@@ -43,6 +43,7 @@ namespace av::icd {
 namespace {
 constexpr const char *dma_buf_extension = "VK_EXT_external_memory_dma_buf";
 constexpr const char *win32_memory_extension = "VK_KHR_external_memory_win32";
+constexpr const char *descriptor_buffer_extension = "VK_EXT_descriptor_buffer";
 
 using Entry = vkicd::generated::Entry;
 using Level = vkicd::generated::DispatchLevel;
@@ -683,7 +684,13 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
         vkproto::av_vkCreateDevice(made->connection()->transport(), translation_, physical_device, &forwarded, allocator, &host);
     if (result != VK_SUCCESS) return result;
     *device = static_cast<VkDevice>(wrap_child(LoaderHandle::Kind::device, host, *made));
-    return *device != VK_NULL_HANDLE ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (*device == VK_NULL_HANDLE) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (asked.named(descriptor_buffer_extension)) {
+        LoaderHandle *const created = handle_of(*device, LoaderHandle::Kind::device);
+        DeviceMemory *const placing = created != nullptr ? memory_of(*created) : nullptr;
+        if (placing != nullptr) placing->enable_placement();
+    }
+    return VK_SUCCESS;
 }
 
 void IcdRoot::release_device_memory(LoaderHandle &device)

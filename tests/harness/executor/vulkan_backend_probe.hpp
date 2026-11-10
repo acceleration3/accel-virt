@@ -26,6 +26,7 @@ struct VulkanBackendProbe {
     const GuestMemoryTypes &types() const;
     void                    show_types(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed);
     bool                    memory_import() const;
+    void                    enable_placement(VkDevice device);
     void                    begin_frame(bool recording);
     [[nodiscard]] Status    add_template(uint64_t made, uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
                                          uint32_t count, const uint32_t *immutable = nullptr,

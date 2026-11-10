@@ -331,6 +331,13 @@ void channel_stats(void *, AvExecutor *executor, uint32_t context_id, const uint
     if (session != nullptr && body != nullptr) session->channel_stats(context_id, body, size);
 }
 
+uint32_t place_memory(void *, AvExecutor *executor, uint64_t size, uint32_t request, AvHostMemory *memory)
+{
+    AV_SCOPE("place_memory");
+    if (memory == nullptr) return 1u;
+    return library.root().place_memory(session_of(executor), size, request, *memory) == av::Status::ok ? 0u : 1u;
+}
+
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -365,7 +372,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               compose_planes,
                               lose_device,
                               answer_part,
-                              channel_stats};
+                              channel_stats,
+                              place_memory};
 
 }
 

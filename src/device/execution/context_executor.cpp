@@ -63,7 +63,7 @@ Status ContextExecutor::create()
     AV_SCOPE("ContextExecutor::create");
     host_.require_worker("ContextExecutor::create");
     if (executor_ != nullptr || !configured_) return Status::invalid_state;
-    executor_ = make();
+    __atomic_store_n(&executor_, make(), __ATOMIC_RELEASE);
     if (executor_ == nullptr) {
         StdioLog  sink(stderr);
         DriverLog lines(sink, "virtio-gpu-av: ");
@@ -145,6 +145,15 @@ Status ContextExecutor::import(uint64_t blob_id, uint64_t memory_key, uint64_t &
     if (device_memory != 0u) return Status::ok;
     library_.release_blob(executor_, blob_id);
     return Status::not_supported;
+}
+
+Status ContextExecutor::place(uint64_t size, uint32_t request, AvHostMemory &memory)
+{
+    AV_SCOPE("ContextExecutor::place");
+    host_.require_main_loop("ContextExecutor::place");
+    AvExecutor *const made = __atomic_load_n(&executor_, __ATOMIC_ACQUIRE);
+    if (made == nullptr) return Status::invalid_state;
+    return library_.place_memory(made, size, request, memory);
 }
 
 void ContextExecutor::channel_stats(const uint8_t *body, size_t size)

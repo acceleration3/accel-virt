@@ -69,6 +69,8 @@ public:
     void          set_memory_caching(std::uint32_t caching);
     std::uint32_t memory_allocations();
     std::uint32_t memory_frees();
+    std::uint32_t placements();
+    void          refuse_placement_at(std::uint32_t nth);
     std::uint32_t held_memory();
     std::uint32_t live_memory();
     struct MemoryRequest {
@@ -78,6 +80,7 @@ public:
         std::uint32_t request;
     };
     MemoryRequest last_memory_request();
+    MemoryRequest last_placement();
     std::uint8_t *memory_bytes(std::uint32_t domain, std::uint64_t key);
     int           answered_descriptor(std::uint32_t domain, std::uint64_t key);
     std::uint32_t imported();
@@ -248,6 +251,9 @@ private:
     std::uint32_t              memory_caching_ = AV_MEMORY_WRITE_BACK;
     std::uint32_t              memory_allocations_ = 0u;
     std::uint32_t              memory_frees_ = 0u;
+    std::uint32_t              placements_ = 0u;
+    std::uint32_t              refuse_placement_ = 0u;
+    MemoryRequest              last_placement_ = {};
     MemoryRequest              last_memory_request_ = {};
 };
 

@@ -321,3 +321,22 @@ TEST(guest_memory_types_invariants, a_host_type_shown_by_no_guest_type_breaks_th
 { GuestMemoryTypes types;
   GuestMemoryTypesProbe(learnt_anv(types)).set_host(3u, 0u);
   CHECK(!types.invariants_hold()); }
+
+TEST(guest_memory_types, the_visible_types_with_a_twin_in_the_guest_view_are_placed_and_the_others_are_not)
+{ GuestMemoryTypes none_placed;
+  none_placed.learn(host(radv), 0xEu);
+  for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++) CHECK(!none_placed.placed(type));
+  GuestMemoryTypes types;
+  types.learn(host(anv, 1u), 0x1Bu);
+  const VkPhysicalDeviceMemoryProperties guest = shown(types);
+  std::uint32_t placed_seen = 0u;
+  for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++) {
+      const std::uint32_t host_type = types.host_type(type);
+      const bool          twinned = host_type == 0u || host_type == 1u || host_type == 3u || host_type == 4u;
+      const bool          visible_in_guest = (guest.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
+      CHECK_EQ(types.placed(type), twinned && visible_in_guest);
+      placed_seen += types.placed(type) ? 1u : 0u;
+  }
+  CHECK_EQ(placed_seen, 4u);
+  CHECK(!types.placed(guest.memoryTypeCount));
+  CHECK(!types.placed(VK_MAX_MEMORY_TYPES)); }

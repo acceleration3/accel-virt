@@ -419,6 +419,8 @@ private:
     [[nodiscard]] bool import_memory(GuestDevice &device, int fd, uint64_t size, uint64_t &wire_handle);
     [[nodiscard]] bool import_payload(int fd, uint64_t into, uint64_t &wire_handle, uint64_t &detail);
     bool               imports_nothing(const void *next) const;
+    bool               exports_memory(const void *next) const;
+    [[nodiscard]] bool place_exported(GuestDevice &device, uint32_t guest_type, uint64_t memory, uint64_t size);
 
     static constexpr uint64_t guest_semaphore = 1u;
 

@@ -23,10 +23,12 @@ public:
 
     [[nodiscard]] Status open(uint64_t bytes, HostMemoryRequest memory, const BlobRole &role = BlobRole());
     [[nodiscard]] Status adopt(void *address, uint64_t bytes, HostMemoryRequest memory);
+    [[nodiscard]] Status place(uint64_t bytes, HostMemoryRequest memory, uint64_t named);
     [[nodiscard]] Status close();
     [[nodiscard]] Status abandon();
 
     bool     held() const;
+    bool     placed() const;
     uint64_t bytes() const;
     uint8_t *view() const;
     uint8_t *view_at(uint64_t offset, uint64_t bytes) const;
@@ -40,6 +42,8 @@ private:
 
     HostWindowChunk chunk_;
     BlobImport      import_;
+    uint64_t        named_;
+    bool            placed_;
 
     friend struct HostAllocationProbe;
 };

@@ -76,6 +76,8 @@ public:
     uint64_t          arena_bytes() const;
     uint64_t          host_errors() const;
 
+    [[nodiscard]] Status place_memory(uint64_t bytes, HostMemoryRequest memory, const void *owner, uint64_t named,
+                                      HostAllocation *&made);
     [[nodiscard]] Status open_memory(uint64_t bytes, HostMemoryRequest memory, const void *owner,
                                      HostAllocation *&made);
     [[nodiscard]] Status adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, const void *owner,

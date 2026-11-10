@@ -47,6 +47,7 @@ public:
     [[nodiscard]] Status  bind(const ContextSetup &setup, const CapsetInfo &capset);
     Status                refused(const char *step, Status status) const;
     const ContextBinding &binding() const;
+    [[nodiscard]] Status place_memory(uint64_t size, uint32_t request, AvHostMemory &memory);
     uint32_t             id() const;
     bool                 running() const;
     void                 report(StateWriter &writer);

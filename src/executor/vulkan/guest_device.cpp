@@ -4,7 +4,7 @@
 
 namespace av {
 
-GuestDevice::GuestDevice() : table_(), memory_(table_), invalid_shader_extension_(false)
+GuestDevice::GuestDevice() : table_(), memory_(table_), invalid_shader_extension_(false), placement_(false)
 {
     AV_SCOPE("GuestDevice::GuestDevice");
 }
@@ -31,6 +31,18 @@ VulkanMemoryImport &GuestDevice::memory()
 {
     AV_SCOPE("GuestDevice::memory");
     return memory_;
+}
+
+void GuestDevice::enable_placement(bool enabled)
+{
+    AV_SCOPE("GuestDevice::enable_placement");
+    placement_ = enabled;
+}
+
+bool GuestDevice::placement() const
+{
+    AV_SCOPE("GuestDevice::placement");
+    return placement_;
 }
 
 void GuestDevice::note_invalid_shader_extension(bool enabled)

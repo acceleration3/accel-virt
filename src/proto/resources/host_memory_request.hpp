@@ -7,7 +7,7 @@ namespace av {
 
 class HostMemoryRequest {
 public:
-    enum class Kind : uint8_t { upload = 1u, readback = 2u, vulkan = 3u };
+    enum class Kind : uint8_t { upload = 1u, readback = 2u, vulkan = 3u, placed = 4u };
 
     static constexpr uint32_t memory_types = 32u;
 

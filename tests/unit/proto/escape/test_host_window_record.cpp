@@ -99,7 +99,7 @@ TEST(host_window_record, every_field_is_judged)
       {"an open turned adoption, of no address", Operation::open, 6u, 2u, 3u},
       {"open with a resource already", Operation::open, 8u, 4u, resource},
       {"open of no memory", Operation::open, 12u, 4u, 0u},
-      {"open of a memory kind there is none of", Operation::open, 12u, 4u, 4u},
+      {"open of a memory kind there is none of", Operation::open, 12u, 4u, 5u},
       {"open of a Vulkan type past the last", Operation::open, 12u, 4u, 0x2003u},
       {"open of a class naming a type", Operation::open, 12u, 4u, 0x0101u},
       {"open of no bytes", Operation::open, 16u, 8u, 0u},
@@ -260,3 +260,14 @@ TEST(host_window_record, accept_answer_refuses_what_does_not_answer_the_request)
   CHECK_STATUS(request.accept_answer(answer.data(), HostWindowRecord::encoded_size), Status::ok);
   CHECK_EQ(request.address(), address);
   CHECK_EQ(request.memory().encoded(), memory.encoded()); }
+
+TEST(host_window_record, an_open_of_placed_memory_names_the_type_and_decodes_like_any_open)
+{ const HostMemoryRequest placed(HostMemoryRequest::Kind::placed, 6u);
+  Bytes bytes(HostWindowRecord(Operation::open, asked, 0u, placed));
+  CHECK_STATUS(bytes.status(), Status::ok);
+  HostWindowRecord decoded;
+  CHECK_STATUS(decode(bytes, decoded), Status::ok);
+  CHECK(decoded.opens());
+  CHECK_EQ(decoded.bytes(), asked);
+  CHECK_EQ(decoded.memory().encoded(), placed.encoded());
+  CHECK(decoded.memory().kind() == HostMemoryRequest::Kind::placed); }
