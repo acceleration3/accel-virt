@@ -11,6 +11,7 @@
 #include "executor/budgeted_heap.hpp"
 #include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/gl_buffer_slices.hpp"
+#include "executor/opengl/gl_client_reads.hpp"
 #include "executor/opengl/gl_occlusion_queries.hpp"
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_memory_objects.hpp"
@@ -105,6 +106,7 @@ private:
     SyncTokens  fences_;
     GlTransferPacer pacer_;
     GlOcclusionQueries occlusion_;
+    GlClientReads   client_reads_;
     GlSharedFences *shared_fences_;
     GlBatchProgress progress_;
     GlErrorQueue    pending_;

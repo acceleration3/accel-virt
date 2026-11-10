@@ -1,4 +1,5 @@
 #include "executor/opengl/opengl_backend.hpp"
+#include "proto/generated/opengl/gl_protocol_ids.h"
 
 #include "executor/byte_ledger.hpp"
 
@@ -243,6 +244,7 @@ void OpenGlBackend::shut_down()
     if (context_.make_current()) {
         if (drain_fence_ != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
         if (gl_.glFinish != nullptr && drained_at_ != submitted_) gl_.glFinish();
+        client_reads_.release(gl_);
         pack_.release();
         pack_.abandon_all();
         buffers_.give_back();
@@ -308,6 +310,10 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     submitted_++;
     if (slices_.knows(command_id)) return slices_.run(command_id, payload, reply, arena);
     const WireReader peek = payload;
+    if (command_id == glproto::kCmd_glReadPixels && client_reads_.run(gl_, peek, reply, arena)) {
+        ran_++;
+        return true;
+    }
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
         LogLine(lines_).text(glproto::cmd_id_to_string(command_id)).text(" could not run").write();
         return false;
