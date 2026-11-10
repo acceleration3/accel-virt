@@ -1,0 +1,16 @@
+From: accel-virt
+Subject: [PATCH] output merger logic ops are reported for every colour target format when the device has logic ops, not only the unsigned integer ones
+
+accel-virt: logic ops apply to normalized and signed integer targets as well, and D3D12 refuses a pipeline whose logic op target format lacks the bit, so a UNORM target could not use the logic op the device offers.
+---
+--- a/libs/vkd3d/device.c
++++ b/libs/vkd3d/device.c
+@@ -5235,7 +5235,7 @@
+         {
+             data->Support1 |= D3D12_FORMAT_SUPPORT1_RENDER_TARGET | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET;
+ 
+-            if (device->device_info.features2.features.logicOp && format->type == VKD3D_FORMAT_TYPE_UINT)
++            if (device->device_info.features2.features.logicOp)
+                 data->Support2 |= D3D12_FORMAT_SUPPORT2_OUTPUT_MERGER_LOGIC_OP;
+ 
+             /* This bit seems to only indicate support for AVERAGE resolves and is
