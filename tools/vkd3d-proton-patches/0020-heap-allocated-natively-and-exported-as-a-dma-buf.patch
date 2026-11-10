@@ -47,7 +47,7 @@ index 6a4ab90..bd8bf0b 100644
          UINT64 size, REFIID iid, void **heap)
  {
 diff --git a/libs/vkd3d/device.c b/libs/vkd3d/device.c
-index 51fafc9..5c32cd3 100644
+index 51fafc9..ea0f8b4 100644
 --- a/libs/vkd3d/device.c
 +++ b/libs/vkd3d/device.c
 @@ -8021,6 +8021,48 @@ HRESULT vkd3d_open_heap_from_dmabuf(ID3D12Device *device, void *address, int fd,
@@ -79,7 +79,7 @@ index 51fafc9..5c32cd3 100644
 +
 +    if (object->allocation.chunk || !object->allocation.device_allocation.vk_memory)
 +    {
-+        ID3D12Heap_Release(&object->ID3D12Heap_iface);
++        ID3D12Heap1_Release(&object->ID3D12Heap_iface);
 +        return E_FAIL;
 +    }
 +
@@ -90,7 +90,7 @@ index 51fafc9..5c32cd3 100644
 +    if (VK_CALL(vkGetMemoryFdKHR(impl->vk_device, &fd_info, fd)) != VK_SUCCESS)
 +    {
 +        *fd = -1;
-+        ID3D12Heap_Release(&object->ID3D12Heap_iface);
++        ID3D12Heap1_Release(&object->ID3D12Heap_iface);
 +        return E_FAIL;
 +    }
 +    return return_interface(&object->ID3D12Heap_iface, &IID_ID3D12Heap, riid, heap);
