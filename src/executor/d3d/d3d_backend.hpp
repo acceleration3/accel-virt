@@ -292,6 +292,7 @@ private:
     bool                    mark_refused_;
     bool                    show_refused_;
     bool                    lost_;
+    bool                    memory_refused_;
 };
 
 }

@@ -1,0 +1,258 @@
+From: accel-virt
+Subject: [PATCH] a refused allocation skips the operation and is counted instead of losing the device every session shares
+
+Direct3D 11 UpdateSubresource, the initializers, buffer invalidation, image
+relocation and the scratch buffers marked the whole device lost when memory ran
+out, which faults every session on the shared host device. They now count the
+refusal; dxvk_take_out_of_memory returns and clears the count so the embedder
+faults only the session that was running.
+---
+diff --git a/src/d3d11/d3d11.sym b/src/d3d11/d3d11.sym
+index 47bf060..9420ce4 100644
+--- a/src/d3d11/d3d11.sym
++++ b/src/d3d11/d3d11.sym
+@@ -5,6 +5,7 @@
+     D3D11CreateDeviceAndSwapChain;
+     D3D11On12CreateDevice;
+     dxvk_proton_set_vram_gate;
++    dxvk_take_out_of_memory;
+ 
+   local:
+     *;
+diff --git a/src/d3d11/d3d11_context.cpp b/src/d3d11/d3d11_context.cpp
+index 7b42449..7214e99 100644
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -3063,7 +3063,7 @@ namespace dxvk {
+     DxvkBufferSlice slice = AllocStagingBuffer(bufferSize);
+ 
+     if (unlikely(!slice.defined())) {
+-      m_device->markDeviceLost();
++      m_device->markOutOfMemory();
+       return;
+     }
+ 
+@@ -5728,7 +5728,7 @@ namespace dxvk {
+       DxvkBufferSlice stagingSlice = AllocStagingBuffer(Length);
+ 
+       if (unlikely(!stagingSlice.defined())) {
+-        m_device->markDeviceLost();
++        m_device->markOutOfMemory();
+         return;
+       }
+ 
+@@ -5798,7 +5798,7 @@ namespace dxvk {
+     auto stagingSlice = AllocStagingBuffer(util::computeImageDataSize(packedFormat, extent));
+ 
+     if (unlikely(!stagingSlice.defined())) {
+-      m_device->markDeviceLost();
++      m_device->markOutOfMemory();
+       return;
+     }
+ 
+diff --git a/src/d3d11/d3d11_initializer.cpp b/src/d3d11/d3d11_initializer.cpp
+index ef559d2..f51d55f 100644
+--- a/src/d3d11/d3d11_initializer.cpp
++++ b/src/d3d11/d3d11_initializer.cpp
+@@ -106,7 +106,7 @@ namespace dxvk {
+     auto srcSlice = m_stagingBuffer.alloc(icbSlice.length());
+ 
+     if (unlikely(!srcSlice.defined())) {
+-      m_device->markDeviceLost();
++      m_device->markOutOfMemory();
+       return;
+     }
+ 
+@@ -138,7 +138,7 @@ namespace dxvk {
+       auto stagingSlice = m_stagingBuffer.alloc(buffer->info().size);
+ 
+       if (unlikely(!stagingSlice.defined())) {
+-        m_device->markDeviceLost();
++        m_device->markOutOfMemory();
+         return;
+       }
+ 
+@@ -209,7 +209,7 @@ namespace dxvk {
+         stagingSlice = m_stagingBuffer.alloc(dataSize);
+ 
+         if (unlikely(!stagingSlice.defined())) {
+-          m_device->markDeviceLost();
++          m_device->markOutOfMemory();
+           return;
+         }
+       }
+diff --git a/src/d3d11/d3d11_video.cpp b/src/d3d11/d3d11_video.cpp
+index c9a35a2..73a32ed 100644
+--- a/src/d3d11/d3d11_video.cpp
++++ b/src/d3d11/d3d11_video.cpp
+@@ -1529,7 +1529,7 @@ namespace dxvk {
+       Rc<DxvkResourceAllocation> uboSlice = m_ubo->allocateStorage();
+ 
+       if (unlikely(!uboSlice)) {
+-        m_device->markDeviceLost();
++        m_device->markOutOfMemory();
+         return;
+       }
+ 
+diff --git a/src/d3d9/d3d9.sym b/src/d3d9/d3d9.sym
+index a794062..48d3337 100644
+--- a/src/d3d9/d3d9.sym
++++ b/src/d3d9/d3d9.sym
+@@ -21,6 +21,7 @@
+     Direct3DCreate9On12;
+     Direct3DCreate9On12Ex;
+     dxvk_proton_set_vram_gate;
++    dxvk_take_out_of_memory;
+ 
+   local:
+     *;
+diff --git a/src/d3d9/d3d9_constant_buffer.cpp b/src/d3d9/d3d9_constant_buffer.cpp
+index 8dacd15..1f0239b 100644
+--- a/src/d3d9/d3d9_constant_buffer.cpp
++++ b/src/d3d9/d3d9_constant_buffer.cpp
+@@ -34,7 +34,7 @@ namespace dxvk {
+         m_cpuSlice = CreateBuffer();
+       } catch (const DxvkOutOfMemoryError& e) {
+         Logger::err(e.message());
+-        m_device->GetDXVKDevice()->markDeviceLost();
++        m_device->GetDXVKDevice()->markOutOfMemory();
+         return nullptr;
+       }
+     }
+@@ -45,7 +45,7 @@ namespace dxvk {
+       auto storage = m_cpuBuffer->allocateStorage();
+ 
+       if (unlikely(!storage)) {
+-        m_device->GetDXVKDevice()->markDeviceLost();
++        m_device->GetDXVKDevice()->markOutOfMemory();
+         return nullptr;
+       }
+ 
+diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
+index 1ba8078..4e0cef2 100644
+--- a/src/d3d9/d3d9_device.cpp
++++ b/src/d3d9/d3d9_device.cpp
+@@ -5403,7 +5403,7 @@ namespace dxvk {
+       D3D9BufferSlice slice = AllocStagingBuffer(dirtySize);
+ 
+       if (unlikely(!slice.mapPtr)) {
+-        m_dxvkDevice->markDeviceLost();
++        m_dxvkDevice->markOutOfMemory();
+         return;
+       }
+ 
+@@ -5460,7 +5460,7 @@ namespace dxvk {
+       D3D9BufferSlice slice = AllocStagingBuffer(pSrcTexture->GetMipSize(SrcSubresource));
+ 
+       if (unlikely(!slice.mapPtr)) {
+-        m_dxvkDevice->markDeviceLost();
++        m_dxvkDevice->markOutOfMemory();
+         return;
+       }
+ 
+@@ -5668,7 +5668,7 @@ namespace dxvk {
+     D3D9BufferSlice slice = AllocStagingBuffer(range.max - range.min);
+ 
+     if (unlikely(!slice.mapPtr)) {
+-      m_dxvkDevice->markDeviceLost();
++      m_dxvkDevice->markOutOfMemory();
+       return D3DERR_OUTOFVIDEOMEMORY;
+     }
+ 
+diff --git a/src/dxvk/dxvk_context.cpp b/src/dxvk/dxvk_context.cpp
+index 2db380c..011e272 100644
+--- a/src/dxvk/dxvk_context.cpp
++++ b/src/dxvk/dxvk_context.cpp
+@@ -1360,7 +1360,7 @@ namespace dxvk {
+     const Rc<DxvkBuffer>&           buffer,
+           Rc<DxvkResourceAllocation>&& slice) {
+     if (unlikely(!slice)) {
+-      m_device->markDeviceLost();
++      m_device->markOutOfMemory();
+       return;
+     }
+ 
+@@ -1617,7 +1617,7 @@ namespace dxvk {
+     auto storage = image->allocateStorageWithUsage(usage, 0u);
+ 
+     if (unlikely(!storage)) {
+-      m_device->markDeviceLost();
++      m_device->markOutOfMemory();
+       return false;
+     }
+ 
+@@ -2528,7 +2528,7 @@ namespace dxvk {
+ 
+           m_cmd->track(std::move(oldStorage));
+         } else {
+-          m_device->markDeviceLost();
++          m_device->markOutOfMemory();
+         }
+       }
+ 
+@@ -9251,7 +9251,7 @@ namespace dxvk {
+       return m_device->createBuffer(createInfo, memoryType);
+     } catch (const DxvkOutOfMemoryError& e) {
+       Logger::err(e.message());
+-      m_device->markDeviceLost();
++      m_device->markOutOfMemory();
+       return nullptr;
+     }
+   }
+@@ -9320,7 +9320,7 @@ namespace dxvk {
+       auto storage = m_specBuffer->allocateStorage();
+ 
+       if (unlikely(!storage)) {
+-        m_device->markDeviceLost();
++        m_device->markOutOfMemory();
+         return DxvkResourceBufferInfo();
+       }
+ 
+diff --git a/src/dxvk/dxvk_device.cpp b/src/dxvk/dxvk_device.cpp
+index 0221825..ae44219 100644
+--- a/src/dxvk/dxvk_device.cpp
++++ b/src/dxvk/dxvk_device.cpp
+@@ -1,3 +1,4 @@
++#include <atomic>
+ #include "dxvk_device.h"
+ #include "dxvk_instance.h"
+ #include "dxvk_latency_builtin.h"
+@@ -911,3 +912,18 @@ namespace dxvk {
+   }
+ 
+ }
++
++
++namespace dxvk {
++
++  std::atomic<uint32_t> g_outOfMemoryEvents = { 0u };
++
++  void DxvkDevice::markOutOfMemory() {
++    g_outOfMemoryEvents.fetch_add(1u, std::memory_order_relaxed);
++  }
++
++}
++
++extern "C" __attribute__((visibility("default"))) uint32_t dxvk_take_out_of_memory() {
++  return dxvk::g_outOfMemoryEvents.exchange(0u, std::memory_order_relaxed);
++}
+diff --git a/src/dxvk/dxvk_device.h b/src/dxvk/dxvk_device.h
+index 62aa334..0b3f5fc 100644
+--- a/src/dxvk/dxvk_device.h
++++ b/src/dxvk/dxvk_device.h
+@@ -268,6 +268,15 @@ namespace dxvk {
+       m_submissionQueue.markDeviceLost();
+     }
+ 
++    /**
++     * \brief Records that an allocation was refused
++     *
++     * The operation that needed it is skipped. The device stays
++     * usable for everything else sharing it; the embedder reads
++     * the count through dxvk_take_out_of_memory.
++     */
++    void markOutOfMemory();
++
+     /**
+      * \brief Queries mapped image subresource layout
+      *

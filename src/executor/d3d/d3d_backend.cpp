@@ -127,7 +127,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       region_(guest_, lines_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
       d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()), tiles_(objects_),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
-      missed_key_(0u), batches_(), queue_drain_(), submitted_(0u), drained_(false), predication_refusal_noted_(false), mark_refused_(false), show_refused_(false), lost_(false)
+      missed_key_(0u), batches_(), queue_drain_(), submitted_(0u), drained_(false), predication_refusal_noted_(false), mark_refused_(false), show_refused_(false), lost_(false), memory_refused_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -145,6 +145,7 @@ bool D3dBackend::initialize(SessionShares &shares, ImportTable &imports, D3d11Ho
     d3d12_.initialize(imports, device12, device11, surfaces, &shares);
     d3d9_.initialize(device9, surfaces, device11, &shares, &imports);
     lost_ = false;
+    memory_refused_ = false;
     return true;
 }
 
@@ -264,6 +265,7 @@ void D3dBackend::end_batch()
     d3d9_.end_batch();
     d3d12_.end_batch();
     finish_d3d11();
+    if (device11_ != nullptr && device11_->refused_memory()) memory_refused_ = true;
     batches_.end(issued(), completed());
 }
 
@@ -339,7 +341,7 @@ void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 bool D3dBackend::lost() const
 {
     AV_SCOPE("D3dBackend::lost");
-    return lost_ || (device11_ != nullptr && device11_->lost()) || d3d12_.lost() || d3d9_.lost();
+    return lost_ || memory_refused_ || (device11_ != nullptr && device11_->lost()) || d3d12_.lost() || d3d9_.lost();
 }
 
 bool D3dBackend::lose_device()
@@ -814,7 +816,7 @@ bool D3dBackend::on_Finish11(uint32_t &hresult)
     const HRESULT removed = device11_->device()->GetDeviceRemovedReason();
     lost_ = FAILED(removed);
     const uint32_t own = states_.removed_reason(states_.selected_id());
-    hresult = own != 0u ? own : static_cast<uint32_t>(removed);
+    hresult = own != 0u ? own : memory_refused_ ? static_cast<uint32_t>(E_OUTOFMEMORY) : static_cast<uint32_t>(removed);
     return true;
 }
 

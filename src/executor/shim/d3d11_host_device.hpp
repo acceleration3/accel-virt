@@ -64,6 +64,7 @@ public:
     [[nodiscard]] bool admit(WakeSignal &wake);
     void               dismiss(WakeSignal &wake);
     bool               lost();
+    bool               refused_memory() const;
     [[nodiscard]] bool renew(uint32_t wait_ms);
     [[nodiscard]] bool lose();
 

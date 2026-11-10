@@ -863,3 +863,48 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         backend.shut_down();
     }
 }
+
+TEST(d3d_backend_device, a_staging_allocation_the_host_refuses_faults_its_session_and_not_the_device_others_share)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    constexpr std::uint32_t out_of_memory = 0x8007000Eu;
+    av::HostRamLedger *const host = apis.host_ram_ledger();
+    const std::uint64_t kept = host->budget();
+    {
+        HeldBackend     greedy(first_backend, rig.log);
+        HeldBackend     bystander(second_backend, rig.log);
+        av::SessionShares unshared_a, unshared_b;
+        CHECK(greedy.backend().initialize(unshared_a, rig.imports, device));
+        CHECK(bystander.backend().initialize(unshared_b, rig.imports, device));
+        av::D3dLoopback greedy_wire(greedy.backend(), rig.imports);
+        av::D3dLoopback bystander_wire(bystander.backend(), rig.imports);
+        std::uint32_t hresult = 1u, level = 0u, removed = 1u;
+        CHECK(av_d3d_CreateDevice11(greedy_wire, 1u, 0u, 0u, &hresult, &level));
+        CHECK(av_d3d_CreateDevice11(bystander_wire, 1u, 0u, 0u, &hresult, &level));
+        ResourceDesc buffer = {};
+        buffer.dimension = 1u;
+        buffer.width = 1u << 20u;
+        buffer.bind_flags = bind_vertex;
+        CHECK(av_d3d_CreateResource(greedy_wire, 100u, buffer, 0u, 0u, 0u));
+        host->budget(4096u);
+        static std::uint8_t bytes[4096u];
+        const Box head = {0u, 0u, 0u, sizeof(bytes), 1u, 1u};
+        CHECK(av_d3d_UpdateSubresource(greedy_wire, 100u, 0u, 1u, head, 0u, 0u, 0u, bytes, sizeof(bytes)));
+        CHECK(av_d3d_Finish11(greedy_wire, &removed));
+        host->budget(kept);
+        CHECK_EQ(removed, out_of_memory);
+        CHECK(av_d3d_Finish11(bystander_wire, &removed));
+        CHECK_EQ(removed, 0u);
+        make_triangle(bystander_wire);
+        CHECK_EQ(bystander_wire.refused(), 0u);
+        bind_triangle(bystander_wire);
+        CHECK(av_d3d_Draw(bystander_wire, 3u, 0u));
+        CHECK(av_d3d_Finish11(bystander_wire, &removed));
+        CHECK_EQ(removed, 0u);
+        greedy.backend().shut_down();
+        bystander.backend().shut_down();
+    }
+}

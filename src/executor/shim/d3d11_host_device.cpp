@@ -430,6 +430,12 @@ bool D3d11HostDevice::lost()
     return renewal_.lost(*this);
 }
 
+bool D3d11HostDevice::refused_memory() const
+{
+    AV_SCOPE("D3d11HostDevice::refused_memory");
+    return runtime_ != nullptr && runtime_->take_out_of_memory() != 0u;
+}
+
 bool D3d11HostDevice::present() const
 {
     AV_SCOPE("D3d11HostDevice::present");

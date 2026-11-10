@@ -35,6 +35,7 @@ public:
     int32_t export_image(void *resource, Vkd3dImageExport &image) const;
     int32_t export_fence(void *fence, int &fd) const;
     void    abandon_waits(void *device) const;
+    uint32_t take_out_of_memory() const;
     bool    translates_indirect_addresses() const;
     void    set_indirect_va_table(void *list, uint64_t table) const;
     int32_t serialize_root_signature(const void *desc, void *&blob) const;
@@ -52,6 +53,7 @@ private:
     using ExportImage = int32_t (*)(void *resource, Vkd3dImageExport *image);
     using ExportFence = int32_t (*)(void *fence, int *fd);
     using SetVramGate = void (*)(const AvVramGate *gate);
+    using TakeOutOfMemory = uint32_t (*)();
     using AbandonWaits = void (*)(void *device);
     using SetIndirectTable = int32_t (*)(void *list, uint64_t table);
 
@@ -73,6 +75,8 @@ private:
     ExportFence    export_fence_;
     AbandonWaits   abandon_waits_;
     SetIndirectTable set_indirect_table_;
+    TakeOutOfMemory  take_memory11_;
+    TakeOutOfMemory  take_memory9_;
 };
 
 }

@@ -33,7 +33,8 @@ D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), d3d9_(nullptr), create_factory_(nullptr),
       create_device11_(nullptr), get_interface12_(nullptr), create9_(nullptr),
       open_dmabuf_heap_(nullptr),
-      serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr), abandon_waits_(nullptr), set_indirect_table_(nullptr)
+      serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr), abandon_waits_(nullptr), set_indirect_table_(nullptr),
+      take_memory11_(nullptr), take_memory9_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
 }
@@ -59,6 +60,7 @@ bool D3dRuntime::open()
     }
     create_factory_ = reinterpret_cast<CreateFactory>(dlsym(dxgi_, "CreateDXGIFactory1"));
     create_device11_ = reinterpret_cast<CreateDevice11>(dlsym(d3d11_, "D3D11CreateDevice"));
+    take_memory11_ = reinterpret_cast<TakeOutOfMemory>(dlsym(d3d11_, "dxvk_take_out_of_memory"));
     if (create_factory_ == nullptr || create_device11_ == nullptr) {
         close();
         return false;
@@ -78,6 +80,7 @@ bool D3dRuntime::open()
     }
     d3d9_ = open_library("libdxvk_d3d9.so");
     if (d3d9_ != nullptr) create9_ = reinterpret_cast<Create9>(dlsym(d3d9_, "Direct3DCreate9"));
+    if (d3d9_ != nullptr) take_memory9_ = reinterpret_cast<TakeOutOfMemory>(dlsym(d3d9_, "dxvk_take_out_of_memory"));
     return true;
 }
 
@@ -88,6 +91,8 @@ void D3dRuntime::close()
     create_device11_ = nullptr;
     get_interface12_ = nullptr;
     create9_ = nullptr;
+    take_memory11_ = nullptr;
+    take_memory9_ = nullptr;
     open_dmabuf_heap_ = nullptr;
     serialize_root_ = nullptr;
     export_image_ = nullptr;
@@ -229,6 +234,12 @@ int32_t D3dRuntime::export_image(void *resource, Vkd3dImageExport &image) const
     AV_SCOPE("D3dRuntime::export_image");
     if (export_image_ == nullptr || resource == nullptr) return E_NOTIMPL;
     return export_image_(resource, &image);
+}
+
+uint32_t D3dRuntime::take_out_of_memory() const
+{
+    AV_SCOPE("D3dRuntime::take_out_of_memory");
+    return (take_memory11_ != nullptr ? take_memory11_() : 0u) + (take_memory9_ != nullptr ? take_memory9_() : 0u);
 }
 
 void D3dRuntime::abandon_waits(void *device) const
