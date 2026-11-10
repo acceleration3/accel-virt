@@ -7,7 +7,8 @@ namespace av {
 bool D3dBatchCounter::Marks::covered_by(const Marks &done) const
 {
     AV_SCOPE("D3dBatchCounter::Marks::covered_by");
-    return d3d11_ <= done.d3d11_ && d3d12_ <= done.d3d12_ && d3d9_ <= done.d3d9_;
+    return d3d11_ <= done.d3d11_ && d3d12_ <= done.d3d12_ && d3d9_ <= done.d3d9_ &&
+           d3d9_lent_ <= done.d3d9_lent_;
 }
 
 D3dBatchCounter::D3dBatchCounter() : pending_(), first_(0u), count_(0u), last_(), marked_(0u)

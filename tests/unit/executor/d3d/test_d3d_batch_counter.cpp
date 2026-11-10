@@ -9,9 +9,12 @@ namespace {
 
 using Marks = D3dBatchCounter::Marks;
 
-constexpr Marks none = {0u, 0u, 0u};
+constexpr Marks none = {0u, 0u, 0u, 0u};
 
-Marks marks(std::uint64_t d3d11, std::uint64_t d3d12 = 0u, std::uint64_t d3d9 = 0u) { return Marks{d3d11, d3d12, d3d9}; }
+Marks marks(std::uint64_t d3d11, std::uint64_t d3d12 = 0u, std::uint64_t d3d9 = 0u, std::uint64_t lent = 0u)
+{
+    return Marks{d3d11, d3d12, d3d9, lent};
+}
 
 }
 
@@ -202,4 +205,13 @@ TEST(d3d_batch_counter_families, reached_waits_for_the_slowest_family_across_a_m
   CHECK_EQ(counter.reached(marks(1u, 1u, 0u)), 2u);
   CHECK_EQ(counter.reached(marks(0u, 1u, 1u)), 0u);
   CHECK_EQ(counter.reached(marks(1u, 1u, 1u)), 3u);
+  CHECK(counter.invariants_hold()); }
+
+TEST(d3d_batch_counter_families, a_batch_with_a_lent_copy_is_not_reached_until_the_copy_is)
+{ D3dBatchCounter counter;
+  counter.end(marks(0u, 0u, 0u, 1u), none);
+  counter.end(marks(0u, 0u, 0u, 1u), none);
+  CHECK_EQ(counter.reached(none), 0u);
+  CHECK_EQ(counter.reached(marks(5u, 5u, 5u, 0u)), 0u);
+  CHECK_EQ(counter.reached(marks(0u, 0u, 0u, 1u)), 2u);
   CHECK(counter.invariants_hold()); }

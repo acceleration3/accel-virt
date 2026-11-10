@@ -11,6 +11,7 @@ public:
         uint64_t d3d11_;
         uint64_t d3d12_;
         uint64_t d3d9_;
+        uint64_t d3d9_lent_;
 
         bool operator==(const Marks &other) const = default;
         bool covered_by(const Marks &done) const;

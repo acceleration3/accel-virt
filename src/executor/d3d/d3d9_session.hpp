@@ -61,6 +61,8 @@ public:
     bool               lost() const;
     uint64_t           marked() const;
     uint64_t           reached() const;
+    uint64_t           lent_issued() const;
+    uint64_t           lent_reached() const;
     bool               polled() const;
 
 

@@ -10,11 +10,9 @@ namespace av {
 
 namespace {
 
-constexpr uint64_t copy_deadline_nanoseconds = 5000000000u;
-
 }
 
-D3d9LentCopies::D3d9LentCopies(BlockSource &blocks) : copiers_(blocks), copier_of_(blocks, Pool::paged)
+D3d9LentCopies::D3d9LentCopies(BlockSource &blocks) : tickets_(0u), copiers_(blocks), copier_of_(blocks, Pool::paged)
 {
     AV_SCOPE("D3d9LentCopies::D3d9LentCopies");
 }
@@ -56,10 +54,12 @@ Status D3d9LentCopies::copy(IDirect3DDevice9 *device, IDirect3DSurface9 *source,
     region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u};
     region.imageOffset = {area.left, area.top, 0};
     region.imageExtent = {wide, high, 1u};
-    const uint64_t value = ++copier->issued_;
+    const uint64_t value = tickets_ + 1u;
     if (!copier->vulkan_.work().copy_to_buffer(image, current, storage->buffer(), region, copier->done_, value))
         return Status::invalid_state;
-    return copier->done_.wait(value, copy_deadline_nanoseconds) ? Status::ok : Status::invalid_state;
+    tickets_ = value;
+    copier->signalled_ = value;
+    return Status::ok;
 }
 
 D3d9LentCopies::Copier *D3d9LentCopies::copier_for(IDirect3DDevice9 *device)
@@ -71,7 +71,8 @@ D3d9LentCopies::Copier *D3d9LentCopies::copier_for(IDirect3DDevice9 *device)
     if (copier_of_.reserve(copier_of_.count() + 1u) != Status::ok) return nullptr;
     Copier *made = nullptr;
     if (copiers_.create(made) != Status::ok) return nullptr;
-    made->issued_ = 0u;
+    made->signalled_ = 0u;
+    made->known_ = 0u;
     made->uses_ = 0u;
     made->refused_ = false;
     for (Storage &held : made->storages_) {
@@ -123,6 +124,30 @@ void D3d9LentCopies::close(Copier &copier)
     }
     copier.done_.release();
     copier.vulkan_.release();
+}
+
+uint64_t D3d9LentCopies::issued() const
+{
+    AV_SCOPE("D3d9LentCopies::issued");
+    return tickets_;
+}
+
+uint64_t D3d9LentCopies::reached() const
+{
+    AV_SCOPE("D3d9LentCopies::reached");
+    uint64_t reached = tickets_;
+    copier_of_.for_each([&reached](uint64_t, Copier *copier) {
+        if (copier->signalled_ == 0u) return;
+        if (copier->done_.wait(copier->signalled_, 0u)) copier->known_ = copier->signalled_;
+        if (copier->known_ < copier->signalled_ && copier->known_ < reached) reached = copier->known_;
+    });
+    return reached;
+}
+
+bool D3d9LentCopies::pending() const
+{
+    AV_SCOPE("D3d9LentCopies::pending");
+    return reached() < tickets_;
 }
 
 void D3d9LentCopies::forget_device(IDirect3DDevice9 *device)

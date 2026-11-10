@@ -270,7 +270,7 @@ D3dBatchCounter::Marks D3dBackend::issued() const
     uint64_t marked12 = 0u;
     uint64_t reached12 = 0u;
     d3d12_.gpu_progress(marked12, reached12);
-    return D3dBatchCounter::Marks{progress11_.marked(), marked12, d3d9_.marked()};
+    return D3dBatchCounter::Marks{progress11_.marked(), marked12, d3d9_.marked(), d3d9_.lent_issued()};
 }
 
 D3dBatchCounter::Marks D3dBackend::completed() const
@@ -279,7 +279,7 @@ D3dBatchCounter::Marks D3dBackend::completed() const
     uint64_t marked12 = 0u;
     uint64_t reached12 = 0u;
     d3d12_.gpu_progress(marked12, reached12);
-    return D3dBatchCounter::Marks{progress11_.reached(), reached12, d3d9_.reached()};
+    return D3dBatchCounter::Marks{progress11_.reached(), reached12, d3d9_.reached(), d3d9_.lent_reached()};
 }
 
 void D3dBackend::finish_d3d11()

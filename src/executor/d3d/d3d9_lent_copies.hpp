@@ -31,6 +31,9 @@ public:
     [[nodiscard]] Status copy(IDirect3DDevice9 *device, IDirect3DSurface9 *source, const d3d9proto::Rect &area,
                               uint64_t handle, SourceMemory &memory, uint32_t pitch, uint32_t x, uint32_t y);
     void forget_device(IDirect3DDevice9 *device);
+    uint64_t issued() const;
+    uint64_t reached() const;
+    bool     pending() const;
     void release();
 
 private:
@@ -43,7 +46,8 @@ private:
     struct Copier {
         D3d9VulkanLane vulkan_;
         VulkanTimeline done_;
-        uint64_t       issued_;
+        uint64_t       signalled_;
+        uint64_t       known_;
         uint64_t       uses_;
         Storage        storages_[most_memories];
         bool           refused_;
@@ -53,6 +57,7 @@ private:
     void    close(Copier &copier);
     const VulkanBuffer *storage_for(Copier &copier, uint64_t handle, SourceMemory &memory);
 
+    uint64_t                      tickets_;
     ObjectPool<Copier>            copiers_;
     KeyedSlots<uint64_t, Copier *> copier_of_;
 };

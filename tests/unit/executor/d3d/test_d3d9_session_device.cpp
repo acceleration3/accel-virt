@@ -23,6 +23,8 @@
 #include "harness/platform/mock_platform.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
+#include <unistd.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -727,6 +729,12 @@ TEST(d3d9_session_device, a_render_target_is_copied_into_lent_memory_row_by_row_
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(wire.refused(), 0u);
+    for (int waited = 0; waited < 2000; waited++) {
+        std::uint32_t last = 0u;
+        std::memcpy(&last, store->pointer() + std::size_t{size - 1u} * pitch + (size / 2u) * 4u, sizeof(last));
+        if (last == blue) break;
+        usleep(1000);
+    }
     for (std::uint32_t y = 0u; y < size; y += 9u) {
         const std::uint8_t *const row = store->pointer() + std::size_t{y} * pitch;
         std::uint32_t left = 0u, edge = 0u;
