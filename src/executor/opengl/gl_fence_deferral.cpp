@@ -17,25 +17,9 @@ bool advanced(uint64_t mode)
     return mode >= first_advanced_equation && mode <= last_advanced_equation;
 }
 
-
-bool declares_advanced_blending(WireReader &payload)
-{
-    AV_SCOPE("declares_advanced_blending");
-    static const char marker[] = "blend_support_";
-    const size_t      length = sizeof marker - 1u;
-    std::vector<uint8_t> bytes(payload.remaining());
-    if (bytes.size() < length || !payload.read(bytes.data(), bytes.size())) return false;
-    for (size_t at = 0u; at + length <= bytes.size(); at++) {
-        size_t matched = 0u;
-        while (matched < length && bytes[at + matched] == static_cast<uint8_t>(marker[matched])) matched++;
-        if (matched == length) return true;
-    }
-    return false;
 }
 
-}
-
-GlFenceDeferral::GlFenceDeferral() : occlusion_(), blending_{}, advanced_{}, advanced_source_(false), owed_(0u)
+GlFenceDeferral::GlFenceDeferral() : occlusion_(), blending_{}, advanced_{}, owed_(0u)
 {
     AV_SCOPE("GlFenceDeferral::GlFenceDeferral");
 }
@@ -89,10 +73,6 @@ void GlFenceDeferral::ran(uint32_t command_id, WireReader payload)
         if (payload.read_varint(first) && payload.read_varint(second) && payload.read_varint(third))
             blend_equation(first, second, true);
         break;
-    case glproto::kCmd_glShaderSource:
-    case glproto::kCmd_glCreateShaderProgramv:
-        if (declares_advanced_blending(payload)) advanced_source_ = true;
-        break;
     default: break;
     }
 }
@@ -111,16 +91,10 @@ bool GlFenceDeferral::advanced_blending() const
     return false;
 }
 
-bool GlFenceDeferral::advanced_source() const
-{
-    AV_SCOPE("GlFenceDeferral::advanced_source");
-    return advanced_source_;
-}
-
 bool GlFenceDeferral::defers() const
 {
     AV_SCOPE("GlFenceDeferral::defers");
-    return owed_ < most_owed && (occlusion_.open() || advanced_blending() || advanced_source_);
+    return owed_ < most_owed && (occlusion_.open() || advanced_blending());
 }
 
 bool GlFenceDeferral::demands(uint32_t command_id) const
@@ -154,7 +128,6 @@ void GlFenceDeferral::owe()
 void GlFenceDeferral::paid()
 {
     AV_SCOPE("GlFenceDeferral::paid");
-    if (owed_ >= most_owed) advanced_source_ = false;
     owed_ = 0u;
 }
 
@@ -170,7 +143,6 @@ void GlFenceDeferral::clear()
     occlusion_.clear();
     for (bool &flag : blending_) flag = false;
     for (bool &flag : advanced_) flag = false;
-    advanced_source_ = false;
     owed_ = 0u;
 }
 
