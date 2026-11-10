@@ -267,6 +267,18 @@ TEST(d3d_backend, nothing_is_bound_drawn_cleared_or_copied_with_no_device_select
   CHECK(!backend.on_ResolveSubresource(1u, 0u, 2u, 0u, 28u));
   CHECK(!backend.on_GenerateMips(nobody));
   CHECK(!backend.on_CopyStructureCount(1u, 0u, 2u));
+  std::uint32_t tiles = 0u, packed_mips = 0u, packed_tiles = 0u;
+  const TileRegion tile_region = {};
+  const TileRange  tile_range = {};
+  const TileCoordinate tile_start = {};
+  const TileSize       tile_size = {};
+  CHECK(!backend.on_ResourceTiling11(1u, tiles, packed_mips, packed_tiles));
+  CHECK(!backend.on_UpdateTileMappings11(1u, 1u, &tile_region, 2u, 1u, &tile_range, 0u));
+  CHECK(!backend.on_CopyTileMappings11(1u, tile_start, 2u, tile_start, tile_size, 0u));
+  CHECK(!backend.on_CopyTiles11(1u, tile_start, tile_size, 2u, 0u, 0u));
+  CHECK(!backend.on_UpdateTiles11(1u, tile_start, tile_size, 0u, data, sizeof data));
+  CHECK(!backend.on_ResizeTilePool11(1u, 0u));
+  CHECK(!backend.on_TiledResourceBarrier11(1u, 2u));
   CHECK(!backend.on_UpdateSubresource(nobody, 0u, 0u, box, 16u, 16u, 0u, data, sizeof data));
   CHECK(!backend.on_ReadSubresource(nobody, 0u, hresult, row_pitch, depth_pitch, out, sizeof out, size));
   CHECK(!backend.on_PresentPoint(nobody, 0u, 1u));

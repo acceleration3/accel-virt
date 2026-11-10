@@ -86,6 +86,13 @@ public:
     virtual bool on_CopyResource(uint32_t destination, uint32_t source) = 0;
     virtual bool on_CopySubresourceRegion(uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t z, uint32_t source, uint32_t source_subresource, uint32_t has_box, const Box& box, uint32_t copy_flags) = 0;
     virtual bool on_BltResource(uint32_t destination, uint32_t destination_subresource, uint32_t destination_left, uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom, uint32_t source, uint32_t source_subresource, uint32_t source_left, uint32_t source_top, uint32_t source_right, uint32_t source_bottom) = 0;
+    virtual bool on_ResourceTiling11(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) = 0;
+    virtual bool on_UpdateTileMappings11(uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t pool, uint32_t range_count, const TileRange* ranges, uint32_t flags) = 0;
+    virtual bool on_CopyTileMappings11(uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags) = 0;
+    virtual bool on_CopyTiles11(uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) = 0;
+    virtual bool on_UpdateTiles11(uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t flags, const uint8_t* data, uint64_t data_size) = 0;
+    virtual bool on_ResizeTilePool11(uint32_t pool, uint64_t bytes) = 0;
+    virtual bool on_TiledResourceBarrier11(uint32_t before, uint32_t after) = 0;
     virtual bool on_ResolveSubresource(uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) = 0;
     virtual bool on_GenerateMips(uint32_t view) = 0;
     virtual bool on_CopyStructureCount(uint32_t destination, uint32_t offset, uint32_t source_view) = 0;

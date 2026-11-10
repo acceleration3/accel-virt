@@ -8,6 +8,8 @@ namespace av {
 class ResourceMisc {
 public:
     static constexpr uint32_t shared_bit = 0x2u;
+    static constexpr uint32_t tile_pool_bit = 0x20000u;
+    static constexpr uint32_t tiled_bit = 0x40000u;
     static constexpr uint32_t rows_bit = 0x80000000u;
     static constexpr uint32_t presented_bit = 0x40000000u;
 

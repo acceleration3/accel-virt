@@ -107,6 +107,25 @@ namespace av::d3dproto {
 // decoded, an sRGB-typed or floating source encoded as sRGB, so a value already encoded is not encoded twice.
 // Nothing is answered; textures the host cannot draw between are left as they were.
 [[nodiscard]] bool av_d3d_BltResource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t destination_left, uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom, uint32_t source, uint32_t source_subresource, uint32_t source_left, uint32_t source_top, uint32_t source_right, uint32_t source_bottom);
+// How a tiled resource is tiled on the host: every tile it has, and its packed mips - how many of its
+// smallest mips share tiles, and how many tiles they share. Zeros for any other resource.
+[[nodiscard]] bool av_d3d_ResourceTiling11(::av::ClientTransport& t, uint32_t resource, uint32_t* tiles, uint32_t* packed_mips, uint32_t* packed_tiles);
+// Maps the tiles of `regions` of a tiled resource, in order, to the tiles of the tile pool `ranges` name,
+// in order. pool is 0 when every range unmaps or skips. A call the guest made with more regions or ranges than one
+// command carries crosses as several, in order.
+[[nodiscard]] bool av_d3d_UpdateTileMappings11(::av::ClientTransport& t, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t pool, uint32_t range_count, const TileRange* ranges, uint32_t flags);
+// Maps the tiles of a region of `destination` to whatever the same-sized region of `source` from
+// `source_start` is mapped to.
+[[nodiscard]] bool av_d3d_CopyTileMappings11(::av::ClientTransport& t, uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags);
+// Copies a region of a tiled resource's tiles to `buffer` at `buffer_offset`, 64 KiB a tile in the
+// region's order - or from it, when flags has D3D11_TILE_COPY_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE.
+[[nodiscard]] bool av_d3d_CopyTiles11(::av::ClientTransport& t, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags);
+// `data`, 64 KiB a tile in the region's order, into a region of a tiled resource's tiles.
+[[nodiscard]] bool av_d3d_UpdateTiles11(::av::ClientTransport& t, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t flags, const void* data, uint64_t data_size);
+// A tile pool's size in bytes, a multiple of 64 KiB.
+[[nodiscard]] bool av_d3d_ResizeTilePool11(::av::ClientTransport& t, uint32_t pool, uint64_t bytes);
+// The access to a tiled resource (or a view of one) before and after, each 0 for none.
+[[nodiscard]] bool av_d3d_TiledResourceBarrier11(::av::ClientTransport& t, uint32_t before, uint32_t after);
 [[nodiscard]] bool av_d3d_ResolveSubresource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format);
 [[nodiscard]] bool av_d3d_GenerateMips(::av::ClientTransport& t, uint32_t view);
 [[nodiscard]] bool av_d3d_CopyStructureCount(::av::ClientTransport& t, uint32_t destination, uint32_t offset, uint32_t source_view);

@@ -74,6 +74,13 @@ const char* command_name(uint32_t id) {
         case kCmd_QueryBufferSlices11: return "QueryBufferSlices11";
         case kCmd_BindBufferSlice: return "BindBufferSlice";
         case kCmd_BltResource: return "BltResource";
+        case kCmd_ResourceTiling11: return "ResourceTiling11";
+        case kCmd_UpdateTileMappings11: return "UpdateTileMappings11";
+        case kCmd_CopyTileMappings11: return "CopyTileMappings11";
+        case kCmd_CopyTiles11: return "CopyTiles11";
+        case kCmd_UpdateTiles11: return "UpdateTiles11";
+        case kCmd_ResizeTilePool11: return "ResizeTilePool11";
+        case kCmd_TiledResourceBarrier11: return "TiledResourceBarrier11";
         case kCmd_BeginQuery: return "BeginQuery";
         case kCmd_EndQuery: return "EndQuery";
         case kCmd_GetQueryData: return "GetQueryData";

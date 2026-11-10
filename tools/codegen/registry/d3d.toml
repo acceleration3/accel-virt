@@ -74,6 +74,18 @@ fields = ["u32 view", "u32 initial_count"]
 [structs.StreamOutTarget]
 fields = ["u32 buffer", "u32 offset"]
 
+[structs.TileCoordinate]
+fields = ["u32 x", "u32 y", "u32 z", "u32 subresource"]
+
+[structs.TileSize]
+fields = ["u32 tiles", "u32 use_box", "u32 width", "u32 height", "u32 depth"]
+
+[structs.TileRegion]
+fields = ["TileCoordinate start", "TileSize size"]
+
+[structs.TileRange]
+fields = ["u32 flags", "u32 pool_offset", "u32 tiles"]
+
 [structs.Caps11]
 fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_command_lists",
           "u32 double_precision_float_shader_ops", "u32 compute_shaders_on_10x",
@@ -427,6 +439,56 @@ Nothing is answered; textures the host cannot draw between are left as they were
 params = ["u32 destination", "u32 destination_subresource", "u32 destination_left", "u32 destination_top",
           "u32 destination_right", "u32 destination_bottom", "u32 source", "u32 source_subresource",
           "u32 source_left", "u32 source_top", "u32 source_right", "u32 source_bottom"]
+
+[[command]]
+name = "ResourceTiling11"
+id = 0x0411
+doc = """How a tiled resource is tiled on the host: every tile it has, and its packed mips - how many of its
+smallest mips share tiles, and how many tiles they share. Zeros for any other resource."""
+params = ["u32 resource"]
+reply = ["u32 tiles", "u32 packed_mips", "u32 packed_tiles"]
+
+[[command]]
+name = "UpdateTileMappings11"
+id = 0x0412
+doc = """Maps the tiles of `regions` of a tiled resource, in order, to the tiles of the tile pool `ranges` name,
+in order. pool is 0 when every range unmaps or skips. A call the guest made with more regions or ranges than one
+command carries crosses as several, in order."""
+params = ["u32 resource", "u32 region_count", "TileRegion regions[region_count] max 256", "u32 pool",
+          "u32 range_count", "TileRange ranges[range_count] max 256", "u32 flags"]
+
+[[command]]
+name = "CopyTileMappings11"
+id = 0x0413
+doc = """Maps the tiles of a region of `destination` to whatever the same-sized region of `source` from
+`source_start` is mapped to."""
+params = ["u32 destination", "TileCoordinate destination_start", "u32 source", "TileCoordinate source_start",
+          "TileSize size", "u32 flags"]
+
+[[command]]
+name = "CopyTiles11"
+id = 0x0414
+doc = """Copies a region of a tiled resource's tiles to `buffer` at `buffer_offset`, 64 KiB a tile in the
+region's order - or from it, when flags has D3D11_TILE_COPY_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE."""
+params = ["u32 resource", "TileCoordinate start", "TileSize size", "u32 buffer", "u64 buffer_offset", "u32 flags"]
+
+[[command]]
+name = "UpdateTiles11"
+id = 0x0415
+doc = """`data`, 64 KiB a tile in the region's order, into a region of a tiled resource's tiles."""
+params = ["u32 resource", "TileCoordinate start", "TileSize size", "u32 flags", "bytes data"]
+
+[[command]]
+name = "ResizeTilePool11"
+id = 0x0416
+doc = "A tile pool's size in bytes, a multiple of 64 KiB."
+params = ["u32 pool", "u64 bytes"]
+
+[[command]]
+name = "TiledResourceBarrier11"
+id = 0x0417
+doc = "The access to a tiled resource (or a view of one) before and after, each 0 for none."
+params = ["u32 before", "u32 after"]
 
 [[command]]
 name = "ResolveSubresource"

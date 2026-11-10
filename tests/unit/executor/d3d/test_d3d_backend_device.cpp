@@ -2,6 +2,7 @@
 #include "fixtures/d3d/triangle_ps.hpp"
 #include "fixtures/d3d/triangle_vs.hpp"
 #include "core/support/object_storage.hpp"
+#include "executor/d3d/d3d11_tiles.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
@@ -222,6 +223,101 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK(av_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, driver_internal_error);
     CHECK_EQ(wire.refused(), 0u);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
+TEST(d3d_backend_device, a_tile_mapped_and_filled_reads_back_through_a_copy_to_a_buffer)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend, rig.log);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device));
+    av::D3dLoopback wire(backend, rig.imports);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    Caps11 caps = {};
+    static FormatCaps formats[256];
+    std::uint64_t answered = 0u;
+    CHECK(av_d3d_QueryCaps11(wire, &caps, formats, sizeof(formats), &answered));
+    if (caps.tiled_resources_tier == 0u) {
+        std::fprintf(stderr, "this GPU has no sparse binding under DXVK: nothing judged\n");
+        backend.shut_down();
+        return;
+    }
+    constexpr std::uint32_t tile_bytes = av::D3d11Tiles::tile_bytes;
+    constexpr std::uint32_t pool_bit = 0x20000u;
+    constexpr std::uint32_t tiled_bit = 0x40000u;
+    constexpr std::uint32_t format_r8g8b8a8 = 28u;
+    constexpr std::uint32_t linear_to_tiled = 0x2u;
+    constexpr std::uint32_t tiled_to_linear = 0x4u;
+    ResourceDesc pool = {};
+    pool.dimension = 1u;
+    pool.width = 2u * tile_bytes;
+    pool.misc_flags = pool_bit;
+    CHECK(av_d3d_CreateResource(wire, 1u, pool, 0u, 0u, 0u));
+    ResourceDesc tiled = {};
+    tiled.dimension = 3u;
+    tiled.width = 128u;
+    tiled.height = 128u;
+    tiled.depth_or_array = 1u;
+    tiled.mip_levels = 1u;
+    tiled.format = format_r8g8b8a8;
+    tiled.sample_count = 1u;
+    tiled.misc_flags = tiled_bit;
+    CHECK(av_d3d_CreateResource(wire, 2u, tiled, 0u, 0u, 0u));
+    ResourceDesc linear = {};
+    linear.dimension = 1u;
+    linear.width = tile_bytes;
+    CHECK(av_d3d_CreateResource(wire, 3u, linear, 0u, 0u, 0u));
+    CHECK_EQ(wire.refused(), 0u);
+
+    std::uint32_t tiles = 0u, packed_mips = 7u, packed_tiles = 7u;
+    CHECK(av_d3d_ResourceTiling11(wire, 2u, &tiles, &packed_mips, &packed_tiles));
+    CHECK_EQ(tiles, 1u);
+    CHECK_EQ(packed_mips, 0u);
+    CHECK_EQ(packed_tiles, 0u);
+
+    const TileRegion region = {{0u, 0u, 0u, 0u}, {1u, 0u, 0u, 0u, 0u}};
+    const TileRange  range = {0u, 1u, 1u};
+    CHECK(av_d3d_UpdateTileMappings11(wire, 2u, 1u, &region, 1u, 1u, &range, 0u));
+    static std::uint8_t pattern[tile_bytes];
+    for (std::uint32_t index = 0u; index < tile_bytes; index++) pattern[index] = static_cast<std::uint8_t>(index * 7u + 3u);
+    CHECK(av_d3d_UpdateTiles11(wire, 2u, region.start, region.size, 0u, pattern, sizeof(pattern)));
+    CHECK(av_d3d_CopyTiles11(wire, 2u, region.start, region.size, 3u, 0u, tiled_to_linear));
+    ResourceDesc half = {};
+    half.dimension = 1u;
+    half.width = tile_bytes / 2u;
+    CHECK(av_d3d_CreateResource(wire, 4u, half, 0u, 0u, 0u));
+    static std::uint8_t back[tile_bytes / 2u];
+    for (std::uint32_t part = 0u; part < 2u; part++) {
+        const Box piece = {part * tile_bytes / 2u, 0u, 0u, (part + 1u) * tile_bytes / 2u, 1u, 1u};
+        CHECK(av_d3d_CopySubresourceRegion(wire, 4u, 0u, 0u, 0u, 0u, 3u, 0u, 1u, piece, 0u));
+        std::uint32_t row_pitch = 0u, depth_pitch = 0u;
+        std::uint64_t read = 0u;
+        CHECK(av_d3d_ReadSubresource(wire, 4u, 0u, &hresult, &row_pitch, &depth_pitch, back, sizeof(back), &read));
+        CHECK_EQ(hresult, 0u);
+        CHECK_EQ(read, static_cast<std::uint64_t>(tile_bytes / 2u));
+        CHECK(std::memcmp(pattern + part * tile_bytes / 2u, back, sizeof(back)) == 0);
+    }
+    CHECK_EQ(wire.refused(), 0u);
+
+    const TileCoordinate whole_start = {0u, 0u, 0u, 0u};
+    CHECK(av_d3d_CopyTileMappings11(wire, 2u, whole_start, 2u, whole_start, region.size, 0u));
+    CHECK(av_d3d_ResizeTilePool11(wire, 1u, tile_bytes));
+    CHECK(av_d3d_TiledResourceBarrier11(wire, 2u, 3u));
+    CHECK(av_d3d_CopyTiles11(wire, 2u, region.start, region.size, 3u, 0u, linear_to_tiled));
+    CHECK_EQ(wire.refused(), 0u);
+
+    const TileRegion empty = {{0u, 0u, 0u, 0u}, {0u, 0u, 0u, 0u, 0u}};
+    CHECK(av_d3d_UpdateTileMappings11(wire, 2u, 1u, &empty, 1u, 1u, &range, 0u));
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, driver_internal_error);
     CHECK(backend.invariants_hold());
     backend.shut_down();
 }

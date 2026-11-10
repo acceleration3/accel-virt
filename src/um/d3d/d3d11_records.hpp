@@ -51,6 +51,10 @@ struct ResourceRecord {
     HostAllocation          *lent;
     ResourceRecord          *immediate;
     uint64_t                 gpu_wrote;
+    uint32_t                 tiles;
+    uint32_t                 packed_mips;
+    uint32_t                 packed_tiles;
+    uint32_t                 tiling_known;
 };
 
 struct ObjectRecord {

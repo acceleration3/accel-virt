@@ -59,7 +59,8 @@ constexpr uint32_t dimension_texture3d = 4u;
 constexpr uint32_t kept_misc_flags = D3D11_RESOURCE_MISC_GENERATE_MIPS | D3D11_RESOURCE_MISC_TEXTURECUBE |
                                      D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS |
                                      D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS |
-                                     D3D11_RESOURCE_MISC_BUFFER_STRUCTURED | D3D11_RESOURCE_MISC_RESOURCE_CLAMP;
+                                     D3D11_RESOURCE_MISC_BUFFER_STRUCTURED | D3D11_RESOURCE_MISC_RESOURCE_CLAMP |
+                                     ResourceMisc::tile_pool_bit | ResourceMisc::tiled_bit;
 constexpr uint32_t known_bind_flags = D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER |
                                       D3D11_BIND_CONSTANT_BUFFER | D3D11_BIND_SHADER_RESOURCE |
                                       D3D11_BIND_STREAM_OUTPUT | D3D11_BIND_RENDER_TARGET |
@@ -123,7 +124,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_),
       lines_(log.d3d11()), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
       region_(guest_, lines_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
-      d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()),
+      d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()), tiles_(objects_),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
       missed_key_(0u), batches_(), queue_drain_(), submitted_(0u), drained_(false), predication_refusal_noted_(false), mark_refused_(false), show_refused_(false), lost_(false)
 {
@@ -2221,6 +2222,62 @@ bool D3dBackend::invariants_hold() const
     if (!states_.invariants_hold() || !batches_.invariants_hold()) return false;
     if (device11_ == nullptr) return states_.count() == 0u && objects_.count() == 0u;
     return true;
+}
+
+
+bool D3dBackend::on_ResourceTiling11(uint32_t resource, uint32_t &tiles, uint32_t &packed_mips,
+                                     uint32_t &packed_tiles)
+{
+    AV_SCOPE("D3dBackend::on_ResourceTiling11");
+    return ready() && tiles_.tiling(*device11_->device(), resource, tiles, packed_mips, packed_tiles);
+}
+
+bool D3dBackend::on_UpdateTileMappings11(uint32_t resource, uint32_t region_count,
+                                         const d3dproto::TileRegion *regions, uint32_t pool, uint32_t range_count,
+                                         const d3dproto::TileRange *ranges, uint32_t flags)
+{
+    AV_SCOPE("D3dBackend::on_UpdateTileMappings11");
+    return ready() &&
+           tiles_.update_mappings(*device11_->context(), resource, region_count, regions, pool, range_count, ranges,
+                                  flags);
+}
+
+bool D3dBackend::on_CopyTileMappings11(uint32_t destination, const d3dproto::TileCoordinate &destination_start,
+                                       uint32_t source, const d3dproto::TileCoordinate &source_start,
+                                       const d3dproto::TileSize &size, uint32_t flags)
+{
+    AV_SCOPE("D3dBackend::on_CopyTileMappings11");
+    return ready() &&
+           tiles_.copy_mappings(*device11_->context(), destination, destination_start, source, source_start, size,
+                                flags);
+}
+
+bool D3dBackend::on_CopyTiles11(uint32_t resource, const d3dproto::TileCoordinate &start,
+                                const d3dproto::TileSize &size, uint32_t buffer, uint64_t buffer_offset,
+                                uint32_t flags)
+{
+    AV_SCOPE("D3dBackend::on_CopyTiles11");
+    return ready() && tiles_.copy(*device11_->context(), resource, start, size, buffer, buffer_offset, flags);
+}
+
+bool D3dBackend::on_UpdateTiles11(uint32_t resource, const d3dproto::TileCoordinate &start,
+                                  const d3dproto::TileSize &size, uint32_t flags, const uint8_t *data,
+                                  uint64_t data_size)
+{
+    AV_SCOPE("D3dBackend::on_UpdateTiles11");
+    return ready() && tiles_.update(*device11_->context(), resource, start, size, flags, data, data_size);
+}
+
+bool D3dBackend::on_ResizeTilePool11(uint32_t pool, uint64_t bytes)
+{
+    AV_SCOPE("D3dBackend::on_ResizeTilePool11");
+    return ready() && tiles_.resize(*device11_->context(), pool, bytes);
+}
+
+bool D3dBackend::on_TiledResourceBarrier11(uint32_t before, uint32_t after)
+{
+    AV_SCOPE("D3dBackend::on_TiledResourceBarrier11");
+    return ready() && tiles_.barrier(*device11_->context(), before, after);
 }
 
 }

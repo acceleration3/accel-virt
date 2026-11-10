@@ -73,7 +73,7 @@ void D3d11Capabilities::measure_options(ID3D11Device5 &device)
         caps_.typed_uav_load_additional_formats = static_cast<uint32_t>(options2.TypedUAVLoadAdditionalFormats);
         caps_.rovs = static_cast<uint32_t>(options2.ROVsSupported);
         caps_.conservative_rasterization_tier = static_cast<uint32_t>(options2.ConservativeRasterizationTier);
-        caps_.tiled_resources_tier = 0u;
+        caps_.tiled_resources_tier = static_cast<uint32_t>(options2.TiledResourcesTier);
         caps_.map_on_default_textures = 0u;
         caps_.standard_swizzle = 0u;
         caps_.unified_memory_architecture = 0u;

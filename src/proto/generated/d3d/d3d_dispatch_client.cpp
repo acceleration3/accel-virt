@@ -635,6 +635,92 @@ bool av_d3d_BltResource(::av::ClientTransport& t, uint32_t destination, uint32_t
     return t.send_async(kCmd_BltResource, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d_ResourceTiling11(::av::ClientTransport& t, uint32_t resource, uint32_t* tiles, uint32_t* packed_mips, uint32_t* packed_tiles) {
+    AV_SCOPE("av_d3d_ResourceTiling11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_ResourceTiling11, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (tiles != nullptr) *tiles = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (packed_mips != nullptr) *packed_mips = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (packed_tiles != nullptr) *packed_tiles = value; }
+    return r.remaining() == 0u;
+}
+
+bool av_d3d_UpdateTileMappings11(::av::ClientTransport& t, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t pool, uint32_t range_count, const TileRange* ranges, uint32_t flags) {
+    AV_SCOPE("av_d3d_UpdateTileMappings11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod<uint32_t>(region_count);
+    if (region_count > 256u || (region_count != 0u && regions == nullptr)) return abandon(t);
+    if (region_count != 0u) b.write(regions, sizeof(*regions) * region_count);
+    b.write_pod<uint32_t>(pool);
+    b.write_pod<uint32_t>(range_count);
+    if (range_count > 256u || (range_count != 0u && ranges == nullptr)) return abandon(t);
+    if (range_count != 0u) b.write(ranges, sizeof(*ranges) * range_count);
+    b.write_pod<uint32_t>(flags);
+    return t.send_async(kCmd_UpdateTileMappings11, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d_CopyTileMappings11(::av::ClientTransport& t, uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags) {
+    AV_SCOPE("av_d3d_CopyTileMappings11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(destination);
+    b.write_pod(destination_start);
+    b.write_pod<uint32_t>(source);
+    b.write_pod(source_start);
+    b.write_pod(size);
+    b.write_pod<uint32_t>(flags);
+    return t.send_async(kCmd_CopyTileMappings11, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d_CopyTiles11(::av::ClientTransport& t, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) {
+    AV_SCOPE("av_d3d_CopyTiles11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(start);
+    b.write_pod(size);
+    b.write_pod<uint32_t>(buffer);
+    b.write_pod<uint64_t>(buffer_offset);
+    b.write_pod<uint32_t>(flags);
+    return t.send_async(kCmd_CopyTiles11, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d_UpdateTiles11(::av::ClientTransport& t, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t flags, const void* data, uint64_t data_size) {
+    AV_SCOPE("av_d3d_UpdateTiles11");
+    const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(start);
+    b.write_pod(size);
+    b.write_pod<uint32_t>(flags);
+    if (!put_bytes(t, b, data, data_size)) return abandon(t);
+    return t.send_async(kCmd_UpdateTiles11, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d_ResizeTilePool11(::av::ClientTransport& t, uint32_t pool, uint64_t bytes) {
+    AV_SCOPE("av_d3d_ResizeTilePool11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(pool);
+    b.write_pod<uint64_t>(bytes);
+    return t.send_async(kCmd_ResizeTilePool11, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d_TiledResourceBarrier11(::av::ClientTransport& t, uint32_t before, uint32_t after) {
+    AV_SCOPE("av_d3d_TiledResourceBarrier11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(before);
+    b.write_pod<uint32_t>(after);
+    return t.send_async(kCmd_TiledResourceBarrier11, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d_ResolveSubresource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) {
     AV_SCOPE("av_d3d_ResolveSubresource");
     ::av::WireWriter b = t.request_writer();

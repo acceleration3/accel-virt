@@ -33,6 +33,7 @@ public:
 
 private:
     UINT pipeline_levels() const;
+    UINT tiled_support_flags() const;
 
     d3dproto::Caps11     caps_;
     d3d::DxgiFormatTable formats_;

@@ -703,54 +703,6 @@ VOID D3d11Device::recycle_destroy_command_list(D3D11DDI_HCOMMANDLIST handle)
     destroy_command_list(handle);
 }
 
-VOID D3d11Device::update_tile_mappings(D3D10DDI_HRESOURCE, UINT, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
-                                       const D3DWDDM1_3DDI_TILE_REGION_SIZE *, D3D10DDI_HRESOURCE, UINT, const UINT *,
-                                       const UINT *, const UINT *, UINT)
-{
-    AV_SCOPE("D3d11Device::update_tile_mappings");
-    not_implemented("pfnUpdateTileMappings");
-}
-
-VOID D3d11Device::copy_tile_mappings(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
-                                     D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
-                                     const D3DWDDM1_3DDI_TILE_REGION_SIZE *, UINT)
-{
-    AV_SCOPE("D3d11Device::copy_tile_mappings");
-    not_implemented("pfnCopyTileMappings");
-}
-
-VOID D3d11Device::copy_tiles(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
-                             const D3DWDDM1_3DDI_TILE_REGION_SIZE *, D3D10DDI_HRESOURCE, UINT64, UINT)
-{
-    AV_SCOPE("D3d11Device::copy_tiles");
-    not_implemented("pfnCopyTiles");
-}
-
-VOID D3d11Device::update_tiles(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
-                               const D3DWDDM1_3DDI_TILE_REGION_SIZE *, const void *, UINT)
-{
-    AV_SCOPE("D3d11Device::update_tiles");
-    not_implemented("pfnUpdateTiles");
-}
-
-VOID D3d11Device::tiled_resource_barrier(D3D11DDI_HANDLETYPE, void *, D3D11DDI_HANDLETYPE, void *)
-{
-    AV_SCOPE("D3d11Device::tiled_resource_barrier");
-}
-
-VOID D3d11Device::get_mip_packing(D3D10DDI_HRESOURCE, UINT *packed, UINT *tiles)
-{
-    AV_SCOPE("D3d11Device::get_mip_packing");
-    if (packed != nullptr) *packed = 0u;
-    if (tiles != nullptr) *tiles = 0u;
-}
-
-VOID D3d11Device::resize_tile_pool(D3D10DDI_HRESOURCE, UINT64)
-{
-    AV_SCOPE("D3d11Device::resize_tile_pool");
-    not_implemented("pfnResizeTilePool");
-}
-
 VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE handle, UINT count, D3DKMT_HANDLE *allocation,
                                       D3DWDDM2_0DDI_TEXTURE_LAYOUT *layout, UINT *swizzle_transition,
                                       D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT *subresources)

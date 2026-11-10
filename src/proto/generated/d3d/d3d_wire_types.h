@@ -219,6 +219,40 @@ struct StreamOutTarget {
 static_assert(sizeof(StreamOutTarget) == 8, "StreamOutTarget crosses as 8 bytes");
 static_assert(__is_trivially_copyable(StreamOutTarget), "StreamOutTarget is plain data");
 
+struct TileCoordinate {
+    uint32_t x;
+    uint32_t y;
+    uint32_t z;
+    uint32_t subresource;
+};
+static_assert(sizeof(TileCoordinate) == 16, "TileCoordinate crosses as 16 bytes");
+static_assert(__is_trivially_copyable(TileCoordinate), "TileCoordinate is plain data");
+
+struct TileSize {
+    uint32_t tiles;
+    uint32_t use_box;
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+};
+static_assert(sizeof(TileSize) == 20, "TileSize crosses as 20 bytes");
+static_assert(__is_trivially_copyable(TileSize), "TileSize is plain data");
+
+struct TileRegion {
+    TileCoordinate start;
+    TileSize size;
+};
+static_assert(sizeof(TileRegion) == 36, "TileRegion crosses as 36 bytes");
+static_assert(__is_trivially_copyable(TileRegion), "TileRegion is plain data");
+
+struct TileRange {
+    uint32_t flags;
+    uint32_t pool_offset;
+    uint32_t tiles;
+};
+static_assert(sizeof(TileRange) == 12, "TileRange crosses as 12 bytes");
+static_assert(__is_trivially_copyable(TileRange), "TileRange is plain data");
+
 struct Caps11 {
     uint32_t feature_level;
     uint32_t driver_concurrent_creates;

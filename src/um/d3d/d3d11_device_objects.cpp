@@ -110,7 +110,10 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                       ((args->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) != 0u ? api_bind_uav : 0u);
     desc.misc_flags = (args->MiscFlags & misc_same_bits) |
                       ((args->MiscFlags & D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP) != 0u ? api_generate_mips : 0u) |
-                      (cube ? api_texture_cube : 0u);
+                      (cube ? api_texture_cube : 0u) |
+                      ((args->MiscFlags & D3DWDDM1_3DDI_RESOURCE_MISC_TILED) != 0u ? ResourceMisc::tiled_bit : 0u) |
+                      ((args->MiscFlags & D3DWDDM1_3DDI_RESOURCE_MISC_TILE_POOL) != 0u ? ResourceMisc::tile_pool_bit
+                                                                                      : 0u);
     desc.structure_stride = args->ByteStride;
     const d3d::SwapChainBuffer::Model buffer_model =
         d3d::SwapChainBuffer(args->pPrimaryDesc != nullptr, args->MiscFlags).model();

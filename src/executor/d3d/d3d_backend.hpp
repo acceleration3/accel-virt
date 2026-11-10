@@ -4,6 +4,7 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d_batch_counter.hpp"
 #include "executor/d3d/d3d11_batch_progress.hpp"
+#include "executor/d3d/d3d11_tiles.hpp"
 #include "executor/d3d/d3d12_session.hpp"
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -97,6 +98,20 @@ public:
                         uint64_t &formats_size) override;
     bool on_Flush11() override;
     bool on_ClearState11() override;
+    bool on_ResourceTiling11(uint32_t resource, uint32_t &tiles, uint32_t &packed_mips,
+                             uint32_t &packed_tiles) override;
+    bool on_UpdateTileMappings11(uint32_t resource, uint32_t region_count, const d3dproto::TileRegion *regions,
+                                 uint32_t pool, uint32_t range_count, const d3dproto::TileRange *ranges,
+                                 uint32_t flags) override;
+    bool on_CopyTileMappings11(uint32_t destination, const d3dproto::TileCoordinate &destination_start,
+                               uint32_t source, const d3dproto::TileCoordinate &source_start,
+                               const d3dproto::TileSize &size, uint32_t flags) override;
+    bool on_CopyTiles11(uint32_t resource, const d3dproto::TileCoordinate &start, const d3dproto::TileSize &size,
+                        uint32_t buffer, uint64_t buffer_offset, uint32_t flags) override;
+    bool on_UpdateTiles11(uint32_t resource, const d3dproto::TileCoordinate &start, const d3dproto::TileSize &size,
+                          uint32_t flags, const uint8_t *data, uint64_t data_size) override;
+    bool on_ResizeTilePool11(uint32_t pool, uint64_t bytes) override;
+    bool on_TiledResourceBarrier11(uint32_t before, uint32_t after) override;
     bool on_Finish11(uint32_t &hresult) override;
     bool on_DestroyObject(uint32_t object) override;
     bool on_CreateResource(uint32_t resource, const d3dproto::ResourceDesc &desc, uint64_t shared_key, uint64_t memory,
@@ -256,6 +271,7 @@ private:
     SliceStorages           slices_;
     D3d12Session            d3d12_;
     D3d9Session             d3d9_;
+    D3d11Tiles              tiles_;
     QueryResultPublisher    published_;
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;

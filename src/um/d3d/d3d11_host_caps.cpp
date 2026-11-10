@@ -74,6 +74,16 @@ UINT D3d11HostCaps::pipeline_levels() const
     return levels;
 }
 
+UINT D3d11HostCaps::tiled_support_flags() const
+{
+    AV_SCOPE("D3d11HostCaps::tiled_support_flags");
+    UINT flags = 0u;
+    if (caps_.tiled_resources_tier >= 1u) flags |= D3DWDDM1_3DDI_TILED_RESOURCES_TIER_1_SUPPORTED;
+    if (caps_.tiled_resources_tier >= 2u) flags |= D3DWDDM1_3DDI_TILED_RESOURCES_TIER_2_SUPPORTED;
+    if (caps_.tiled_resources_tier >= 3u) flags |= D3DWDDM2_0DDI_TILED_RESOURCES_TIER_3_SUPPORTED;
+    return flags;
+}
+
 HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
 {
     AV_SCOPE("D3d11HostCaps::answer");
@@ -107,7 +117,11 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
         precision.AllOtherStagesMinPrecision = caps_.all_other_shader_stages_min_precision;
         return reply.give_whole(&precision, sizeof precision) ? S_OK : E_INVALIDARG;
     }
-    case D3DWDDM1_3DDICAPS_D3D11_OPTIONS1: word = 0u; break;
+    case D3DWDDM1_3DDICAPS_D3D11_OPTIONS1: {
+        D3DWDDM1_3DDI_D3D11_OPTIONS_DATA1 tiled = {};
+        tiled.TiledResourcesSupportFlags = tiled_support_flags();
+        return reply.give_whole(&tiled, sizeof tiled) ? S_OK : E_INVALIDARG;
+    }
     case D3DWDDM1_3DDICAPS_MARKER: word = 0u; break;
     case D3DWDDM2_0DDICAPS_D3D11_OPTIONS2: word = caps_.conservative_rasterization_tier; break;
     case D3DWDDM2_0DDICAPS_D3D11_OPTIONS3: word = caps_.vp_and_rt_array_index_from_any_shader; break;
