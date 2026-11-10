@@ -12,6 +12,7 @@ enum class AllocationKind : uint16_t {
     gdi = 4u,
     surface = 5u,
     cross_adapter = 6u,
+    host_heap = 7u,
     client = 16u,
     context_ring = 17u,
 };

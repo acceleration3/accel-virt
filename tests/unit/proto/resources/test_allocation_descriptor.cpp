@@ -89,6 +89,7 @@ TEST(allocation_descriptor_decode, round_trips_every_kind)
       AllocationDescriptor(AllocationKind::gdi, false, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::client, false, SurfaceLayout(), 1u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::host_heap, false, SurfaceLayout(), std::uint64_t{64} << 30u, ScanoutTarget(), 9u),
   };
   for (const AllocationDescriptor &descriptor : descriptors) {
       std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -180,3 +181,14 @@ TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
       AllocationDescriptor decoded;
       CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed);
   } }
+
+TEST(allocation_descriptor_decode, a_host_heap_names_memory_the_host_owns_and_has_a_bound)
+{ const AllocationDescriptor heap(AllocationKind::host_heap, false, SurfaceLayout(), std::uint64_t{1} << 44u, ScanoutTarget(), 0x77u);
+  std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  AllocationDescriptor decoded;
+  CHECK_STATUS(decoded.decode(encoded(heap, bytes), sizeof bytes), Status::ok);
+  CHECK_EQ(decoded.host_key(), 0x77u);
+  const AllocationDescriptor past(AllocationKind::host_heap, false, SurfaceLayout(), (std::uint64_t{1} << 44u) + 1u, ScanoutTarget());
+  CHECK_STATUS(decoded.decode(encoded(past, bytes), sizeof bytes), Status::malformed);
+  const AllocationDescriptor scanned(AllocationKind::host_heap, false, SurfaceLayout(), 0x1000u, ScanoutTarget(1u, 60u, 1u));
+  CHECK_STATUS(decoded.decode(encoded(scanned, bytes), sizeof bytes), Status::malformed); }

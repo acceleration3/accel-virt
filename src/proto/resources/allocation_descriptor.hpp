@@ -31,6 +31,7 @@ public:
 
 private:
     static constexpr uint64_t page_bytes = 0x1000u;
+    static constexpr uint64_t host_heap_bytes_most = uint64_t{1} << 44u;
     static constexpr uint32_t magic = 0x00415641u;
     static constexpr uint16_t flag_cpu_visible = 0x1u;
 

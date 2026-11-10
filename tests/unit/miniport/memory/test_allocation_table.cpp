@@ -649,3 +649,27 @@ TEST(allocation_table_create, a_resource_create_that_fails_part_way_leaves_no_re
   CHECK_STATUS(again.create(), Status::ok);
   CHECK(again.request().hResource != nullptr);
   CHECK(again.table().invariants_hold()); }
+
+TEST(allocation_table_create, a_host_heap_may_be_bigger_than_the_aperture_because_the_host_owns_its_memory)
+{ Fixture fixture;
+  const AllocationDescriptor heap(AllocationKind::host_heap, false, SurfaceLayout(), std::uint64_t{8} << 30u, ScanoutTarget(), 3u);
+  fixture.set_count(1u, heap);
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK(fixture.info(0u).Size == (std::uint64_t{8} << 30u));
+  CHECK(fixture.table().invariants_hold());
+  fixture.set_count(1u, shadow);
+  const AllocationDescriptor huge(AllocationKind::shadow, true, SurfaceLayout(10u, 10u, 21u, 40u), std::uint64_t{8} << 30u, ScanoutTarget());
+  fixture.set_count(1u, huge);
+  CHECK_STATUS(fixture.create(), Status::invalid_parameter); }
+
+TEST(allocation_table_create, a_shareable_host_heap_mints_an_identity)
+{ Fixture fixture;
+  const AllocationDescriptor heap(AllocationKind::host_heap, false, SurfaceLayout(), std::uint64_t{1} << 20u, ScanoutTarget(), 3u);
+  fixture.set_count(1u, heap);
+  fixture.ask_to_share(0u, std::uint64_t{1} << 20u);
+  CHECK_STATUS(fixture.create(), Status::ok);
+  const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
+  CHECK(allocation != nullptr);
+  if (allocation == nullptr) return;
+  CHECK(allocation->shared_id() != 0u);
+  CHECK_EQ(allocation->host_key(), allocation->shared_id()); }

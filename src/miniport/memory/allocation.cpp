@@ -78,7 +78,10 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
     const AllocationKind kind = descriptor_.kind();
     const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging;
-    const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
+    const uint32_t segment = pinned ? ApertureSegment::segment_id
+                             : kind == AllocationKind::host_heap
+                                 ? segments_.host_heap_segment_id(descriptor_.cpu_visible())
+                                 : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
     info.SupportedWriteSegmentSet = 1u << (segment - 1u);

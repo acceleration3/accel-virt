@@ -44,7 +44,8 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info, Resource *res
                                           : descriptor.decode(bytes, AllocationDescriptor::encoded_size);
     if (read != Status::ok) return Status::invalid_parameter;
     if (shareable) descriptor = shared_data.descriptor();
-    if (descriptor.size() > segment_.size()) return Status::invalid_parameter;
+    if (descriptor.kind() != AllocationKind::host_heap && descriptor.size() > segment_.size())
+        return Status::invalid_parameter;
     const uint64_t size = (descriptor.size() + Allocation::page_bytes - 1u) & ~(Allocation::page_bytes - 1u);
     Allocation *allocation = nullptr;
     const Status status = allocations_.create(allocation, platform_, segments_, descriptor, size);

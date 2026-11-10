@@ -405,6 +405,42 @@ TEST(allocation_report_to, a_client_buffer_follows_vidmm_s_system_memory_past_th
   CHECK_EQ(name_info.PreferredSegment, 3u);
   CHECK_EQ(name_info.SupportedReadSegmentSet, 0x4u); }
 
+TEST(allocation_report_to, a_host_heap_is_accounted_in_the_local_segment_at_its_real_size_and_holds_no_pages)
+{ MockPlatform platform;
+  Segments segments(platform);
+  segments.offer_local(std::uint64_t{16} << 30u);
+  const std::uint64_t bytes = std::uint64_t{4} << 30u;
+  const AllocationDescriptor heap(AllocationKind::host_heap, false, SurfaceLayout(), bytes, ScanoutTarget(), 5u);
+  Allocation allocation(platform, segments.segments(), heap, bytes);
+  DxgkAllocationInfoRecord info = {};
+  allocation.report_to(info);
+  CHECK(info.Size == bytes);
+  CHECK_EQ(info.PreferredSegment, 2u);
+  CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
+  CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
+  CHECK_EQ(info.Flags, 0u);
+  CHECK_EQ(allocation.pages().count(), 0u);
+  CHECK_EQ(allocation.host_key(), 5u);
+  CHECK(allocation.invariants_hold()); }
+
+TEST(allocation_report_to, a_cpu_visible_host_heap_or_one_without_a_local_segment_is_in_system_memory)
+{ MockPlatform platform;
+  Segments without(platform);
+  const AllocationDescriptor gpu(AllocationKind::host_heap, false, SurfaceLayout(), 0x10000u, ScanoutTarget());
+  Allocation plain(platform, without.segments(), gpu, 0x10000u);
+  DxgkAllocationInfoRecord info = {};
+  plain.report_to(info);
+  CHECK_EQ(info.PreferredSegment, 2u);
+  Segments with(platform);
+  with.offer_local(std::uint64_t{1} << 30u);
+  const AllocationDescriptor upload(AllocationKind::host_heap, true, SurfaceLayout(), 0x10000u, ScanoutTarget());
+  Allocation visible(platform, with.segments(), upload, 0x10000u);
+  DxgkAllocationInfoRecord seen = {};
+  visible.report_to(seen);
+  CHECK_EQ(seen.PreferredSegment, 3u);
+  CHECK_EQ(seen.SupportedReadSegmentSet, 0x4u);
+  CHECK_EQ(seen.Flags, 1u); }
+
 TEST(allocation_report_to, a_context_s_name_is_not_pinned_in_the_aperture)
 { MockPlatform platform;
   Segments segments(platform);
