@@ -151,6 +151,9 @@ void ManualCalls::buffer_sub_data(uint32_t target, intptr_t offset, intptr_t siz
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     if (sliced_buffer(*context, target) != 0u) return context->record(gl_invalid_operation);
+    uint32_t bound = 0u;
+    if (bound_to(*context, target, bound) && context->mappings().refuses_subdata(bound))
+        return context->record(gl_invalid_operation);
     wrote_bound(*context, target, offset, size, data);
     BufferPieces pieces(*context->wire());
     if (pieces.cuts_write(size, data))
@@ -163,6 +166,7 @@ void ManualCalls::named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr
     AV_SCOPE("ManualCalls::named_buffer_sub_data");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    if (context->mappings().refuses_subdata(buffer)) return context->record(gl_invalid_operation);
     if (context->slices().holds(buffer)) return context->record(gl_invalid_operation);
     if (offset >= 0 && size >= 0)
         context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
@@ -177,6 +181,7 @@ void ManualCalls::named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, in
     AV_SCOPE("ManualCalls::named_buffer_sub_data_ext");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    if (context->mappings().refuses_subdata(buffer)) return context->record(gl_invalid_operation);
     if (context->slices().holds(buffer)) return context->record(gl_invalid_operation);
     if (offset >= 0 && size >= 0)
         context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
@@ -677,6 +682,7 @@ void ManualCalls::buffer_storage(uint32_t target, intptr_t size, const void *dat
     BufferPieces pieces(*context->wire());
     const bool   cut = pieces.cuts_write(size, data);
     glproto::av_glBufferStorage(*context->wire(), target, size, cut ? nullptr : data, flags | gl_dynamic_storage_bit);
+    if (bound_to(*context, target, buffer)) context->mappings().keep_flags(buffer, flags);
     if (cut) pieces.write(target, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 
@@ -706,6 +712,7 @@ void ManualCalls::named_buffer_storage(uint32_t buffer, intptr_t size, const voi
     const bool   cut = pieces.cuts_write(size, data);
     glproto::av_glNamedBufferStorage(*context->wire(), buffer, size, cut ? nullptr : data,
                                      flags | gl_dynamic_storage_bit);
+    context->mappings().keep_flags(buffer, flags);
     if (cut) pieces.write_named(buffer, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 
@@ -735,6 +742,7 @@ void ManualCalls::named_buffer_storage_ext(uint32_t buffer, intptr_t size, const
     const bool   cut = pieces.cuts_write(size, data);
     glproto::av_glNamedBufferStorageEXT(*context->wire(), buffer, size, cut ? nullptr : data,
                                         flags | gl_dynamic_storage_bit);
+    context->mappings().keep_flags(buffer, flags);
     if (cut) pieces.write_named_ext(buffer, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 

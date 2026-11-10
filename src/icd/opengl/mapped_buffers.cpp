@@ -34,7 +34,7 @@ uint32_t access_error(uint32_t access)
 }
 
 MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, SlicedBuffers &slices, DriverLog &log)
-    : shadows_(shadows), slices_(slices), log_(log), transfer_(shadows), mappings_(memory), persistent_writers_(0u), logged_()
+    : shadows_(shadows), slices_(slices), kept_flags_(memory, Pool::paged), log_(log), transfer_(shadows), mappings_(memory), persistent_writers_(0u), logged_()
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");
 }
@@ -111,6 +111,26 @@ void *MappedBuffers::pointer_of(uint32_t buffer) const
     return mapping != nullptr ? mapping->at() : nullptr;
 }
 
+void MappedBuffers::keep_flags(uint32_t buffer, uint32_t flags)
+{
+    AV_SCOPE("MappedBuffers::keep_flags");
+    if (buffer == 0u) return;
+    if (uint32_t *const kept = kept_flags_.find(buffer)) {
+        *kept = flags;
+        return;
+    }
+    uint32_t slot = 0u;
+    static_cast<void>(kept_flags_.insert(buffer, flags, slot));
+}
+
+bool MappedBuffers::refuses_subdata(uint32_t buffer) const
+{
+    AV_SCOPE("MappedBuffers::refuses_subdata");
+    constexpr uint32_t dynamic_storage = 0x0100u;
+    const uint32_t *const kept = kept_flags_.find(buffer);
+    return kept != nullptr && (*kept & dynamic_storage) == 0u;
+}
+
 bool MappedBuffers::map_state(uint32_t buffer, uint32_t pname, int64_t &value) const
 {
     AV_SCOPE("MappedBuffers::map_state");
@@ -122,7 +142,12 @@ bool MappedBuffers::map_state(uint32_t buffer, uint32_t pname, int64_t &value) c
     const uint32_t       both = BufferMapping::map_read | BufferMapping::map_write;
     switch (pname) {
     case gl_buffer_storage_flags:
-        return buffer == 0u || slices_.storage_flags(buffer, value);
+        if (buffer == 0u || slices_.storage_flags(buffer, value)) return true;
+        if (const uint32_t *const kept = kept_flags_.find(buffer)) {
+            value = static_cast<int64_t>(*kept);
+            return true;
+        }
+        return false;
     case gl_buffer_mapped:
         value = mapping != nullptr || access != 0u ? 1 : 0;
         return true;
@@ -161,6 +186,7 @@ void MappedBuffers::forget(int32_t count, const uint32_t *buffers)
     for (int32_t at = 0; at < count; at++) {
         BufferMapping *const mapping = find(buffers[at]);
         if (mapping != nullptr) drop(*mapping);
+        static_cast<void>(kept_flags_.erase(buffers[at]));
     }
 }
 

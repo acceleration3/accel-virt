@@ -2223,3 +2223,26 @@ TEST(manual_calls, a_negative_buffer_size_is_an_error_without_a_host_call)
   gen::Wrap_glBufferStorage(array_buffer, -8, data, 0u);
   CHECK_EQ(current.error(), gl_invalid_value);
   CHECK_EQ(current.sent(), before); }
+
+TEST(manual_calls, storage_without_dynamic_storage_refuses_subdata_and_reports_only_the_flags_the_application_gave)
+{ Current current;
+  const std::uint8_t data[8] = {};
+  gen::Wrap_glBindBuffer(array_buffer, 4u);
+  gen::Wrap_glBufferStorage(array_buffer, sizeof data, data, 0x0002u);
+  const std::uint32_t before = current.sent();
+  gen::Wrap_glBufferSubData(array_buffer, 0, 4, data);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  gen::Wrap_glNamedBufferSubData(4u, 0, 4, data);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  CHECK_EQ(current.sent(), before);
+  GLint flags = -1;
+  gen::Wrap_glGetBufferParameteriv(array_buffer, 0x8220u, &flags);
+  CHECK_EQ(flags, 0x0002);
+  gen::Wrap_glBindBuffer(array_buffer, 5u);
+  gen::Wrap_glBufferStorage(array_buffer, sizeof data, data, 0x0100u);
+  gen::Wrap_glBufferSubData(array_buffer, 0, 4, data);
+  const GLuint deleted[] = {4u};
+  gen::Wrap_glDeleteBuffers(1, deleted);
+  gen::Wrap_glBindBuffer(array_buffer, 4u);
+  gen::Wrap_glBufferSubData(array_buffer, 0, 4, data);
+  CHECK_EQ(current.sent(), before + 4u); }
