@@ -163,6 +163,13 @@ public:
     void on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice,
                                                     VkPhysicalDeviceMemoryProperties2 *pMemoryProperties) override;
 
+    void on_vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount,
+                                                     VkQueueFamilyProperties *pQueueFamilyProperties) override;
+    void on_vkGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount,
+                                                      VkQueueFamilyProperties2 *pQueueFamilyProperties) override;
+    void on_vkGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount,
+                                                         VkQueueFamilyProperties2 *pQueueFamilyProperties) override;
+
     VkResult on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer) override;
     VkResult on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,

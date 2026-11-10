@@ -629,6 +629,48 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice 
     on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
 }
 
+namespace {
+
+void timestamps_per_spec(VkQueueFamilyProperties &family)
+{
+    constexpr uint32_t least_valid_bits = 36u;
+    if (family.timestampValidBits != 0u && family.timestampValidBits < least_valid_bits) family.timestampValidBits = 0u;
+}
+
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice,
+                                                                uint32_t *pQueueFamilyPropertyCount,
+                                                                VkQueueFamilyProperties *pQueueFamilyProperties)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceQueueFamilyProperties");
+    RealVulkanDispatch::on_vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, pQueueFamilyPropertyCount,
+                                                                    pQueueFamilyProperties);
+    if (pQueueFamilyProperties == nullptr || pQueueFamilyPropertyCount == nullptr) return;
+    for (uint32_t index = 0u; index < *pQueueFamilyPropertyCount; index++)
+        timestamps_per_spec(pQueueFamilyProperties[index]);
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice,
+                                                                 uint32_t *pQueueFamilyPropertyCount,
+                                                                 VkQueueFamilyProperties2 *pQueueFamilyProperties)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceQueueFamilyProperties2");
+    RealVulkanDispatch::on_vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, pQueueFamilyPropertyCount,
+                                                                     pQueueFamilyProperties);
+    if (pQueueFamilyProperties == nullptr || pQueueFamilyPropertyCount == nullptr) return;
+    for (uint32_t index = 0u; index < *pQueueFamilyPropertyCount; index++)
+        timestamps_per_spec(pQueueFamilyProperties[index].queueFamilyProperties);
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                                    uint32_t *pQueueFamilyPropertyCount,
+                                                                    VkQueueFamilyProperties2 *pQueueFamilyProperties)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceQueueFamilyProperties2KHR");
+    on_vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
+}
+
 bool VulkanBackend::backs_with_source(VkDevice device, const void *next, VkStructureType external,
                                       VkExternalMemoryHandleTypeFlags types) const
 {
