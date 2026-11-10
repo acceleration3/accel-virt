@@ -1,3 +1,4 @@
+#include "executor/vram_budget_source.hpp"
 #include "executor/vram_ledger.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/vram_policy.hpp"
@@ -10,6 +11,20 @@ using av::VramLedger;
 namespace {
 
 constexpr std::uint64_t gib = 1ull << 30;
+
+
+class FixedSource final : public av::VramBudgetSource {
+public:
+    FixedSource(std::uint64_t budget, std::uint64_t usage) : budget_(budget), usage_(usage) {}
+    bool device_local(std::uint64_t &budget, std::uint64_t &usage) override
+    { budget = budget_;
+      usage = usage_;
+      return true; }
+
+private:
+    std::uint64_t budget_;
+    std::uint64_t usage_;
+};
 
 }
 
@@ -89,3 +104,14 @@ TEST(vram_ledger, racing_threads_never_hold_more_than_the_cap_and_end_at_zero)
   a.join(); b.join(); c.join(); d.join();
   CHECK_EQ(over, 0u);
   CHECK_EQ(ledger.used(), 0u); }
+
+TEST(vram_ledger, the_advertised_cap_stays_the_policys_while_the_followed_cap_falls_with_the_host)
+{ VramLedger  ledger;
+  FixedSource source(6 * gib, 5 * gib);
+  ledger.learn(16 * gib);
+  ledger.follow(&source);
+  CHECK(ledger.take(1));
+  CHECK(ledger.cap() < ledger.advertised());
+  CHECK_EQ(ledger.advertised(), 14 * gib);
+  ledger.reserve_vram(4096u);
+  CHECK_EQ(ledger.advertised(), 12 * gib); }

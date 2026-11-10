@@ -22,6 +22,7 @@ public:
     void reserve_vram(uint32_t mib);
 
     uint64_t total() const;
+    uint64_t advertised() const override;
 
     bool invariants_hold() const;
 

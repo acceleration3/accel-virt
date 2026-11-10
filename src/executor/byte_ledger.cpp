@@ -51,6 +51,12 @@ void ByteLedger::give(uint64_t bytes)
     }
 }
 
+uint64_t ByteLedger::advertised() const
+{
+    AV_SCOPE("ByteLedger::advertised");
+    return cap();
+}
+
 uint64_t ByteLedger::cap() const
 {
     AV_SCOPE("ByteLedger::cap");

@@ -75,6 +75,12 @@ uint64_t VramAccount::held() const
     return __atomic_load_n(&held_, __ATOMIC_ACQUIRE);
 }
 
+uint64_t VramAccount::advertised() const
+{
+    AV_SCOPE("VramAccount::advertised");
+    return ledger_ != nullptr ? ledger_->advertised() : UINT64_MAX;
+}
+
 uint64_t VramAccount::cap() const
 {
     AV_SCOPE("VramAccount::cap");

@@ -24,6 +24,7 @@ public:
 
     uint64_t held() const;
     uint64_t cap() const;
+    uint64_t advertised() const;
     uint64_t free_bytes() const;
     uint64_t used() const;
 

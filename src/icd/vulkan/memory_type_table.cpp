@@ -43,17 +43,12 @@ Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
 
     properties_.memoryTypeCount = host.memoryTypeCount;
     for (uint32_t type = 0u; type < host.memoryTypeCount; type++) properties_.memoryTypes[type] = host.memoryTypes[type];
-    uint64_t system_heap = memory_.budget(MemorySegmentGroup::non_local);
-    for (uint32_t heap = 0u; heap < host.memoryHeapCount && system_heap == 0u; heap++)
-        if (group_of(host.memoryHeaps[heap]) == MemorySegmentGroup::non_local)
-            system_heap = host.memoryHeaps[heap].size;
     properties_.memoryHeapCount = host.memoryHeapCount;
     for (uint32_t heap = 0u; heap < host.memoryHeapCount; heap++) {
         properties_.memoryHeaps[heap].flags = host.memoryHeaps[heap].flags;
-        const bool device_local = group_of(host.memoryHeaps[heap]) == MemorySegmentGroup::local;
-        properties_.memoryHeaps[heap].size = device_local ? host.memoryHeaps[heap].size : system_heap;
+        properties_.memoryHeaps[heap].size = host.memoryHeaps[heap].size;
     }
-    shared_budget_ = system_heap;
+    shared_budget_ = memory_.budget(MemorySegmentGroup::non_local);
     return Status::ok;
 }
 
@@ -71,7 +66,10 @@ void MemoryTypeTable::budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer,
         const bool listed = heap < properties_.memoryHeapCount;
         const uint64_t adapter = listed ? memory_.usage(group_of(properties_.memoryHeaps[heap])) : 0u;
         const uint64_t usage = listed && hosted.heapUsage[heap] > adapter ? hosted.heapUsage[heap] : adapter;
-        const uint64_t size = listed ? properties_.memoryHeaps[heap].size : 0u;
+        uint64_t size = listed ? properties_.memoryHeaps[heap].size : 0u;
+        if (listed && group_of(properties_.memoryHeaps[heap]) == MemorySegmentGroup::non_local && shared_budget_ != 0u &&
+            shared_budget_ < size)
+            size = shared_budget_;
         answer.heapUsage[heap] = usage;
         answer.heapBudget[heap] = listed && size < usage ? usage : size;
     }
@@ -104,10 +102,6 @@ bool MemoryTypeTable::invariants_hold() const
     if (properties_.memoryHeapCount == 0u) return properties_.memoryTypeCount == 0u;
     for (uint32_t type = 0u; type < properties_.memoryTypeCount; type++)
         if (properties_.memoryTypes[type].heapIndex >= properties_.memoryHeapCount) return false;
-    for (uint32_t heap = 0u; heap < properties_.memoryHeapCount; heap++)
-        if (group_of(properties_.memoryHeaps[heap]) == MemorySegmentGroup::non_local &&
-            properties_.memoryHeaps[heap].size != shared_budget_)
-            return false;
     return true;
 }
 

@@ -78,6 +78,12 @@ void VramLedger::refresh()
     set_cap(followed < mine ? mine : followed);
 }
 
+uint64_t VramLedger::advertised() const
+{
+    AV_SCOPE("VramLedger::advertised");
+    return total_ == 0u ? UINT64_MAX : policy_.cap_for(total_);
+}
+
 uint64_t VramLedger::total() const
 {
     AV_SCOPE("VramLedger::total");

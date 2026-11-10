@@ -38,8 +38,8 @@ bool VramBudget::system(uint32_t heap) const
 void VramBudget::clamp(VkPhysicalDeviceMemoryProperties &answer) const
 {
     AV_SCOPE("VramBudget::clamp");
-    const uint64_t cap = account_.cap();
-    const uint64_t host_cap = host_account_.cap();
+    const uint64_t cap = account_.advertised();
+    const uint64_t host_cap = host_account_.advertised();
     for (uint32_t heap = 0u; heap < answer.memoryHeapCount && heap < VK_MAX_MEMORY_HEAPS; heap++) {
         const uint64_t limit = capped(heap) ? cap : host_cap;
         if (limit < answer.memoryHeaps[heap].size) answer.memoryHeaps[heap].size = limit;

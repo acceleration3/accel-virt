@@ -152,7 +152,7 @@ private:
 
 }
 
-TEST(icd_memory, the_physical_device_s_types_sit_on_the_adapter_s_budgets)
+TEST(icd_memory, the_physical_device_s_heaps_are_the_host_s_whatever_the_adapter_s_budget)
 { MemoryRig rig;
   rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 512u * mib, 12u * mib);
   rig.host().vk_memory_properties(types, visible);
@@ -165,7 +165,7 @@ TEST(icd_memory, the_physical_device_s_types_sit_on_the_adapter_s_budgets)
   CHECK_EQ(properties.memoryTypes[0].propertyFlags,
            static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
   CHECK_EQ(properties.memoryHeapCount, 1u);
-  CHECK_EQ(properties.memoryHeaps[0].size, 512u * mib);
+  CHECK_EQ(properties.memoryHeaps[0].size, 1024u * mib);
   CHECK_EQ(properties.memoryHeaps[1].size, 0u);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties)); }
 
@@ -188,7 +188,7 @@ TEST(icd_memory, the_budget_nodes_in_the_chain_are_the_adapter_s)
   properties.pNext = &first;
   rig.entry<MemoryProperties2>("vkGetPhysicalDeviceMemoryProperties2")(rig.physical(), &properties);
   CHECK_EQ(properties.memoryProperties.memoryTypeCount, types);
-  CHECK_EQ(properties.memoryProperties.memoryHeaps[0].size, 512u * mib);
+  CHECK_EQ(properties.memoryProperties.memoryHeaps[0].size, 1024u * mib);
   const VkPhysicalDeviceMemoryBudgetPropertiesEXT *const budgets[] = {&first, &second};
   for (const VkPhysicalDeviceMemoryBudgetPropertiesEXT *budget : budgets) {
       CHECK_EQ(budget->heapBudget[0], 512u * mib);
