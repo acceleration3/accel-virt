@@ -221,6 +221,8 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
     }
     if (!r->display) {
         b->enabled_output_bitmask = 0;
+    } else if (b->conf.max_outputs > 1) {
+        b->enabled_output_bitmask = (1u << b->conf.max_outputs) - 1u;
     }
     for (uint32_t i = 0; i < AV_DEVICE_INTERRUPT_LINES; i++) {
         r->fence_queues[i] = virtio_add_queue(VIRTIO_DEVICE(qdev), 2, virtio_gpu_av_fence_kick);
