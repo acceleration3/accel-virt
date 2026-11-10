@@ -1,5 +1,5 @@
 diff --git a/libs/vkd3d/device.c b/libs/vkd3d/device.c
-index 0c940cb..ead5870 100644
+index 0c940cb..8da3bed 100644
 --- a/libs/vkd3d/device.c
 +++ b/libs/vkd3d/device.c
 @@ -1417,7 +1417,7 @@ static HRESULT vkd3d_instance_init(struct vkd3d_instance *instance,
@@ -28,6 +28,15 @@ index 0c940cb..ead5870 100644
      VkResult vr;
      HRESULT hr;
  
+@@ -3991,7 +3997,7 @@ static HRESULT vkd3d_create_vk_device(struct d3d12_device *device,
+         return hr;
+     }
+ 
+-    if (!(extensions = vkd3d_calloc(extension_count, sizeof(*extensions))))
++    if (!(extensions = vkd3d_calloc(extension_count + 1, sizeof(*extensions))))
+     {
+         vkd3d_free(user_extension_supported);
+         return E_OUTOFMEMORY;
 @@ -4045,7 +4051,45 @@ static HRESULT vkd3d_create_vk_device(struct d3d12_device *device,
      device_info.pEnabledFeatures = &device->device_info.features2.features;
      vkd3d_free(user_extension_supported);
