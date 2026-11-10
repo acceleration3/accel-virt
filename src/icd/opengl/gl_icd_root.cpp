@@ -103,6 +103,7 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_vertex_program", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_fragment_program", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_sparse_texture", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_bindless_texture", 1u, "manual_calls.a_bindless_handle_is_used_only_after_this_share_group_was_given_it"},
     {"GL_NV_conservative_raster", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
