@@ -2,6 +2,7 @@
 #define AV_FAKE_COMMON_CONFIG_HPP
 
 #include "core/platform/register_window.hpp"
+#include "proto/context/context_capacity.hpp"
 
 #include <cstdint>
 
@@ -9,7 +10,7 @@ namespace av {
 
 class FakeCommonConfig final : public RegisterWindow {
 public:
-    static constexpr std::uint16_t max_queues = 66u;
+    static constexpr std::uint16_t max_queues = ContextCapacity::queues;
     static constexpr std::uint32_t history_capacity = 16u;
 
     struct Queue {

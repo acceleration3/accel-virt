@@ -271,7 +271,7 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
       {submit(5u, setup(99u)), err_invalid_resource_id},
       {submit(5u, setup(small_ring)), err_invalid_parameter},
       {submit(5u, setup(ring, 12u, ProtocolVersion::current_major + 1u)), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, 64u)), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, av::ContextCapacity::contexts)), err_invalid_parameter},
       {submit(5u, setup(headless_ring)), err_invalid_parameter},
       {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, 0u, 99u)), err_invalid_resource_id},
   };

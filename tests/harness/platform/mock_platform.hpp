@@ -178,11 +178,11 @@ public:
     const DdiTable *registered_table() const;
 
 private:
-    static constexpr std::uint32_t max_live = 4096u;
-    static constexpr std::uint32_t max_contiguous = 1024u;
-    static constexpr std::uint32_t max_page_frames = 256u;
-    static constexpr std::uint32_t max_frame_views = 256u;
-    static constexpr std::uint32_t max_process_views = 256u;
+    static constexpr std::uint32_t max_live = 32768u;
+    static constexpr std::uint32_t max_contiguous = 8192u;
+    static constexpr std::uint32_t max_page_frames = 1024u;
+    static constexpr std::uint32_t max_frame_views = 2048u;
+    static constexpr std::uint32_t max_process_views = 2048u;
     static constexpr std::uint32_t max_events = 32u;
     static constexpr std::uint64_t first_event_handle = 0x1F0u;
     static constexpr std::uint64_t first_process_view = 0x00007FF000000000ull;
@@ -231,7 +231,7 @@ private:
         std::uint32_t  ordinal;
         bool           live;
     };
-    static constexpr std::uint32_t max_owned_pages = 512u;
+    static constexpr std::uint32_t max_owned_pages = 2048u;
 
     OwnedPages *find_owned(void *pages);
 

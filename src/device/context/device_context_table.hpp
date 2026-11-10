@@ -3,6 +3,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "device/context/d3d_ordering.hpp"
 #include "device/context/device_context.hpp"
 #include "device/execution/executor_shares.hpp"
@@ -23,7 +24,7 @@ struct DeviceContextTableProbe;
 
 class DeviceContextTable {
 public:
-    static constexpr uint32_t max_contexts = 64u;
+    static constexpr uint32_t max_contexts = ContextCapacity::contexts;
 
     DeviceContextTable(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
                        const ExecutorLibrary &library, WireRecorder &recorder);

@@ -3,6 +3,7 @@
 #include "miniport/pci/pci_base_addresses.hpp"
 #include "miniport/pci/resource_list.hpp"
 #include "core/support/status.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "miniport/virtio/virt_queue.hpp"
 #include "miniport/virtio/virtio_capability_walk.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
@@ -390,7 +391,7 @@ TEST(virtio_gpu_device_connect_fence_queue, gives_each_doorbell_a_message_past_t
       CHECK_EQ(message, expected[doorbell]);
       CHECK_EQ(mapped.common().queue(static_cast<std::uint16_t>(2u + doorbell)).vector, expected[doorbell]);
   }
-  CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);
+  CHECK_STATUS(device.connect_fence_queue(av::ContextCapacity::contexts, message), Status::not_found);
   CHECK_STATUS(device.connect_fence_queue(0xFFFFu, message), Status::not_found);
   CHECK(device.invariants_hold()); }
 
@@ -406,7 +407,7 @@ TEST(virtio_gpu_device_connect_fence_queue, shares_vector_zero_or_assigns_nothin
       CHECK_STATUS(device.connect_fence_queue(5u, message), Status::ok);
       CHECK_EQ(message, 0u);
       if (messages != 0u) CHECK_EQ(mapped.common().queue(7u).vector, 0u);
-      CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);
+      CHECK_STATUS(device.connect_fence_queue(av::ContextCapacity::contexts, message), Status::not_found);
   } }
 
 TEST(virtio_gpu_device_connect_fence_queue, a_doorbell_past_the_queues_the_device_has_is_not_found_without_messages)

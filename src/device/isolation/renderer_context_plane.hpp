@@ -5,6 +5,7 @@
 #include "core/support/object_storage.hpp"
 #include "device/context/context_plane.hpp"
 #include "device/isolation/remote_context.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "device/isolation/renderer_link.hpp"
 #include "device/memory/blob_table.hpp"
 #include "proto/context/device_uuid.hpp"
@@ -27,7 +28,7 @@ struct RendererContextPlaneProbe;
 
 class RendererContextPlane final : public ContextPlane {
 public:
-    static constexpr uint32_t max_contexts = 64u;
+    static constexpr uint32_t max_contexts = ContextCapacity::contexts;
     static constexpr uint32_t max_path = HelloMessage::max_path_length;
     static constexpr uint32_t max_losses = 3u;
     static constexpr uint64_t loss_window_ns = 60000000000u;

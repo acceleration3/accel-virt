@@ -22,6 +22,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
@@ -130,7 +131,7 @@ constexpr std::uint8_t  uuid[av::GpuIdentity::uuid_bytes] = {};
 
 CapsetInfo capset()
 {
-    return CapsetInfo(av::ProtocolVersion(1u, 0u), 0x7u, 64u, 12u, 20u, 0u,
+    return CapsetInfo(av::ProtocolVersion(1u, 0u), 0x7u, av::ContextCapacity::contexts, 12u, 20u, 0u,
                       av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 
@@ -684,7 +685,7 @@ TEST(av_context_table_bind, a_record_the_capset_forbids_is_refused_before_the_de
 { Fixture fixture;
   Host host(fixture.mapped());
   const AvContextRecord opengl(SubApi::opengl, 12u, fixture.ring().handle(), page);
-  const CapsetInfo vulkan_only(av::ProtocolVersion(1u, 0u), 0x1u, 64u, 12u, 20u, 0u,
+  const CapsetInfo vulkan_only(av::ProtocolVersion(1u, 0u), 0x1u, av::ContextCapacity::contexts, 12u, 20u, 0u,
                                av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
   CHECK_STATUS(fixture.table().bind(&first_context, opengl, fixture.device(),
                                     fixture.mapped().function().doorbells(), vulkan_only),
@@ -1572,7 +1573,7 @@ constexpr std::size_t options_offset = setup_offset + 32u;
 
 CapsetInfo current_capset()
 {
-    return CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor), 0x7u, 64u, 12u, 20u, 0u,
+    return CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor), 0x7u, av::ContextCapacity::contexts, 12u, 20u, 0u,
                       av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 

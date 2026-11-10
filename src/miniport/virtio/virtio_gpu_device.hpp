@@ -7,6 +7,7 @@
 #include "core/support/status.hpp"
 #include "miniport/virtio/gpu_command_queue.hpp"
 #include "miniport/virtio/virtio_pci_transport.hpp"
+#include "proto/context/context_capacity.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -54,7 +55,7 @@ public:
 private:
     enum : uint16_t { config_source = 0u, control_source = 1u, cursor_source = 2u, source_count = 3u };
     enum : uint16_t { control_queue = 0u, cursor_queue = 1u, first_fence_queue = 2u };
-    static constexpr uint32_t doorbells = 64u;
+    static constexpr uint32_t doorbells = ContextCapacity::contexts;
     static constexpr uint16_t no_vector = 0xFFFFu;
     static constexpr uint64_t num_scanouts_offset = 8u;
     static constexpr uint64_t events_clear_offset = 4u;

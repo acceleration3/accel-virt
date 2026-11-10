@@ -12,6 +12,10 @@ static_assert(FenceInterrupts::display_line == AV_DEVICE_DISPLAY_LINE &&
                   FenceInterrupts::present_line == AV_DEVICE_PRESENT_LINE &&
                   FenceInterrupts::lines == AV_DEVICE_INTERRUPT_LINES,
               "the glue makes a virtqueue for every line the core raises");
+static_assert(AV_DEVICE_DOORBELLS == ContextCapacity::contexts && AV_DEVICE_DOORBELL_PAGE == ContextCapacity::doorbell_page_bytes &&
+                  AV_DEVICE_FENCE_QUEUE_FIRST == ContextCapacity::fence_queue_first &&
+                  AV_DEVICE_FENCE_QUEUE_FIRST + AV_DEVICE_INTERRUPT_LINES == ContextCapacity::queues,
+              "the device header and the core size the contexts alike");
 
 FenceInterrupts::FenceInterrupts(Host &host) : host_(host), lock_(nullptr), connected_(false), stress_(nullptr)
 {

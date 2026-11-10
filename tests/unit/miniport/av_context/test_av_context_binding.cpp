@@ -11,6 +11,7 @@
 #include "proto/resources/host_blob_id.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/escape/av_context_record.hpp"
@@ -59,7 +60,7 @@ constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {};
 
 CapsetInfo capset()
 {
-    return CapsetInfo(ProtocolVersion(1u, 0u), 0x7u, 64u, 12u, 20u, 0u,
+    return CapsetInfo(ProtocolVersion(1u, 0u), 0x7u, av::ContextCapacity::contexts, 12u, 20u, 0u,
                       GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 

@@ -10,7 +10,7 @@ namespace av {
 
 class FakeHandleTable {
 public:
-    static constexpr std::uint32_t capacity = 256u;
+    static constexpr std::uint32_t capacity = 1024u;
 
     FakeHandleTable();
     ~FakeHandleTable();

@@ -3,6 +3,7 @@
 
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "proto/submission/ring_progress.hpp"
 
 #include <stdint.h>
@@ -16,8 +17,8 @@ struct RingSubmitterProbe;
 
 class RingSubmitter {
 public:
-    static constexpr uint32_t doorbell_pages = 64u;
-    static constexpr uint64_t doorbell_page_bytes = 4096u;
+    static constexpr uint32_t doorbell_pages = ContextCapacity::contexts;
+    static constexpr uint64_t doorbell_page_bytes = ContextCapacity::doorbell_page_bytes;
 
     RingSubmitter(Platform &platform, RegisterWindow &doorbells, FenceProgress &fences);
 

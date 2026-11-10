@@ -2,6 +2,7 @@
 #define AV_FENCE_INTERRUPTS_HPP
 
 #include "core/support/status.hpp"
+#include "proto/context/context_capacity.hpp"
 
 #include <stdint.h>
 
@@ -13,7 +14,7 @@ struct FenceInterruptsProbe;
 
 class FenceInterrupts {
 public:
-    static constexpr uint32_t display_line = 64u;
+    static constexpr uint32_t display_line = ContextCapacity::contexts;
     static constexpr uint32_t present_line = display_line + 1u;
     static constexpr uint32_t lines = present_line + 1u;
 

@@ -4,6 +4,7 @@
 #include "device/abi/av_executor.h"
 #include "device/host/host.hpp"
 #include "harness/host/host_violation.hpp"
+#include "proto/context/context_capacity.hpp"
 #include "proto/context/gpu_identity.hpp"
 
 #include <atomic>
@@ -19,12 +20,12 @@ class RendererPeer;
 class MockHost final : public Host {
 public:
     static constexpr std::uint32_t no_gpu = 0xFFFFFFFFu;
-    static constexpr std::uint32_t max_threads = 128u;
-    static constexpr std::uint32_t max_events = 256u;
-    static constexpr std::uint32_t max_mutexes = 256u;
+    static constexpr std::uint32_t max_threads = 512u;
+    static constexpr std::uint32_t max_events = 1024u;
+    static constexpr std::uint32_t max_mutexes = 1024u;
     static constexpr std::uint32_t max_gpus = 8u;
     static constexpr std::uint32_t max_main_loop_work = 1024u;
-    static constexpr std::uint32_t max_doorbells = 64u;
+    static constexpr std::uint32_t max_doorbells = ContextCapacity::contexts;
     static constexpr std::uint32_t interrupt_lines = max_doorbells + 2u;
     static constexpr std::uint32_t max_scanout_heads = 16u;
 

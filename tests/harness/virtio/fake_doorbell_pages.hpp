@@ -2,6 +2,7 @@
 #define AV_FAKE_DOORBELL_PAGES_HPP
 
 #include "core/platform/register_window.hpp"
+#include "proto/context/context_capacity.hpp"
 
 #include <cstdint>
 
@@ -9,7 +10,7 @@ namespace av {
 
 class FakeDoorbellPages final : public RegisterWindow {
 public:
-    static constexpr std::uint32_t pages = 64u;
+    static constexpr std::uint32_t pages = ContextCapacity::contexts;
     static constexpr std::uint64_t page_bytes = 4096u;
 
     FakeDoorbellPages();

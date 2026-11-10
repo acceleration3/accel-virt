@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "device/context/device_context_table.hpp"
 #include "device/gpu/device_capset.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
@@ -46,7 +47,7 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   CHECK(info.offers(SubApi::vulkan));
   CHECK(!info.offers(SubApi::opengl));
   CHECK(!info.offers(SubApi::opencl));
-  CHECK_EQ(info.max_contexts(), 64u);
+  CHECK_EQ(info.max_contexts(), av::DeviceContextTable::max_contexts);
   CHECK(info.accepts_ring_order(12u) && info.accepts_ring_order(24u));
   CHECK(!info.accepts_ring_order(11u) && !info.accepts_ring_order(25u));
   CHECK(!info.has_feature(CapsetInfo::feature_host_visible_memory));

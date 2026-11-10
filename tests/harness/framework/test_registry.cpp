@@ -1,5 +1,7 @@
 #include "harness/framework/test_registry.hpp"
 
+#include <pthread.h>
+
 #include "core/platform/platform.hpp"
 
 #include <cstdarg>
@@ -52,6 +54,31 @@ bool TestRegistry::take_current_failure()
     return failed;
 }
 
+namespace {
+
+constexpr std::size_t test_stack_bytes = std::size_t{512} << 20u;
+
+void *run_case(void *test)
+{
+    static_cast<const TestCase *>(test)->run();
+    return nullptr;
+}
+
+void run_on_wide_stack(const TestCase &test)
+{
+    pthread_attr_t attributes;
+    pthread_t      thread;
+    if (pthread_attr_init(&attributes) != 0 || pthread_attr_setstacksize(&attributes, test_stack_bytes) != 0 ||
+        pthread_create(&thread, &attributes, run_case, const_cast<TestCase *>(&test)) != 0) {
+        test.run();
+        return;
+    }
+    pthread_join(thread, nullptr);
+    pthread_attr_destroy(&attributes);
+}
+
+}
+
 int TestRegistry::run(int argc, char **argv)
 {
     const char *filter = (argc > 1) ? argv[1] : nullptr;
@@ -63,7 +90,7 @@ int TestRegistry::run(int argc, char **argv)
         current_failed_ = false;
         std::printf("%-34s %-54s", test->suite(), test->name());
         std::fflush(stdout);
-        test->run();
+        run_on_wide_stack(*test);
         std::printf("%s\n", current_failed_ ? "FAIL" : "ok");
         failures_ += current_failed_ ? 1 : 0;
         executed++;

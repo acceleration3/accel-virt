@@ -2,6 +2,7 @@
 #define AV_DEVICE_PULSE_HPP
 
 #include "core/support/status.hpp"
+#include "proto/context/context_capacity.hpp"
 
 #include <stdint.h>
 
@@ -13,7 +14,7 @@ struct DevicePulseProbe;
 
 class DevicePulse {
 public:
-    static constexpr uint32_t capacity = 64u;
+    static constexpr uint32_t capacity = ContextCapacity::contexts;
     static constexpr uint64_t period_ns = 250000000u;
 
     explicit DevicePulse(Host &host);

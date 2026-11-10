@@ -63,7 +63,7 @@ void FakeVirtioGpuFunction::add_doorbell_region()
     add_shared_memory_region(doorbell_region_id, 0u, 0u, length, doorbell_bar_address);
     const std::uint32_t low = static_cast<std::uint32_t>(doorbell_bar_address);
     std::memcpy(config_ + 0x10u, &low, 4u);
-    common_.set_queues(67u, 256u);
+    common_.set_queues(ContextCapacity::contexts + 3u, 256u);
     doorbell_region_ = true;
 }
 

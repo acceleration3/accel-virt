@@ -244,7 +244,7 @@ TEST(bar_mappings_map_region, a_region_past_its_resource_is_refused_and_the_stru
   CHECK_STATUS(discovery.discover(), Status::ok);
   BarMappings mappings(discovery.platform(), discovery.interface());
   CHECK_STATUS(mappings.map(discovery.bars(), discovery.resources(), discovery.layout()), Status::ok);
-  const VirtioRegion oversized(0u, 0u, 0x100000u);
+  const VirtioRegion oversized(0u, 0u, 0x200000u);
   CHECK(mappings.map_region(discovery.bars(), discovery.resources(), oversized) != Status::ok);
   CHECK_EQ(mappings.mapped_bars(), 1u);
   CHECK(mappings.invariants_hold()); }

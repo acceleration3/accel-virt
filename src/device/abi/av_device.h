@@ -12,13 +12,13 @@ extern "C" {
 
 typedef void (*AvHostRoutine)(void *context);
 
-#define AV_DEVICE_DOORBELLS 64u
+#define AV_DEVICE_DOORBELLS 256u
 #define AV_DEVICE_DOORBELL_PAGE 4096u
 #define AV_DEVICE_DOORBELL_SHM_ID 0x72u
 #define AV_DEVICE_FENCE_QUEUE_FIRST 2u
-#define AV_DEVICE_DISPLAY_LINE 64u
-#define AV_DEVICE_PRESENT_LINE 65u
-#define AV_DEVICE_INTERRUPT_LINES 66u
+#define AV_DEVICE_DISPLAY_LINE AV_DEVICE_DOORBELLS
+#define AV_DEVICE_PRESENT_LINE (AV_DEVICE_DOORBELLS + 1u)
+#define AV_DEVICE_INTERRUPT_LINES (AV_DEVICE_DOORBELLS + 2u)
 
 typedef struct AvGpuProperties {
     uint32_t vendor_id;
