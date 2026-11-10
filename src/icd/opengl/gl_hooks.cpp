@@ -74,6 +74,16 @@ const uint64_t *offsets_of(const void *const *offsets, size_t count) noexcept
     return converted;
 }
 
+const int64_t *wide_intptrs(const GLintptr *values, size_t count, uint32_t which) noexcept
+{
+    AV_SCOPE("wide_intptrs");
+    GuestGlContext *const context = current_context();
+    if (context == nullptr) return nullptr;
+    const int64_t *const wide = context->arrays().widened(values, count, which);
+    if (wide == nullptr && values != nullptr) context->record(GuestGlContext::gl_out_of_memory);
+    return wide;
+}
+
 bool pixel_buffer_bound(bool packing) noexcept
 {
     AV_SCOPE("pixel_buffer_bound");

@@ -228,9 +228,9 @@ void av_glBindBuffersBase(::av::ClientTransport& av_t, GLenum target, GLuint fir
     (void)av_t.send_async(kCmd_glBindBuffersBase, av_b);
 }
 
-void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizeiptr* sizes) {
+void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers, const int64_t* offsets, const int64_t* sizes) {
     AV_SCOPE("av_glBindBuffersRange");
-    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, sizes != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizeiptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizeiptr)))) : 0u};
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t)))) : 0u, sizes != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t)))) : 0u};
     ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(first));
@@ -260,7 +260,7 @@ void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint fi
         if (buffers_want != 0) av_b.write(buffers, buffers_want);
     }
     size_t offsets_want = 0;
-    if (offsets != nullptr) offsets_want = (static_cast<size_t>(count) * sizeof(GLintptr));
+    if (offsets != nullptr) offsets_want = (static_cast<size_t>(count) * sizeof(int64_t));
     ::av::ClientBlobLease offsets_lease{};
     bool offsets_via_blob = false;
     if (offsets != nullptr &&
@@ -284,7 +284,7 @@ void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint fi
         if (offsets_want != 0) av_b.write(offsets, offsets_want);
     }
     size_t sizes_want = 0;
-    if (sizes != nullptr) sizes_want = (static_cast<size_t>(count) * sizeof(GLsizeiptr));
+    if (sizes != nullptr) sizes_want = (static_cast<size_t>(count) * sizeof(int64_t));
     ::av::ClientBlobLease sizes_lease{};
     bool sizes_via_blob = false;
     if (sizes != nullptr &&
@@ -643,9 +643,9 @@ void av_glBindVertexBuffer(::av::ClientTransport& av_t, GLuint bindingindex, GLu
     (void)av_t.send_async(kCmd_glBindVertexBuffer, av_b);
 }
 
-void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides) {
+void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* buffers, const int64_t* offsets, const GLsizei* strides) {
     AV_SCOPE("av_glBindVertexBuffers");
-    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
     ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -674,7 +674,7 @@ void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei c
         if (buffers_want != 0) av_b.write(buffers, buffers_want);
     }
     size_t offsets_want = 0;
-    if (offsets != nullptr) offsets_want = (static_cast<size_t>(count) * sizeof(GLintptr));
+    if (offsets != nullptr) offsets_want = (static_cast<size_t>(count) * sizeof(int64_t));
     ::av::ClientBlobLease offsets_lease{};
     bool offsets_via_blob = false;
     if (offsets != nullptr &&
@@ -17164,9 +17164,9 @@ void av_glVertexArrayVertexBuffer(::av::ClientTransport& av_t, GLuint vaobj, GLu
     (void)av_t.send_async(kCmd_glVertexArrayVertexBuffer, av_b);
 }
 
-void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides) {
+void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GLuint first, GLsizei count, const GLuint* buffers, const int64_t* offsets, const GLsizei* strides) {
     AV_SCOPE("av_glVertexArrayVertexBuffers");
-    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(int64_t)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
     ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(vaobj));
     av_b.write_varint(static_cast<uint64_t>(first));
@@ -17196,7 +17196,7 @@ void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GL
         if (buffers_want != 0) av_b.write(buffers, buffers_want);
     }
     size_t offsets_want = 0;
-    if (offsets != nullptr) offsets_want = (static_cast<size_t>(count) * sizeof(GLintptr));
+    if (offsets != nullptr) offsets_want = (static_cast<size_t>(count) * sizeof(int64_t));
     ::av::ClientBlobLease offsets_lease{};
     bool offsets_via_blob = false;
     if (offsets != nullptr &&

@@ -573,8 +573,8 @@ static bool decode_glBindBuffersRange(const RealGl& av_gl, ::av::WireReader& av_
             if (!av_r.read_varint(av_bytes)) return false;
             if (av_bytes > av_r.remaining()) return false;
             offsets_room = av_bytes;
-            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLintptr) + 1;
-            auto* av_run = av_arena.allocate<GLintptr>(av_elements);
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(int64_t) + 1;
+            auto* av_run = av_arena.allocate<int64_t>(av_elements);
             if (av_run == nullptr) return false;
             if (av_bytes != 0 &&
                 !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
@@ -601,8 +601,8 @@ static bool decode_glBindBuffersRange(const RealGl& av_gl, ::av::WireReader& av_
             if (!av_r.read_varint(av_bytes)) return false;
             if (av_bytes > av_r.remaining()) return false;
             sizes_room = av_bytes;
-            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLsizeiptr) + 1;
-            auto* av_run = av_arena.allocate<GLsizeiptr>(av_elements);
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(int64_t) + 1;
+            auto* av_run = av_arena.allocate<int64_t>(av_elements);
             if (av_run == nullptr) return false;
             if (av_bytes != 0 &&
                 !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
@@ -621,12 +621,12 @@ static bool decode_glBindBuffersRange(const RealGl& av_gl, ::av::WireReader& av_
     if (count < 0) return av_refuse(0x0501);
     const uint64_t offsets_elements = static_cast<uint64_t>(count);
     uint64_t offsets_needed = 0;
-    if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(GLintptr)), &offsets_needed)) return false;
+    if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(int64_t)), &offsets_needed)) return false;
     if (offsets == nullptr ? (offsets_needed != 0 && !(buffers == nullptr)) : offsets_room < offsets_needed) return false;
     if (count < 0) return av_refuse(0x0501);
     const uint64_t sizes_elements = static_cast<uint64_t>(count);
     uint64_t sizes_needed = 0;
-    if (__builtin_mul_overflow(sizes_elements, static_cast<uint64_t>(sizeof(GLsizeiptr)), &sizes_needed)) return false;
+    if (__builtin_mul_overflow(sizes_elements, static_cast<uint64_t>(sizeof(int64_t)), &sizes_needed)) return false;
     if (sizes == nullptr ? (sizes_needed != 0 && !(buffers == nullptr)) : sizes_room < sizes_needed) return false;
     if (av_gl.glBindBuffersRange == nullptr) return false;
     av_gl.glBindBuffersRange(target, first, count, buffers, offsets, sizes);
@@ -1070,8 +1070,8 @@ static bool decode_glBindVertexBuffers(const RealGl& av_gl, ::av::WireReader& av
             if (!av_r.read_varint(av_bytes)) return false;
             if (av_bytes > av_r.remaining()) return false;
             offsets_room = av_bytes;
-            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLintptr) + 1;
-            auto* av_run = av_arena.allocate<GLintptr>(av_elements);
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(int64_t) + 1;
+            auto* av_run = av_arena.allocate<int64_t>(av_elements);
             if (av_run == nullptr) return false;
             if (av_bytes != 0 &&
                 !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
@@ -1118,7 +1118,7 @@ static bool decode_glBindVertexBuffers(const RealGl& av_gl, ::av::WireReader& av
     if (count < 0) return av_refuse(0x0501);
     const uint64_t offsets_elements = static_cast<uint64_t>(count);
     uint64_t offsets_needed = 0;
-    if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(GLintptr)), &offsets_needed)) return false;
+    if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(int64_t)), &offsets_needed)) return false;
     if (offsets == nullptr ? (offsets_needed != 0 && !(buffers == nullptr)) : offsets_room < offsets_needed) return false;
     if (count < 0) return av_refuse(0x0501);
     const uint64_t strides_elements = static_cast<uint64_t>(count);
@@ -22824,8 +22824,8 @@ static bool decode_glVertexArrayVertexBuffers(const RealGl& av_gl, ::av::WireRea
             if (!av_r.read_varint(av_bytes)) return false;
             if (av_bytes > av_r.remaining()) return false;
             offsets_room = av_bytes;
-            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLintptr) + 1;
-            auto* av_run = av_arena.allocate<GLintptr>(av_elements);
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(int64_t) + 1;
+            auto* av_run = av_arena.allocate<int64_t>(av_elements);
             if (av_run == nullptr) return false;
             if (av_bytes != 0 &&
                 !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
@@ -22872,7 +22872,7 @@ static bool decode_glVertexArrayVertexBuffers(const RealGl& av_gl, ::av::WireRea
     if (count < 0) return av_refuse(0x0501);
     const uint64_t offsets_elements = static_cast<uint64_t>(count);
     uint64_t offsets_needed = 0;
-    if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(GLintptr)), &offsets_needed)) return false;
+    if (__builtin_mul_overflow(offsets_elements, static_cast<uint64_t>(sizeof(int64_t)), &offsets_needed)) return false;
     if (offsets == nullptr ? (offsets_needed != 0 && !(buffers == nullptr)) : offsets_room < offsets_needed) return false;
     if (count < 0) return av_refuse(0x0501);
     const uint64_t strides_elements = static_cast<uint64_t>(count);

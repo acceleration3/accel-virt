@@ -101,7 +101,7 @@ void APIENTRY Wrap_glBindBuffersRange(GLenum target, GLuint first, GLsizei count
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
     ::av::glicd::bind_buffers_indexed(target);
-    ::av::glproto::av_glBindBuffersRange(*av_t, target, first, count, buffers, offsets, sizes);
+    ::av::glproto::av_glBindBuffersRange(*av_t, target, first, count, buffers, ::av::glicd::wide_intptrs(offsets, static_cast<size_t>(count), 0u), ::av::glicd::wide_intptrs(sizes, static_cast<size_t>(count), 1u));
 }
 
 void APIENTRY Wrap_glBindFragDataLocation(GLuint program, GLuint color, const GLchar* name) {
@@ -207,7 +207,7 @@ void APIENTRY Wrap_glBindVertexBuffers(GLuint first, GLsizei count, const GLuint
     AV_SCOPE("glBindVertexBuffers");
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
-    ::av::glproto::av_glBindVertexBuffers(*av_t, first, count, buffers, offsets, strides);
+    ::av::glproto::av_glBindVertexBuffers(*av_t, first, count, buffers, ::av::glicd::wide_intptrs(offsets, static_cast<size_t>(count), 0u), strides);
 }
 
 void APIENTRY Wrap_glBlendColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
@@ -4180,7 +4180,7 @@ void APIENTRY Wrap_glVertexArrayVertexBuffers(GLuint vaobj, GLuint first, GLsize
     AV_SCOPE("glVertexArrayVertexBuffers");
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
-    ::av::glproto::av_glVertexArrayVertexBuffers(*av_t, vaobj, first, count, buffers, offsets, strides);
+    ::av::glproto::av_glVertexArrayVertexBuffers(*av_t, vaobj, first, count, buffers, ::av::glicd::wide_intptrs(offsets, static_cast<size_t>(count), 0u), strides);
 }
 
 void APIENTRY Wrap_glVertexAttrib1d(GLuint index, GLdouble x) {

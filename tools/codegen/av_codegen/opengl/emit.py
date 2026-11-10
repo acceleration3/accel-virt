@@ -72,6 +72,8 @@ def _client_params(cmd: Command, defaults: bool = False) -> list[str]:
                 out.append(f"size_t {p.name}_bytes")
             out.append(f"bool {p.name}_is_offset" +
                        (" = false" if defaults else ""))
+        elif _wide_array(p):
+            out.append(f"const int64_t* {p.name}")
         else:
             out.append(f"{p.type.cpp()} {p.name}")
     return out
@@ -115,7 +117,16 @@ def _count_expr(p: Param) -> str:
     raise AssertionError(f"no count for {p.name}: {length.kind}")
 
 
+WIDE_POINTER_SIZED = ("GLintptr", "GLsizeiptr")
+
+
+def _wide_array(p: Param) -> bool:
+    return p.role is Role.ARRAY_IN and p.type.base in WIDE_POINTER_SIZED
+
+
 def _storage_type(p: Param) -> str:
+    if _wide_array(p):
+        return "int64_t"
     return "uint8_t" if p.type.base == "void" else p.type.base
 
 
@@ -2098,6 +2109,9 @@ def _icd_forward_args(cmd: Command) -> list[str]:
             if _stated_size(cmd) is None:
                 args.append(f"av_{p.name}_bytes")
             args.append(f"av_{p.name}_offset")
+        elif _wide_array(p) and p.length is not None:
+            args.append(f"::av::glicd::wide_intptrs({p.name}, "
+                        f"static_cast<size_t>({p.length.text}), {1 if p.name == 'sizes' else 0}u)")
         else:
             args.append(p.name)
     return args

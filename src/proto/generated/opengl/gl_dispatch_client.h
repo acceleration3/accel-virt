@@ -24,7 +24,7 @@ void av_glBindBuffer(::av::ClientTransport& av_t, GLenum target, GLuint buffer);
 void av_glBindBufferBase(::av::ClientTransport& av_t, GLenum target, GLuint index, GLuint buffer);
 void av_glBindBufferRange(::av::ClientTransport& av_t, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
 void av_glBindBuffersBase(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers);
-void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizeiptr* sizes);
+void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers, const int64_t* offsets, const int64_t* sizes);
 void av_glBindFragDataLocation(::av::ClientTransport& av_t, GLuint program, GLuint color, const GLchar* name);
 void av_glBindFragDataLocationIndexed(::av::ClientTransport& av_t, GLuint program, GLuint colorNumber, GLuint index, const GLchar* name);
 void av_glBindFramebuffer(::av::ClientTransport& av_t, GLenum target, GLuint framebuffer);
@@ -40,7 +40,7 @@ void av_glBindTextures(::av::ClientTransport& av_t, GLuint first, GLsizei count,
 void av_glBindTransformFeedback(::av::ClientTransport& av_t, GLenum target, GLuint id);
 void av_glBindVertexArray(::av::ClientTransport& av_t, GLuint array);
 void av_glBindVertexBuffer(::av::ClientTransport& av_t, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
-void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides);
+void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* buffers, const int64_t* offsets, const GLsizei* strides);
 void av_glBlendColor(::av::ClientTransport& av_t, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
 void av_glBlendEquation(::av::ClientTransport& av_t, GLenum mode);
 void av_glBlendEquationSeparate(::av::ClientTransport& av_t, GLenum modeRGB, GLenum modeAlpha);
@@ -595,7 +595,7 @@ void av_glVertexArrayAttribLFormat(::av::ClientTransport& av_t, GLuint vaobj, GL
 void av_glVertexArrayBindingDivisor(::av::ClientTransport& av_t, GLuint vaobj, GLuint bindingindex, GLuint divisor);
 void av_glVertexArrayElementBuffer(::av::ClientTransport& av_t, GLuint vaobj, GLuint buffer);
 void av_glVertexArrayVertexBuffer(::av::ClientTransport& av_t, GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride);
-void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides);
+void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GLuint first, GLsizei count, const GLuint* buffers, const int64_t* offsets, const GLsizei* strides);
 void av_glVertexAttrib1d(::av::ClientTransport& av_t, GLuint index, GLdouble x);
 void av_glVertexAttrib1dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v);
 void av_glVertexAttrib1f(::av::ClientTransport& av_t, GLuint index, GLfloat x);

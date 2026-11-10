@@ -2196,3 +2196,16 @@ TEST(manual_calls_slices, a_slice_is_placed_by_storage_calls_and_a_plain_storage
   CHECK(!current.context().slices().holds(11u));
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK(current.context().invariants_hold()); }
+
+TEST(manual_calls, vertex_buffer_offsets_cross_as_eight_byte_elements)
+{ Current current;
+  const GLuint   buffers[2] = {4u, 5u};
+  const GLintptr offsets[2] = {16, 32};
+  const GLsizei  strides[2] = {12, 12};
+  gen::Wrap_glBindVertexBuffers(0u, 2, buffers, offsets, strides);
+  gen::Wrap_glBindBuffersRange(array_buffer, 0u, 2, buffers, offsets, offsets);
+  gen::Wrap_glVertexArrayVertexBuffers(3u, 0u, 2, buffers, offsets, strides);
+  CHECK_EQ(current.sent(), 3u);
+  CHECK_EQ(current.sent_since(0u), ids::kCmd_glBindVertexBuffers);
+  CHECK_EQ(current.sent_since(1u), ids::kCmd_glBindBuffersRange);
+  CHECK_EQ(current.sent_since(2u), ids::kCmd_glVertexArrayVertexBuffers); }

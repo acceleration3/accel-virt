@@ -64,6 +64,7 @@ public:
     uint64_t attribute_pointer(uint32_t index) const;
 
     const uint64_t *offsets_of(const void *const *pointers, size_t count);
+    const int64_t  *widened(const intptr_t *values, size_t count, uint32_t which);
 
     bool skip_active_texture(uint32_t texture);
     bool skip_bind_texture(uint32_t target, uint32_t texture);
@@ -111,6 +112,7 @@ private:
     uint32_t   textures_[units][texture_targets];
     uint32_t   samplers_[units];
     GrowableArray<uint64_t> offsets_;
+    GrowableArray<int64_t>  wide_[2];
     uint64_t                no_offsets_;
 
     friend struct ClientArrayStateProbe;

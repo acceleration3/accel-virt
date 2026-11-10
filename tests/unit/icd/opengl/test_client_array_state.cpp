@@ -359,3 +359,16 @@ TEST(client_array_state, deleting_the_buffer_the_default_vertex_array_uses_unbin
   state.delete_buffers(1, names);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
   CHECK(state.invariants_hold()); }
+
+TEST(client_array_state, pointer_sized_values_are_widened_for_the_wire)
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
+  const std::intptr_t values[3] = {-1, 8, 16};
+  const std::int64_t *wide = state.widened(values, 3u, 0u);
+  CHECK(wide != nullptr);
+  CHECK_EQ(wide[0], -1);
+  CHECK_EQ(wide[2], 16);
+  CHECK(state.widened(nullptr, 3u, 0u) == nullptr);
+  CHECK(state.widened(values, 0u, 1u) != nullptr);
+  CHECK(state.widened(values, 3u, 5u) != nullptr);
+  CHECK(state.widened(values, 3u, 1u) != nullptr); }

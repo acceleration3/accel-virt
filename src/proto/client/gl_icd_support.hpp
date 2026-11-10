@@ -19,6 +19,7 @@ size_t           compressed_bytes(GLsizei width, GLsizei height, GLsizei depth, 
 size_t           level_bytes(GLenum target, GLint level, GLenum format, GLenum type) noexcept;
 size_t           compressed_level_bytes(GLenum target, GLint level, bool packing) noexcept;
 const uint64_t  *offsets_of(const void *const *offsets, size_t count) noexcept;
+const int64_t   *wide_intptrs(const GLintptr *values, size_t count, uint32_t which) noexcept;
 bool             pixel_buffer_bound(bool packing) noexcept;
 bool             query_buffer_bound() noexcept;
 GLuint           framebuffer_name(GLuint name) noexcept;

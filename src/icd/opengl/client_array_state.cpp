@@ -32,7 +32,7 @@ constexpr uint32_t texture_targets_kept[] = {
 ClientArrayState::ClientArrayState(BlockSource &memory)
     : buffers_{}, pushed_{}, depth_(0u), unsaved_(0u), host_depth_limit_(least_depth_limit), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
       elements_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
-      offsets_(memory, Pool::paged), no_offsets_(0u)
+      offsets_(memory, Pool::paged), wide_{GrowableArray<int64_t>(memory, Pool::paged), GrowableArray<int64_t>(memory, Pool::paged)}, no_offsets_(0u)
 {
     AV_SCOPE("ClientArrayState::ClientArrayState");
     forget_bindings();
@@ -275,6 +275,18 @@ const uint64_t *ClientArrayState::offsets_of(const void *const *pointers, size_t
     for (size_t index = 0u; index < count; index++)
         offsets_.at(static_cast<uint32_t>(index)) = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointers[index]));
     return offsets_.begin();
+}
+
+const int64_t *ClientArrayState::widened(const intptr_t *values, size_t count, uint32_t which)
+{
+    AV_SCOPE("ClientArrayState::widened");
+    if (values == nullptr) return nullptr;
+    if (which > 1u || count == 0u) return reinterpret_cast<const int64_t *>(values);
+    if constexpr (sizeof(intptr_t) == sizeof(int64_t)) return reinterpret_cast<const int64_t *>(values);
+    GrowableArray<int64_t> &table = wide_[which];
+    if (count > 0x7FFFFFFFu || table.resize(static_cast<uint32_t>(count), 0) != Status::ok) return nullptr;
+    for (size_t index = 0u; index < count; index++) table.at(static_cast<uint32_t>(index)) = static_cast<int64_t>(values[index]);
+    return table.begin();
 }
 
 bool ClientArrayState::skip_active_texture(uint32_t texture)
