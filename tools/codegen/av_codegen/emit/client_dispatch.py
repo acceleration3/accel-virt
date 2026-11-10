@@ -26,6 +26,14 @@ def _signature(reg: Registry, cmd: Command, translates: bool = True) -> str:
     return f"{cmd.return_type.cpp()} av_{cmd.name}({', '.join(args)})"
 
 
+def _host_copy(cmd: Command):
+    if cmd.name.startswith("vkCopyMemoryToImage"):
+        return cmd.params[1].name, "dstImage"
+    if cmd.name.startswith("vkCopyImageToMemory"):
+        return cmd.params[1].name, "srcImage"
+    return None
+
+
 def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
     is_async = cmd.sync_mode == "async"
@@ -36,7 +44,21 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     else:
         on_fail = f"    return static_cast<{cmd.return_type.cpp()}>(0);"
 
-    lines: list[str] = ["::av::WireWriter payload = t.request_writer();"]
+    lines: list[str] = []
+    copy = _host_copy(cmd)
+    if copy is not None:
+        info, image = copy
+        lines += [
+            f"for (uint32_t av_c = 0; av_c < {info}->regionCount; ++av_c) {{",
+            "    uint64_t av_n = 0;",
+            f"    if (!handles.image_copy_bytes({info}->{image}, {info}->pRegions[av_c].imageSubresource,",
+            f"            {info}->pRegions[av_c].imageExtent, {info}->pRegions[av_c].memoryRowLength,",
+            f"            {info}->pRegions[av_c].memoryImageHeight, av_n)) {{",
+            "        return VK_ERROR_FORMAT_NOT_SUPPORTED;",
+            "    }",
+            "}",
+        ]
+    lines.append("::av::WireWriter payload = t.request_writer();")
 
     i = 0
     while i < len(cmd.params):
@@ -282,6 +304,23 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("}")
         i += 1
 
+    if copy is not None and cmd.name.startswith("vkCopyImageToMemory"):
+        info, image = copy
+        lines += [
+            "if (result_code >= 0) {",
+            f"    for (uint32_t av_c = 0; av_c < {info}->regionCount; ++av_c) {{",
+            "        uint64_t av_n = 0;",
+            f"        if (!handles.image_copy_bytes({info}->{image}, {info}->pRegions[av_c].imageSubresource,",
+            f"                {info}->pRegions[av_c].imageExtent, {info}->pRegions[av_c].memoryRowLength,",
+            f"                {info}->pRegions[av_c].memoryImageHeight, av_n)) {{",
+            on_fail,
+            "        }",
+            f"        if (av_n != 0 && !r.read({info}->pRegions[av_c].pHostPointer, static_cast<size_t>(av_n))) {{",
+            on_fail,
+            "        }",
+            "    }",
+            "}",
+        ]
     if not is_void:
         lines.append(f"return static_cast<{cmd.return_type.cpp()}>(result_code);")
     return lines

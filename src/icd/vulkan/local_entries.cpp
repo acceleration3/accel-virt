@@ -93,6 +93,19 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplateKHR(
                                                                 pDescriptorUpdateTemplate);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
+                                                   const VkAllocationCallbacks *pAllocator, VkImage *pImage)
+{
+    AV_SCOPE("local_vkCreateImage");
+    return icd_binding.root().create_image(device, pCreateInfo, pAllocator, pImage);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator)
+{
+    AV_SCOPE("local_vkDestroyImage");
+    icd_binding.root().destroy_image(device, image, pAllocator);
+}
+
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyDescriptorUpdateTemplate(VkDevice device,
                                                                    VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                                                    const VkAllocationCallbacks *pAllocator)

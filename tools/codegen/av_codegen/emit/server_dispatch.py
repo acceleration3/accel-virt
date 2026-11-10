@@ -277,6 +277,18 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 f"    if (!{serialize.deserialize_call(reg, p.type.base, 'r', f'&{p.name}_local', 'arena', 's')}) return false;"
             )
             call_args.append(f"&{p.name}_local")
+            if cmd.name.startswith("vkCopyImageToMemory"):
+                out_after_call += [
+                    "    if (static_cast<int32_t>(result) >= 0) {",
+                    f"        for (uint32_t av_c = 0; av_c < {p.name}_local.regionCount; ++av_c) {{",
+                    "            uint64_t av_n = 0;",
+                    f"            const VkImageToMemoryCopy& av_r = {p.name}_local.pRegions[av_c];",
+                    f"            if (!s.image_copy_bytes({p.name}_local.srcImage, av_r.imageSubresource, av_r.imageExtent,",
+                    "                    av_r.memoryRowLength, av_r.memoryImageHeight, av_n)) { return false; }",
+                    "            if (av_n != 0) { reply.write(av_r.pHostPointer, static_cast<size_t>(av_n)); }",
+                    "        }",
+                    "    }",
+                ]
         elif kind in ("in_handle_array", "in_struct_array", "in_pod_array"):
             elem = p.type.base
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)

@@ -7,6 +7,7 @@
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/vulkan/issued_binaries.hpp"
+#include "proto/vulkan/host_copy_images.hpp"
 #include "executor/vulkan/spirv_validator.hpp"
 #include "executor/vulkan/vram_budget.hpp"
 #include "executor/vulkan/vulkan_fence_targets.hpp"
@@ -88,6 +89,8 @@ public:
                                                     const VkAllocationCallbacks *pAllocator,
                                                     VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate) override;
     uint64_t template_bytes(VkDescriptorUpdateTemplate made) const override;
+    bool     image_copy_bytes(VkImage image, const VkImageSubresourceLayers &layers, VkExtent3D extent,
+                              uint32_t row_length, uint32_t image_height, uint64_t &bytes) const override;
     void on_vkUpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet descriptorSet,
                                               VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                               const void *pData) override;
@@ -425,6 +428,7 @@ private:
     VulkanFenceWatch     fence_watch_;
     SpirvValidator       spirv_;
     IssuedBinaries       issued_;
+    HostCopyImages       copies_;
     VramBudget           vram_;
     VulkanSubmitProgress progress_;
     VulkanTimelineSubmit timeline_submit_;

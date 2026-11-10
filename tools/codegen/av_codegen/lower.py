@@ -13,6 +13,7 @@ def lower(root: ET.Element, profile: Profile,
           declared_names: set[str] | None = None) -> Registry:
     reg = Registry()
     reg.declared_names = set(declared_names or ())
+    reg.formats = parse.parse_formats(root)
 
     api_consts = parse.parse_api_constants(root)
 

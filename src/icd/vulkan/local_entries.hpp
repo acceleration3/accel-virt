@@ -37,6 +37,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplate(
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplateKHR(
     VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
+                                                   const VkAllocationCallbacks *pAllocator, VkImage *pImage);
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyDescriptorUpdateTemplate(
     VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate,
     const VkAllocationCallbacks *pAllocator);

@@ -268,3 +268,25 @@ def parse_extensions(root: ET.Element) -> dict[str, dict]:
             "type": ext.get("type"),
         }
     return out
+
+
+def parse_formats(root: ET.Element) -> list[dict]:
+    out: list[dict] = []
+    container = root.find("formats")
+    if container is None:
+        return out
+    for fmt in container.findall("format"):
+        if fmt.findall("plane"):
+            continue
+        extent = (fmt.get("blockExtent") or "1,1,1").split(",")
+        components = {c.get("name"): int(c.get("bits") or 0) for c in fmt.findall("component")
+                      if (c.get("bits") or "").isdigit()}
+        out.append({
+            "name": fmt.get("name"),
+            "block_bytes": int(fmt.get("blockSize")),
+            "block_width": int(extent[0]),
+            "block_height": int(extent[1]),
+            "depth_bits": components.get("D", 0),
+            "stencil_bits": components.get("S", 0),
+        })
+    return out

@@ -208,7 +208,7 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
       "vkGetPhysicalDeviceMemoryProperties2", "vkAllocateMemory", "vkFreeMemory", "vkFlushMappedMemoryRanges",
       "vkInvalidateMappedMemoryRanges", "vkGetQueryPoolResults",
       "vkCreateDescriptorUpdateTemplate", "vkCreateDescriptorUpdateTemplateKHR",
-      "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR",
+      "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR", "vkCreateImage", "vkDestroyImage",
       "vkCreateSemaphore", "vkDestroySemaphore", "vkGetPhysicalDeviceExternalBufferProperties",
       "vkGetPhysicalDeviceExternalBufferPropertiesKHR", "vkGetPhysicalDeviceExternalSemaphoreProperties",
       "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR",

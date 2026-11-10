@@ -4780,41 +4780,32 @@ inline void serialize_VkCopyImageToMemoryInfo(::av::WireWriter& buf, HandleTrans
     serialize_VkImage(buf, handles, v.srcImage);
     buf.write_pod(v.srcImageLayout);
     buf.write_pod(v.regionCount);
-    {
-        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
-        buf.write_pod(present);
-        if (present) {
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
-                serialize_VkImageToMemoryCopy(buf, handles, v.pRegions[i]);
-            }
-        }
+    for (uint32_t i = 0; i < v.regionCount; ++i) {
+        serialize_VkImageToMemoryCopy(buf, handles, v.pRegions[i]);
     }
 }
 
 [[nodiscard]] inline bool deserialize_VkCopyImageToMemoryInfo(::av::WireReader& r, const HandleTranslation& handles, VkCopyImageToMemoryInfo* out, ::av::WireArena& arena) {
-    (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     if (!deserialize_VkImage(r, handles, out->srcImage)) { return false; }
-    if (out->srcImage == VK_NULL_HANDLE) { return false; }
     if (!r.read_pod(out->srcImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
-    {
-        uint8_t present = 0;
-        if (!r.read_pod(present)) { return false; }
-        if (!present && as_number(out->regionCount) != 0) { return false; }
-        if (!present || as_number(out->regionCount) == 0) {
-            out->pRegions = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkImageToMemoryCopy>(static_cast<size_t>(as_number(out->regionCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
-                if (!deserialize_VkImageToMemoryCopy(r, handles, &arr[i], arena)) { return false; }
-            }
-            out->pRegions = arr;
-        }
+    auto* regions = arena.allocate<VkImageToMemoryCopy>(out->regionCount);
+    if (regions == nullptr) { return false; }
+    for (uint32_t i = 0; i < out->regionCount; ++i) {
+        if (!deserialize_VkImageToMemoryCopy(r, handles, &regions[i], arena)) { return false; }
+        uint64_t n = 0;
+        if (!handles.image_copy_bytes(out->srcImage, regions[i].imageSubresource, regions[i].imageExtent, regions[i].memoryRowLength, regions[i].memoryImageHeight, n)) { return false; }
+        regions[i].pHostPointer = nullptr;
+        if (n == 0) { continue; }
+        char* blob = arena.allocate_chars(static_cast<size_t>(n));
+        if (blob == nullptr) { return false; }
+        __builtin_memset(blob, 0, static_cast<size_t>(n));
+        regions[i].pHostPointer = blob;
     }
+    out->pRegions = regions;
     return true;
 }
 
@@ -4845,8 +4836,12 @@ inline void serialize_VkCopyMemoryToImageInfo(::av::WireWriter& buf, HandleTrans
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
     for (uint32_t i = 0; i < v.regionCount; ++i) {
-        serialize_VkMemoryToImageCopy(buf, handles, v.pRegions[i]);
-        buf.write_varint(0);
+        const VkMemoryToImageCopy& region = v.pRegions[i];
+        serialize_VkMemoryToImageCopy(buf, handles, region);
+        uint64_t n = 0;
+        if (!handles.image_copy_bytes(v.dstImage, region.imageSubresource, region.imageExtent, region.memoryRowLength, region.memoryImageHeight, n) || region.pHostPointer == nullptr) { n = 0; }
+        buf.write_varint(n);
+        if (n != 0) { buf.write(region.pHostPointer, static_cast<size_t>(n)); }
     }
 }
 
@@ -4863,7 +4858,10 @@ inline void serialize_VkCopyMemoryToImageInfo(::av::WireWriter& buf, HandleTrans
         if (!deserialize_VkMemoryToImageCopy(r, handles, &regions[i], arena)) { return false; }
         uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
-        if (n == 0) { regions[i].pHostPointer = nullptr; continue; }
+        uint64_t expected = 0;
+        if (!handles.image_copy_bytes(out->dstImage, regions[i].imageSubresource, regions[i].imageExtent, regions[i].memoryRowLength, regions[i].memoryImageHeight, expected) || n != expected) { return false; }
+        regions[i].pHostPointer = nullptr;
+        if (n == 0) { continue; }
         char* blob = arena.allocate_chars(static_cast<size_t>(n));
         if (blob == nullptr) { return false; }
         if (!r.read(blob, static_cast<size_t>(n))) { return false; }

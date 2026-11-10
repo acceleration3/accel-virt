@@ -5,12 +5,14 @@
 #include "icd/vulkan/descriptor_template_table.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "icd/vulkan/handle_registry.hpp"
+#include "proto/vulkan/host_copy_images.hpp"
 
 namespace av::icd {
 
 GuestHandleTranslation::GuestHandleTranslation(ThreadLock &lock, const HandleRegistry &handles,
-                                               const DescriptorTemplateTable &templates)
-    : lock_(lock), handles_(handles), templates_(templates)
+                                               const DescriptorTemplateTable &templates,
+                                               const HostCopyImages &copies)
+    : lock_(lock), handles_(handles), templates_(templates), copies_(copies)
 {
     AV_SCOPE("GuestHandleTranslation::GuestHandleTranslation");
 }
@@ -43,6 +45,14 @@ uint64_t GuestHandleTranslation::template_bytes(VkDescriptorUpdateTemplate made)
 {
     AV_SCOPE("GuestHandleTranslation::template_bytes");
     return templates_.bytes_of(made);
+}
+
+bool GuestHandleTranslation::image_copy_bytes(VkImage image, const VkImageSubresourceLayers &layers, VkExtent3D extent,
+                                              uint32_t row_length, uint32_t image_height, uint64_t &bytes) const
+{
+    AV_SCOPE("GuestHandleTranslation::image_copy_bytes");
+    const ThreadLockHold held(lock_);
+    return copies_.bytes(reinterpret_cast<uint64_t>(image), layers, extent, row_length, image_height, bytes);
 }
 
 }

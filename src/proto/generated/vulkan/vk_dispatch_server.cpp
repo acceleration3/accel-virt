@@ -5643,6 +5643,15 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCopyImageToMemoryInfo(r, s, &pCopyImageToMemoryInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyImageToMemoryEXT(device, &pCopyImageToMemoryInfo_local);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) >= 0) {
+            for (uint32_t av_c = 0; av_c < pCopyImageToMemoryInfo_local.regionCount; ++av_c) {
+                uint64_t av_n = 0;
+                const VkImageToMemoryCopy& av_r = pCopyImageToMemoryInfo_local.pRegions[av_c];
+                if (!s.image_copy_bytes(pCopyImageToMemoryInfo_local.srcImage, av_r.imageSubresource, av_r.imageExtent,
+                        av_r.memoryRowLength, av_r.memoryImageHeight, av_n)) { return false; }
+                if (av_n != 0) { reply.write(av_r.pHostPointer, static_cast<size_t>(av_n)); }
+            }
+        }
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyMemoryToAccelerationStructureKHR: {

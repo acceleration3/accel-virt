@@ -15,6 +15,7 @@
 #include "icd/vulkan/icd_entry_lookup.hpp"
 #include "icd/vulkan/instance_span.hpp"
 #include "icd/vulkan/descriptor_template_table.hpp"
+#include "proto/vulkan/host_copy_images.hpp"
 #include "icd/vulkan/guest_handle_translation.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/external_objects.hpp"
@@ -132,6 +133,9 @@ public:
                                                VkDescriptorUpdateTemplate *made);
     void     destroy_descriptor_update_template(VkDevice device, VkDescriptorUpdateTemplate made,
                                                 const VkAllocationCallbacks *allocator);
+    VkResult create_image(VkDevice device, const VkImageCreateInfo *create, const VkAllocationCallbacks *allocator,
+                          VkImage *made);
+    void     destroy_image(VkDevice device, VkImage image, const VkAllocationCallbacks *allocator);
     VkResult export_memory_handle(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle);
     VkResult export_semaphore_handle(VkDevice device, const SemaphoreGetWin32HandleRecord *request,
                                      void **handle);
@@ -200,6 +204,7 @@ private:
     Presentation           presentation_;
     FenceWakes             wakes_;
     DescriptorTemplateTable templates_;
+    HostCopyImages          host_copies_;
     GuestHandleTranslation  translation_;
     ExternalObjects         externals_;
     uint32_t                kernel_refusal_;

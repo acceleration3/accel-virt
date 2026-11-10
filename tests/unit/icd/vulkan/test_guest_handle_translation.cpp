@@ -6,6 +6,7 @@
 #include "icd/vulkan/descriptor_template_table.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/guest_handle_translation.hpp"
+#include "proto/vulkan/host_copy_images.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
@@ -30,7 +31,7 @@ constexpr std::uint64_t device_host = 0x7002u;
 
 class Rig {
 public:
-    Rig() : lock_(trace_, 'T'), registry_(platform_), templates_(platform_, lock_), translation_(lock_, registry_, templates_) {}
+    Rig() : lock_(trace_, 'T'), registry_(platform_), templates_(platform_, lock_), copies_(platform_), translation_(lock_, registry_, templates_, copies_) {}
 
     LoaderHandle *wrap(LoaderHandle::Kind kind, std::uint64_t host, LoaderHandle *parent)
     {
@@ -50,6 +51,7 @@ private:
     av::RecordingThreadLock lock_;
     HandleRegistry          registry_;
     DescriptorTemplateTable templates_;
+    av::HostCopyImages      copies_;
     GuestHandleTranslation  translation_;
 };
 

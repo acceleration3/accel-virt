@@ -95,3 +95,4 @@ class Registry:
     implemented_extensions: dict[str, str] = field(default_factory=dict)
     manual_commands: set[str] = field(default_factory=set)
     command_extensions: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
+    formats: list[dict] = field(default_factory=list)

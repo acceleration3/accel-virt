@@ -5545,6 +5545,14 @@ VkResult av_vkCopyImageToImageEXT(::av::ClientTransport& t, HandleTranslation& h
 
 VkResult av_vkCopyImageToMemoryEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkCopyImageToMemoryInfo* pCopyImageToMemoryInfo) {
     AV_SCOPE("av_vkCopyImageToMemoryEXT");
+    for (uint32_t av_c = 0; av_c < pCopyImageToMemoryInfo->regionCount; ++av_c) {
+        uint64_t av_n = 0;
+        if (!handles.image_copy_bytes(pCopyImageToMemoryInfo->srcImage, pCopyImageToMemoryInfo->pRegions[av_c].imageSubresource,
+                pCopyImageToMemoryInfo->pRegions[av_c].imageExtent, pCopyImageToMemoryInfo->pRegions[av_c].memoryRowLength,
+                pCopyImageToMemoryInfo->pRegions[av_c].memoryImageHeight, av_n)) {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+    }
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, handles, device);
     serialize_VkCopyImageToMemoryInfo(payload, handles, *pCopyImageToMemoryInfo);
@@ -5556,6 +5564,19 @@ VkResult av_vkCopyImageToMemoryEXT(::av::ClientTransport& t, HandleTranslation& 
     int32_t result_code = 0;
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
+    }
+    if (result_code >= 0) {
+        for (uint32_t av_c = 0; av_c < pCopyImageToMemoryInfo->regionCount; ++av_c) {
+            uint64_t av_n = 0;
+            if (!handles.image_copy_bytes(pCopyImageToMemoryInfo->srcImage, pCopyImageToMemoryInfo->pRegions[av_c].imageSubresource,
+                    pCopyImageToMemoryInfo->pRegions[av_c].imageExtent, pCopyImageToMemoryInfo->pRegions[av_c].memoryRowLength,
+                    pCopyImageToMemoryInfo->pRegions[av_c].memoryImageHeight, av_n)) {
+        return VK_ERROR_DEVICE_LOST;
+            }
+            if (av_n != 0 && !r.read(pCopyImageToMemoryInfo->pRegions[av_c].pHostPointer, static_cast<size_t>(av_n))) {
+        return VK_ERROR_DEVICE_LOST;
+            }
+        }
     }
     return static_cast<VkResult>(result_code);
 }
@@ -5580,6 +5601,14 @@ VkResult av_vkCopyMemoryToAccelerationStructureKHR(::av::ClientTransport& t, Han
 
 VkResult av_vkCopyMemoryToImageEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkCopyMemoryToImageInfo* pCopyMemoryToImageInfo) {
     AV_SCOPE("av_vkCopyMemoryToImageEXT");
+    for (uint32_t av_c = 0; av_c < pCopyMemoryToImageInfo->regionCount; ++av_c) {
+        uint64_t av_n = 0;
+        if (!handles.image_copy_bytes(pCopyMemoryToImageInfo->dstImage, pCopyMemoryToImageInfo->pRegions[av_c].imageSubresource,
+                pCopyMemoryToImageInfo->pRegions[av_c].imageExtent, pCopyMemoryToImageInfo->pRegions[av_c].memoryRowLength,
+                pCopyMemoryToImageInfo->pRegions[av_c].memoryImageHeight, av_n)) {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+    }
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, handles, device);
     serialize_VkCopyMemoryToImageInfo(payload, handles, *pCopyMemoryToImageInfo);
