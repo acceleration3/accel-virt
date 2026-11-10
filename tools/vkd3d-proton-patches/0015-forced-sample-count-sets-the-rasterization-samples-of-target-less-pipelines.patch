@@ -1,0 +1,33 @@
+From: accel-virt
+Subject: [PATCH] a graphics pipeline without render targets or a depth stencil format rasterizes with the rasterizer's forced sample count
+
+accel-virt: D3D12 UAV-only rendering with ForcedSampleCount N runs the pixel shader once per pixel with the coverage of N samples; the count was ignored and the pipeline rasterized with one sample.
+---
+--- a/libs/vkd3d/state.c
++++ b/libs/vkd3d/state.c
+@@ -3290,8 +3290,6 @@
+     vk_desc->depthBiasSlopeFactor = d3d12_desc->SlopeScaledDepthBias;
+     vk_desc->lineWidth = 1.0f;
+ 
+-    if (d3d12_desc->ForcedSampleCount)
+-        FIXME("Ignoring ForcedSampleCount %#x.\n", d3d12_desc->ForcedSampleCount);
+ }
+ 
+ static void rs_conservative_info_from_d3d12(VkPipelineRasterizationConservativeStateCreateInfoEXT *conservative_info,
+@@ -4976,6 +4974,16 @@
+     if (desc->sample_desc.Count != 1 && desc->sample_desc.Quality)
+         WARN("Ignoring sample quality %u.\n", desc->sample_desc.Quality);
+ 
++    if (desc->rasterizer_state.ForcedSampleCount)
++    {
++        DXGI_SAMPLE_DESC forced = {desc->rasterizer_state.ForcedSampleCount, 0};
++
++        if (desc->rtv_formats.NumRenderTargets || desc->dsv_format != DXGI_FORMAT_UNKNOWN)
++            WARN("Ignoring ForcedSampleCount %u with bound targets.\n", forced.Count);
++        else
++            sample_count = vk_samples_from_dxgi_sample_desc(&forced);
++    }
++
+     rt_count = desc->rtv_formats.NumRenderTargets;
+     if (rt_count > ARRAY_SIZE(graphics->blend_attachments))
+     {
