@@ -141,6 +141,28 @@ TEST(device_vblank_enable, each_blank_is_reported_once_while_asked_and_not_befor
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK(fixture.vsync().invariants_hold()); }
 
+TEST(device_vblank_tick, a_tick_that_comes_late_reports_every_blank_it_missed_up_to_the_catch_up_limit)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.sources().set_scanout(0u, 0x40000000, nullptr), Status::ok);
+  fixture.blank(3u);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.blank(4u);
+  fixture.tick(100u);
+  CHECK_EQ(fixture.vsync().reported(), 1u);
+  fixture.blank(9u);
+  fixture.tick(200u);
+  CHECK_EQ(fixture.vsync().reported(), 6u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 6u);
+  fixture.blank(1000u);
+  fixture.tick(300u);
+  CHECK_EQ(fixture.vsync().reported(), 6u + DeviceVblank::catch_up_most);
+  fixture.blank(1001u);
+  fixture.tick(400u);
+  CHECK_EQ(fixture.vsync().reported(), 7u + DeviceVblank::catch_up_most);
+  CHECK(fixture.vsync().invariants_hold()); }
+
 TEST(device_vblank_tick, a_posted_source_reports_the_flip_the_device_latched_and_others_the_newest)
 { Fixture fixture;
   CHECK_STATUS(fixture.vsync().initialize(), Status::ok);

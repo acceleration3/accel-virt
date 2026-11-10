@@ -97,6 +97,9 @@ Status DeviceVblank::resume()
     suspended_ = false;
     reporting_ = suspended_reporting_;
     suspended_reporting_ = false;
+    VblankRecord blank;
+    if (page_.read(target, blank) == Status::ok && blank.sequence() > platform_.load_atomic(sequence_))
+        platform_.store_atomic(sequence_, blank.sequence());
     ask();
     return page_.address() != 0u ? Status::ok : Status::invalid_state;
 }
@@ -126,8 +129,12 @@ void DeviceVblank::tick(uint64_t now, bool latching)
         const FlipView shown = sources_.shown(target, frame);
         reported_frame_ = frame != 0u ? frame : newest;
         sources_.note_reported(shown, blank.sequence(), blank.vblank_ns());
-        if (report(shown) == Status::ok) reported_++;
-        else platform_.log("avgpu: a vsync was refused");
+        const uint64_t passed = seen == 0u ? 1u : blank.sequence() - seen;
+        const uint64_t owed = passed < catch_up_most ? passed : catch_up_most;
+        for (uint64_t each = 0u; each < owed; each++) {
+            if (report(shown) == Status::ok) reported_++;
+            else platform_.log("avgpu: a vsync was refused");
+        }
     }
 }
 
