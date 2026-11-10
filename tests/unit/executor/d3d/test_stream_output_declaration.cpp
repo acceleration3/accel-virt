@@ -46,7 +46,7 @@ TEST(stream_output_declaration, a_rasterized_stream_is_one_of_the_four_or_none)
   CHECK(!Declaration(entries, 1u, strides, 1u, 4u).holds());
   CHECK(!Declaration(entries, 1u, strides, 1u, 0x80000000u).holds()); }
 
-TEST(stream_output_declaration, strides_are_nonzero_words_of_at_most_2048_bytes)
+TEST(stream_output_declaration, strides_are_words_of_at_most_2048_bytes_and_a_used_buffer_has_a_nonzero_one)
 { const Entry entries[1] = {{0u, 0u, 0u, 0xFu}};
   const std::uint32_t zero[1] = {0u};
   const std::uint32_t odd[1] = {6u};
@@ -59,6 +59,13 @@ TEST(stream_output_declaration, strides_are_nonzero_words_of_at_most_2048_bytes)
   const std::uint32_t five[5] = {4u, 4u, 4u, 4u, 4u};
   CHECK(!Declaration(entries, 1u, five, 5u, none_stream).holds());
   CHECK(!Declaration(entries, 1u, nullptr, 1u, none_stream).holds()); }
+
+TEST(stream_output_declaration, a_buffer_no_entry_writes_may_have_a_zero_stride)
+{ const std::uint32_t strides[4] = {16u, 16u, 16u, 0u};
+  const Entry         entries[3] = {{0u, 0u, 0u, 0xFu}, {0u, 1u, 1u, 0xFu}, {0u, 2u, 2u, 0xFu}};
+  const Entry         reaching[1] = {{0u, 3u, 3u, 0xFu}};
+  CHECK(Declaration(entries, 3u, strides, 4u, none_stream).holds());
+  CHECK(!Declaration(reaching, 1u, strides, 4u, none_stream).holds()); }
 
 TEST(stream_output_declaration, a_buffer_serves_one_stream_and_every_used_buffer_has_a_stride)
 { const std::uint32_t strides[2] = {16u, 16u};

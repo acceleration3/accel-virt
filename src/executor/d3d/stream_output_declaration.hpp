@@ -32,7 +32,7 @@ public:
         if (stride_count_ != 0u && strides_ == nullptr) return false;
         if (rasterized_ != no_stream && rasterized_ >= most_streams) return false;
         for (uint32_t index = 0u; index < stride_count_; index++)
-            if (strides_[index] == 0u || strides_[index] % 4u != 0u || strides_[index] > most_stride) return false;
+            if (strides_[index] % 4u != 0u || strides_[index] > most_stride) return false;
         uint32_t stream_of_buffer[most_buffers] = {};
         uint32_t bytes_of_buffer[most_buffers] = {};
         bool     used[most_buffers] = {};
@@ -45,7 +45,9 @@ public:
             used[entry.output_slot] = true;
             stream_of_buffer[entry.output_slot] = entry.stream;
             bytes_of_buffer[entry.output_slot] += component_count(index) * 4u;
-            if (stride_count_ != 0u && bytes_of_buffer[entry.output_slot] > strides_[entry.output_slot]) return false;
+            if (stride_count_ != 0u &&
+                (strides_[entry.output_slot] == 0u || bytes_of_buffer[entry.output_slot] > strides_[entry.output_slot]))
+                return false;
         }
         return true;
     }

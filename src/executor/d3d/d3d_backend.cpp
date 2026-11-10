@@ -21,6 +21,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
 #include "executor/d3d/stream_output_declaration.hpp"
+#include "executor/d3d/stream_output_signature.hpp"
 #include "proto/d3d/buffer_slice_support.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
@@ -1045,6 +1046,13 @@ bool D3dBackend::on_CreateUnorderedAccessView(uint32_t id, const d3dproto::ViewD
     return objects_.keep(id, D3dObjectKind::unordered_access_view, made) == Status::ok;
 }
 
+bool D3dBackend::refused_shader(const char *why) const
+{
+    AV_SCOPE("D3dBackend::refused_shader");
+    LogLine(lines_).text("CreateShader ").text(why).write();
+    return false;
+}
+
 bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_count,
                                  const d3dproto::SignatureEntry *inputs, uint32_t output_count,
                                  const d3dproto::SignatureEntry *outputs, uint32_t patch_count,
@@ -1055,20 +1063,24 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
 {
     AV_SCOPE("D3dBackend::on_CreateShader");
     const D3dObjectKind kind = shader_kind(stage);
-    if (!has_device() || kind == D3dObjectKind::none || code == nullptr) return false;
+    if (!has_device() || kind == D3dObjectKind::none || code == nullptr) return refused_shader("names no device, stage or code");
     const size_t capacity = static_cast<size_t>(code_size) + container_slack;
     uint8_t *const storage = arena_ == nullptr ? nullptr : arena_->allocate<uint8_t>(capacity);
-    if (storage == nullptr) return false;
+    if (storage == nullptr) return refused_shader("has no arena room");
     DxbcContainer container(storage, capacity);
     const bool pixel = stage == stage_pixel;
+    const bool streams = stage == stage_geometry && stream_out_count != 0u;
+    const StreamOutputSignature completed(outputs, output_count, stream_out, streams ? stream_out_count : 0u);
+    const d3dproto::SignatureEntry *const all_outputs = completed.entries();
+    const uint32_t                        all_count = completed.count();
     if (!container.add_signature(DxbcContainer::Role::input, inputs, input_count, false) ||
-        !container.add_signature(DxbcContainer::Role::output, outputs, output_count, pixel) ||
+        !container.add_signature(DxbcContainer::Role::output, all_outputs, all_count, pixel) ||
         (patch_count != 0u &&
          !container.add_signature(DxbcContainer::Role::patch_constant, patch_constants, patch_count, false)) ||
         !container.add_code(code, static_cast<size_t>(code_size)))
-        return false;
+        return refused_shader("has a signature or code the container refuses");
     const size_t size = container.finish();
-    if (size == 0u) return false;
+    if (size == 0u) return refused_shader("made an empty container");
     ID3D11Device5 *const device = device11_->device();
     HRESULT result = E_INVALIDARG;
     IUnknown *made = nullptr;
@@ -1098,7 +1110,7 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
         } else {
             const StreamOutputDeclaration<d3dproto::StreamOutEntry> declaration(stream_out, stream_out_count, strides,
                                                                                 stride_count, rasterized_stream);
-            if (!declaration.holds()) return false;
+            if (!declaration.holds()) return refused_shader("has a stream output declaration that is not valid");
             D3D11_SO_DECLARATION_ENTRY entries[128] = {};
             for (uint32_t index = 0u; index < stream_out_count; index++) {
                 const d3dproto::StreamOutEntry &entry = stream_out[index];
@@ -1109,13 +1121,13 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
                 if (entry.register_index == no_stream) continue;
                 d3dproto::SignatureEntry named = {};
                 bool                     found = false;
-                for (uint32_t output = 0u; output < output_count; output++)
-                    if (outputs[output].register_index == entry.register_index &&
-                        outputs[output].stream == entry.stream) {
-                        named = outputs[output];
+                for (uint32_t output = 0u; output < all_count; output++)
+                    if (all_outputs[output].register_index == entry.register_index &&
+                        all_outputs[output].stream == entry.stream) {
+                        named = all_outputs[output];
                         found = true;
                     }
-                if (!found) return false;
+                if (!found) return refused_shader("streams a register its outputs do not name");
                 uint32_t semantic = 0u;
                 entries[index].SemanticName = container.semantic_of(named, false, semantic);
                 entries[index].SemanticIndex = semantic;
@@ -1140,7 +1152,10 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
         break;
     }
     }
-    if (FAILED(result) || made == nullptr) return true;
+    if (FAILED(result) || made == nullptr) {
+        LogLine(lines_).text("the host made no shader of stage ").number(stage).text(" (").hex(static_cast<uint32_t>(result), 8u).text(")").write();
+        return true;
+    }
     return objects_.keep(id, kind, made) == Status::ok;
 }
 

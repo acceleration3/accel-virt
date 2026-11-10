@@ -205,6 +205,7 @@ public:
     bool invariants_hold() const;
 
 private:
+    bool refused_shader(const char *why) const;
     bool dynamic_buffer(ID3D11Resource *resource) const;
     bool detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_t bytes);
     bool marks_batches();
