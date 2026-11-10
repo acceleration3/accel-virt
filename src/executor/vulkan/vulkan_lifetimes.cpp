@@ -150,6 +150,11 @@ Status VulkanLifetimes::destroy(VulkanDestroyKind kind, uint64_t device, uint64_
     AV_SCOPE("VulkanLifetimes::destroy");
     if (reached > reached_) reached_ = reached;
     VulkanNode **const found = nodes_.find(handle);
+    if (found != nullptr) {
+        (*found)->AddRef();
+        holds_.let_go_completed(*found, reached_);
+        (*found)->Release();
+    }
     if (found == nullptr && marked <= reached) {
         destroyer_.destroy(kind, device, parent, handle);
         return Status::ok;

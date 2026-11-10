@@ -211,6 +211,18 @@ public:
             visit((*found)->at(index).object_, (*found)->at(index).pin_);
     }
 
+    void let_go_completed(Object *object, uint64_t reached)
+    {
+        AV_SCOPE("ObjectHolds::let_go_completed");
+        lists_.for_each([&](uint64_t, Hold *&kept) {
+            if (kept->mark() == 0u || kept->mark() > reached) return;
+            typename Hold::Held held = {};
+            if (!kept->remove(object, held)) return;
+            unpin(held.pin_, kept->mark());
+            held.object_->Release();
+        });
+    }
+
     [[nodiscard]] Pin *repinned(Pin *pin)
     {
         AV_SCOPE("ObjectHolds::repinned");

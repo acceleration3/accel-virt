@@ -107,6 +107,15 @@ TEST(vulkan_lifetimes, an_object_a_submitted_command_buffer_holds_outlives_the_c
   CHECK(rig.destroyer.destroyed(buffer));
   CHECK(rig.lifetimes.invariants_hold()); }
 
+TEST(vulkan_lifetimes, a_buffer_destroyed_after_the_command_buffer_that_recorded_it_finished_running_is_destroyed_at_once)
+{ Rig rig;
+  CHECK_STATUS(rig.hold(list, buffer), av::Status::ok);
+  rig.lifetimes.submitted(list, 3u);
+  CHECK_STATUS(rig.destroy(VulkanDestroyKind::buffer, buffer, 3u, 3u), av::Status::ok);
+  CHECK(rig.destroyer.destroyed(buffer));
+  CHECK(!rig.lifetimes.tracked(buffer));
+  CHECK(rig.lifetimes.invariants_hold()); }
+
 TEST(vulkan_lifetimes, a_command_buffer_run_again_is_kept_to_its_latest_submission)
 { Rig rig;
   CHECK_STATUS(rig.hold(list, buffer), av::Status::ok);

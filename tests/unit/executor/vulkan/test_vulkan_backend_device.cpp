@@ -1809,7 +1809,7 @@ TEST(vulkan_backend_device, device_local_memory_freed_after_its_work_ran_is_give
       submit.pCommandBuffers = &commands;
       CHECK_EQ(vkproto::av_vkQueueSubmit(wire, translation, as_handle<VkQueue>(queue), 1u, &submit, VK_NULL_HANDLE), VK_SUCCESS);
       CHECK_EQ(vkproto::av_vkQueueWaitIdle(wire, translation, as_handle<VkQueue>(queue)), VK_SUCCESS);
-      vkproto::av_vkDestroyCommandPool(wire, translation, device, pool, nullptr);
+      made.backend().end_batch();
       for (std::uint32_t b = 0u; b < 2u; b++) {
           vkproto::av_vkDestroyBuffer(wire, translation, device, buffers[b], nullptr);
           vkproto::av_vkFreeMemory(wire, translation, device, memories[b], nullptr);
@@ -1817,6 +1817,7 @@ TEST(vulkan_backend_device, device_local_memory_freed_after_its_work_ran_is_give
       made.backend().end_batch();
       vkproto::av_vkGetDeviceQueue(wire, translation, device, 0u, 0u, &queue);
       CHECK_EQ(ledger.used(), std::uint64_t{0});
+      vkproto::av_vkDestroyCommandPool(wire, translation, device, pool, nullptr);
       made.backend().use_vram(nullptr, nullptr);
   }
 }

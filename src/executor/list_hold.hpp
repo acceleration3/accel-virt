@@ -65,6 +65,18 @@ public:
         stale_ = true;
     }
 
+    bool remove(const Object *object, Held &removed)
+    {
+        AV_SCOPE("ListHold::remove");
+        const uint32_t index = position_of(object);
+        if (index == held_.size()) return false;
+        removed = held_.at(index);
+        held_.at(index) = held_.at(held_.size() - 1u);
+        held_.truncate(held_.size() - 1u);
+        stale_ = true;
+        return true;
+    }
+
     void forget_mark()
     {
         AV_SCOPE("ListHold::forget_mark");

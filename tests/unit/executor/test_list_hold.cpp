@@ -185,3 +185,21 @@ TEST(list_hold, a_pin_is_not_adopted_for_an_object_the_list_does_not_hold_or_whe
   CHECK(!hold.adopt_pin(&other, &pin));
   CHECK(!hold.adopt_pin(&held, nullptr));
   CHECK(hold.adopt_pin(&held, &pin)); }
+
+TEST(list_hold, a_removed_object_is_no_longer_held_and_the_others_stay)
+{ av::MockPlatform platform;
+  Hold hold(platform);
+  CountedObject first, second, third;
+  bool fresh = false;
+  CHECK_STATUS(hold.add(held_of(first), fresh), av::Status::ok);
+  CHECK_STATUS(hold.add(held_of(second), fresh), av::Status::ok);
+  CHECK_STATUS(hold.add(held_of(third), fresh), av::Status::ok);
+  Hold::Held removed = {};
+  CHECK(hold.remove(&first, removed));
+  CHECK(removed.object_ == &first);
+  CHECK(!hold.remove(&first, removed));
+  CHECK(!hold.holds(&first));
+  CHECK(hold.holds(&second));
+  CHECK(hold.holds(&third));
+  CHECK_EQ(hold.size(), 2u);
+  CHECK(hold.invariants_hold()); }
