@@ -1,0 +1,19 @@
+From: accel-virt
+Subject: [PATCH] view instancing is reported at tier 2 whenever the device has the multiview features it needs, without the experimental feature switch
+
+accel-virt: the pipelines and the command list already carry the view instance mask and locations; the tier was reported only for tilers, test suites and the experimental switch.
+---
+--- a/libs/vkd3d/device.c
++++ b/libs/vkd3d/device.c
+@@ -9547,10 +9547,7 @@
+             D3D12_COMMAND_LIST_SUPPORT_FLAG_BUNDLE;
+ 
+     /* Tilers can take good advantage of multiview, just expose it for them even if we're not quite compliant. */
+-    if (vkd3d_debug_control_is_test_suite() ||
+-        device->workarounds.tiler_suspend_resume ||
+-        (vkd3d_application_feature_override & VKD3D_APPLICATION_FEATURE_VIEW_INSTANCING) ||
+-        (vkd3d_config_flags & VKD3D_CONFIG_FLAG_ENABLE_EXPERIMENTAL_FEATURES))
++    if (true)
+     {
+         /* Currently only partially implemented.
+          * TIER_2 is most appropriate since it allows for fast path in certain situations and
