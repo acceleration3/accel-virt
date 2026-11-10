@@ -590,6 +590,7 @@ void ManualCalls::gen_buffers(int32_t count, uint32_t *buffers)
 {
     AV_SCOPE("ManualCalls::gen_buffers");
     GuestGlContext *const context = sending();
+    if (context != nullptr && count < 0) return context->record(gl_invalid_value);
     if (context != nullptr) glproto::av_glGenBuffers(*context->wire(), count, buffers);
 }
 
@@ -597,6 +598,7 @@ void ManualCalls::gen_textures(int32_t count, uint32_t *textures)
 {
     AV_SCOPE("ManualCalls::gen_textures");
     GuestGlContext *const context = sending();
+    if (context != nullptr && count < 0) return context->record(gl_invalid_value);
     if (context != nullptr) glproto::av_glGenTextures(*context->wire(), count, textures);
 }
 
@@ -604,6 +606,7 @@ void ManualCalls::gen_vertex_arrays(int32_t count, uint32_t *arrays)
 {
     AV_SCOPE("ManualCalls::gen_vertex_arrays");
     GuestGlContext *const context = sending();
+    if (context != nullptr && count < 0) return context->record(gl_invalid_value);
     if (context != nullptr) glproto::av_glGenVertexArrays(*context->wire(), count, arrays);
 }
 
