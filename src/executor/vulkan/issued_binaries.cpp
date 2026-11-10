@@ -56,11 +56,13 @@ public:
 private:
     uint64_t rotated(uint64_t word, uint32_t by) const
     {
+        AV_SCOPE("SipDigest::rotated");
         return (word << by) | (word >> (64u - by));
     }
 
     void round()
     {
+        AV_SCOPE("SipDigest::round");
         v0_ += v1_;
         v1_ = rotated(v1_, 13u);
         v1_ ^= v0_;
@@ -79,6 +81,7 @@ private:
 
     void block(uint64_t word)
     {
+        AV_SCOPE("SipDigest::block");
         v3_ ^= word;
         round();
         round();
