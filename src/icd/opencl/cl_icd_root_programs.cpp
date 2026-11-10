@@ -321,7 +321,7 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
         }
         static_cast<ClObject *>(static_cast<void *>(made))->keep_traits(carried | non_uniform);
     }
-    report_program_error(error, kept != CL_SUCCESS ? kept : host_error);
+    report_program_error(error, kept != CL_SUCCESS ? kept : host_error == CL_INVALID_BINARY ? CL_LINK_PROGRAM_FAILURE : host_error);
     notify.tell(made);
     return made;
 }

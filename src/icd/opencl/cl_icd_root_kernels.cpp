@@ -110,6 +110,10 @@ cl_int ClIcdRoot::judge_host_transfer(const ClObject &queue, const ClObject &mem
 cl_int ClIcdRoot::judge_host_map(const ClObject &queue, const ClObject &mem, cl_map_flags map_flags)
 {
     AV_SCOPE("ClIcdRoot::judge_host_map");
+    constexpr cl_map_flags known = CL_MAP_READ | CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION;
+    if (map_flags == 0u || (map_flags & ~known) != 0u) return CL_INVALID_VALUE;
+    if ((map_flags & CL_MAP_WRITE_INVALIDATE_REGION) != 0u && (map_flags & (CL_MAP_READ | CL_MAP_WRITE)) != 0u)
+        return CL_INVALID_VALUE;
     if (mem.context() != queue.context()) return CL_INVALID_CONTEXT;
     const ClMemFlags flags(mem.flags());
     if ((map_flags & CL_MAP_READ) != 0u && !flags.lets_host_read()) return CL_INVALID_OPERATION;
