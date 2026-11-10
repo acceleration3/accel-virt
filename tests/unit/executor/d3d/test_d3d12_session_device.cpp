@@ -98,7 +98,15 @@ bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     apis.open();
+    const char *const wanted = std::getenv("AV_TEST_HOST_GPU");
     for (std::uint32_t index = 0u; index < apis.gpu_count(); index++) {
+        if (wanted != nullptr) {
+            std::uint8_t candidate[16] = {};
+            apis.gpu_uuid(index, candidate);
+            char text[33] = {};
+            for (std::uint32_t at = 0u; at < 16u; at++) std::snprintf(text + 2u * at, 3u, "%02x", candidate[at]);
+            if (std::strcmp(text, wanted) != 0) continue;
+        }
         device11 = apis.d3d11_device(index);
         device12 = apis.d3d12_device(index);
         shares = apis.shares(index);
@@ -438,7 +446,7 @@ TEST(d3d12_session_device, native_upload_and_readback_heaps_are_host_memory_the_
     setenv("AV_HEAP_PLACEMENT", "native", 1);
     av::D3dBackend backend(rig.log);
     av::SessionShares session;
-    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12, nullptr));
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12, nullptr, nullptr, source));
     unsetenv("AV_HEAP_PLACEMENT");
     av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
     std::uint32_t placement = 0u;
@@ -480,7 +488,7 @@ TEST(d3d12_session_device, a_native_heap_the_guest_never_maps_is_dropped_with_it
         setenv("AV_HEAP_PLACEMENT", native != 0 ? "native" : "import", 1);
         av::D3dBackend backend(rig.log);
         av::SessionShares session;
-        CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12, nullptr));
+        CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12, nullptr, nullptr, source));
         unsetenv("AV_HEAP_PLACEMENT");
         av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
         std::uint32_t placement = 7u;

@@ -619,13 +619,16 @@ bool D3d12Session::on_QueryHeapPlacement12(uint32_t &placed)
     return true;
 }
 
-bool D3d12Session::native_heap(uint32_t heap, const d3d12proto::HeapProperties &properties, uint64_t size,
-                               uint64_t alignment, uint32_t &hresult, uint64_t &placed)
+bool D3d12Session::native_heap(uint32_t heap, uint64_t size, uint64_t alignment, uint32_t &hresult, uint64_t &placed)
 {
     AV_SCOPE("D3d12Session::native_heap");
     D3D12_HEAP_DESC desc = {};
     desc.SizeInBytes = size;
-    desc.Properties = host_properties(properties);
+    desc.Properties.Type = D3D12_HEAP_TYPE_CUSTOM;
+    desc.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+    desc.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+    desc.Properties.CreationNodeMask = 1u;
+    desc.Properties.VisibleNodeMask = 1u;
     desc.Alignment = alignment;
     desc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
     OwnedFd           descriptor;
@@ -635,9 +638,8 @@ bool D3d12Session::native_heap(uint32_t heap, const d3d12proto::HeapProperties &
         hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
         return true;
     }
-    const uint32_t caching = properties.type == heap_readback ? AV_MEMORY_WRITE_BACK : AV_MEMORY_WRITE_COMBINED;
-    const uint64_t owner = reinterpret_cast<uint64_t>(imports_);
-    if (source_->place_heap(owner, heap, size, caching, descriptor.fd()) != Status::ok) {
+        const uint64_t owner = reinterpret_cast<uint64_t>(imports_);
+    if (source_->place_heap(owner, heap, size, AV_MEMORY_WRITE_BACK, descriptor.fd()) != Status::ok) {
         made->Release();
         hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
         return true;
@@ -705,7 +707,7 @@ bool D3d12Session::create_heap(uint32_t heap, const d3d12proto::HeapProperties &
     if (device_ == nullptr) return false;
     if (cpu_visible(properties)) {
         if (placing_ && memory == 0u && (properties.type == heap_upload || properties.type == heap_readback))
-            return native_heap(heap, properties, size, alignment, hresult, placed);
+            return native_heap(heap, size, alignment, hresult, placed);
         return window_heap(heap, size, memory, offset, hresult);
     }
     D3D12_HEAP_DESC desc = {};

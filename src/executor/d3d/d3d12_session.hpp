@@ -181,8 +181,8 @@ private:
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
     bool                       window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base, uint32_t &hresult);
-    bool                       native_heap(uint32_t heap, const d3d12proto::HeapProperties &properties, uint64_t size,
-                                           uint64_t alignment, uint32_t &hresult, uint64_t &placed);
+    bool                       native_heap(uint32_t heap, uint64_t size, uint64_t alignment, uint32_t &hresult,
+                                           uint64_t &placed);
     bool                       decide_placement() const;
     bool                       kept(uint32_t id, D3dObjectKind kind, IUnknown *made);
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
