@@ -171,6 +171,24 @@ ID3D12Heap *D3d12HostDevice::import_dmabuf_heap(void *address, int fd, uint64_t 
     return static_cast<ID3D12Heap *>(heap);
 }
 
+ID3D12Heap *D3d12HostDevice::create_exported_heap(const D3D12_HEAP_DESC &desc, OwnedFd &descriptor) const
+{
+    AV_SCOPE("D3d12HostDevice::create_exported_heap");
+    descriptor.hold(-1);
+    if (device_ == nullptr || runtime_ == nullptr) return nullptr;
+    void *heap = nullptr;
+    int   fd = -1;
+    if (FAILED(runtime_->create_exported_heap(device_, &desc, fd, heap))) return nullptr;
+    descriptor.hold(fd);
+    return static_cast<ID3D12Heap *>(heap);
+}
+
+bool D3d12HostDevice::exports_heaps() const
+{
+    AV_SCOPE("D3d12HostDevice::exports_heaps");
+    return device_ != nullptr && runtime_ != nullptr && runtime_->exports_heaps();
+}
+
 bool D3d12HostDevice::export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const
 {
     AV_SCOPE("D3d12HostDevice::export_image");

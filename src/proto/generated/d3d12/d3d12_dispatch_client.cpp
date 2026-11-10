@@ -140,7 +140,19 @@ bool av_d3d12_QueryHeapSlices12(::av::ClientTransport& t, uint32_t* supported) {
     return r.remaining() == 0u;
 }
 
-bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t* hresult) {
+bool av_d3d12_QueryHeapPlacement12(::av::ClientTransport& t, uint32_t* placed) {
+    AV_SCOPE("av_d3d12_QueryHeapPlacement12");
+    ::av::WireWriter b = t.request_writer();
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_QueryHeapPlacement12, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (placed != nullptr) *placed = value; }
+    return r.remaining() == 0u;
+}
+
+bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t* hresult, uint64_t* placed) {
     AV_SCOPE("av_d3d12_CreateHeap12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(heap);
@@ -156,6 +168,9 @@ bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapPr
     { uint32_t value{};
       if (!r.read_pod(value)) return false;
       if (hresult != nullptr) *hresult = value; }
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (placed != nullptr) *placed = value; }
     return r.remaining() == 0u;
 }
 

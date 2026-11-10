@@ -7,7 +7,7 @@ namespace av {
 
 class HostMemoryRequest {
 public:
-    enum class Kind : uint8_t { upload = 1u, readback = 2u, vulkan = 3u, placed = 4u };
+    enum class Kind : uint8_t { upload = 1u, readback = 2u, vulkan = 3u, placed = 4u, placed_heap = 5u };
 
     static constexpr uint32_t memory_types = 32u;
 
@@ -16,6 +16,7 @@ public:
     explicit HostMemoryRequest(uint32_t encoded);
 
     bool     valid() const;
+    bool     places() const;
     Kind     kind() const;
     uint32_t vulkan_type() const;
     uint32_t encoded() const;

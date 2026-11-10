@@ -32,7 +32,7 @@ TEST(host_memory_request, a_class_that_names_a_type_is_refused_rather_than_read_
   CHECK(!HostMemoryRequest(Kind::readback, 3u).valid()); }
 
 TEST(host_memory_request, a_kind_this_protocol_does_not_have_is_refused)
-{ const std::uint32_t refused[] = {0u, 5u, 0xFFu, 0x100u, 0xFFFFFF05u};
+{ const std::uint32_t refused[] = {0u, 6u, 0xFFu, 0x100u, 0xFFFFFF06u};
   for (const std::uint32_t encoded : refused) CHECK(!HostMemoryRequest(encoded).valid()); }
 
 TEST(host_memory_request, encodes_the_kind_low_and_the_vulkan_type_above_it)
@@ -52,3 +52,14 @@ TEST(host_memory_request, a_placed_request_names_a_type_like_a_vulkan_one_and_is
   CHECK_EQ(HostMemoryRequest(Kind::placed, 5u).encoded(), 0x504u);
   CHECK(HostMemoryRequest(0x504u).kind() == Kind::placed);
   CHECK_EQ(HostMemoryRequest(0x504u).vulkan_type(), 5u); }
+
+TEST(host_memory_request, a_placed_heap_request_names_no_type_and_both_placed_kinds_place)
+{ CHECK(HostMemoryRequest(Kind::placed_heap, 0u).valid());
+  CHECK(!HostMemoryRequest(Kind::placed_heap, 1u).valid());
+  CHECK_EQ(HostMemoryRequest(Kind::placed_heap, 0u).encoded(), 0x005u);
+  CHECK(HostMemoryRequest(0x005u).kind() == Kind::placed_heap);
+  CHECK(HostMemoryRequest(Kind::placed_heap, 0u).places());
+  CHECK(HostMemoryRequest(Kind::placed, 4u).places());
+  CHECK(!HostMemoryRequest(Kind::vulkan, 4u).places());
+  CHECK(!HostMemoryRequest(Kind::upload, 0u).places());
+  CHECK(!HostMemoryRequest().places()); }

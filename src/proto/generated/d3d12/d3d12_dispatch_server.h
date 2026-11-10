@@ -34,7 +34,8 @@ public:
     virtual bool on_Finish12(uint32_t& hresult) = 0;
     virtual bool on_QueryCaps12(uint32_t& hresult, Caps12& caps, uint8_t* formats, uint64_t formats_capacity, uint64_t& formats_size) = 0;
     virtual bool on_QueryHeapSlices12(uint32_t& supported) = 0;
-    virtual bool on_CreateHeap12(uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t& hresult) = 0;
+    virtual bool on_QueryHeapPlacement12(uint32_t& placed) = 0;
+    virtual bool on_CreateHeap12(uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t& hresult, uint64_t& placed) = 0;
     virtual bool on_CreateCommittedResource12(uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address, uint32_t& hresult) = 0;
     virtual bool on_CreateHeapAsync12(uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) = 0;
     virtual bool on_CreateCommittedResourceAsync12(uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;

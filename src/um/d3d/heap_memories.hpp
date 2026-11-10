@@ -30,6 +30,7 @@ public:
 
     [[nodiscard]] Status take_slice(HostMemoryRequest::Kind kind, uint64_t bytes, HeapMemory *&made);
     [[nodiscard]] Status open_dedicated(HostMemoryRequest::Kind kind, uint64_t bytes, HeapMemory *&made);
+    [[nodiscard]] Status place(uint64_t bytes, uint64_t named, HeapMemory *&made);
     [[nodiscard]] Status lend_pages(uint64_t bytes, HeapMemory *&made);
     [[nodiscard]] Status adopt(HostAllocation &allocation, HeapMemory *&made);
 

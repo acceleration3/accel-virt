@@ -79,7 +79,7 @@ Status LocalContextPlane::allocate_memory(uint32_t context, uint64_t key, uint64
                                           AvHostMemory &memory)
 {
     AV_SCOPE("LocalContextPlane::allocate_memory");
-    if (HostMemoryRequest(request).kind() == HostMemoryRequest::Kind::placed) {
+    if (HostMemoryRequest(request).places()) {
         DeviceContext *const placing = contexts_.find(context);
         return placing != nullptr ? placing->place_memory(size, request, memory) : Status::not_found;
     }

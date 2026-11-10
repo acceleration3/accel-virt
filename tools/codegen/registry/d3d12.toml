@@ -190,6 +190,16 @@ params = []
 reply = ["u32 supported"]
 
 [[command]]
+name = "QueryHeapPlacement12"
+id = 0x1006
+doc = """Whether the host makes a CPU-visible heap's memory itself: 1 when its GPU driver refuses to import the host
+memory the guest opened, so CreateHeap12 of an upload or readback heap with no `memory` makes a heap of native memory
+and answers the handle `placed` that a placed host memory request of the guest takes the mapping by, 0 when the guest
+opens the memory first and CreateHeap12 names it."""
+params = []
+reply = ["u32 placed"]
+
+[[command]]
 name = "CreateHeap12"
 id = 0x1100
 doc = """A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
@@ -198,10 +208,12 @@ IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offse
 It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
 released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
 host GPU's own and memory and offset are ignored. The host keeps only the heap flags that name how
-the heap may be used: a guest never reads memory it did not write. hresult is
+the heap may be used: a guest never reads memory it did not write. A heap of a CPU-visible type with `memory` 0,
+asked of a host that answered QueryHeapPlacement12 with 1, is made of native host memory instead and `placed` names
+it, the handle of the placed host memory request that maps it; `placed` is 0 for every other heap. hresult is
 S_OK, or the host's own answer when it made no heap - E_OUTOFMEMORY when it has no memory for one."""
 params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 memory", "u64 offset"]
-reply = ["u32 hresult"]
+reply = ["u32 hresult", "u64 placed"]
 
 [[command]]
 name = "CreateCommittedResource12"

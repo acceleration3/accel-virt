@@ -66,7 +66,10 @@ public:
     [[nodiscard]] Status            open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
     [[nodiscard]] Status            adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory,
                                                  HostAllocation *&made);
+    [[nodiscard]] Status            place_memory(uint64_t bytes, HostMemoryRequest memory, uint64_t named,
+                                                 HostAllocation *&made);
     void                            close_memory(HostAllocation &allocation);
+    ThreadLock                     &placement_lock();
 
 private:
     static constexpr uint8_t  ring_order = 22u;
@@ -79,6 +82,7 @@ private:
 
     DriverLog                      &lines_;
     SrwLock                              lock_;
+    SrwLock                              placement_lock_;
     GuestConnection                      connection_;
     icd::HostChannel                     channel_;
     ObjectStorage<d3d::D3dCommandStream> stream_;

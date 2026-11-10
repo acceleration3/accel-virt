@@ -16,6 +16,7 @@ struct ID3D12Device;
 struct ID3D12Fence;
 struct ID3D12GraphicsCommandList;
 struct ID3D12Heap;
+struct D3D12_HEAP_DESC;
 struct ID3D12Resource;
 struct ID3D12RootSignature;
 
@@ -53,6 +54,8 @@ public:
     const D3d12Capabilities &capabilities() const;
     const D3d12DispatchLimit &dispatch_limit() const;
     ID3D12Heap                *import_dmabuf_heap(void *address, int fd, uint64_t size) const;
+    ID3D12Heap                *create_exported_heap(const D3D12_HEAP_DESC &desc, OwnedFd &descriptor) const;
+    bool                       exports_heaps() const;
     ID3D12RootSignature       *root_signature(const void *desc) const;
     [[nodiscard]] bool         export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const;
     bool                       translates_indirect_addresses() const;

@@ -32,6 +32,8 @@ public:
     IDirect3D9 *create_d3d9() const;
     int32_t create_device12(const uint8_t *uuid, void *&device) const;
     int32_t open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const;
+    int32_t create_exported_heap(void *device, const void *desc, int &fd, void *&heap) const;
+    bool    exports_heaps() const;
     int32_t export_image(void *resource, Vkd3dImageExport &image) const;
     int32_t export_fence(void *fence, int &fd) const;
     void    abandon_waits(void *device) const;
@@ -49,6 +51,7 @@ private:
     using Create9 = IDirect3D9 *(*)(uint32_t sdk_version);
     using OpenDmabufHeap = int32_t (*)(void *device, void *address, int fd, uint64_t size, const void *riid,
                                        void **heap);
+    using CreateExportedHeap = int32_t (*)(void *device, const void *desc, int *fd, const void *riid, void **heap);
     using SerializeRoot = int32_t (*)(const void *desc, void **blob, void **errors);
     using ExportImage = int32_t (*)(void *resource, Vkd3dImageExport *image);
     using ExportFence = int32_t (*)(void *fence, int *fd);
@@ -70,6 +73,7 @@ private:
     GetInterface12 get_interface12_;
     Create9        create9_;
     OpenDmabufHeap open_dmabuf_heap_;
+    CreateExportedHeap create_exported_heap_;
     SerializeRoot  serialize_root_;
     ExportImage    export_image_;
     ExportFence    export_fence_;

@@ -78,6 +78,7 @@ private:
                               const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle);
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
     HRESULT                  heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap);
+    HRESULT                  place_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap);
     HRESULT                  send_heap(const HeapRecord &heap, uint64_t alignment);
     HRESULT                  charge_heap(HeapRecord &heap);
     void                     uncharge_heap(HeapRecord &heap);
@@ -136,6 +137,7 @@ private:
     d3d::PipelineLibraryBlob              library_blob_;
     d3d::D3dCallTrace                    &trace_;
     uint32_t                              context_number_;
+    bool                                  placed_heaps_;
 };
 
 template <typename... Arguments>

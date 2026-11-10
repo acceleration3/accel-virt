@@ -48,6 +48,7 @@ class D3d11HostDevice;
 class D3d12HostDevice;
 class D3d9HostDevice;
 class ExecutorLog;
+class HostMemorySource;
 class ImportTable;
 class SourceMemory;
 class SessionShares;
@@ -61,7 +62,7 @@ public:
 
     [[nodiscard]] bool initialize(SessionShares &shares, ImportTable &imports, D3d11HostDevice *device11,
                                   D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
-                                  D3d9HostDevice *device9 = nullptr);
+                                  D3d9HostDevice *device9 = nullptr, HostMemorySource *source = nullptr);
     void use_host_ram(ByteLedger *ledger, uint64_t limit) override;
     void               shut_down() override;
     void               let_go_of_thread() override;

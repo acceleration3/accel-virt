@@ -14,7 +14,7 @@ static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
     : exporter_(exporter), memories_(blocks), aliases_(blocks), placed_(blocks), placed_sequence_(0u), lock_(), host_(), asked_(0u), mappable_(0u),
-      visible_(0u), vulkan_(), vram_(), host_ram_(), device_ram_(), reuse_()
+      visible_(0u), alike_(0u), vulkan_(), vram_(), host_ram_(), device_ram_(), reuse_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -43,6 +43,7 @@ void HostMemorySource::learn()
         if ((flags & shared) != shared || !exporter_.exportable(type)) continue;
         mappable_ |= bit;
         if (exporter_.imports_host_visible(type)) visible_ |= bit;
+        if (exporter_.imports_alike(type)) alike_ |= bit;
     }
     if (asked_ != before) vulkan_.learn(host_, mappable_);
 }
@@ -53,6 +54,14 @@ uint32_t HostMemorySource::mappable_types()
     const ThreadLockHold held(lock_);
     learn();
     return mappable_;
+}
+
+bool HostMemorySource::imports_heaps()
+{
+    AV_SCOPE("HostMemorySource::imports_heaps");
+    const ThreadLockHold held(lock_);
+    learn();
+    return mappable_ != 0u && (mappable_ & ~alike_) == 0u;
 }
 
 bool HostMemorySource::vulkan_types(GuestMemoryTypes &answer)
@@ -307,8 +316,21 @@ void HostMemorySource::drop_oldest_placed(uint64_t owner)
 Status HostMemorySource::place(uint64_t owner, uint64_t handle, uint32_t type, uint64_t size, uint32_t caching, int fd)
 {
     AV_SCOPE("HostMemorySource::place");
-    if (owner == 0u || handle == 0u || size == 0u || type >= HostMemoryRequest::memory_types || fd < 0)
-        return Status::invalid_parameter;
+    if (type >= HostMemoryRequest::memory_types) return Status::invalid_parameter;
+    return keep_placed(owner, handle, type, size, caching, fd);
+}
+
+Status HostMemorySource::place_heap(uint64_t owner, uint64_t handle, uint64_t size, uint32_t caching, int fd)
+{
+    AV_SCOPE("HostMemorySource::place_heap");
+    return keep_placed(owner, handle, heap_type, size, caching, fd);
+}
+
+Status HostMemorySource::keep_placed(uint64_t owner, uint64_t handle, uint32_t type, uint64_t size, uint32_t caching,
+                                     int fd)
+{
+    AV_SCOPE("HostMemorySource::keep_placed");
+    if (owner == 0u || handle == 0u || size == 0u || fd < 0) return Status::invalid_parameter;
     const ThreadLockHold held(lock_);
     while (placed_of(owner) >= most_placed_per_owner) drop_oldest_placed(owner);
     Placed *made = nullptr;
@@ -434,6 +456,7 @@ void HostMemorySource::report(StateWriter &writer) const
     if (!gate.held()) return;
     writer.hex("mappable_types", mappable_);
     writer.hex("visible_types", visible_);
+    writer.hex("alike_types", alike_);
     writer.number("live", memories_.live());
     writer.number("aliases", aliases_.live());
     uint64_t bytes = 0u;

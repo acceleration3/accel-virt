@@ -50,6 +50,7 @@ class D3d12BlockHeap;
 class EventfdWake;
 class WakeSignal;
 class GuestBytes;
+class HostMemorySource;
 class ImportTable;
 struct D3d12SessionProbe;
 
@@ -60,7 +61,8 @@ public:
 
     void               initialize(const ImportTable &imports, D3d12HostDevice *device,
                                   D3d11HostDevice *shown_by = nullptr,
-                                  SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr);
+                                  SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr,
+                                  HostMemorySource *source = nullptr);
     void               shut_down();
     void               leave_device();
     [[nodiscard]] bool drain_within(TeardownBudget &budget);
@@ -80,7 +82,8 @@ public:
     bool on_Destroy12(uint32_t object) override;
     bool on_Finish12(uint32_t& hresult) override;
     bool on_QueryHeapSlices12(uint32_t& supported) override;
-    bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t& hresult) override;
+    bool on_QueryHeapPlacement12(uint32_t& placed) override;
+    bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t& hresult, uint64_t& placed) override;
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address, uint32_t& hresult) override;
     bool on_CreateHeapAsync12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) override;
     bool on_CreateCommittedResourceAsync12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
@@ -166,7 +169,7 @@ public:
 private:
     bool                       create_heap(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
                                            uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset,
-                                           uint32_t &hresult);
+                                           uint32_t &hresult, uint64_t &placed);
     bool                       create_committed(uint32_t resource, const d3d12proto::HeapProperties &properties,
                                                 uint32_t heap_flags, const d3d12proto::ResourceDesc &desc,
                                                 uint32_t state, const d3d12proto::ClearValue &clear,
@@ -178,6 +181,9 @@ private:
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
     bool                       window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base, uint32_t &hresult);
+    bool                       native_heap(uint32_t heap, const d3d12proto::HeapProperties &properties, uint64_t size,
+                                           uint64_t alignment, uint32_t &hresult, uint64_t &placed);
+    bool                       decide_placement() const;
     bool                       kept(uint32_t id, D3dObjectKind kind, IUnknown *made);
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
                                       const d3d12proto::ResourceDesc &desc, uint32_t state,
@@ -226,6 +232,8 @@ private:
     void                       settle_pipelines();
 
     const ImportTable     *imports_;
+    HostMemorySource      *source_;
+    bool                   placing_;
     D3d12HostDevice       *device_;
     D3d11HostDevice       *shown_by_;
     SessionShares         *shares_;

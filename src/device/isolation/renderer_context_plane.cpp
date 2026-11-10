@@ -134,7 +134,7 @@ Status RendererContextPlane::allocate_memory(uint32_t context, uint64_t key, uin
 {
     AV_SCOPE("RendererContextPlane::allocate_memory");
     host_.require_main_loop("RendererContextPlane::allocate_memory");
-    if (HostMemoryRequest(request).kind() == HostMemoryRequest::Kind::placed) return Status::not_supported;
+    if (HostMemoryRequest(request).places()) return Status::not_supported;
     if (!alive_) return Status::no_memory;
     uint8_t body[AllocateMemoryMessage::encoded_size] = {};
     if (AllocateMemoryMessage(context, request, key, size).encode(body, sizeof body) != Status::ok)

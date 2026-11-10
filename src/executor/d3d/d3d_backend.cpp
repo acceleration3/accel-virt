@@ -133,7 +133,8 @@ D3dBackend::D3dBackend(ExecutorLog &log)
 }
 
 bool D3dBackend::initialize(SessionShares &shares, ImportTable &imports, D3d11HostDevice *device11,
-                            D3d12HostDevice *device12, SharedSurfaces *surfaces, D3d9HostDevice *device9)
+                            D3d12HostDevice *device12, SharedSurfaces *surfaces, D3d9HostDevice *device9,
+                            HostMemorySource *source)
 {
     AV_SCOPE("D3dBackend::initialize");
     if (device11 == nullptr || !device11->admit(wake_)) return false;
@@ -142,7 +143,7 @@ bool D3dBackend::initialize(SessionShares &shares, ImportTable &imports, D3d11Ho
     surfaces_ = surfaces;
     shares_ = &shares;
     imports_ = &imports;
-    d3d12_.initialize(imports, device12, device11, surfaces, &shares);
+    d3d12_.initialize(imports, device12, device11, surfaces, &shares, source);
     d3d9_.initialize(device9, surfaces, device11, &shares, &imports);
     lost_ = false;
     memory_refused_ = false;

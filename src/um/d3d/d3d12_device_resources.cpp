@@ -1,4 +1,5 @@
 #include "core/log/log_line.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "guest/transport/host_allocation.hpp"
@@ -177,6 +178,16 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
             return charged;
         }
     }
+    if (heap.type != heap_default && placed_heaps_) {
+        const HRESULT placed = place_heap(args, heap);
+        if (FAILED(placed)) {
+            addresses_.release(heap.address, args.ByteSize);
+            heap.address = 0u;
+            return placed;
+        }
+        heap.made = 1u;
+        return S_OK;
+    }
     if (heap.type != heap_default) {
         const HRESULT memory = heap_memory(args, heap);
         if (FAILED(memory)) {
@@ -214,8 +225,9 @@ HRESULT D3d12Device::send_heap(const HeapRecord &heap, uint64_t alignment)
         return S_OK;
     }
     uint32_t hresult = 0u;
+    uint64_t placed = 0u;
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
-                                                 size, alignment, memory, offset, &hresult),
+                                                 size, alignment, memory, offset, &hresult, &placed),
               "CreateHeap12"))
         return DXGI_ERROR_DEVICE_REMOVED;
     return static_cast<HRESULT>(hresult);
@@ -252,6 +264,23 @@ HRESULT D3d12Device::heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRe
     if (small && memories_.take_slice(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
     if (memories_.open_dedicated(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
     lines_.write("no host memory for an upload or readback heap");
+    return E_OUTOFMEMORY;
+}
+
+HRESULT D3d12Device::place_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap)
+{
+    AV_SCOPE("D3d12Device::place_heap");
+    const ThreadLockHold held(session_.placement_lock());
+    uint32_t             hresult = 0u;
+    uint64_t             placed = 0u;
+    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
+                                                 heap.size, args.Alignment, 0u, 0u, &hresult, &placed),
+              "CreateHeap12"))
+        return DXGI_ERROR_DEVICE_REMOVED;
+    if (FAILED(static_cast<HRESULT>(hresult))) return static_cast<HRESULT>(hresult);
+    if (placed != 0u && memories_.place(heap.size, placed, heap.backing) == Status::ok) return S_OK;
+    lines_.write("the device mapped no host memory for a native heap");
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     return E_OUTOFMEMORY;
 }
 

@@ -13,7 +13,7 @@ namespace av::d3d {
 
 D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint32_t select_command,
                        uint32_t flush_command, const SliceOffer *offer)
-    : lines_(log), lock_(), connection_(kmt),
+    : lines_(log), lock_(), placement_lock_(), connection_(kmt),
       channel_(memory, log,
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
       stream_(), shared_memory_(memory, channel_, lock_, log, offer, this), query_results_(), contexts_(memory), members_(0u), ids_(),
@@ -109,6 +109,18 @@ Status D3dSession::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest
 {
     AV_SCOPE("D3dSession::adopt_memory");
     return channel_.adopt_memory(address, bytes, memory, this, made);
+}
+
+Status D3dSession::place_memory(uint64_t bytes, HostMemoryRequest memory, uint64_t named, HostAllocation *&made)
+{
+    AV_SCOPE("D3dSession::place_memory");
+    return channel_.place_memory(bytes, memory, this, named, made);
+}
+
+ThreadLock &D3dSession::placement_lock()
+{
+    AV_SCOPE("D3dSession::placement_lock");
+    return placement_lock_;
 }
 
 void D3dSession::close_memory(HostAllocation &allocation)

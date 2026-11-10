@@ -317,6 +317,16 @@ TEST(host_allocation, a_placed_chunk_is_named_by_the_handle_it_is_given_and_asks
   CHECK(!rig.allocation().placed());
   rig.check_nothing_is_held(); }
 
+TEST(host_allocation, a_placed_heap_chunk_is_named_like_a_placed_one)
+{ Rig rig;
+  const HostMemoryRequest heap(HostMemoryRequest::Kind::placed_heap, 0u);
+  CHECK_STATUS(rig.allocation().place(mib, heap, imported_memory), Status::ok);
+  CHECK(rig.allocation().placed());
+  CHECK_EQ(rig.allocation().handle(), imported_memory);
+  CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), heap.encoded());
+  CHECK_STATUS(rig.allocation().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
 TEST(host_allocation, an_abandoned_placed_chunk_lets_go_of_its_name)
 { Rig rig;
   const HostMemoryRequest placed(HostMemoryRequest::Kind::placed, 2u);

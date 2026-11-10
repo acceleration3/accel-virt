@@ -37,6 +37,7 @@ public:
     std::uint8_t *memory(std::uint64_t handle, std::uint64_t offset = 0u) const;
     const SourceMemory *source_memory(std::uint64_t handle) const;
     void          close_memory(std::uint64_t handle);
+    std::uint8_t *take_placed_heap(std::uint64_t bytes);
 
     WireWriter       request_writer() override;
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;
@@ -71,6 +72,11 @@ private:
     std::uint64_t     next_key_;
     Held              region_;
     Held              memories_[max_memories];
+    struct Mapped {
+        void         *address = nullptr;
+        std::uint64_t bytes = 0u;
+    };
+    Mapped            mapped_[max_memories];
 };
 
 }

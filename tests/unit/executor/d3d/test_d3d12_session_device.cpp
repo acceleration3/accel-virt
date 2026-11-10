@@ -85,6 +85,8 @@ struct HeapMemory {
     std::uint64_t upload;
 };
 HeapMemory heaps = {};
+std::uint8_t *readback_native = nullptr;
+std::uint8_t *upload_native = nullptr;
 
 struct Vertex {
     float x, y;
@@ -148,7 +150,17 @@ ResourceDesc buffer_of(std::uint64_t bytes)
     return desc;
 }
 
-void make_frame(av::D3dLoopback &wire)
+bool place_heap(av::D3dLoopback &wire, std::uint32_t id, std::uint32_t type, std::uint8_t *&view)
+{
+    std::uint32_t hresult = 1u;
+    std::uint64_t placed = 0u;
+    if (!av_d3d12_CreateHeap12(wire, id, heap_of(type), 0u, heap_bytes, 0u, 0u, 0u, &hresult, &placed)) return false;
+    if (hresult != 0u || placed != id) return false;
+    view = wire.take_placed_heap(heap_bytes);
+    return view != nullptr;
+}
+
+void make_frame(av::D3dLoopback &wire, bool native = false)
 {
     std::uint32_t hresult = 1u;
     CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult));
@@ -193,10 +205,15 @@ void make_frame(av::D3dLoopback &wire)
     view.resource = target;
     CHECK(av_d3d12_CreateRenderTargetView12(wire, DescriptorRef{rtv_heap, 0u}, 0u, view));
 
-    heaps.readback = wire.open_memory(readback_memory, heap_bytes);
-    CHECK(heaps.readback != 0u);
-    std::memset(wire.memory(heaps.readback), 0xcd, heap_bytes);
-    CHECK(av_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, heaps.readback, 0u));
+    if (native) {
+        CHECK(place_heap(wire, readback_heap, heap_readback, readback_native));
+        std::memset(readback_native, 0xcd, heap_bytes);
+    } else {
+        heaps.readback = wire.open_memory(readback_memory, heap_bytes);
+        CHECK(heaps.readback != 0u);
+        std::memset(wire.memory(heaps.readback), 0xcd, heap_bytes);
+        CHECK(av_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, heaps.readback, 0u));
+    }
     CHECK(av_d3d12_CreatePlacedResource12(wire, readback, readback_heap, 0u, buffer_of(row_pitch * size),
                                            state_copy_dest, ClearValue{}, readback_address));
 }
@@ -229,21 +246,28 @@ void read_frame(av::D3dLoopback &wire)
 std::uint32_t pixel(const av::D3dLoopback &wire, std::uint32_t x, std::uint32_t y)
 {
     std::uint32_t value = 0u;
-    std::memcpy(&value, wire.memory(heaps.readback, y * row_pitch + x * 4u), sizeof(value));
+    const std::uint8_t *const at = readback_native != nullptr ? readback_native + y * row_pitch + x * 4u
+                                                              : wire.memory(heaps.readback, y * row_pitch + x * 4u);
+    std::memcpy(&value, at, sizeof(value));
     return value;
 }
 
-void make_triangle(av::D3dLoopback &wire, bool whole_containers)
+void make_triangle(av::D3dLoopback &wire, bool whole_containers, bool native = false)
 {
-    heaps.upload = wire.open_memory(upload_memory, heap_bytes);
-    CHECK(heaps.upload != 0u);
-    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, heaps.upload, 0u));
+    if (native) {
+        CHECK(place_heap(wire, upload_heap, heap_upload, upload_native));
+    } else {
+        heaps.upload = wire.open_memory(upload_memory, heap_bytes);
+        CHECK(heaps.upload != 0u);
+        CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, heaps.upload, 0u));
+    }
     const Vertex triangle[3] = {{-1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
                                 {-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
                                 {0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f}};
-    std::memcpy(wire.memory(heaps.upload), triangle, sizeof(triangle));
+    std::uint8_t *const upload_view = native ? upload_native : wire.memory(heaps.upload);
+    std::memcpy(upload_view, triangle, sizeof(triangle));
     const float tint[4] = {0.5f, 0.5f, 0.5f, 1.0f};
-    std::memcpy(wire.memory(heaps.upload, 256u), tint, sizeof(tint));
+    std::memcpy(upload_view + 256u, tint, sizeof(tint));
     CHECK(av_d3d12_CreatePlacedResource12(wire, vertices, upload_heap, 0u, buffer_of(256u), state_generic_read,
                                            ClearValue{}, upload_address));
     CHECK(av_d3d12_CreatePlacedResource12(wire, constants, upload_heap, 256u, buffer_of(256u), state_generic_read,
@@ -394,6 +418,85 @@ TEST(d3d12_session_device, a_triangle_drawn_from_ddi_dxil_reads_back_where_it_wa
         CHECK_EQ(removed, 0u);
         CHECK_EQ(wire.refused(), 0u);
         CHECK(backend.invariants_hold());
+        backend.shut_down();
+    }
+}
+
+TEST(d3d12_session_device, native_upload_and_readback_heaps_are_host_memory_the_guest_maps_and_a_triangle_drawn_from_them_reads_back)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    if (!device12->exports_heaps()) {
+        std::fprintf(stderr, "this vkd3d-proton exports no heap (tools/vkd3d-proton-patches): nothing judged\n");
+        return;
+    }
+    setenv("AV_HEAP_PLACEMENT", "native", 1);
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12, nullptr));
+    unsetenv("AV_HEAP_PLACEMENT");
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    std::uint32_t placement = 0u;
+    CHECK(av_d3d12_QueryHeapPlacement12(wire, &placement));
+    CHECK_EQ(placement, 1u);
+    std::uint32_t slices = 7u;
+    CHECK(av_d3d12_QueryHeapSlices12(wire, &slices));
+    CHECK_EQ(slices, static_cast<std::uint32_t>(av::HeapSliceSupport::none));
+    readback_native = nullptr;
+    upload_native = nullptr;
+    make_frame(wire, true);
+    make_triangle(wire, false, true);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK_EQ(source->placed(), 0u);
+    draw_triangle(wire);
+    read_frame(wire);
+    judge_triangle(wire);
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+    readback_native = nullptr;
+    upload_native = nullptr;
+}
+
+TEST(d3d12_session_device, a_native_heap_the_guest_never_maps_is_dropped_with_its_heap_and_a_host_that_imports_places_nothing)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    if (!device12->exports_heaps()) return;
+    for (int native = 0; native < 2; native++) {
+        setenv("AV_HEAP_PLACEMENT", native != 0 ? "native" : "import", 1);
+        av::D3dBackend backend(rig.log);
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12, nullptr));
+        unsetenv("AV_HEAP_PLACEMENT");
+        av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+        std::uint32_t placement = 7u;
+        CHECK(av_d3d12_QueryHeapPlacement12(wire, &placement));
+        CHECK_EQ(placement, native != 0 ? 1u : 0u);
+        std::uint32_t hresult = 1u;
+        std::uint64_t placed = 9u;
+        CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult));
+        if (native != 0) {
+            CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, 0u, 0u, &hresult, &placed));
+            CHECK_EQ(hresult, 0u);
+            CHECK_EQ(placed, std::uint64_t{upload_heap});
+            CHECK_EQ(source->placed(), 1u);
+            CHECK(av_d3d12_Destroy12(wire, upload_heap));
+            CHECK_EQ(source->placed(), 0u);
+        }
         backend.shut_down();
     }
 }

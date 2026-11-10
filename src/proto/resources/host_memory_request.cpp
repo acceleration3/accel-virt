@@ -27,8 +27,16 @@ bool HostMemoryRequest::valid() const
     const uint32_t type = encoded_ >> type_shift;
     if (kind == static_cast<uint32_t>(Kind::vulkan) || kind == static_cast<uint32_t>(Kind::placed))
         return type < memory_types;
-    return (kind == static_cast<uint32_t>(Kind::upload) || kind == static_cast<uint32_t>(Kind::readback)) &&
+    return (kind == static_cast<uint32_t>(Kind::upload) || kind == static_cast<uint32_t>(Kind::readback) ||
+            kind == static_cast<uint32_t>(Kind::placed_heap)) &&
            type == 0u;
+}
+
+bool HostMemoryRequest::places() const
+{
+    AV_SCOPE("HostMemoryRequest::places");
+    const Kind asked = kind();
+    return asked == Kind::placed || asked == Kind::placed_heap;
 }
 
 HostMemoryRequest::Kind HostMemoryRequest::kind() const

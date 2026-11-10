@@ -40,7 +40,10 @@ public:
     void                 release_aliases();
     [[nodiscard]] Status alias(uint32_t domain, uint64_t key, HostMemorySource &from, uint32_t from_domain,
                                uint64_t from_key, AvHostMemory &memory);
+    static constexpr uint32_t heap_type = HostMemoryRequest::memory_types;
+
     [[nodiscard]] Status place(uint64_t owner, uint64_t handle, uint32_t type, uint64_t size, uint32_t caching, int fd);
+    [[nodiscard]] Status place_heap(uint64_t owner, uint64_t handle, uint64_t size, uint32_t caching, int fd);
     [[nodiscard]] Status take_placed(uint64_t owner, uint32_t type, uint64_t size, AvHostMemory &memory);
     void                 drop_placed(uint64_t owner, uint64_t handle);
     void                 drop_placed_of(uint64_t owner);
@@ -48,6 +51,7 @@ public:
     SourceMemory        *acquire(uint32_t domain, uint64_t key);
     void                 release(SourceMemory &memory);
     uint32_t             mappable_types();
+    bool                 imports_heaps();
     [[nodiscard]] bool   vulkan_types(GuestMemoryTypes &answer);
     uint32_t             live() const;
     void                 reserve_vram(uint32_t mib);
@@ -80,6 +84,7 @@ private:
 
     static constexpr uint32_t most_placed_per_owner = 16u;
 
+    Status   keep_placed(uint64_t owner, uint64_t handle, uint32_t type, uint64_t size, uint32_t caching, int fd);
     uint32_t placed_of(uint64_t owner) const;
     void     drop_oldest_placed(uint64_t owner);
 
@@ -108,6 +113,7 @@ private:
     uint32_t                     asked_;
     uint32_t                     mappable_;
     uint32_t                     visible_;
+    uint32_t                     alike_;
     GuestMemoryTypes             vulkan_;
     VramPolicy                   vram_;
     VramAccount                  host_ram_;

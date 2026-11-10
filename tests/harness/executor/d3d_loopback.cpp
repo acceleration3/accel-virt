@@ -10,6 +10,7 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdlib>
+#include <sys/mman.h>
 #include <unistd.h>
 
 namespace av {
@@ -24,7 +25,7 @@ D3dLoopback::D3dLoopback(D3dBackend &backend, ImportTable &imports, HostMemorySo
     : RoomedTransport(command_bytes, reply_bytes), backend_(backend), imports_(imports), source_(source), command_(static_cast<uint8_t *>(std::calloc(command_bytes, 1u))),
       reply_(static_cast<uint8_t *>(std::calloc(reply_bytes, 1u))),
       arena_block_(static_cast<uint8_t *>(std::aligned_alloc(16u, arena_bytes))), arena_(arena_block_, arena_bytes),
-      decode_arena_(nullptr, 0u), blobs_(), refused_(0u), answers_(0u), next_key_(1u), region_(), memories_()
+      decode_arena_(nullptr, 0u), blobs_(), refused_(0u), answers_(0u), next_key_(1u), region_(), memories_(), mapped_()
 {
     if (region_bytes == 0u) return;
     if (open(HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), region_bytes, region_,
@@ -35,6 +36,8 @@ D3dLoopback::D3dLoopback(D3dBackend &backend, ImportTable &imports, HostMemorySo
 D3dLoopback::~D3dLoopback()
 {
     for (Held &memory : memories_) close(memory);
+    for (Mapped &view : mapped_)
+        if (view.address != nullptr) ::munmap(view.address, static_cast<std::size_t>(view.bytes));
     close(region_);
     std::free(command_);
     std::free(reply_);
@@ -116,6 +119,25 @@ void D3dLoopback::close_memory(std::uint64_t handle)
 {
     for (Held &memory : memories_)
         if (memory.blob != nullptr && handle != 0u && memory.handle == handle) close(memory);
+}
+
+std::uint8_t *D3dLoopback::take_placed_heap(std::uint64_t bytes)
+{
+    if (source_ == nullptr) return nullptr;
+    for (Mapped &view : mapped_) {
+        if (view.address != nullptr) continue;
+        AvHostMemory taken = {-1, 0u, 0u};
+        if (source_->take_placed(reinterpret_cast<std::uint64_t>(&imports_), HostMemorySource::heap_type, bytes, taken) !=
+            Status::ok)
+            return nullptr;
+        void *const address = ::mmap(nullptr, static_cast<std::size_t>(bytes), PROT_READ | PROT_WRITE, MAP_SHARED, taken.fd, 0);
+        ::close(taken.fd);
+        if (address == MAP_FAILED) return nullptr;
+        view.address = address;
+        view.bytes = bytes;
+        return static_cast<std::uint8_t *>(address);
+    }
+    return nullptr;
 }
 
 WireWriter D3dLoopback::request_writer()

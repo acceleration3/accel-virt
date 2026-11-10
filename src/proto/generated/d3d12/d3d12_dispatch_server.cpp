@@ -137,6 +137,18 @@ static bool decode_QueryHeapSlices12(ServerDispatch& s, ::av::WireReader& r, ::a
     return true;
 }
 
+static bool decode_QueryHeapPlacement12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:QueryHeapPlacement12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t placed{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_QueryHeapPlacement12(placed)) return false;
+    reply.write_pod(placed);
+    return true;
+}
+
 static bool decode_CreateHeap12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CreateHeap12");
     (void)s;
@@ -157,9 +169,11 @@ static bool decode_CreateHeap12(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     uint64_t offset{};
     if (!r.read_pod(offset)) return false;
     uint32_t hresult{};
+    uint64_t placed{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateHeap12(heap, properties, flags, size, alignment, memory, offset, hresult)) return false;
+    if (!s.on_CreateHeap12(heap, properties, flags, size, alignment, memory, offset, hresult, placed)) return false;
     reply.write_pod(hresult);
+    reply.write_pod(placed);
     return true;
 }
 
@@ -1790,6 +1804,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_Finish12:
         case kCmd_QueryCaps12:
         case kCmd_QueryHeapSlices12:
+        case kCmd_QueryHeapPlacement12:
         case kCmd_CreateHeap12:
         case kCmd_CreateCommittedResource12:
         case kCmd_CreateHeapAsync12:
@@ -1883,6 +1898,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_Finish12: return decode_Finish12(s, r, reply, arena);
         case kCmd_QueryCaps12: return decode_QueryCaps12(s, r, reply, arena);
         case kCmd_QueryHeapSlices12: return decode_QueryHeapSlices12(s, r, reply, arena);
+        case kCmd_QueryHeapPlacement12: return decode_QueryHeapPlacement12(s, r, reply, arena);
         case kCmd_CreateHeap12: return decode_CreateHeap12(s, r, reply, arena);
         case kCmd_CreateCommittedResource12: return decode_CreateCommittedResource12(s, r, reply, arena);
         case kCmd_CreateHeapAsync12: return decode_CreateHeapAsync12(s, r, reply, arena);

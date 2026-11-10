@@ -32,7 +32,7 @@ void *D3dRuntime::open_library(const char *name) const
 D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), d3d9_(nullptr), create_factory_(nullptr),
       create_device11_(nullptr), get_interface12_(nullptr), create9_(nullptr),
-      open_dmabuf_heap_(nullptr),
+      open_dmabuf_heap_(nullptr), create_exported_heap_(nullptr),
       serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr), abandon_waits_(nullptr), set_indirect_table_(nullptr),
       take_memory11_(nullptr), take_memory9_(nullptr)
 {
@@ -71,6 +71,8 @@ bool D3dRuntime::open()
         get_interface12_ = reinterpret_cast<GetInterface12>(dlsym(d3d12_, "D3D12GetInterface"));
         open_dmabuf_heap_ =
             reinterpret_cast<OpenDmabufHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_dmabuf"));
+        create_exported_heap_ =
+            reinterpret_cast<CreateExportedHeap>(dlsym(d3d12core_, "vkd3d_proton_create_exported_heap"));
         serialize_root_ = reinterpret_cast<SerializeRoot>(dlsym(d3d12_, "D3D12SerializeVersionedRootSignature"));
         export_image_ = reinterpret_cast<ExportImage>(dlsym(d3d12core_, "vkd3d_proton_export_image"));
         export_fence_ = reinterpret_cast<ExportFence>(dlsym(d3d12core_, "vkd3d_proton_export_fence"));
@@ -94,6 +96,7 @@ void D3dRuntime::close()
     take_memory11_ = nullptr;
     take_memory9_ = nullptr;
     open_dmabuf_heap_ = nullptr;
+    create_exported_heap_ = nullptr;
     serialize_root_ = nullptr;
     export_image_ = nullptr;
     export_fence_ = nullptr;
@@ -227,6 +230,24 @@ int32_t D3dRuntime::open_dmabuf_heap(void *device, void *address, int fd, uint64
     const int32_t made = open_dmabuf_heap_(device, address, fd, size, &heap_id, &heap);
     if (FAILED(made)) heap = nullptr;
     return made;
+}
+
+int32_t D3dRuntime::create_exported_heap(void *device, const void *desc, int &fd, void *&heap) const
+{
+    AV_SCOPE("D3dRuntime::create_exported_heap");
+    heap = nullptr;
+    fd = -1;
+    if (create_exported_heap_ == nullptr || device == nullptr || desc == nullptr) return E_NOTIMPL;
+    const GUID    heap_id = __uuidof(ID3D12Heap);
+    const int32_t made = create_exported_heap_(device, desc, &fd, &heap_id, &heap);
+    if (FAILED(made)) heap = nullptr;
+    return made;
+}
+
+bool D3dRuntime::exports_heaps() const
+{
+    AV_SCOPE("D3dRuntime::exports_heaps");
+    return create_exported_heap_ != nullptr;
 }
 
 int32_t D3dRuntime::export_image(void *resource, Vkd3dImageExport &image) const

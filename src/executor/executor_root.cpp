@@ -462,7 +462,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
         }
         started = d3d_[slot].object().initialize(shares_[slot], sessions_[slot].object().imports(), device11,
                                                  apis_->d3d12_device(gpu.index()), apis_->surfaces(gpu.index()),
-                                                 apis_->d3d9_device(gpu.index()));
+                                                 apis_->d3d9_device(gpu.index()), apis_->memory_source(gpu.index()));
         break;
     }
     default:

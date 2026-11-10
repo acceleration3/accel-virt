@@ -9,6 +9,14 @@ namespace av::d3d12proto {
 
 inline bool av_d3d12_CreateHeap12(ClientTransport &t, std::uint32_t heap, const HeapProperties &properties,
                                   std::uint32_t flags, std::uint64_t size, std::uint64_t alignment,
+                                  std::uint64_t memory, std::uint64_t offset, std::uint32_t *hresult)
+{
+    std::uint64_t placed = 0u;
+    return av_d3d12_CreateHeap12(t, heap, properties, flags, size, alignment, memory, offset, hresult, &placed);
+}
+
+inline bool av_d3d12_CreateHeap12(ClientTransport &t, std::uint32_t heap, const HeapProperties &properties,
+                                  std::uint32_t flags, std::uint64_t size, std::uint64_t alignment,
                                   std::uint64_t memory, std::uint64_t offset)
 {
     std::uint32_t hresult = 1u;

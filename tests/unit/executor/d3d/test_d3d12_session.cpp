@@ -115,6 +115,13 @@ TEST(d3d12_session_on_QueryHeapSlices12, a_session_with_no_device_offers_no_heap
   CHECK_EQ(supported, static_cast<std::uint32_t>(av::HeapSliceSupport::none));
   CHECK(fresh.session().invariants_hold()); }
 
+TEST(d3d12_session_on_QueryHeapPlacement12, a_session_with_no_device_places_no_heap)
+{ FreshSession fresh;
+  std::uint32_t placed = 7u;
+  CHECK(fresh.session().on_QueryHeapPlacement12(placed));
+  CHECK_EQ(placed, 0u);
+  CHECK(fresh.session().invariants_hold()); }
+
 TEST(d3d12_session_on_Finish12, answers_the_removed_reason_and_nothing_else_without_a_device)
 { FreshSession fresh;
   std::uint32_t hresult = 5u;
@@ -164,15 +171,16 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   buffer.sample_count = 1u;
   const ClearValue none = {};
   std::uint32_t answered = 7u;
-  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, 0u, 0u, answered));
-  CHECK(!session.on_CreateHeap12(1u, device_local, 0u, 4096u, 0u, 0u, 0u, answered));
+  std::uint64_t claimed = 0u;
+  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, 0u, 0u, answered, claimed));
+  CHECK(!session.on_CreateHeap12(1u, device_local, 0u, 4096u, 0u, 0u, 0u, answered, claimed));
   alignas(4096) static std::uint8_t heap_memory[4096];
   av::LocalImport heap(heap_memory, sizeof heap_memory, 2u);
   constexpr std::uint64_t heap_handle = 0x7001u;
   av::ImportedBlob *taken = nullptr;
   CHECK_STATUS(fresh.imports().take(2u, heap.memory(), taken), av::Status::ok);
   CHECK_STATUS(fresh.imports().name(*taken, heap_handle), av::Status::ok);
-  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, heap_handle, 0u, answered));
+  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, heap_handle, 0u, answered, claimed));
   CHECK(objects.find(1u, av::D3dObjectKind::heap12) == nullptr);
   CHECK(fresh.imports().invariants_hold());
   CHECK(fresh.imports().forget(2u) == &heap.memory());

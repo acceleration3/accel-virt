@@ -37,7 +37,7 @@ D3d12Device::D3d12Device(BlockSource &memory, d3d::D3dSession &session, KeyedLog
                          void *const &list_table, d3d::D3dCallTrace &trace)
     : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), lender_(session), clock_origin_(session, log), memories_(memory, session, log), follower_(), residency_(), channel_(), addresses_(), commitment_(),
       recorder_(*this), null_resource_{}, loss_(lines_), library_blob_(), trace_(trace),
-      context_number_(trace.number_context())
+      context_number_(trace.number_context()), placed_heaps_(false)
 {
     AV_SCOPE("D3d12Device::D3d12Device");
     null_resource_.depth_or_array = 1u;
@@ -78,6 +78,9 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
         session_.leave();
         return d3d::SessionRefusal(exhausted).for_d3d();
     }
+    uint32_t placed = 0u;
+    placed_heaps_ = d3d12proto::av_d3d12_QueryHeapPlacement12(channel_.object(), &placed) && placed != 0u;
+    if (placed_heaps_) lines_.write("upload and readback heaps are native host memory the guest maps");
     return S_OK;
 }
 

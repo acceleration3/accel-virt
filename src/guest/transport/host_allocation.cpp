@@ -40,7 +40,7 @@ Status HostAllocation::place(uint64_t bytes, HostMemoryRequest memory, uint64_t 
 {
     AV_SCOPE("HostAllocation::place");
     if (chunk_.resource_id() != 0u) return Status::invalid_state;
-    if (named == 0u || memory.kind() != HostMemoryRequest::Kind::placed) return Status::invalid_parameter;
+    if (named == 0u || !memory.places()) return Status::invalid_parameter;
     const Status opened = chunk_.open(bytes, memory);
     if (opened != Status::ok) return opened;
     named_ = named;

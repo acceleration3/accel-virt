@@ -30,15 +30,22 @@ namespace av::d3d12proto {
 // when the host has a device, which follows every queue's progress so it can tell when a block's last heap and
 // resource are done with, 0 when it has none. The guest then gives each heap memory of its own.
 [[nodiscard]] bool av_d3d12_QueryHeapSlices12(::av::ClientTransport& t, uint32_t* supported);
+// Whether the host makes a CPU-visible heap's memory itself: 1 when its GPU driver refuses to import the host
+// memory the guest opened, so CreateHeap12 of an upload or readback heap with no `memory` makes a heap of native memory
+// and answers the handle `placed` that a placed host memory request of the guest takes the mapping by, 0 when the guest
+// opens the memory first and CreateHeap12 names it.
+[[nodiscard]] bool av_d3d12_QueryHeapPlacement12(::av::ClientTransport& t, uint32_t* placed);
 // A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
 // is the window of `size` bytes at `offset` in the host memory the guest opened and imported, named by the handle
 // IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` is a multiple of 64 KiB.
 // It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
 // released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
 // host GPU's own and memory and offset are ignored. The host keeps only the heap flags that name how
-// the heap may be used: a guest never reads memory it did not write. hresult is
+// the heap may be used: a guest never reads memory it did not write. A heap of a CPU-visible type with `memory` 0,
+// asked of a host that answered QueryHeapPlacement12 with 1, is made of native host memory instead and `placed` names
+// it, the handle of the placed host memory request that maps it; `placed` is 0 for every other heap. hresult is
 // S_OK, or the host's own answer when it made no heap - E_OUTOFMEMORY when it has no memory for one.
-[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t* hresult);
+[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset, uint32_t* hresult, uint64_t* placed);
 // A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
 // hresult is S_OK, or the host's own answer when it made no resource - E_OUTOFMEMORY when it has no memory for one.
 [[nodiscard]] bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address, uint32_t* hresult);

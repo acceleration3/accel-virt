@@ -55,6 +55,24 @@ Status HeapMemories::open_dedicated(HostMemoryRequest::Kind kind, uint64_t bytes
     return Status::ok;
 }
 
+Status HeapMemories::place(uint64_t bytes, uint64_t named, HeapMemory *&made)
+{
+    AV_SCOPE("HeapMemories::place");
+    made = nullptr;
+    HostAllocation *allocation = nullptr;
+    const Status    opened =
+        session_.place_memory(bytes, HostMemoryRequest(HostMemoryRequest::Kind::placed_heap, 0u), named, allocation);
+    if (opened != Status::ok) return opened;
+    DedicatedHeapMemory *kept = nullptr;
+    const Status         created = dedicated_.create(kept, dedicated_, session_.shared_memory(), *allocation);
+    if (created != Status::ok) {
+        session_.close_memory(*allocation);
+        return created;
+    }
+    made = kept;
+    return Status::ok;
+}
+
 Status HeapMemories::adopt(HostAllocation &allocation, HeapMemory *&made)
 {
     AV_SCOPE("HeapMemories::adopt");

@@ -29,7 +29,7 @@ MockMemoryExporter::~MockMemoryExporter()
 std::uint32_t MockMemoryExporter::add_type(std::uint32_t flags, bool exportable, std::uint32_t heap)
 {
     if (type_count_ >= max_types) return max_types;
-    types_[type_count_] = Type{flags, exportable, false, 0u, 0u, heap};
+    types_[type_count_] = Type{flags, exportable, false, 0u, 0u, heap, false};
     return type_count_++;
 }
 
@@ -49,6 +49,11 @@ void MockMemoryExporter::claim_types(std::uint32_t count) { claimed_ = count; }
 void MockMemoryExporter::hide_on_import(std::uint32_t type)
 {
     if (type < type_count_) types_[type].hidden = true;
+}
+
+void MockMemoryExporter::refuse_alike(std::uint32_t type)
+{
+    if (type < type_count_) types_[type].unalike = true;
 }
 
 bool MockMemoryExporter::fires(std::uint32_t &countdown)
@@ -85,6 +90,15 @@ bool MockMemoryExporter::imports_host_visible(std::uint32_t type)
     }
     types_[type].import_questions++;
     return !types_[type].hidden;
+}
+
+bool MockMemoryExporter::imports_alike(std::uint32_t type)
+{
+    if (type >= type_count_) {
+        misuses_++;
+        return false;
+    }
+    return !types_[type].unalike;
 }
 
 Status MockMemoryExporter::allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory)

@@ -150,6 +150,16 @@ TEST(local_context_plane, a_placed_request_is_made_by_the_executor_of_the_contex
   fixture.ops().refuse_placement_at(1u);
   CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000001u, 0x2000u, placed, memory), Status::no_memory); }
 
+TEST(local_context_plane, a_placed_heap_request_is_routed_like_a_placed_one_and_not_allocated)
+{ Fixture fixture;
+  AvHostMemory memory = {-1, 0u, 0u};
+  const std::uint32_t heap = av::HostMemoryRequest(av::HostMemoryRequest::Kind::placed_heap, 0u).encoded();
+  CHECK_STATUS(fixture.plane().initialize(), Status::ok);
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, heap, memory), Status::not_found);
+  CHECK_EQ(fixture.ops().memory_allocations(), 0u); }
+
 TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain)
 { Fixture fixture;
   AvHostMemory memory = {-1, 0u, 0u};

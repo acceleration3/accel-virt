@@ -19,6 +19,7 @@ public:
     virtual void     memory_properties(VkPhysicalDeviceMemoryProperties &answer) = 0;
     virtual bool     exportable(uint32_t type) = 0;
     virtual bool     imports_host_visible(uint32_t type) = 0;
+    virtual bool     imports_alike(uint32_t type) = 0;
     [[nodiscard]] virtual Status allocate(uint32_t type, uint64_t size, ExportedMemory &memory) = 0;
     virtual void                 free(const ExportedMemory &memory) = 0;
 

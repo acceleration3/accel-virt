@@ -685,6 +685,24 @@ TEST(context_session_host_ram, a_decode_that_overflows_its_block_still_runs_whil
   CHECK_EQ(ledger.tight_refusals(), 0u);
   CHECK_EQ(ledger.used(), 0u); }
 
+TEST(context_session, a_placed_heap_request_takes_a_heap_placement_of_the_session_and_no_vulkan_one)
+{ Drawing drawing;
+  AvHostMemory memory = {-1, 0u, 0u};
+  const av::HostMemoryRequest heap(av::HostMemoryRequest::Kind::placed_heap, 0u);
+  const av::HostMemoryRequest vulkan_type_zero(av::HostMemoryRequest::Kind::placed, 0u);
+  const int fd = open("/dev/null", O_RDONLY);
+  CHECK_STATUS(drawing.source().place_heap(drawing.session().placement_owner(), 0x90u, 8192u, AV_MEMORY_WRITE_COMBINED, fd),
+               Status::ok);
+  CHECK_STATUS(drawing.session().place_memory(8192u, vulkan_type_zero, memory), Status::not_found);
+  CHECK_STATUS(drawing.session().place_memory(4096u, heap, memory), Status::not_found);
+  CHECK_STATUS(drawing.session().place_memory(8192u, heap, memory), Status::ok);
+  CHECK(memory.fd >= 0);
+  CHECK_EQ(memory.caching, static_cast<std::uint32_t>(AV_MEMORY_WRITE_COMBINED));
+  close(memory.fd);
+  CHECK_STATUS(drawing.session().place_memory(8192u, heap, memory), Status::not_found);
+  close(fd);
+  CHECK_EQ(drawing.source().placed(), 0u); }
+
 TEST(context_session, a_placed_request_takes_what_its_backend_registered_under_the_session_s_owner_and_nothing_else)
 { Drawing drawing;
   AvHostMemory memory = {-1, 0u, 0u};

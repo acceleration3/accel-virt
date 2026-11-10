@@ -29,10 +29,12 @@ public:
     void          fill_new(std::uint8_t byte);
     void          claim_types(std::uint32_t count);
     void          hide_on_import(std::uint32_t type);
+    void          refuse_alike(std::uint32_t type);
 
     void          memory_properties(VkPhysicalDeviceMemoryProperties &answer) override;
     bool          exportable(std::uint32_t type) override;
     bool          imports_host_visible(std::uint32_t type) override;
+    bool          imports_alike(std::uint32_t type) override;
     Status        allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory) override;
     void          free(const ExportedMemory &memory) override;
 
@@ -57,6 +59,7 @@ private:
         std::uint32_t questions;
         std::uint32_t import_questions;
         std::uint32_t heap;
+        bool          unalike;
     };
     struct Allocation {
         std::uint64_t handle;

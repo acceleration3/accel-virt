@@ -338,9 +338,10 @@ uint64_t ContextSession::imported_handle(uint64_t blob_id)
 Status ContextSession::place_memory(uint64_t size, HostMemoryRequest request, AvHostMemory &memory)
 {
     AV_SCOPE("ContextSession::place_memory");
-    if (source_ == nullptr || faulted_ || !request.valid() || request.kind() != HostMemoryRequest::Kind::placed)
-        return Status::not_supported;
-    return source_->take_placed(placement_owner(), request.vulkan_type(), size, memory);
+    if (source_ == nullptr || faulted_ || !request.valid() || !request.places()) return Status::not_supported;
+    const uint32_t type =
+        request.kind() == HostMemoryRequest::Kind::placed_heap ? HostMemorySource::heap_type : request.vulkan_type();
+    return source_->take_placed(placement_owner(), type, size, memory);
 }
 
 uint64_t ContextSession::placement_owner()
