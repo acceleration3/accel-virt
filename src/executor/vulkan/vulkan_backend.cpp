@@ -579,7 +579,6 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
         static_cast<void>(devices_.destroy(made));
     }
     learn_types(physicalDevice);
-    learn_ray_limits(physicalDevice);
     return result;
 }
 

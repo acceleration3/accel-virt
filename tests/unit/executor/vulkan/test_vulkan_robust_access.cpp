@@ -369,7 +369,7 @@ TEST(vulkan_robust_access, a_buffer_memory_or_structure_asking_for_a_captured_ad
   backend.shut_down(); }
 
 TEST(vulkan_robust_access, a_device_naming_an_extension_that_hands_the_driver_guest_addresses_is_refused)
-{ const char *const names[] = {"VK_KHR_acceleration_structure"};
+{ const char *const names[] = {"VK_EXT_device_generated_commands"};
   VkDeviceCreateInfo info = plain_device();
   info.enabledExtensionCount = 1u;
   info.ppEnabledExtensionNames = names;

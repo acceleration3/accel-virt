@@ -20,7 +20,9 @@ uint64_t number(const void *handle)
 void VulkanBackend::learn_ray_limits(VkPhysicalDevice physical)
 {
     AV_SCOPE("VulkanBackend::learn_ray_limits");
-    if (!knows_handle(number(physical), VulkanObjectKind::physical_device)) return;
+    if (ray_limits_learnt_) return;
+    ray_limits_learnt_ = true;
+    if (physical == VK_NULL_HANDLE) return;
     VkPhysicalDeviceAccelerationStructurePropertiesKHR structure = {};
     structure.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
     VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipeline = {};
@@ -52,6 +54,7 @@ bool VulkanBackend::builds_admitted(VkDevice device, uint32_t count,
                                     const uint32_t *const *maxima)
 {
     AV_SCOPE("VulkanBackend::builds_admitted");
+    learn_ray_limits(physical_);
     const uint64_t owner = number(device);
     for (uint32_t at = 0u; at < count; at++) {
         const VkAccelerationStructureBuildGeometryInfoKHR &info = infos[at];
@@ -133,6 +136,7 @@ void VulkanBackend::on_vkCmdTraceRaysKHR(VkCommandBuffer commandBuffer,
                                          uint32_t width, uint32_t height, uint32_t depth)
 {
     AV_SCOPE("VulkanBackend::on_vkCmdTraceRaysKHR");
+    learn_ray_limits(physical_);
     const uint64_t device = owning_device(number(commandBuffer));
     const VkStridedDeviceAddressRegionKHR regions[4] = {*pRaygenShaderBindingTable, *pMissShaderBindingTable,
                                                         *pHitShaderBindingTable, *pCallableShaderBindingTable};
@@ -152,6 +156,7 @@ void VulkanBackend::on_vkCmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
                                                   VkDeviceAddress indirectDeviceAddress)
 {
     AV_SCOPE("VulkanBackend::on_vkCmdTraceRaysIndirectKHR");
+    learn_ray_limits(physical_);
     const uint64_t device = owning_device(number(commandBuffer));
     const VkStridedDeviceAddressRegionKHR regions[4] = {*pRaygenShaderBindingTable, *pMissShaderBindingTable,
                                                         *pHitShaderBindingTable, *pCallableShaderBindingTable};

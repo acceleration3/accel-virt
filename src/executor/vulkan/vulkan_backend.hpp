@@ -461,6 +461,7 @@ private:
     SpirvValidator       spirv_;
     IssuedBinaries       issued_;
     VulkanAddresses      addresses_;
+    bool                 ray_limits_learnt_ = false;
     HostCopyImages       copies_;
     VramBudget           vram_;
     VulkanSubmitProgress progress_;
