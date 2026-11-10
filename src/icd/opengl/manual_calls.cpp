@@ -1164,9 +1164,27 @@ void ManualCalls::read_pixels(int32_t x, int32_t y, int32_t width, int32_t heigh
     if (sliced && !slice_pack_pixels(pixels, bytes)) return;
     ClientTransport &wire = *context->wire();
     const bool       staged = !offset && context->staging().stage_download(wire, pixels, bytes);
+    uint64_t         start = 0u, row_bytes = 0u, stride = 0u;
+    uint8_t         *kept = nullptr;
+    if (!offset && !sliced && pixels != nullptr && bytes != 0u &&
+        context->arrays().pixel_layout(format, type, width, height, true, start, row_bytes, stride) &&
+        (stride != row_bytes || start != 0u))
+        kept = context->vertex().staging(bytes);
+    if (kept != nullptr) __builtin_memcpy(kept, pixels, bytes);
     glproto::av_glReadPixels(wire, x, y, width, height, format, type, staged ? nullptr : pixels,
                              staged ? 0u : bytes, offset || staged);
     if (staged) context->staging().finish_download(wire, pixels, bytes);
+    if (kept != nullptr) {
+        uint8_t *const into = static_cast<uint8_t *>(pixels);
+        __builtin_memcpy(into, kept, static_cast<size_t>(start < bytes ? start : bytes));
+        for (int32_t row = 0; row < height; row++) {
+            const uint64_t from = start + static_cast<uint64_t>(row) * stride + row_bytes;
+            const uint64_t to = start + static_cast<uint64_t>(row + 1) * stride;
+            if (from >= bytes || to <= from) continue;
+            const uint64_t end = to < bytes ? to : bytes;
+            __builtin_memcpy(into + from, kept + from, static_cast<size_t>(end - from));
+        }
+    }
     if (sliced) pack_slice_done();
 }
 

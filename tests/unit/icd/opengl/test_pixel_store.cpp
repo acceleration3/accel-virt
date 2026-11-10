@@ -189,3 +189,22 @@ TEST(pixel_store_invariants, fail_for_an_alignment_or_skip_no_set_accepts)
   PixelStore skip;
   av::glicd::PixelStoreProbe::break_skip(skip);
   CHECK(!skip.invariants_hold()); }
+
+TEST(pixel_store, the_layout_names_the_start_the_row_bytes_and_the_stride)
+{ PixelStore store;
+  std::uint64_t start = 0u, row = 0u, stride = 0u;
+  CHECK(store.set(PixelStore::Field::alignment, 8));
+  CHECK(store.layout(0x1907u, 0x1401u, 5, 2, start, row, stride));
+  CHECK_EQ(start, 0u);
+  CHECK_EQ(row, 15u);
+  CHECK_EQ(stride, 16u);
+  CHECK(store.set(PixelStore::Field::alignment, 1));
+  CHECK(store.set(PixelStore::Field::row_length, 8));
+  CHECK(store.set(PixelStore::Field::skip_rows, 1));
+  CHECK(store.set(PixelStore::Field::skip_pixels, 2));
+  CHECK(store.layout(0x1908u, 0x1401u, 3, 2, start, row, stride));
+  CHECK_EQ(row, 12u);
+  CHECK_EQ(stride, 32u);
+  CHECK_EQ(start, 32u + 8u);
+  CHECK(!store.layout(0x1908u, 0x1401u, 0, 2, start, row, stride));
+  CHECK(!store.layout(0x1234u, 0x1401u, 3, 2, start, row, stride)); }

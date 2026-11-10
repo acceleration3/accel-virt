@@ -81,6 +81,24 @@ size_t PixelStore::span(uint32_t format, uint32_t type, int32_t width, int32_t h
     return static_cast<size_t>(end);
 }
 
+bool PixelStore::layout(uint32_t format, uint32_t type, int32_t width, int32_t height, uint64_t &start,
+                        uint64_t &row_bytes, uint64_t &stride) const
+{
+    AV_SCOPE("PixelStore::layout");
+    const size_t count = components(format);
+    const size_t packed = packed_bytes(type);
+    const size_t value = packed != 0u ? packed : value_bytes(type);
+    if (count == 0u || value == 0u || width <= 0 || height <= 0) return false;
+    const size_t   pixel = (packed != 0u ? 1u : count) * value;
+    const uint64_t alignment = static_cast<uint64_t>(get(Field::alignment));
+    const uint64_t row_pixels = static_cast<uint64_t>(get(Field::row_length) > 0 ? get(Field::row_length) : width);
+    stride = row_pixels * pixel;
+    if (value < alignment) stride = (stride + alignment - 1u) / alignment * alignment;
+    row_bytes = static_cast<uint64_t>(width) * pixel;
+    start = static_cast<uint64_t>(get(Field::skip_rows)) * stride + static_cast<uint64_t>(get(Field::skip_pixels)) * pixel;
+    return true;
+}
+
 size_t PixelStore::bitmap_span(int32_t width, int32_t height) const
 {
     AV_SCOPE("PixelStore::bitmap_span");

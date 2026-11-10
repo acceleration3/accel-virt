@@ -14,7 +14,8 @@ namespace av::glicd {
 
 namespace {
 
-constexpr uint32_t known_access = 0x007Fu;
+constexpr uint32_t known_access = 0x00FFu;
+constexpr uint32_t coherent_bit = 0x0080u;
 
 uint32_t access_error(uint32_t access)
 {
@@ -24,6 +25,8 @@ uint32_t access_error(uint32_t access)
         BufferMapping::map_invalidate_range | BufferMapping::map_invalidate_buffer | BufferMapping::map_unsynchronized;
     if ((access & ~known_access) != 0u) return MappedBuffers::gl_invalid_value;
     if ((access & read_write) == 0u) return MappedBuffers::gl_invalid_operation;
+    if ((access & coherent_bit) != 0u && (access & BufferMapping::map_persistent) == 0u)
+        return MappedBuffers::gl_invalid_operation;
     if ((access & BufferMapping::map_read) != 0u && (access & not_with_read) != 0u)
         return MappedBuffers::gl_invalid_operation;
     if ((access & BufferMapping::map_flush_explicit) != 0u && (access & BufferMapping::map_write) == 0u)

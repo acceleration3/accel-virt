@@ -104,7 +104,8 @@ TEST(mapped_buffers, access_bits_and_arguments_are_judged_first)
       std::uint32_t access;
       std::uint32_t error;
   } refusals[] = {
-      {1u, 0, 4, 0x0080u | read, invalid_value},
+      {1u, 0, 4, 0x0100u | read, invalid_value},
+      {1u, 0, 4, 0x0080u | read, invalid_operation},
       {1u, 0, 4, 0x8000'0000u | write, invalid_value},
       {1u, 0, 4, 0u, invalid_operation},
       {1u, 0, 4, persistent, invalid_operation},

@@ -73,6 +73,13 @@ size_t ClientArrayState::bitmap_bytes(int32_t width, int32_t height, bool packin
     return (packing ? pack_ : unpack_).bitmap_span(width, height);
 }
 
+bool ClientArrayState::pixel_layout(uint32_t format, uint32_t type, int32_t width, int32_t height, bool packing,
+                                    uint64_t &start, uint64_t &row_bytes, uint64_t &stride) const
+{
+    AV_SCOPE("ClientArrayState::pixel_layout");
+    return (packing ? pack_ : unpack_).layout(format, type, width, height, start, row_bytes, stride);
+}
+
 void ClientArrayState::bind_buffer(uint32_t target, uint32_t buffer)
 {
     AV_SCOPE("ClientArrayState::bind_buffer");
