@@ -6,6 +6,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_build_options.hpp"
 #include "icd/opencl/cl_include_inliner.hpp"
+#include "icd/opencl/cl_option_judge.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -83,6 +84,7 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     if (devices != CL_SUCCESS) return devices;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    if (!ClOptionJudge(options).valid()) return CL_INVALID_BUILD_OPTIONS;
     if (held->source() != nullptr) {
         const cl_int inlined = build_with_includes(*held, *wire, options);
         if (inlined != CL_SUCCESS) return inlined;
@@ -93,6 +95,7 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     if (!sent.usable()) return CL_OUT_OF_HOST_MEMORY;
     const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, sent.for_host());
     if (built == CL_SUCCESS) held->keep_traits(sent.traits() | (held->traits() & ClObject::program_from_source));
+    else if (built == CL_BUILD_PROGRAM_FAILURE) held->keep_traits(held->traits() | ClObject::program_failed);
     if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
     if (built == CL_SUCCESS || built == CL_BUILD_PROGRAM_FAILURE) notify.tell(program);
     return built;
@@ -257,6 +260,7 @@ cl_int ClIcdRoot::compile_program(cl_program program, cl_uint num_devices, const
     if (!notify.valid() || (num_headers != 0u && header_names == nullptr)) return CL_INVALID_VALUE;
     const cl_int devices = program_devices(*held, num_devices, device_list);
     if (devices != CL_SUCCESS) return devices;
+    if (!ClOptionJudge(options).valid()) return CL_INVALID_COMPILER_OPTIONS;
     ClHostNumbers host_headers_room(memory_);
     uint64_t     *host_headers = nullptr;
     const cl_int listed = program_list(*held, num_headers, headers, host_headers_room, host_headers);
@@ -285,6 +289,7 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
         return nullptr;
     }
     cl_int judgement = !notify.valid() || num_inputs == 0u ? CL_INVALID_VALUE : CL_SUCCESS;
+    if (judgement == CL_SUCCESS && !ClOptionJudge(options).valid()) judgement = CL_INVALID_LINKER_OPTIONS;
     if (judgement == CL_SUCCESS) judgement = program_devices(*held, num_devices, device_list);
     ClHostNumbers host_inputs_room(memory_);
     uint64_t     *host_inputs = nullptr;
@@ -299,7 +304,8 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
     const uint64_t linked = av::clproto::av_clLinkProgram(*wire, held->wire(), 0u, nullptr, options, num_inputs,
                                                           host_inputs, &host_error);
     if (linked == 0u) {
-        report_program_error(error, host_error != CL_SUCCESS ? host_error : CL_LINK_PROGRAM_FAILURE);
+        report_program_error(error, host_error == CL_INVALID_BINARY ? CL_LINK_PROGRAM_FAILURE
+                                    : host_error != CL_SUCCESS ? host_error : CL_LINK_PROGRAM_FAILURE);
         return nullptr;
     }
     if (host_error == CL_LINK_PROGRAM_FAILURE) note_build_log(*wire, linked, host_device_of(*held), options);
@@ -405,6 +411,7 @@ cl_int ClIcdRoot::create_kernels_in_program(cl_program program, cl_uint num_kern
     ClObject *const held = judged(program, ClObject::Kind::program);
     if (held == nullptr) return CL_INVALID_PROGRAM;
     if (kernels != nullptr && num_kernels == 0u) return CL_INVALID_VALUE;
+    if ((held->traits() & ClObject::program_failed) != 0u) return CL_INVALID_PROGRAM_EXECUTABLE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_uint   room = kernels != nullptr ? num_kernels : 0u;
@@ -505,6 +512,8 @@ cl_int ClIcdRoot::kernel_arg_info(cl_kernel kernel, cl_uint index, cl_kernel_arg
         return CL_KERNEL_ARG_INFO_NOT_AVAILABLE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    const ClKernelShape *const shape = held->shape();
+    if (shape != nullptr && index >= shape->count()) return CL_INVALID_ARG_INDEX;
     return av::clproto::av_clGetKernelArgInfo(*wire, held->wire(), index, name, value_bytes, value, size_ret);
 }
 

@@ -127,9 +127,24 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
-    const cl_int             copied = av::clproto::av_clEnqueueCopyImageToBuffer(
-        event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), origin, region, offset,
-        waits.count(), waits.count() != 0u ? listed : nullptr, event != nullptr ? &produced : nullptr);
+    const uint32_t           element = source->extent().element_bytes();
+    const bool               layered = source->extent().type() == CL_MEM_OBJECT_IMAGE1D_ARRAY && region[1] > 1u && element != 0u;
+    cl_int                   copied = CL_SUCCESS;
+    if (!layered) {
+        copied = av::clproto::av_clEnqueueCopyImageToBuffer(
+            event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), origin, region, offset,
+            waits.count(), waits.count() != 0u ? listed : nullptr, event != nullptr ? &produced : nullptr);
+    } else {
+        for (size_t layer = 0u; layer < region[1] && copied == CL_SUCCESS; ++layer) {
+            const size_t one_origin[3] = {origin[0], origin[1] + layer, 0u};
+            const size_t one_region[3] = {region[0], 1u, 1u};
+            const bool   last = layer + 1u == region[1];
+            copied = av::clproto::av_clEnqueueCopyImageToBuffer(
+                last && event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), one_origin,
+                one_region, offset + layer * region[0] * element, layer == 0u ? waits.count() : 0u,
+                layer == 0u && waits.count() != 0u ? listed : nullptr, last && event != nullptr ? &produced : nullptr);
+        }
+    }
     if (copied == CL_SUCCESS && event != nullptr) hand_over(*wire, *held, produced, event);
     return copied;
 }
@@ -168,9 +183,24 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
-    const cl_int             copied = av::clproto::av_clEnqueueCopyBufferToImage(
-        event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), offset, origin, region,
-        waits.count(), waits.count() != 0u ? listed : nullptr, event != nullptr ? &produced : nullptr);
+    const uint32_t           element = target->extent().element_bytes();
+    const bool               layered = target->extent().type() == CL_MEM_OBJECT_IMAGE1D_ARRAY && region[1] > 1u && element != 0u;
+    cl_int                   copied = CL_SUCCESS;
+    if (!layered) {
+        copied = av::clproto::av_clEnqueueCopyBufferToImage(
+            event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), offset, origin, region,
+            waits.count(), waits.count() != 0u ? listed : nullptr, event != nullptr ? &produced : nullptr);
+    } else {
+        for (size_t layer = 0u; layer < region[1] && copied == CL_SUCCESS; ++layer) {
+            const size_t one_origin[3] = {origin[0], origin[1] + layer, 0u};
+            const size_t one_region[3] = {region[0], 1u, 1u};
+            const bool   last = layer + 1u == region[1];
+            copied = av::clproto::av_clEnqueueCopyBufferToImage(
+                last && event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(),
+                offset + layer * region[0] * element, one_origin, one_region, layer == 0u ? waits.count() : 0u,
+                layer == 0u && waits.count() != 0u ? listed : nullptr, last && event != nullptr ? &produced : nullptr);
+        }
+    }
     if (copied == CL_SUCCESS && event != nullptr) hand_over(*wire, *held, produced, event);
     return copied;
 }
@@ -270,6 +300,29 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
     if (wire == nullptr) {
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
+    }
+    {
+        if (region.size == 0u) {
+            report_error(error, CL_INVALID_BUFFER_SIZE);
+            return nullptr;
+        }
+        if (held->extent().shape() == ClMemExtent::Shape::buffer && !held->extent().holds_range(region.origin, region.size)) {
+            report_error(error, CL_INVALID_VALUE);
+            return nullptr;
+        }
+        ClDevice *const device = held->context() != nullptr ? devices_.running(*held->context()) : nullptr;
+        cl_uint         bits = 0u;
+        constexpr cl_uint least_alignment_bytes = 128u;
+        if (region.origin % least_alignment_bytes != 0u) {
+            report_error(error, CL_MISALIGNED_SUB_BUFFER_OFFSET);
+            return nullptr;
+        }
+        if (region.origin != 0u && device != nullptr &&
+            host_device_info(*wire, *device, CL_DEVICE_MEM_BASE_ADDR_ALIGN, sizeof bits, &bits, nullptr) == CL_SUCCESS &&
+            bits >= 8u && region.origin % (bits / 8u) != 0u) {
+            report_error(error, CL_MISALIGNED_SUB_BUFFER_OFFSET);
+            return nullptr;
+        }
     }
     cl_int         host_error = CL_SUCCESS;
     const uint64_t made = av::clproto::av_clCreateSubBuffer(*wire, held->wire(), ClMemFlags(inherited).for_host(), type, &region,

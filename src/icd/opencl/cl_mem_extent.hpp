@@ -18,6 +18,10 @@ public:
     void as_image(cl_mem_object_type type, size_t width, size_t height, size_t depth, size_t array,
                   const cl_image_format &format);
 
+    void with_pitches(size_t row, size_t slice);
+    size_t row_pitch() const;
+    size_t slice_pitch() const;
+    cl_mem_object_type type() const;
     Shape    shape() const;
     uint64_t base() const;
     uint64_t bytes() const;
@@ -41,6 +45,8 @@ private:
     size_t             depth_;
     size_t             array_;
     cl_image_format    format_;
+    size_t             row_pitch_;
+    size_t             slice_pitch_;
 };
 
 }

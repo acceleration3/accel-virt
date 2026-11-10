@@ -337,11 +337,17 @@ cl_int ClIcdRoot::free_memory(ClDevice &device, size_t value_bytes, void *value,
     size_t free_kib = static_cast<size_t>(memory.available(MemorySegmentGroup::local) / kib);
     ClientTransport *const wire = wire_of(*device.object());
     size_t                 host_kib[2] = {};
+    cl_ulong               total_bytes = 0u;
     if (wire != nullptr &&
         av::clproto::av_clGetDeviceInfo(*wire, device.object()->wire(), free_memory_amd, sizeof host_kib, host_kib,
                                          nullptr) == CL_SUCCESS &&
-        host_kib[0] < free_kib)
-        free_kib = host_kib[0];
+        av::clproto::av_clGetDeviceInfo(*wire, device.object()->wire(), CL_DEVICE_GLOBAL_MEM_SIZE, sizeof total_bytes,
+                                         &total_bytes, nullptr) == CL_SUCCESS) {
+        const size_t total_kib = static_cast<size_t>(total_bytes / kib);
+        const size_t held_kib = total_kib > host_kib[0] ? total_kib - host_kib[0] : 0u;
+        free_kib = free_kib > held_kib ? free_kib - held_kib : 0u;
+        if (host_kib[0] < free_kib) free_kib = host_kib[0];
+    }
     const size_t answer[2] = {free_kib, free_kib};
     const ClInfoRequest asked(value_bytes, value, size_ret);
     if (value_bytes < sizeof answer) return asked.give(answer, sizeof answer[0]);
@@ -376,7 +382,16 @@ cl_int ClIcdRoot::host_extensions(ClDevice &device, ExtensionWords &words)
     size_t       answered = 0u;
     const cl_int asked = host_device_info(*wire, device, CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
     if (asked != CL_SUCCESS) return asked;
-    return words.hold(host, answered) == Status::ok ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
+    if (words.hold(host, answered) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+    cl_device_fp_config half = 0u;
+    if (!words.holds("cl_khr_fp16")) {
+        if (host_device_info(*wire, device, CL_DEVICE_HALF_FP_CONFIG, sizeof half, &half, nullptr) != CL_SUCCESS) {
+            half = 0u;
+            device_answers_.keep(reinterpret_cast<uintptr_t>(device.object()), CL_DEVICE_HALF_FP_CONFIG, &half, sizeof half);
+        }
+        if (half != 0u && words.add("cl_khr_fp16") != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+    }
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::device_extensions(ClDevice &device, size_t value_bytes, void *value,
@@ -793,6 +808,14 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         report_error(error, judged_flags);
         return nullptr;
     }
+    if (ClObject *const owner = judged(context, ClObject::Kind::context)) {
+        constexpr size_t always_allowed = size_t{32} << 20u;
+        const uint64_t   limit = bytes > always_allowed ? max_allocation(*owner) : 0u;
+        if (bytes != 0u && limit != 0u && bytes > limit) {
+            report_error(error, CL_INVALID_BUFFER_SIZE);
+            return nullptr;
+        }
+    }
     cl_mem const made = create_buffer_for_host(context, asked.for_host(), bytes, host_pointer, properties, error);
     if (made == nullptr) return nullptr;
     ClObject *const object = static_cast<ClObject *>(static_cast<void *>(made));
@@ -1004,6 +1027,10 @@ cl_kernel ClIcdRoot::create_kernel(cl_program program, const char *name, cl_int 
     }
     if (name == nullptr) {
         report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
+    if ((held->traits() & ClObject::program_failed) != 0u) {
+        report_error(error, CL_INVALID_PROGRAM_EXECUTABLE);
         return nullptr;
     }
     ClientTransport *const wire = wire_of(*held);
@@ -1474,7 +1501,8 @@ void *ClIcdRoot::svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t by
     GuestClContext *const owner = held->context();
     ClientTransport *const wire = owner != nullptr ? owner->wire() : nullptr;
     if (wire == nullptr) return nullptr;
-    const uint64_t host = av::clproto::av_clSVMAlloc(*wire, held->wire(), flags, bytes, alignment);
+    uint64_t host = av::clproto::av_clSVMAlloc(*wire, held->wire(), flags, bytes, alignment);
+    if (host == 0u && alignment != 0u) host = av::clproto::av_clSVMAlloc(*wire, held->wire(), flags, bytes, 0u);
     if (host == 0u) return nullptr;
     void *const mirror = owner->svm().take(host, bytes, alignment);
     if (mirror == nullptr) {
@@ -1634,7 +1662,12 @@ cl_int ClIcdRoot::set_user_event_status(cl_event event, cl_int status)
     if (held == nullptr) return CL_INVALID_EVENT;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    return av::clproto::av_clSetUserEventStatus(*wire, held->wire(), status);
+    if (held->parent() == nullptr || held->parent()->kind() != ClObject::Kind::context) return CL_INVALID_EVENT;
+    if (status > 0 && status != CL_COMPLETE) return CL_INVALID_VALUE;
+    if ((held->traits() & ClObject::event_settled) != 0u) return CL_INVALID_OPERATION;
+    const cl_int set = av::clproto::av_clSetUserEventStatus(*wire, held->wire(), status);
+    if (set == CL_SUCCESS) held->keep_traits(held->traits() | ClObject::event_settled);
+    return set;
 }
 
 cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
@@ -1865,6 +1898,12 @@ cl_int ClIcdRoot::image_info(cl_mem image, cl_image_info name, size_t value_byte
                                  ? reinterpret_cast<cl_mem>(held->companion())
                                  : nullptr;
         return ClInfoRequest(value_bytes, value, size_ret).give(&named, sizeof named);
+    }
+    if ((name == CL_IMAGE_ROW_PITCH || name == CL_IMAGE_SLICE_PITCH) && held->extent().shape() == ClMemExtent::Shape::image &&
+        held->extent().element_bytes() != 0u &&
+        (held->companion() != nullptr || held->extent().type() == CL_MEM_OBJECT_IMAGE1D_BUFFER)) {
+        const size_t pitch = name == CL_IMAGE_ROW_PITCH ? held->extent().row_pitch() : held->extent().slice_pitch();
+        return ClInfoRequest(value_bytes, value, size_ret).give(&pitch, sizeof pitch);
     }
     if (name == d3d11_subresource_info) {
         const D3d11Object *const made = d3d11_object_of(*held);
@@ -2303,6 +2342,47 @@ cl_mem ClIcdRoot::create_image_3d(cl_context context, cl_mem_flags flags, const 
     return create_image(context, flags, format, &desc, host_pointer, error);
 }
 
+ClImageLimits ClIcdRoot::image_limits(ClObject &context, bool dimensions, bool pitch)
+{
+    AV_SCOPE("ClIcdRoot::image_limits");
+    ClImageLimits limits = {};
+    ClientTransport *const wire = wire_of(context);
+    ClDevice *const        device = context.context() != nullptr ? devices_.running(*context.context()) : nullptr;
+    if (wire == nullptr || device == nullptr) return limits;
+    size_t sizes[7] = {};
+    const cl_device_info names[7] = {CL_DEVICE_IMAGE2D_MAX_WIDTH, CL_DEVICE_IMAGE2D_MAX_HEIGHT, CL_DEVICE_IMAGE3D_MAX_WIDTH,
+                                     CL_DEVICE_IMAGE3D_MAX_HEIGHT, CL_DEVICE_IMAGE3D_MAX_DEPTH, CL_DEVICE_IMAGE_MAX_ARRAY_SIZE,
+                                     CL_DEVICE_IMAGE_MAX_BUFFER_SIZE};
+    for (uint32_t index = 0u; index < 7u && dimensions; ++index) {
+        size_t value = 0u;
+        if (host_device_info(*wire, *device, names[index], sizeof value, &value, nullptr) == CL_SUCCESS) sizes[index] = value;
+    }
+    limits.width_2d_ = sizes[0];
+    limits.height_2d_ = sizes[1];
+    limits.width_3d_ = sizes[2];
+    limits.height_3d_ = sizes[3];
+    limits.depth_3d_ = sizes[4];
+    limits.array_size_ = sizes[5];
+    limits.buffer_size_ = sizes[6];
+    cl_uint alignment = 0u;
+    if (pitch && host_device_info(*wire, *device, CL_DEVICE_IMAGE_PITCH_ALIGNMENT, sizeof alignment, &alignment, nullptr) ==
+                     CL_SUCCESS)
+        limits.pitch_alignment_ = alignment;
+    return limits;
+}
+
+uint64_t ClIcdRoot::max_allocation(ClObject &context)
+{
+    AV_SCOPE("ClIcdRoot::max_allocation");
+    ClientTransport *const wire = wire_of(context);
+    ClDevice *const        device = context.context() != nullptr ? devices_.running(*context.context()) : nullptr;
+    cl_ulong               bytes = 0u;
+    if (wire == nullptr || device == nullptr ||
+        host_device_info(*wire, *device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof bytes, &bytes, nullptr) != CL_SUCCESS)
+        return 0u;
+    return bytes;
+}
+
 cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
                                const cl_image_format *format, const cl_image_desc *desc,
                                void *host_pointer, cl_int *error)
@@ -2351,6 +2431,20 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
+    {
+        ClMemExtent shape;
+        shape.as_image(desc->image_type, 1u, 1u, 1u, 1u, *format);
+        const ClObject *const backing = desc->buffer != nullptr ? judged(desc->buffer, ClObject::Kind::mem) : nullptr;
+        const bool            large = desc->image_width > 8192u || desc->image_height > 8192u || desc->image_depth > 2048u ||
+                           desc->image_array_size > 2048u || desc->image_width > 65536u;
+        const cl_int          judged_image = ClImageJudge(image_limits(*held, large, desc->buffer != nullptr && desc->image_row_pitch != 0u)).judge(
+            *desc, shape.element_bytes(), desc->buffer != nullptr, backing != nullptr ? backing->extent().bytes() : 0u,
+            host_pointer != nullptr);
+        if (judged_image != CL_SUCCESS) {
+            report_error(error, judged_image);
+            return nullptr;
+        }
+    }
     cl_int         host_error = CL_SUCCESS;
     const uint64_t image = av::clproto::av_clCreateImage(
         *wire, held->wire(),
@@ -2376,6 +2470,7 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
         if (desc->buffer != nullptr) object->keep_companion(judged(desc->buffer, ClObject::Kind::mem));
         object->extent().as_image(desc->image_type, desc->image_width, desc->image_height, desc->image_depth,
                                   desc->image_array_size, *format);
+        object->extent().with_pitches(desc->image_row_pitch, desc->image_slice_pitch);
     }
     return static_cast<cl_mem>(made);
 }
@@ -2591,9 +2686,59 @@ cl_int ClIcdRoot::supported_image_formats(cl_context context, cl_mem_flags flags
     if (formats != nullptr && num_entries == 0u) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const size_t room = formats != nullptr ? num_entries * sizeof(cl_image_format) : 0u;
-    return av::clproto::av_clGetSupportedImageFormats(*wire, held->wire(), flags, type, num_entries,
-                                                       formats, room, num_formats);
+    constexpr cl_mem_flags access = CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY | CL_MEM_KERNEL_READ_AND_WRITE;
+    const cl_mem_flags     key = flags & access;
+    GuestClContext *const  owner = held->context();
+    uint32_t               count = 0u;
+    const cl_image_format *known = owner->formats().find(key, type, count);
+    if (known == nullptr) {
+        cl_image_format all[ClFormatCache::most_formats] = {};
+        cl_uint         listed = 0u;
+        const cl_int    asked = av::clproto::av_clGetSupportedImageFormats(*wire, held->wire(), flags, type,
+                                                                           ClFormatCache::most_formats, all, sizeof all, &listed);
+        if (asked != CL_SUCCESS || listed > ClFormatCache::most_formats)
+            return av::clproto::av_clGetSupportedImageFormats(*wire, held->wire(), flags, type, num_entries, formats,
+                                                              formats != nullptr ? num_entries * sizeof(cl_image_format) : 0u,
+                                                              num_formats);
+        cl_image_format usable[ClFormatCache::most_formats] = {};
+        uint32_t        kept = 0u;
+        uint64_t        backing = 0u;
+        cl_int          made = CL_SUCCESS;
+        if (type == CL_MEM_OBJECT_IMAGE1D_BUFFER)
+            backing = av::clproto::av_clCreateBuffer(*wire, held->wire(), CL_MEM_READ_WRITE, 4096u, nullptr, &made);
+        for (cl_uint index = 0u; index < listed; ++index) {
+            cl_image_desc desc = {};
+            desc.image_type = type;
+            desc.image_width = 1u;
+            desc.image_height = 1u;
+            desc.image_depth = 1u;
+            desc.image_array_size = 1u;
+            desc.buffer = reinterpret_cast<cl_mem>(static_cast<uintptr_t>(backing));
+            cl_int         refused = CL_SUCCESS;
+            const uint64_t probe = (type == CL_MEM_OBJECT_IMAGE1D_BUFFER && backing == 0u)
+                                       ? 1u
+                                       : av::clproto::av_clCreateImage(*wire, held->wire(),
+                                                                       type == CL_MEM_OBJECT_IMAGE1D_BUFFER ? cl_mem_flags{0} : key & ~static_cast<cl_mem_flags>(CL_MEM_KERNEL_READ_AND_WRITE),
+                                                                       &all[index], &desc, nullptr, 0u, &refused);
+            if (probe != 0u && !(type == CL_MEM_OBJECT_IMAGE1D_BUFFER && backing == 0u)) give_back_to_host(*wire, ClObject::Kind::mem, probe);
+            if (probe != 0u || refused != CL_IMAGE_FORMAT_NOT_SUPPORTED) usable[kept++] = all[index];
+        }
+        if (backing != 0u) give_back_to_host(*wire, ClObject::Kind::mem, backing);
+        static_cast<void>(owner->formats().keep(key, type, usable, kept));
+        known = owner->formats().find(key, type, count);
+        if (known == nullptr) {
+            count = kept;
+            known = usable;
+            if (num_formats != nullptr) *num_formats = kept;
+            if (formats != nullptr)
+                for (uint32_t index = 0u; index < kept && index < num_entries; ++index) formats[index] = usable[index];
+            return CL_SUCCESS;
+        }
+    }
+    if (num_formats != nullptr) *num_formats = count;
+    if (formats != nullptr)
+        for (uint32_t index = 0u; index < count && index < num_entries; ++index) formats[index] = known[index];
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::wait_list(GuestClContext &context, cl_uint count, const cl_event *events, ClHostNumbers &room,

@@ -23,7 +23,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
       region_(),
-      svm_(memory), external_(handles, memory, lines), d3d11_(memory), mappings_(memory), properties_(), notify_(), state_(State::created)
+      svm_(memory), external_(handles, memory, lines), d3d11_(memory), formats_(), mappings_(memory), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -224,6 +224,12 @@ ClD3d11Objects &GuestClContext::d3d11()
 {
     AV_SCOPE("GuestClContext::d3d11");
     return d3d11_;
+}
+
+ClFormatCache &GuestClContext::formats()
+{
+    AV_SCOPE("GuestClContext::formats");
+    return formats_;
 }
 
 uint32_t GuestClContext::guest_device() const

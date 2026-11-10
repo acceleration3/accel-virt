@@ -465,8 +465,10 @@ TEST(cl_enqueue_api, a_sub_buffer_holds_its_buffer_and_names_it_as_its_associate
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
-  const cl_buffer_region region = {64u, 64u};
+  const cl_buffer_region region = {128u, 64u};
   cl_int                 error = CL_INVALID_VALUE;
+  const cl_uint          base_align_bits = 1024u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&base_align_bits), sizeof base_align_bits);
   rig.host().cl_handle(host_sub, CL_SUCCESS);
   const cl_mem sub = table_of(run.buffer())->clCreateSubBuffer(run.buffer(), CL_MEM_READ_WRITE,
                                                                  CL_BUFFER_CREATE_TYPE_REGION, &region, &error);

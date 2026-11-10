@@ -14,6 +14,7 @@
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
+#include "icd/opencl/cl_image_judge.hpp"
 #include "icd/opencl/cl_kernel_shape.hpp"
 #include "icd/opencl/cl_program_source.hpp"
 #include "icd/opencl/cl_object_table.hpp"
@@ -437,6 +438,8 @@ private:
     void            *wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t wire,
                           GuestClContext *context,
                           ClObject *parent, cl_int *error);
+    ClImageLimits    image_limits(ClObject &context, bool dimensions, bool pitch);
+    uint64_t         max_allocation(ClObject &context);
     cl_int           build_with_includes(ClObject &program, ClientTransport &wire, const char *options);
     cl_int           refusal_for(ClObject::Kind kind) const;
     ClObject        *drop_reference(void *object, ClObject &held, ClObject::Kind kind, ClDestructorCallbacks::Due &due);

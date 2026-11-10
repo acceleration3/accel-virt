@@ -132,6 +132,7 @@ TEST(cl_gl_sharing, the_device_of_the_current_gl_context_is_the_one_device)
   cl_device_id named = nullptr;
   std::size_t  size = 0u;
   rig.host().cl_info(CL_SUCCESS, "cl_khr_icd cl_khr_gl_sharing", 29u);
+  rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, &size),
            CL_SUCCESS);
   CHECK(named == found.device());
@@ -194,6 +195,7 @@ TEST(cl_gl_sharing, a_device_without_the_extension_is_no_device_of_the_gl_contex
   const cl_context_properties current[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(current_gl),
                                            CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
   rig.host().cl_info(CL_SUCCESS, "cl_khr_icd", 11u);
+  rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
   cl_device_id named = nullptr;
   std::size_t  size = 7u;
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, &size),
@@ -454,6 +456,7 @@ TEST(cl_gl_sharing, the_gl_context_query_judges_the_platform_the_share_group_and
     cl_device_id device = nullptr;
     std::size_t  size = 0u;
     rig.host().cl_info(CL_SUCCESS, "cl_khr_icd cl_khr_gl_sharing", 29u);
+    rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
     CHECK_EQ(rig.root().gl_context_info(named, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof device, &device, &size),
              CL_SUCCESS);
     CHECK(device == found.device());

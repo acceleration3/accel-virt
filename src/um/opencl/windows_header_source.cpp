@@ -36,13 +36,13 @@ bool WindowsHeaderSource::fetch(BlockSource &memory, const char *directory, cons
     HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
                                     FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
-    LARGE_INTEGER size = {};
-    bool          read = false;
-    if (GetFileSizeEx(file, &size) != 0 && size.QuadPart > 0 && size.QuadPart < (16ll << 20)) {
-        char *const block = static_cast<char *>(memory.allocate(static_cast<size_t>(size.QuadPart) + 1u, Pool::paged));
+    DWORD high = 0u;
+    const DWORD low = GetFileSize(file, &high);
+    bool        read = false;
+    if (low != INVALID_FILE_SIZE && high == 0u && low != 0u && low < (16u << 20u)) {
+        char *const block = static_cast<char *>(memory.allocate(static_cast<size_t>(low) + 1u, Pool::paged));
         DWORD       got = 0u;
-        if (block != nullptr &&
-            ReadFile(file, block, static_cast<DWORD>(size.QuadPart), &got, nullptr) != 0 && got == size.QuadPart) {
+        if (block != nullptr && ReadFile(file, block, low, &got, nullptr) != 0 && got == low) {
             block[got] = '\0';
             text = block;
             bytes = got;

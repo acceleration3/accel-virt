@@ -13,6 +13,7 @@
 #include "icd/common/open_mappings.hpp"
 #include "icd/opencl/cl_d3d11_objects.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
+#include "icd/opencl/cl_format_cache.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/mapped_region.hpp"
 #include "icd/opencl/svm_table.hpp"
@@ -80,6 +81,7 @@ public:
     SvmTable        &svm();
     ClExternalMemory &external();
     ClD3d11Objects   &d3d11();
+    ClFormatCache    &formats();
     uint32_t         guest_device() const;
 
     MappedRegion    *take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
@@ -119,6 +121,7 @@ private:
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     ClD3d11Objects                       d3d11_;
+    ClFormatCache                        formats_;
     icd::OpenMappings<MappedRegion>      mappings_;
     ClPropertyList                       properties_;
     ClContextNotify                      notify_;

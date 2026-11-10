@@ -310,7 +310,7 @@ TEST(cl_icd_root_enqueue, shared_memory_calls_the_api_would_refuse_send_nothing)
 namespace {
 
 alignas(4096) std::uint8_t lent_block[av::clicd::ClIcdRoot::lent_minimum];
-std::uint8_t               own_block[64];
+std::uint8_t               own_block[256];
 
 constexpr std::uint64_t host_over_own = 0x6D00u;
 constexpr std::uint64_t host_over_lent = 0x6E00u;
@@ -334,7 +334,9 @@ TEST(cl_icd_root_enqueue, a_sub_buffer_over_the_applications_memory_or_memory_le
   CHECK(lent != nullptr);
   if (own == nullptr || lent == nullptr) return;
 
-  const cl_buffer_region inside_own = {16u, 32u};
+  const cl_buffer_region inside_own = {128u, 32u};
+  const cl_uint align_bits = 1024u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&align_bits), sizeof align_bits);
   rig.host().cl_handle(host_sub, CL_SUCCESS);
   const cl_mem sub_of_own = rig.root().create_sub_buffer(own, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION,
                                                          &inside_own, &error);
@@ -344,7 +346,7 @@ TEST(cl_icd_root_enqueue, a_sub_buffer_over_the_applications_memory_or_memory_le
   if (sub_of_own != nullptr) {
       CHECK_EQ(rig.root().mem_object_info(sub_of_own, CL_MEM_HOST_PTR, sizeof host_pointer, &host_pointer, nullptr),
                CL_SUCCESS);
-      CHECK(host_pointer == own_block + 16);
+      CHECK(host_pointer == own_block + 128);
   }
 
   const cl_buffer_region inside_lent = {4096u, 4096u};

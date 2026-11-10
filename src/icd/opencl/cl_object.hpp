@@ -58,6 +58,8 @@ public:
     static constexpr uint32_t program_non_uniform = 4u;
     static constexpr uint32_t kernel_unshaped = 8u;
     static constexpr uint32_t program_from_source = 16u;
+    static constexpr uint32_t program_failed = 32u;
+    static constexpr uint32_t event_settled = 64u;
 
     void            keep_source(ClProgramSource *source);
     ClProgramSource *source() const;

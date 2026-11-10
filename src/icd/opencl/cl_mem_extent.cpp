@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClMemExtent::ClMemExtent()
     : shape_(Shape::unknown), type_(0u), base_(0u), bytes_(0u), width_(0u), height_(0u), depth_(0u), array_(0u),
-      format_{}
+      format_{}, row_pitch_(0u), slice_pitch_(0u)
 {
     AV_SCOPE("ClMemExtent::ClMemExtent");
 }
@@ -31,6 +31,34 @@ void ClMemExtent::as_image(cl_mem_object_type type, size_t width, size_t height,
     depth_ = depth;
     array_ = array;
     format_ = format;
+}
+
+void ClMemExtent::with_pitches(size_t row, size_t slice)
+{
+    AV_SCOPE("ClMemExtent::with_pitches");
+    row_pitch_ = row;
+    slice_pitch_ = slice;
+}
+
+size_t ClMemExtent::row_pitch() const
+{
+    AV_SCOPE("ClMemExtent::row_pitch");
+    return row_pitch_ != 0u ? row_pitch_ : width_ * element_bytes();
+}
+
+size_t ClMemExtent::slice_pitch() const
+{
+    AV_SCOPE("ClMemExtent::slice_pitch");
+    if (slice_pitch_ != 0u) return slice_pitch_;
+    return type_ == CL_MEM_OBJECT_IMAGE1D_BUFFER || type_ == CL_MEM_OBJECT_IMAGE1D || type_ == CL_MEM_OBJECT_IMAGE2D
+               ? 0u
+               : row_pitch() * (type_ == CL_MEM_OBJECT_IMAGE1D_ARRAY ? 1u : height_);
+}
+
+cl_mem_object_type ClMemExtent::type() const
+{
+    AV_SCOPE("ClMemExtent::type");
+    return type_;
 }
 
 ClMemExtent::Shape ClMemExtent::shape() const

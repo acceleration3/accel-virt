@@ -132,6 +132,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     cl_device_id device = opened_device(rig);
     CHECK(device != nullptr);
     rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+    rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
     std::memset(reported, 'x', sizeof reported);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
              CL_SUCCESS);
@@ -177,6 +178,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, nullptr),
              CL_OUT_OF_RESOURCES);
     rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+    rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, nullptr),
              CL_SUCCESS);
     CHECK_EQ(rig.kmt().queued_answers(), 0u); } }
@@ -187,6 +189,7 @@ TEST(cl_icd_root, the_import_handle_types_are_this_drivers_own_and_only_where_it
     CHECK(device != nullptr);
     static const char importing[] = "cl_khr_external_memory";
     rig.host().cl_info(CL_SUCCESS, importing, sizeof importing);
+    rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
     cl_external_memory_handle_type_khr taken = 0u;
     std::size_t                        answered = 0u;
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
@@ -213,6 +216,7 @@ TEST(cl_icd_root, the_import_handle_types_are_this_drivers_own_and_only_where_it
     cl_device_id device = opened_device(rig);
     static const char plain[] = "cl_khr_fp64 cl_khr_gl_sharing";
     rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+    rig.host().cl_info(CL_INVALID_OPERATION, nullptr, 0u);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
                                       &taken, nullptr),
              CL_INVALID_VALUE); }

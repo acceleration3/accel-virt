@@ -753,7 +753,7 @@ TEST(cl_image_paths, transfers_are_staged_while_buffers_fill_their_part_of_the_a
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   on->blocks().give_back(full); }
 
-TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_as_they_stand)
+TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_less_the_ones_it_refuses_to_make)
 { ClIcdRig rig;
   Running  run(rig);
   CHECK(run.made());
@@ -769,22 +769,29 @@ TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_as_they_stand)
            CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  const cl_image_format answered[2] = {{CL_RGBA, CL_UNORM_INT8}, {CL_R, CL_FLOAT}};
-  rig.host().cl_formats(CL_SUCCESS, answered, 2u, 30u);
+  const cl_image_format answered[3] = {{CL_RGBA, CL_UNORM_INT8}, {CL_INTENSITY, CL_UNORM_INT8}, {CL_R, CL_FLOAT}};
+  rig.host().cl_formats(CL_SUCCESS, answered, 3u, 3u);
+  rig.host().cl_handle(host_image + 8u, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_handle(0u, CL_IMAGE_FORMAT_NOT_SUPPORTED);
+  rig.host().cl_handle(host_image + 9u, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(table_of(run.context())->clGetSupportedImageFormats(run.context(), CL_MEM_READ_ONLY,
-                                                               CL_MEM_OBJECT_IMAGE2D, 2u, formats, &listed),
+                                                               CL_MEM_OBJECT_IMAGE2D, 4u, formats, &listed),
            CL_SUCCESS);
-  CHECK_EQ(listed, 30u);
+  CHECK_EQ(listed, 2u);
   CHECK_EQ(formats[0].image_channel_order, static_cast<cl_channel_order>(CL_RGBA));
   CHECK_EQ(formats[1].image_channel_data_type, static_cast<cl_channel_type>(CL_FLOAT));
   CHECK_EQ(formats[2].image_channel_order, 0u);
 
-  rig.host().cl_formats(CL_SUCCESS, nullptr, 0u, 30u);
+  const std::uint32_t known = rig.kmt().commands();
   listed = 0u;
   CHECK_EQ(rig.root().supported_image_formats(run.context(), CL_MEM_READ_ONLY, CL_MEM_OBJECT_IMAGE2D, 0u, nullptr,
                                               &listed),
            CL_SUCCESS);
-  CHECK_EQ(listed, 30u); }
+  CHECK_EQ(listed, 2u);
+  CHECK_EQ(rig.kmt().commands(), known);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 TEST(cl_image_paths, a_marker_or_a_barrier_names_the_hosts_events_and_hands_back_its_own)
 { ClIcdRig rig;

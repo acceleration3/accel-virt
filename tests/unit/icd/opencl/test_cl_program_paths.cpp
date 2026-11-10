@@ -281,7 +281,6 @@ TEST(cl_program_paths, a_compile_names_its_headers_by_the_host_s_numbers_and_a_l
       context_table.clLinkProgram(run.context(), 0u, nullptr, nullptr, 1u, &header, nullptr, nullptr, &error);
   CHECK(failed != nullptr);
   CHECK_EQ(error, CL_LINK_PROGRAM_FAILURE);
-  rig.host().cl_handle(0u, CL_INVALID_LINKER_OPTIONS);
   CHECK(context_table.clLinkProgram(run.context(), 0u, nullptr, "-bad", 1u, &header, nullptr, nullptr, &error) ==
         nullptr);
   CHECK_EQ(error, CL_INVALID_LINKER_OPTIONS);
