@@ -574,6 +574,68 @@ TEST(d3d_backend_device, a_draw_auto_over_what_the_stream_output_wrote_keeps_the
 TEST(d3d_backend_device, a_stream_output_of_a_triangle_strip_streams_every_vertex_through_the_triangle_variant)
 { stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 5u); }
 
+
+namespace {
+
+constexpr std::uint32_t four_stream_tokens[] = {0x00020050u, 0x000000c8u, 0x0100086au, 0x05000061u, 0x002010f2u, 0x00000001u, 0x00000000u, 0x00000001u, 0x0400005fu, 0x00201072u, 0x00000001u, 0x00000001u, 0x02000068u, 0x00000001u, 0x0100085du, 0x0300008fu, 0x00110000u, 0x00000000u, 0x0100085cu, 0x04000067u, 0x001020f2u, 0x00000000u, 0x00000001u, 0x03000065u, 0x00102072u, 0x00000001u, 0x0300008fu, 0x00110000u, 0x00000001u, 0x0100085cu, 0x04000067u, 0x001020f2u, 0x00000000u, 0x00000001u, 0x03000065u, 0x00102072u, 0x00000001u, 0x0300008fu, 0x00110000u, 0x00000002u, 0x0100085cu, 0x04000067u, 0x001020f2u, 0x00000000u, 0x00000001u, 0x03000065u, 0x00102072u, 0x00000001u, 0x0300008fu, 0x00110000u, 0x00000003u, 0x0100085cu, 0x04000067u, 0x001020f2u, 0x00000000u, 0x00000001u, 0x03000065u, 0x00102072u, 0x00000001u, 0x0200005eu, 0x0000000cu, 0x06000036u, 0x00102032u, 0x00000000u, 0x00201046u, 0x00000000u, 0x00000000u, 0x08000036u, 0x001020c2u, 0x00000000u, 0x00004002u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3f800000u, 0x06000036u, 0x00102072u, 0x00000001u, 0x00201246u, 0x00000000u, 0x00000001u, 0x03000075u, 0x00110000u, 0x00000000u, 0x0b000038u, 0x00100032u, 0x00000000u, 0x00004002u, 0x3f000000u, 0x3f000000u, 0x00000000u, 0x00000000u, 0x00201046u, 0x00000000u, 0x00000000u, 0x05000036u, 0x00102032u, 0x00000000u, 0x00100046u, 0x00000000u, 0x08000036u, 0x001020c2u, 0x00000000u, 0x00004002u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3f800000u, 0x06000036u, 0x00102072u, 0x00000001u, 0x00201496u, 0x00000000u, 0x00000001u, 0x03000075u, 0x00110000u, 0x00000001u, 0x10000032u, 0x00100032u, 0x00000000u, 0x00201046u, 0x00000000u, 0x00000000u, 0x00004002u, 0x3e800000u, 0x3e800000u, 0x00000000u, 0x00000000u, 0x00004002u, 0x3f000000u, 0xbf000000u, 0x00000000u, 0x00000000u, 0x05000036u, 0x00102032u, 0x00000000u, 0x00100046u, 0x00000000u, 0x08000036u, 0x001020c2u, 0x00000000u, 0x00004002u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3f800000u, 0x06000036u, 0x00102072u, 0x00000001u, 0x00201926u, 0x00000000u, 0x00000001u, 0x03000075u, 0x00110000u, 0x00000002u, 0x0b000038u, 0x00100032u, 0x00000000u, 0x00004002u, 0x3f8ccccdu, 0x3f8ccccdu, 0x00000000u, 0x00000000u, 0x00201046u, 0x00000000u, 0x00000000u, 0x05000036u, 0x00102032u, 0x00000000u, 0x00100046u, 0x00000000u, 0x08000036u, 0x001020c2u, 0x00000000u, 0x00004002u, 0x00000000u, 0x00000000u, 0x00000000u, 0x3f800000u, 0x0c000000u, 0x00100072u, 0x00000000u, 0x00004002u, 0x3f800000u, 0x3f800000u, 0x3f800000u, 0x00000000u, 0x80201246u, 0x00000041u, 0x00000000u, 0x00000001u, 0x05000036u, 0x00102072u, 0x00000001u, 0x00100246u, 0x00000000u, 0x03000075u, 0x00110000u, 0x00000003u, 0x0100003eu};
+
+}
+
+TEST(d3d_backend_device, a_geometry_shader_streams_each_of_its_four_streams_to_its_own_buffer)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend, rig.log);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device));
+    av::D3dLoopback wire(backend, rig.imports);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    SignatureEntry outputs[8] = {};
+    StreamOutEntry streamed[8] = {};
+    for (std::uint32_t stream = 0u; stream < 4u; stream++) {
+        outputs[stream * 2u] = SignatureEntry{1u, 0u, 15u, 3u, 0u, stream};
+        outputs[stream * 2u + 1u] = SignatureEntry{0u, 1u, 7u, 3u, 0u, stream};
+        streamed[stream * 2u] = StreamOutEntry{stream, stream, 0u, 0xFu};
+        streamed[stream * 2u + 1u] = StreamOutEntry{stream, stream, 1u, 0x7u};
+    }
+    const std::uint32_t strides[4] = {28u, 28u, 28u, 28u};
+    constexpr std::uint32_t stage_geometry = 3u, gs = 50u, out = 60u, no_rasterized_stream = 0xFFFFFFFFu;
+    CHECK(av_d3d_CreateShader(wire, gs, stage_geometry, triangle_vs::outputs_count, triangle_vs::outputs, 8u, outputs, 0u,
+                              nullptr, 8u, streamed, 4u, strides, no_rasterized_stream, four_stream_tokens,
+                              sizeof four_stream_tokens));
+    CHECK_EQ(wire.refused(), 0u);
+    ResourceDesc buffer = {};
+    buffer.dimension = 1u;
+    buffer.width = 3u * 28u;
+    buffer.bind_flags = 0x10u;
+    for (std::uint32_t stream = 0u; stream < 4u; stream++) CHECK(av_d3d_CreateResource(wire, out + stream, buffer, 0u, 0u, 0u));
+    bind_triangle(wire);
+    CHECK(av_d3d_SetTopology(wire, 1u));
+    CHECK(av_d3d_SetShader(wire, stage_geometry, gs));
+    const StreamOutTarget targets[4] = {{out, 0u}, {out + 1u, 0u}, {out + 2u, 0u}, {out + 3u, 0u}};
+    CHECK(av_d3d_SetStreamOutTargets(wire, 4u, targets));
+    CHECK(av_d3d_Draw(wire, 3u, 0u));
+    CHECK(av_d3d_SetStreamOutTargets(wire, 0u, nullptr));
+    for (std::uint32_t stream = 0u; stream < 4u; stream++) {
+        static float streamed_out[3u * 7u];
+        std::uint32_t row_pitch = 0u, depth_pitch = 0u;
+        std::uint64_t read = 0u;
+        CHECK(av_d3d_ReadSubresource(wire, out + stream, 0u, &hresult, &row_pitch, &depth_pitch, streamed_out,
+                                     sizeof streamed_out, &read));
+        CHECK_EQ(hresult, 0u);
+        float sum = 0.0f;
+        for (const float value : streamed_out) sum += value < 0.0f ? -value : value;
+        std::fprintf(stderr, "stream %u: sum %f first %f %f %f %f\n", stream, sum, streamed_out[0], streamed_out[1], streamed_out[2], streamed_out[3]);
+        CHECK(sum > 0.0f);
+    }
+    CHECK_EQ(wire.refused(), 0u);
+}
+
 TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_releases_it)
 {
     av::ExecutorLogRig rig;

@@ -1,0 +1,28 @@
+From: accel-virt
+Subject: [PATCH] Geometry shader output streams are decorated whatever order the declarations come in
+
+The stream mask was only known after the output primitive declaration had been
+emitted, so outputs declared before it, such as the stream output variables,
+lost their Stream decoration and every stream was captured as stream 0. The
+mask is now read from the declarations before any is emitted.
+---
+diff --git a/subprojects/dxbc-spirv/spirv/spirv_builder.cpp b/subprojects/dxbc-spirv/spirv/spirv_builder.cpp
+index c43a987..33a42a8 100644
+--- a/subprojects/dxbc-spirv/spirv/spirv_builder.cpp
++++ b/subprojects/dxbc-spirv/spirv/spirv_builder.cpp
+@@ -26,6 +26,15 @@ void SpirvBuilder::buildSpirvBinary() {
+   if (m_options.maxCbvSize || m_options.maxCbvCount >= 0)
+     demoteCbv();
+ 
++  {
++    auto [a, b] = m_builder.getDeclarations();
++
++    for (auto iter = a; iter != b; iter++) {
++      if (iter->getOpCode() == ir::OpCode::eSetGsOutputPrimitive)
++        m_geometry.streamMask = uint32_t(iter->getOperand(2u));
++    }
++  }
++
+   for (const auto& op : m_builder)
+     emitInstruction(op);
+ 
