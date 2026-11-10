@@ -18,6 +18,7 @@ constexpr DWORD fog_in_fvf = 0x2000u;
 constexpr DWORD line_pattern_rep = 0x4u;
 constexpr DWORD no_vsdt_ubyte4 = 0x80u;
 constexpr DWORD managed_device = 0x40u;
+constexpr DWORD linear_to_srgb_presentation = 0x80u;
 constexpr DWORD hw_vertex_buffer = 0x02000000u;
 constexpr DWORD hw_index_buffer = 0x04000000u;
 constexpr DWORD sub_volume_lock = 0x08000000u;
@@ -60,7 +61,7 @@ void D3d9HostCaps::fix_up()
     caps_.DeviceType = D3DDEVTYPE_HAL;
     caps_.AdapterOrdinal = 0u;
     caps_.Caps2 |= D3DCAPS2_DYNAMICTEXTURES;
-    caps_.Caps3 &= ~managed_device;
+    caps_.Caps3 &= ~(managed_device | linear_to_srgb_presentation);
     caps_.DevCaps |= hw_vertex_buffer | hw_index_buffer | sub_volume_lock;
     caps_.DevCaps2 |= D3DDEVCAPS2_STREAMOFFSET;
     caps_.RasterCaps |= D3DPRASTERCAPS_SCISSORTEST;
