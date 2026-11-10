@@ -795,8 +795,9 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_command_queue>(
-        wrap(*wire, ClObject::Kind::command_queue, queue, held->context(), held, error));
+    void *const made = wrap(*wire, ClObject::Kind::command_queue, queue, held->context(), held, error);
+    if (made != nullptr) static_cast<ClObject *>(made)->keep_flags(bits);
+    return static_cast<cl_command_queue>(made);
 }
 
 cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
@@ -1100,7 +1101,7 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
     if (named->context() != held->context()) return CL_INVALID_CONTEXT;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     const ClKernelShape *const shape = kernel_shape(*named, *wire);
     if (shape != nullptr) {
@@ -1138,7 +1139,7 @@ cl_int ClIcdRoot::enqueue_external(cl_command_queue queue, cl_uint count, const 
     }
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     if (event == nullptr && waits.count() == 0u) return CL_SUCCESS;
     ClientTransport *const wire = context->wire();
@@ -1186,7 +1187,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     bool has_room = false;
@@ -1260,7 +1261,7 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     if (blocking != CL_TRUE && waits.count() != 0u && bytes <= wire->room().inline_write()) {
         ClHostNumbers listed_room(memory_);
         uint64_t     *listed = nullptr;
-        const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+        const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
         if (judged_list != CL_SUCCESS) return judged_list;
         held->busy();
         uint64_t     produced = 0u;
@@ -1541,7 +1542,7 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     const bool   waits_here = blocking == CL_TRUE && waits.count() != 0u;
     if (waits_here) {
@@ -1585,7 +1586,7 @@ cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *eve
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     {
         const uint64_t offset = static_cast<uint64_t>(static_cast<const uint8_t *>(pointer) - allocation->mirror());
@@ -1668,6 +1669,7 @@ cl_int ClIcdRoot::set_user_event_status(cl_event event, cl_int status)
     if ((held->traits() & ClObject::event_settled) != 0u) return CL_INVALID_OPERATION;
     const cl_int set = av::clproto::av_clSetUserEventStatus(*wire, held->wire(), status);
     if (set == CL_SUCCESS) held->keep_traits(held->traits() | ClObject::event_settled);
+    if (set == CL_SUCCESS && status < 0) static_cast<void>(objects_.poison_gated_queues(held->parent()));
     return set;
 }
 
@@ -2168,7 +2170,7 @@ cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_me
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2202,7 +2204,7 @@ cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, con
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2245,7 +2247,7 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2625,7 +2627,7 @@ cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, 
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2742,19 +2744,46 @@ cl_int ClIcdRoot::supported_image_formats(cl_context context, cl_mem_flags flags
     return CL_SUCCESS;
 }
 
-cl_int ClIcdRoot::wait_list(GuestClContext &context, cl_uint count, const cl_event *events, ClHostNumbers &room,
+cl_int ClIcdRoot::wait_list(ClObject &queue, cl_uint count, const cl_event *events, ClHostNumbers &room,
                             uint64_t *&into)
 {
     AV_SCOPE("ClIcdRoot::wait_list");
     if ((count == 0u) != (events == nullptr)) return CL_INVALID_EVENT_WAIT_LIST;
     into = room.room(count);
     if (into == nullptr) return CL_OUT_OF_HOST_MEMORY;
+    bool gated = false;
     for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const held = judged(events[index], ClObject::Kind::event);
-        if (held == nullptr || held->context() != &context) return CL_INVALID_EVENT_WAIT_LIST;
+        if (held == nullptr || held->context() != queue.context()) return CL_INVALID_EVENT_WAIT_LIST;
         into[index] = held->wire();
+        if (held->parent() != nullptr && held->parent()->kind() == ClObject::Kind::context) gated = true;
     }
+    if (gated) queue.keep_traits(queue.traits() | ClObject::queue_gated);
+    heal_queue(queue);
     return CL_SUCCESS;
+}
+
+void ClIcdRoot::heal_queue(ClObject &queue)
+{
+    AV_SCOPE("ClIcdRoot::heal_queue");
+    if ((queue.traits() & ClObject::queue_poisoned) == 0u) return;
+    GuestClContext *const  context = queue.context();
+    ClObject *const        owner = queue.parent();
+    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
+    const uint64_t         host_device = owner != nullptr ? host_device_of(*owner) : 0u;
+    if (wire == nullptr || host_device == 0u) return;
+    static_cast<void>(drain(*wire, queue.wire(), context->wakes(), nullptr, 0u));
+    static_cast<void>(deliver_queued(*wire, context->staging(), queue.wire()));
+    const uint64_t profiled[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), CL_QUEUE_PROFILING_ENABLE, 0u};
+    cl_int         host_error = CL_SUCCESS;
+    const uint64_t fresh = av::clproto::av_clCreateCommandQueueWithProperties(
+        *wire, owner->wire(), host_device, (queue.flags() & CL_QUEUE_PROFILING_ENABLE) != 0u ? profiled : nullptr,
+        &host_error);
+    if (fresh == 0u) return;
+    const uint64_t failed = queue.wire();
+    queue.rewire(fresh);
+    queue.keep_traits(queue.traits() & ~ClObject::queue_poisoned);
+    give_back_to_host(*wire, ClObject::Kind::command_queue, failed);
 }
 
 cl_int ClIcdRoot::enqueue_point(PointCommand command, cl_command_queue queue, cl_uint count,
@@ -2768,7 +2797,7 @@ cl_int ClIcdRoot::enqueue_point(PointCommand command, cl_command_queue queue, cl
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers handles_room(memory_);
     uint64_t     *handles = nullptr;
-    const cl_int listed = wait_list(*context, count, events, handles_room, handles);
+    const cl_int listed = wait_list(*held, count, events, handles_room, handles);
     if (listed != CL_SUCCESS) return listed;
     uint64_t     produced = 0u;
     const cl_int placed = command(*wire, held->wire(), count, count != 0u ? handles : nullptr,
@@ -2981,7 +3010,7 @@ cl_int ClIcdRoot::enqueue_gl_objects(GlObjectsCommand command, cl_command_queue 
     }
     ClHostNumbers handles_room(memory_);
     uint64_t     *handles = nullptr;
-    const cl_int listed = wait_list(*context, waits, events, handles_room, handles);
+    const cl_int listed = wait_list(*held, waits, events, handles_room, handles);
     if (listed != CL_SUCCESS) return listed;
     uint64_t     produced = 0u;
     const cl_int placed = command(*wire, held->wire(), count, count != 0u ? named : nullptr, waits,

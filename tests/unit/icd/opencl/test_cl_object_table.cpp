@@ -503,6 +503,27 @@ TEST(cl_object_table, a_contexts_queues_are_idle_when_none_of_them_has_work_in_f
   CHECK(!rig.objects().queues_idle(other));
   CHECK(rig.objects().invariants_hold()); }
 
+TEST(cl_object_table, only_the_queues_of_the_context_that_waited_on_user_events_are_marked_poisoned)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const other = rig.make(ClObject::Kind::context, 0x910u);
+  CHECK_EQ(rig.objects().poison_gated_queues(nullptr), 0u);
+  CHECK_EQ(rig.objects().poison_gated_queues(context), 0u);
+  ClObject *const gated = rig.make(ClObject::Kind::command_queue, 0x901u, context);
+  ClObject *const plain = rig.make(ClObject::Kind::command_queue, 0x902u, context);
+  ClObject *const elsewhere = rig.make(ClObject::Kind::command_queue, 0x911u, other);
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x903u, context);
+  CHECK(buffer != nullptr);
+  gated->keep_traits(gated->traits() | ClObject::queue_gated);
+  elsewhere->keep_traits(elsewhere->traits() | ClObject::queue_gated);
+  buffer->keep_traits(buffer->traits() | ClObject::queue_gated);
+  CHECK_EQ(rig.objects().poison_gated_queues(context), 1u);
+  CHECK((gated->traits() & ClObject::queue_poisoned) != 0u);
+  CHECK((plain->traits() & ClObject::queue_poisoned) == 0u);
+  CHECK((elsewhere->traits() & ClObject::queue_poisoned) == 0u);
+  CHECK((buffer->traits() & ClObject::queue_poisoned) == 0u);
+  CHECK(rig.objects().invariants_hold()); }
+
 TEST(cl_object, an_orphan_with_no_children_does_not_owe_the_parent_one)
 { av::MockPlatform platform;
   ClObject parent(dispatch, platform, ClObject::Kind::command_queue, 0x900u, nullptr, nullptr);

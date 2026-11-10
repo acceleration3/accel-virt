@@ -401,8 +401,9 @@ private:
     ClKernelShape   *kernel_shape(ClObject &kernel, ClientTransport &wire);
     [[nodiscard]] cl_int judge_kernel_argument(ClKernelShape &shape, uint32_t index, size_t bytes, const void *value);
     cl_int           marker_event(ClientTransport &wire, ClObject &queue, cl_event *event, cl_command_type type = 0u);
-    cl_int           wait_list(GuestClContext &context, cl_uint count, const cl_event *events, ClHostNumbers &room,
+    cl_int           wait_list(ClObject &queue, cl_uint count, const cl_event *events, ClHostNumbers &room,
                                uint64_t *&into);
+    void             heal_queue(ClObject &queue);
     cl_int           gl_share_for(const ClPropertyList &list, uint32_t &share);
     ClObject        *gl_sharing(cl_context context, cl_int *error);
     static bool      texture_target(cl_GLenum target);

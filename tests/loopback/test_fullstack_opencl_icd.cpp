@@ -2154,3 +2154,56 @@ TEST(fullstack_opencl_icd, a_non_blocking_write_gated_on_a_user_event_set_after_
     CHECK_EQ(loader.release_event(gate), CL_SUCCESS);
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+TEST(fullstack_opencl_icd, a_command_after_one_whose_user_event_failed_still_runs_in_the_same_queue)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    cl_int         error = CL_INVALID_VALUE;
+    const cl_event gate = loader.create_user_event(run.context(), &error);
+    CHECK(gate != nullptr);
+    if (gate == nullptr) return;
+    float scratch[elements] = {};
+    cl_event victim = nullptr;
+    CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.input(), CL_FALSE, 0u, vector_bytes, scratch,
+                                                         1u, &gate, &victim),
+             CL_SUCCESS);
+    CHECK(victim != nullptr);
+    CHECK_EQ(loader.set_user_event_status(gate, -5), CL_SUCCESS);
+    if (victim != nullptr) {
+        CHECK_EQ(loader.wait_for_events(1u, &victim), CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);
+        cl_int status = CL_COMPLETE;
+        CHECK_EQ(table_of(victim)->clGetEventInfo(victim, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
+                                                  nullptr),
+                 CL_SUCCESS);
+        CHECK(status < 0);
+    }
+    cl_event after = nullptr;
+    CHECK_EQ(run.enqueue(&after), CL_SUCCESS);
+    CHECK(after != nullptr);
+    CHECK_EQ(run.flush(), CL_SUCCESS);
+    if (after != nullptr) {
+        CHECK_EQ(loader.wait_for_events(1u, &after), CL_SUCCESS);
+        cl_int status = -1;
+        CHECK_EQ(table_of(after)->clGetEventInfo(after, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
+                                                 nullptr),
+                 CL_SUCCESS);
+        CHECK_EQ(status, CL_COMPLETE);
+        CHECK_EQ(loader.release_event(after), CL_SUCCESS);
+    }
+    float read[elements] = {};
+    CHECK_EQ(run.read(read, CL_TRUE, nullptr), CL_SUCCESS);
+    CHECK_EQ(run.wrong(read), 0u);
+    if (victim != nullptr) CHECK_EQ(loader.release_event(victim), CL_SUCCESS);
+    CHECK_EQ(loader.release_event(gate), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }

@@ -840,3 +840,75 @@ TEST(cl_icd_root_enqueue, a_copy_into_or_out_of_a_buffer_that_is_no_buffer_asks_
   CHECK_EQ(rig.root().enqueue_copy_buffer_to_image(run.queue(), not_memory, image, 0u, origin, region, nullptr),
            CL_INVALID_MEM_OBJECT);
   CHECK_EQ(rig.kmt().commands(), sent); }
+
+namespace {
+
+std::uint32_t count_commands(const av::MockKmt &kmt, std::uint32_t from, std::uint32_t command)
+{
+    std::uint32_t counted = 0u;
+    for (std::uint32_t index = from; index < kmt.commands(); ++index)
+        if (kmt.command_id(index) == command) ++counted;
+    return counted;
+}
+
+std::uint32_t position_of(const av::MockKmt &kmt, std::uint32_t from, std::uint32_t command)
+{
+    for (std::uint32_t index = from; index < kmt.commands(); ++index)
+        if (kmt.command_id(index) == command) return index;
+    return ~std::uint32_t{0};
+}
+
+}
+
+TEST(cl_icd_root_enqueue, a_queue_whose_command_waited_on_a_user_event_that_failed_gets_a_new_host_queue_before_its_next_command)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const cl_event gate = run.gate();
+  rig.host().cl_enqueued(CL_SUCCESS, ClRunningRig::host_event);
+  cl_event victim = nullptr;
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 1u, &gate, &victim), CL_SUCCESS);
+
+  const std::uint32_t before_failing = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().set_user_event_status(gate, -5), CL_SUCCESS);
+  CHECK_EQ(count_commands(rig.kmt(), before_failing, av::clproto::kCmd_clCreateCommandQueueWithProperties), 0u);
+
+  const std::uint32_t before_next = rig.kmt().commands();
+  const cl_int        complete = CL_COMPLETE;
+  rig.host().cl_enqueued(CL_SUCCESS, ClRunningRig::host_event + 1u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_handle(ClRunningRig::host_queue + 1u, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, ClRunningRig::host_event + 2u);
+  cl_event next = nullptr;
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 0u, nullptr, &next), CL_SUCCESS);
+  CHECK(ClIcdRootProbe::context(rig.root(), run.context())->flush() == av::TransportResult::ok);
+  CHECK_EQ(count_commands(rig.kmt(), before_next, av::clproto::kCmd_clCreateCommandQueueWithProperties), 1u);
+  CHECK_EQ(count_commands(rig.kmt(), before_next, av::clproto::kCmd_clReleaseCommandQueue), 1u);
+  CHECK(position_of(rig.kmt(), before_next, av::clproto::kCmd_clCreateCommandQueueWithProperties) <
+        position_of(rig.kmt(), before_next, av::clproto::kCmd_clReleaseCommandQueue));
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+
+  const std::uint32_t before_again = rig.kmt().commands();
+  rig.host().cl_enqueued(CL_SUCCESS, ClRunningRig::host_event + 3u);
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(count_commands(rig.kmt(), before_again, av::clproto::kCmd_clCreateCommandQueueWithProperties), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_enqueue, a_queue_that_never_waited_on_a_user_event_keeps_its_host_queue_when_one_fails)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const std::uint32_t before = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().set_user_event_status(run.gate(), -5), CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, ClRunningRig::host_event);
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(count_commands(rig.kmt(), before, av::clproto::kCmd_clCreateCommandQueueWithProperties), 0u);
+  CHECK_EQ(count_commands(rig.kmt(), before, av::clproto::kCmd_clReleaseCommandQueue), 0u);
+  CHECK(rig.root().invariants_hold()); }

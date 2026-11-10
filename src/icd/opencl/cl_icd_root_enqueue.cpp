@@ -31,7 +31,7 @@ cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitLis
     GuestClContext *const context = queue.context();
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(queue, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     const uint32_t kept = waits.blocks() ? waits.count() : without_unset_user_events(wire, waits, listed);
     if (kept == 0u) return drain_unless_idle(wire, queue);
@@ -123,7 +123,7 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -179,7 +179,7 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -225,7 +225,7 @@ cl_int ClIcdRoot::enqueue_fill_image(cl_command_queue queue, cl_mem image, const
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -259,7 +259,7 @@ cl_int ClIcdRoot::enqueue_migrate(cl_command_queue queue, cl_uint count, const c
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -580,7 +580,7 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     const SvmAllocation *const into_shared = context->svm().covering(to);
     const SvmAllocation *const from_shared = context->svm().covering(from);
@@ -639,7 +639,7 @@ cl_int ClIcdRoot::svm_mem_fill(cl_command_queue queue, void *pointer, const void
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
+    const cl_int judged_list = wait_list(*held, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     context->svm().covering(pointer)->note_device_write();
     uint64_t                 produced = 0u;

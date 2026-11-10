@@ -108,6 +108,21 @@ bool ClObjectTable::queues_idle(const ClObject *context) const
     return idle;
 }
 
+uint32_t ClObjectTable::poison_gated_queues(const ClObject *context)
+{
+    AV_SCOPE("ClObjectTable::poison_gated_queues");
+    if (context == nullptr) return 0u;
+    const ThreadLockHold held(lock_);
+    uint32_t             marked = 0u;
+    tree_.for_children(*context, [&marked](const ClObject &child) {
+        if (child.kind() != ClObject::Kind::command_queue || (child.traits() & ClObject::queue_gated) == 0u) return;
+        ClObject &queue = const_cast<ClObject &>(child);
+        queue.keep_traits(queue.traits() | ClObject::queue_poisoned);
+        ++marked;
+    });
+    return marked;
+}
+
 void ClObjectTable::report(StateWriter &writer) const
 {
     AV_SCOPE("ClObjectTable::report");

@@ -34,6 +34,7 @@ public:
     uint32_t live() const;
     uint32_t live_of(ClObject::Kind kind) const;
     bool     queues_idle(const ClObject *context) const;
+    uint32_t poison_gated_queues(const ClObject *context);
     void     report(StateWriter &writer) const;
 
     bool invariants_hold() const;

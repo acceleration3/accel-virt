@@ -61,6 +61,8 @@ public:
     static constexpr uint32_t program_failed = 32u;
     static constexpr uint32_t event_settled = 64u;
     static constexpr uint32_t mem_from_gl = 128u;
+    static constexpr uint32_t queue_gated = 256u;
+    static constexpr uint32_t queue_poisoned = 512u;
 
     void            keep_source(ClProgramSource *source);
     ClProgramSource *source() const;

@@ -252,7 +252,7 @@ cl_int ClIcdRoot::d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_ev
     if (context->d3d11().device() == nullptr) return CL_INVALID_CONTEXT;
     ClHostNumbers handles_room(memory_);
     uint64_t     *handles = nullptr;
-    const cl_int listed = wait_list(*context, waits, events, handles_room, handles);
+    const cl_int listed = wait_list(*held, waits, events, handles_room, handles);
     if (listed != CL_SUCCESS) return listed;
     wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
