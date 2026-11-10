@@ -1134,7 +1134,17 @@ void ManualCalls::bind_framebuffer(uint32_t target, uint32_t framebuffer)
     if (context == nullptr) return;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.bound(target, framebuffer);
+    context->arrays().note_framebuffer(framebuffer);
     glproto::av_glBindFramebuffer(*context->wire(), target, framebuffers.name_of(framebuffer));
+}
+
+bool ManualCalls::is_framebuffer(uint32_t framebuffer)
+{
+    AV_SCOPE("ManualCalls::is_framebuffer");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return false;
+    if (!context->arrays().framebuffer_known(framebuffer)) return false;
+    return glproto::av_glIsFramebuffer(*context->wire(), context->framebuffers().name_of(framebuffer)) != 0u;
 }
 
 void ManualCalls::draw_buffer(uint32_t buffer)

@@ -2299,13 +2299,6 @@ GLboolean APIENTRY Wrap_glIsEnabledi(GLenum target, GLuint index) {
     return ::av::glproto::av_glIsEnabledi(*av_t, target, index);
 }
 
-GLboolean APIENTRY Wrap_glIsFramebuffer(GLuint framebuffer) {
-    AV_SCOPE("glIsFramebuffer");
-    auto* av_t = ::av::glicd::wire();
-    if (av_t == nullptr) return 0;
-    return ::av::glproto::av_glIsFramebuffer(*av_t, framebuffer);
-}
-
 GLboolean APIENTRY Wrap_glIsProgram(GLuint program) {
     AV_SCOPE("glIsProgram");
     auto* av_t = ::av::glicd::wire();

@@ -62,6 +62,12 @@ GLenum APIENTRY Wrap_glClientWaitSync(GLsync sync, GLbitfield flags, GLuint64 ti
     return ::av::glicd::gl_icd_binding.root().manual().client_wait_sync(sync, flags, timeout);
 }
 
+GLboolean APIENTRY Wrap_glIsFramebuffer(GLuint framebuffer)
+{
+    AV_SCOPE("Wrap_glIsFramebuffer");
+    return ::av::glicd::gl_icd_binding.root().manual().is_framebuffer(framebuffer) ? 1 : 0;
+}
+
 void APIENTRY Wrap_glFinish(void)
 {
     AV_SCOPE("Wrap_glFinish");

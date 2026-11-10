@@ -249,6 +249,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
         choose_adapter(dc);
         const Status made = make_chain(*context);
         if (made != Status::ok) {
+            LogLine(lines_).text("wglMakeCurrent: the context chain could not be made, status ").number(static_cast<uint32_t>(made)).text(", error ").number(made_error(made)).write();
             fail(made_error(made));
             return nullptr;
         }

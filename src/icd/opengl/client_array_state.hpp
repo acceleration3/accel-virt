@@ -52,6 +52,8 @@ public:
     void     pop_client();
     void     limit_client_depth(int32_t reported);
     void     forget_buffer(uint32_t target);
+    void     note_framebuffer(uint32_t name);
+    bool     framebuffer_known(uint32_t name) const;
     void     reset_client(uint32_t mask);
     void     set_vertex_array_elements(uint32_t array, uint32_t buffer);
     void     delete_buffers(int32_t count, const uint32_t *buffers);
@@ -109,6 +111,7 @@ private:
     uint32_t   vertex_array_;
     uint32_t                       default_elements_;
     KeyedSlots<uint32_t, uint32_t> elements_;
+    KeyedSlots<uint32_t, uint32_t> framebuffers_;
     uint64_t   attribute_pointers_[max_attributes];
     uint32_t   active_unit_;
     uint32_t   textures_[units][texture_targets];

@@ -167,6 +167,7 @@ public:
                              const void *indices);
     void flush();
     void bind_framebuffer(uint32_t target, uint32_t framebuffer);
+    bool is_framebuffer(uint32_t framebuffer);
     void draw_buffer(uint32_t buffer);
     void read_buffer(uint32_t buffer);
     uint32_t client_wait_sync(void *sync, uint32_t flags, uint64_t timeout);

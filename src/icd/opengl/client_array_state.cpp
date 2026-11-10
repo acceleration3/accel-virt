@@ -31,7 +31,7 @@ constexpr uint32_t texture_targets_kept[] = {
 
 ClientArrayState::ClientArrayState(BlockSource &memory)
     : buffers_{}, pushed_{}, depth_(0u), unsaved_(0u), host_depth_limit_(least_depth_limit), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
-      elements_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
+      elements_(memory, Pool::paged), framebuffers_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
       offsets_(memory, Pool::paged), wide_{GrowableArray<int64_t>(memory, Pool::paged), GrowableArray<int64_t>(memory, Pool::paged)}, no_offsets_(0u)
 {
     AV_SCOPE("ClientArrayState::ClientArrayState");
@@ -159,6 +159,20 @@ void ClientArrayState::forget_unsaved_bindings()
     buffers_[buffer_slot(pixel_pack_buffer)] = unknown;
     buffers_[buffer_slot(pixel_unpack_buffer)] = unknown;
     set_vertex_array_elements(vertex_array_, unknown);
+}
+
+void ClientArrayState::note_framebuffer(uint32_t name)
+{
+    AV_SCOPE("ClientArrayState::note_framebuffer");
+    if (name == 0u || framebuffers_.find(name) != nullptr) return;
+    uint32_t slot = 0u;
+    static_cast<void>(framebuffers_.insert(name, 1u, slot));
+}
+
+bool ClientArrayState::framebuffer_known(uint32_t name) const
+{
+    AV_SCOPE("ClientArrayState::framebuffer_known");
+    return framebuffers_.find(name) != nullptr;
 }
 
 void ClientArrayState::forget_buffer(uint32_t target)
