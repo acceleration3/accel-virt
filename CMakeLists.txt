@@ -14,6 +14,7 @@ option(AV_COVERAGE "instrument for llvm-cov"        OFF)
 option(AV_SANITIZE "build tests with ASan + UBSan"  ON)
 option(AV_FUZZ     "build libFuzzer targets"        OFF)
 option(AV_CHECKED "verify invariants around every mutation" ON)
+set(AV_D3D_RUNTIME_DIR "${CMAKE_SOURCE_DIR}/build-d3d/lib" CACHE PATH "the built DXVK and vkd3d-proton libraries the device tests load")
 option(AV_QEMU     "build the patched QEMU with the device and smoke-test it" OFF)
 if(AV_QEMU AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -368,9 +369,10 @@ foreach(src ${AV_UNIT_TESTS})
      name STREQUAL "test_d3d_external_export_device" OR
      name STREQUAL "test_d3d9_session_device" OR
      name STREQUAL "test_d3d_vulkan_interop_device" OR name STREQUAL "test_d3d_device_loss_device" OR
-     name STREQUAL "test_fullstack_device_loss")
+     name MATCHES "^test_fullstack_" OR name STREQUAL "test_vulkan_backend" OR
+     name STREQUAL "test_compositor_memory_device" OR name STREQUAL "test_executor_root")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
-      "ASAN_OPTIONS=detect_leaks=0;AV_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
+      "ASAN_OPTIONS=detect_leaks=0;AV_D3D_PATH=${AV_D3D_RUNTIME_DIR};DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
   endif()
   if(name STREQUAL "test_fullstack_av" OR name STREQUAL "test_fullstack_device_loss")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
