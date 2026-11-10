@@ -1,0 +1,701 @@
+From: accel-virt
+Subject: [PATCH] Direct3D 11 predication skips draws and dispatches through conditional rendering
+
+SetPredication resolves the occlusion or stream output overflow query on the GPU
+into a predicate buffer and wraps draws and dispatches in conditional rendering,
+so a draw is skipped when the query result equals the predicate value. Without
+the extension predication stays a no-op.
+---
+diff --git a/src/d3d11/d3d11_context.cpp b/src/d3d11/d3d11_context.cpp
+index 7214e99..c207990 100644
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -2675,10 +2675,21 @@ namespace dxvk {
+     m_state.pr.predicateObject = predicate;
+     m_state.pr.predicateValue  = PredicateValue;
+ 
+-    static bool s_errorShown = false;
++    Rc<DxvkQuery> source;
++    bool overflow = false;
++
++    if (predicate) {
++      source = predicate->GetPredicateSource();
++      overflow = predicate->IsOverflowPredicate();
++    }
+ 
+-    if (pPredicate && !std::exchange(s_errorShown, true))
+-      Logger::err("D3D11DeviceContext::SetPredication: Stub");
++    EmitCs([
++      cSource   = std::move(source),
++      cValue    = bool(PredicateValue),
++      cOverflow = overflow
++    ] (DxvkContext* ctx) {
++      ctx->setPredicate(cSource, cValue, cOverflow);
++    });
+   }
+ 
+ 
+@@ -5076,6 +5087,10 @@ namespace dxvk {
+     m_state.so.reset();
+     m_state.pr.reset();
+ 
++    EmitCs([] (DxvkContext* ctx) {
++      ctx->setPredicate(nullptr, false, false);
++    });
++
+     // Reset resource bindings
+     m_state.cbv.reset();
+     m_state.srv.reset();
+diff --git a/src/d3d11/d3d11_device.cpp b/src/d3d11/d3d11_device.cpp
+index cee045d..9b124f6 100644
+--- a/src/d3d11/d3d11_device.cpp
++++ b/src/d3d11/d3d11_device.cpp
+@@ -1286,7 +1286,7 @@ namespace dxvk {
+     desc.MiscFlags   = pPredicateDesc->MiscFlags;
+     desc.ContextType = D3D11_CONTEXT_TYPE_ALL;
+ 
+-    if (desc.Query != D3D11_QUERY_OCCLUSION_PREDICATE) {
++    if (!D3D11Query::IsPredicateType(desc.Query)) {
+       Logger::warn(str::format("D3D11: Unhandled predicate type: ", pPredicateDesc->Query));
+       return E_INVALIDARG;
+     }
+diff --git a/src/d3d11/d3d11_query.cpp b/src/d3d11/d3d11_query.cpp
+index 440ccaa..9db91c6 100644
+--- a/src/d3d11/d3d11_query.cpp
++++ b/src/d3d11/d3d11_query.cpp
+@@ -109,7 +109,7 @@ namespace dxvk {
+       return S_OK;
+     }
+     
+-    if (m_desc.Query == D3D11_QUERY_OCCLUSION_PREDICATE) {
++    if (IsPredicate()) {
+       if (riid == __uuidof(ID3D11Predicate)) {
+         *ppvObject = AsPredicate(ref(this));
+         return S_OK;
+diff --git a/src/d3d11/d3d11_query.h b/src/d3d11/d3d11_query.h
+index b990f2a..df75003 100644
+--- a/src/d3d11/d3d11_query.h
++++ b/src/d3d11/d3d11_query.h
+@@ -87,6 +87,31 @@ namespace dxvk {
+ 
+     static HRESULT ValidateDesc(const D3D11_QUERY_DESC1* pDesc);
+ 
++    bool IsPredicate() const {
++      return IsPredicateType(m_desc.Query);
++    }
++
++    bool IsOverflowPredicate() const {
++      return m_desc.Query == D3D11_QUERY_SO_OVERFLOW_PREDICATE
++          || m_desc.Query == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM0
++          || m_desc.Query == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM1
++          || m_desc.Query == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM2
++          || m_desc.Query == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM3;
++    }
++
++    Rc<DxvkQuery> GetPredicateSource() const {
++      return m_query[0];
++    }
++
++    static bool IsPredicateType(D3D11_QUERY type) {
++      return type == D3D11_QUERY_OCCLUSION_PREDICATE
++          || type == D3D11_QUERY_SO_OVERFLOW_PREDICATE
++          || type == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM0
++          || type == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM1
++          || type == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM2
++          || type == D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM3;
++    }
++
+     static ID3D11Predicate* AsPredicate(ID3D11Query* pQuery) {
+       // ID3D11Predicate and ID3D11Query have the same vtable. This
+       // saves us some headache in all query-related functions.
+diff --git a/src/dxvk/dxvk_cmdlist.h b/src/dxvk/dxvk_cmdlist.h
+index 38891eb..fcf241c 100644
+--- a/src/dxvk/dxvk_cmdlist.h
++++ b/src/dxvk/dxvk_cmdlist.h
+@@ -787,6 +787,21 @@ namespace dxvk {
+     }
+ 
+ 
++    void cmdBeginConditionalRendering(
++            DxvkCmdBuffer           cmdBuffer,
++      const VkConditionalRenderingBeginInfoEXT* info) {
++      m_cmd.execCommands |= cmdBuffer == DxvkCmdBuffer::ExecBuffer;
++      m_vkd->vkCmdBeginConditionalRenderingEXT(getCmdBuffer(cmdBuffer), info);
++    }
++
++
++    void cmdEndConditionalRendering(
++            DxvkCmdBuffer           cmdBuffer) {
++      m_cmd.execCommands |= cmdBuffer == DxvkCmdBuffer::ExecBuffer;
++      m_vkd->vkCmdEndConditionalRenderingEXT(getCmdBuffer(cmdBuffer));
++    }
++
++
+     void cmdCopyQueryPoolResults(
+             DxvkCmdBuffer           cmdBuffer,
+             VkQueryPool             queryPool,
+diff --git a/src/dxvk/dxvk_context.cpp b/src/dxvk/dxvk_context.cpp
+index 011e272..5745c74 100644
+--- a/src/dxvk/dxvk_context.cpp
++++ b/src/dxvk/dxvk_context.cpp
+@@ -210,6 +210,139 @@ namespace dxvk {
+   }
+ 
+   
++  void DxvkContext::beginPredicate() {
++    if (!m_predicateEnabled || m_predicateActive)
++      return;
++
++    VkConditionalRenderingBeginInfoEXT info = { VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT };
++    info.buffer = m_predicateBuffer->getSliceInfo().buffer;
++    info.offset = m_predicateOffset;
++    info.flags  = m_predicateInvert ? VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT : 0u;
++
++    m_cmd->track(m_predicateBuffer, DxvkAccess::Read);
++    m_cmd->cmdBeginConditionalRendering(DxvkCmdBuffer::ExecBuffer, &info);
++    m_predicateActive = true;
++  }
++
++
++  void DxvkContext::endPredicate() {
++    if (!m_predicateActive)
++      return;
++
++    m_cmd->cmdEndConditionalRendering(DxvkCmdBuffer::ExecBuffer);
++    m_predicateActive = false;
++  }
++
++
++  void DxvkContext::setPredicate(
++    const Rc<DxvkQuery>&      query,
++          bool                value,
++          bool                overflow) {
++    m_predicateEnabled = false;
++
++    if (!query || !m_device->features().extConditionalRendering.conditionalRendering)
++      return;
++
++    small_vector<std::pair<VkQueryPool, uint32_t>, 8> handles;
++    DxvkQueryData base = { };
++
++    if (!query->getPredicateSources(handles, base))
++      return;
++
++    constexpr VkDeviceSize BufferSize = 1u << 16;
++    constexpr VkDeviceSize EntrySize = 2u * sizeof(uint64_t);
++
++    // One entry for the data already accumulated, one per query slot,
++    // and a dword for the result, all kept 16-byte aligned
++    VkDeviceSize inputSize = (handles.size() + 1u) * EntrySize;
++    VkDeviceSize allocSize = inputSize + EntrySize;
++
++    if (unlikely(allocSize > BufferSize))
++      return;
++
++    if (!m_predicateBuffer || m_predicateAlloc + allocSize > BufferSize) {
++      DxvkBufferCreateInfo info = { };
++      info.size = BufferSize;
++      info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
++                 | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
++                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
++                 | VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT;
++      info.stages = VK_PIPELINE_STAGE_TRANSFER_BIT
++                  | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
++                  | VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT;
++      info.access = VK_ACCESS_TRANSFER_WRITE_BIT
++                  | VK_ACCESS_SHADER_READ_BIT
++                  | VK_ACCESS_SHADER_WRITE_BIT
++                  | VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT;
++      info.debugName = "Predicate buffer";
++
++      Rc<DxvkBuffer> buffer = tryCreateBuffer(info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++      if (unlikely(!buffer))
++        return;
++
++      m_predicateBuffer = std::move(buffer);
++      m_predicateAlloc = 0u;
++    }
++
++    this->endCurrentPass(true);
++    this->invalidateState();
++
++    DxvkResourceBufferInfo slice = m_predicateBuffer->getSliceInfo(m_predicateAlloc, allocSize);
++    m_predicateAlloc += allocSize;
++    m_cmd->track(m_predicateBuffer, DxvkAccess::Write);
++
++    m_cmd->cmdUpdateBuffer(DxvkCmdBuffer::ExecBuffer,
++      slice.buffer, slice.offset, EntrySize, &base);
++
++    for (size_t i = 0u; i < handles.size(); i++) {
++      m_cmd->cmdCopyQueryPoolResults(DxvkCmdBuffer::ExecBuffer,
++        handles[i].first, handles[i].second, 1u,
++        slice.buffer, slice.offset + (i + 1u) * EntrySize, EntrySize,
++        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
++    }
++
++    VkMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
++    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
++    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
++    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
++    barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
++
++    VkDependencyInfo depInfo = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
++    depInfo.memoryBarrierCount = 1u;
++    depInfo.pMemoryBarriers = &barrier;
++    m_cmd->cmdPipelineBarrier(DxvkCmdBuffer::ExecBuffer, &depInfo);
++
++    auto pipeline = m_common->metaPredicate().getPipeline();
++
++    m_cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
++      VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
++
++    DxvkMetaPredicatePushConstants pushData = { };
++    pushData.srcVa = slice.gpuAddress;
++    pushData.dstVa = slice.gpuAddress + inputSize;
++    pushData.count = uint32_t(handles.size() + 1u);
++    pushData.mode = overflow
++      ? DxvkMetaPredicateObjects::ModeOverflow
++      : DxvkMetaPredicateObjects::ModeAnySamples;
++
++    m_cmd->bindResources(DxvkCmdBuffer::ExecBuffer,
++      pipeline.layout, 0u, nullptr, sizeof(pushData), &pushData);
++
++    m_cmd->cmdDispatch(DxvkCmdBuffer::ExecBuffer, 1u, 1u, 1u);
++
++    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
++    barrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
++    barrier.dstStageMask = VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT;
++    barrier.dstAccessMask = VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT;
++    m_cmd->cmdPipelineBarrier(DxvkCmdBuffer::ExecBuffer, &depInfo);
++
++    m_predicateOffset = slice.offset + inputSize;
++    m_predicateInvert = value;
++    m_predicateEnabled = true;
++  }
++
++
+   void DxvkContext::beginQuery(const Rc<DxvkQuery>& query) {
+     m_queryManager.enableQuery(m_cmd, query);
+   }
+@@ -865,6 +998,8 @@ namespace dxvk {
+           uint32_t y,
+           uint32_t z) {
+     if (this->commitComputeState<false>()) {
++      PredicateScope predicate(this);
++
+       m_queryManager.beginQueries(m_cmd,
+         VK_QUERY_TYPE_PIPELINE_STATISTICS);
+       
+@@ -885,6 +1020,8 @@ namespace dxvk {
+       return;
+ 
+     if (this->commitComputeState<true>()) {
++      PredicateScope predicate(this);
++
+       m_queryManager.beginQueries(m_cmd,
+         VK_QUERY_TYPE_PIPELINE_STATISTICS);
+ 
+@@ -957,6 +1094,8 @@ namespace dxvk {
+           uint32_t          counterDivisor,
+           uint32_t          counterBias) {
+     if (this->commitGraphicsState<false, true>()) {
++      PredicateScope predicate(this);
++
+       auto argInfo = m_state.id.cntBuffer.getSliceInfo();
+ 
+       m_cmd->cmdDrawIndirectVertexCount(1, 0,
+@@ -1636,6 +1775,8 @@ namespace dxvk {
+           uint32_t                  count,
+     const T*                        draws) {
+     if (this->commitGraphicsState<Indexed, false>()) {
++      PredicateScope predicate(this);
++
+       if (count == 1u) {
+         // Most common case, just emit a single draw
+         if constexpr (Indexed) {
+@@ -1651,8 +1792,11 @@ namespace dxvk {
+         // If the current pipeline has storage resource hazards,
+         // unroll draws and insert a barrier after each one.
+         for (uint32_t i = 0; i < count; i++) {
+-          if (i)
++          if (i) {
++            predicate.suspend();
+             this->commitGraphicsState<Indexed, false>();
++            predicate.resume();
++          }
+ 
+           if constexpr (Indexed) {
+             m_cmd->cmdDrawIndexed(draws[i].indexCount, draws[i].instanceCount,
+@@ -1767,6 +1911,8 @@ namespace dxvk {
+       return;
+ 
+     if (this->commitGraphicsState<Indexed, true>()) {
++      PredicateScope predicate(this);
++
+       if (likely(count == 1u || !unroll || !needsDrawBarriers())) {
+         if (Indexed) {
+           m_cmd->cmdDrawIndexedIndirect(argInfo.buffer,
+@@ -1791,8 +1937,11 @@ namespace dxvk {
+         // If the pipeline has order-sensitive stores, submit one
+         // draw at a time and insert barriers in between.
+         for (uint32_t i = 0; i < count; i++) {
+-          if (i)
++          if (i) {
++            predicate.suspend();
+             this->commitGraphicsState<Indexed, true>();
++            predicate.resume();
++          }
+ 
+           if (Indexed) {
+             m_cmd->cmdDrawIndexedIndirect(argInfo.buffer,
+@@ -1836,6 +1985,8 @@ namespace dxvk {
+       return;
+ 
+     if (this->commitGraphicsState<Indexed, true>()) {
++      PredicateScope predicate(this);
++
+       if (Indexed) {
+         m_cmd->cmdDrawIndexedIndirectCount(
+           argInfo.buffer, argInfo.offset + offset,
+diff --git a/src/dxvk/dxvk_context.h b/src/dxvk/dxvk_context.h
+index de9ba43..5c4c032 100644
+--- a/src/dxvk/dxvk_context.h
++++ b/src/dxvk/dxvk_context.h
+@@ -135,6 +135,21 @@ namespace dxvk {
+      */
+     void endQuery(
+       const Rc<DxvkQuery>&      query);
++
++    /**
++     * \brief Sets the predicate that draws and dispatches obey
++     *
++     * The predicate is resolved on the GPU from the results of the
++     * query, which must have ended. Draws and dispatches are skipped
++     * when the query result matches the given value.
++     * \param [in] query Occlusion or stream output query, or null
++     * \param [in] value Query result that skips the work
++     * \param [in] overflow Resolve a stream output overflow
++     */
++    void setPredicate(
++      const Rc<DxvkQuery>&      query,
++            bool                value,
++            bool                overflow);
+     
+     /**
+      * \brief Sets render targets
+@@ -1354,6 +1369,13 @@ namespace dxvk {
+     Rc<DxvkBuffer>          m_scratchBuffer;
+     VkDeviceSize            m_scratchOffset = 0u;
+ 
++    Rc<DxvkBuffer>          m_predicateBuffer;
++    VkDeviceSize            m_predicateAlloc = 0u;
++    VkDeviceSize            m_predicateOffset = 0u;
++    bool                    m_predicateEnabled = false;
++    bool                    m_predicateInvert = false;
++    bool                    m_predicateActive = false;
++
+     DxvkContextFlags        m_flags;
+     DxvkContextState        m_state;
+     DxvkContextFeatures     m_features;
+@@ -1729,6 +1751,20 @@ namespace dxvk {
+ 
+     void invalidateState();
+ 
++    void beginPredicate();
++
++    void endPredicate();
++
++    struct PredicateScope {
++      PredicateScope(DxvkContext* ctx) : m_ctx(ctx) { m_ctx->beginPredicate(); }
++      ~PredicateScope() { m_ctx->endPredicate(); }
++
++      void suspend() { m_ctx->endPredicate(); }
++      void resume() { m_ctx->beginPredicate(); }
++
++      DxvkContext* m_ctx;
++    };
++
+     template<VkPipelineBindPoint BindPoint>
+     void updateSamplerSet(const DxvkPipelineLayout* layout);
+ 
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index 60ce074..a03693b 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -18,6 +18,7 @@ namespace dxvk {
+   #define EXTENSIONS_WITH_FEATURES                 \
+     HANDLE_EXT(extAttachmentFeedbackLoopLayout);   \
+     HANDLE_EXT(extBorderColorSwizzle);             \
++    HANDLE_EXT(extConditionalRendering);           \
+     HANDLE_EXT(extConservativeRasterization);      \
+     HANDLE_EXT(extCustomBorderColor);              \
+     HANDLE_EXT(extDepthClipEnable);                \
+@@ -926,6 +927,9 @@ namespace dxvk {
+       ENABLE_EXT_FEATURE(extBorderColorSwizzle, borderColorSwizzle, false),
+       ENABLE_EXT_FEATURE(extBorderColorSwizzle, borderColorSwizzleFromImage, false),
+ 
++      /* Predication, used by client APIs */
++      ENABLE_EXT_FEATURE(extConditionalRendering, conditionalRendering, false),
++
+       /* Enables client API features */
+       ENABLE_EXT(extConservativeRasterization, false),
+ 
+diff --git a/src/dxvk/dxvk_device_info.h b/src/dxvk/dxvk_device_info.h
+index 07dc7eb..0316aef 100644
+--- a/src/dxvk/dxvk_device_info.h
++++ b/src/dxvk/dxvk_device_info.h
+@@ -62,6 +62,7 @@ namespace dxvk {
+     VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT   extAttachmentFeedbackLoopLayout = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT };
+     VkPhysicalDeviceBorderColorSwizzleFeaturesEXT             extBorderColorSwizzle           = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT };
+     VkBool32                                                  extConservativeRasterization    = VK_FALSE;
++    VkPhysicalDeviceConditionalRenderingFeaturesEXT           extConditionalRendering         = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT };
+     VkPhysicalDeviceCustomBorderColorFeaturesEXT              extCustomBorderColor            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT };
+     VkPhysicalDeviceDepthClipEnableFeaturesEXT                extDepthClipEnable              = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT };
+     VkPhysicalDeviceDepthBiasControlFeaturesEXT               extDepthBiasControl             = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT };
+@@ -142,6 +143,7 @@ namespace dxvk {
+   struct DxvkDeviceExtensionInfo {
+     VkExtensionProperties extAttachmentFeedbackLoopLayout   = vk::makeExtension(VK_EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME);
+     VkExtensionProperties extBorderColorSwizzle             = vk::makeExtension(VK_EXT_BORDER_COLOR_SWIZZLE_EXTENSION_NAME);
++    VkExtensionProperties extConditionalRendering           = vk::makeExtension(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
+     VkExtensionProperties extConservativeRasterization      = vk::makeExtension(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
+     VkExtensionProperties extCustomBorderColor              = vk::makeExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+     VkExtensionProperties extDepthClipEnable                = vk::makeExtension(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+diff --git a/src/dxvk/dxvk_gpu_query.cpp b/src/dxvk/dxvk_gpu_query.cpp
+index cac562c..a54db4f 100644
+--- a/src/dxvk/dxvk_gpu_query.cpp
++++ b/src/dxvk/dxvk_gpu_query.cpp
+@@ -58,6 +58,23 @@ namespace dxvk {
+   }
+ 
+ 
++  bool DxvkQuery::getPredicateSources(
++          small_vector<std::pair<VkQueryPool, uint32_t>, 8>& handles,
++          DxvkQueryData&      base) {
++    std::lock_guard lock(m_mutex);
++
++    if (!m_ended)
++      return false;
++
++    base = m_queryData;
++
++    for (const auto& q : m_queries)
++      handles.push_back(q->getQuery());
++
++    return true;
++  }
++
++
+   void DxvkQuery::begin() {
+     std::lock_guard lock(m_mutex);
+     m_queries.clear();
+diff --git a/src/dxvk/dxvk_gpu_query.h b/src/dxvk/dxvk_gpu_query.h
+index f763a9c..8873df0 100644
+--- a/src/dxvk/dxvk_gpu_query.h
++++ b/src/dxvk/dxvk_gpu_query.h
+@@ -239,6 +239,17 @@ namespace dxvk {
+      */
+     void end();
+ 
++    /**
++     * \brief Queries the inputs of a GPU-side predicate resolve
++     *
++     * \param [out] handles Query pool slots that still hold results
++     * \param [out] base Data already accumulated from earlier slots
++     * \returns \c false if the query has not ended
++     */
++    bool getPredicateSources(
++            small_vector<std::pair<VkQueryPool, uint32_t>, 8>& handles,
++            DxvkQueryData&      base);
++
+   private:
+ 
+     std::atomic<uint32_t> m_refCount = { 0u };
+diff --git a/src/dxvk/dxvk_meta_predicate.cpp b/src/dxvk/dxvk_meta_predicate.cpp
+new file mode 100644
+index 0000000..d440351
+--- /dev/null
++++ b/src/dxvk/dxvk_meta_predicate.cpp
+@@ -0,0 +1,23 @@
++#include "dxvk_device.h"
++#include "dxvk_meta_predicate.h"
++
++#include <dxvk_predicate_resolve.h>
++
++namespace dxvk {
++
++  DxvkMetaPredicateObjects::DxvkMetaPredicateObjects(DxvkDevice* device)
++  : m_device(device) {
++    m_pipeline.layout = m_device->createBuiltInPipelineLayout(0u,
++      VK_SHADER_STAGE_COMPUTE_BIT, sizeof(DxvkMetaPredicatePushConstants), 0u, nullptr);
++
++    util::DxvkBuiltInShaderStage shader(dxvk_predicate_resolve, nullptr);
++    m_pipeline.pipeline = m_device->createBuiltInComputePipeline(m_pipeline.layout, shader);
++  }
++
++
++  DxvkMetaPredicateObjects::~DxvkMetaPredicateObjects() {
++    auto vk = m_device->vkd();
++    vk->vkDestroyPipeline(vk->device(), m_pipeline.pipeline, nullptr);
++  }
++
++}
+diff --git a/src/dxvk/dxvk_meta_predicate.h b/src/dxvk/dxvk_meta_predicate.h
+new file mode 100644
+index 0000000..11bfa86
+--- /dev/null
++++ b/src/dxvk/dxvk_meta_predicate.h
+@@ -0,0 +1,46 @@
++#pragma once
++
++#include "dxvk_include.h"
++#include "dxvk_pipelayout.h"
++
++namespace dxvk {
++
++  class DxvkDevice;
++
++  struct DxvkMetaPredicatePushConstants {
++    VkDeviceAddress srcVa = 0u;
++    VkDeviceAddress dstVa = 0u;
++    uint32_t        count = 0u;
++    uint32_t        mode  = 0u;
++  };
++
++
++  struct DxvkMetaPredicatePipeline {
++    const DxvkPipelineLayout* layout   = nullptr;
++    VkPipeline                pipeline = VK_NULL_HANDLE;
++  };
++
++
++  class DxvkMetaPredicateObjects {
++
++  public:
++
++    constexpr static uint32_t ModeAnySamples = 0u;
++    constexpr static uint32_t ModeOverflow   = 1u;
++
++    DxvkMetaPredicateObjects(DxvkDevice* device);
++    ~DxvkMetaPredicateObjects();
++
++    DxvkMetaPredicatePipeline getPipeline() const {
++      return m_pipeline;
++    }
++
++  private:
++
++    DxvkDevice* m_device = nullptr;
++
++    DxvkMetaPredicatePipeline m_pipeline;
++
++  };
++
++}
+diff --git a/src/dxvk/dxvk_objects.h b/src/dxvk/dxvk_objects.h
+index 579593b..02cb4c0 100644
+--- a/src/dxvk/dxvk_objects.h
++++ b/src/dxvk/dxvk_objects.h
+@@ -8,6 +8,7 @@
+ #include "dxvk_meta_clear.h"
+ #include "dxvk_meta_copy.h"
+ #include "dxvk_meta_mipgen.h"
++#include "dxvk_meta_predicate.h"
+ #include "dxvk_meta_resolve.h"
+ #include "dxvk_pipemanager.h"
+ #include "dxvk_renderpass.h"
+@@ -70,6 +71,10 @@ namespace dxvk {
+       return m_metaMipGen.get(m_device);
+     }
+ 
++    DxvkMetaPredicateObjects& metaPredicate() {
++      return m_metaPredicate.get(m_device);
++    }
++
+     DxvkMetaClearObjects& metaClear() {
+       return m_metaClear.get(m_device);
+     }
+@@ -99,6 +104,7 @@ namespace dxvk {
+ 
+     Lazy<DxvkMetaBlitObjects>     m_metaBlit;
+     Lazy<DxvkMetaMipGenObjects>   m_metaMipGen;
++    Lazy<DxvkMetaPredicateObjects> m_metaPredicate;
+     Lazy<DxvkMetaClearObjects>    m_metaClear;
+     Lazy<DxvkMetaCopyObjects>     m_metaCopy;
+     Lazy<DxvkMetaResolveObjects>  m_metaResolve;
+diff --git a/src/dxvk/meson.build b/src/dxvk/meson.build
+index 6b12f95..e8e1b57 100644
+--- a/src/dxvk/meson.build
++++ b/src/dxvk/meson.build
+@@ -5,6 +5,7 @@ dxvk_shaders = files([
+   'shaders/dxvk_dummy_frag.frag',
+ 
+   'shaders/dxvk_mipgen.comp',
++  'shaders/dxvk_predicate_resolve.comp',
+ 
+   'shaders/dxvk_present_frag.frag',
+   'shaders/dxvk_present_frag_blit.frag',
+@@ -61,6 +62,7 @@ dxvk_src = [
+   'dxvk_meta_clear.cpp',
+   'dxvk_meta_copy.cpp',
+   'dxvk_meta_mipgen.cpp',
++  'dxvk_meta_predicate.cpp',
+   'dxvk_meta_resolve.cpp',
+   'dxvk_options.cpp',
+   'dxvk_pipelayout.cpp',
+diff --git a/src/dxvk/shaders/dxvk_predicate_resolve.comp b/src/dxvk/shaders/dxvk_predicate_resolve.comp
+new file mode 100644
+index 0000000..4adbcfa
+--- /dev/null
++++ b/src/dxvk/shaders/dxvk_predicate_resolve.comp
+@@ -0,0 +1,50 @@
++#version 460
++
++#extension GL_EXT_buffer_reference2 : enable
++#extension GL_EXT_scalar_block_layout : enable
++
++layout(local_size_x = 1) in;
++
++layout(buffer_reference, buffer_reference_align = 8, scalar)
++readonly buffer src_t {
++  uvec2 values[];
++};
++
++layout(buffer_reference, buffer_reference_align = 4, scalar)
++buffer dst_t {
++  uint value;
++};
++
++layout(push_constant)
++uniform push_data_t {
++  src_t src;
++  dst_t dst;
++  uint count;
++  uint mode;
++} push_args;
++
++uvec2 add64(uvec2 a, uvec2 b) {
++  uint lo = a.x + b.x;
++  uint hi = a.y + b.y + (lo < a.x ? 1u : 0u);
++  return uvec2(lo, hi);
++}
++
++bool greater64(uvec2 a, uvec2 b) {
++  return a.y != b.y ? a.y > b.y : a.x > b.x;
++}
++
++void main() {
++  uvec2 first = uvec2(0u);
++  uvec2 second = uvec2(0u);
++
++  for (uint i = 0u; i < push_args.count; i++) {
++    first = add64(first, push_args.src.values[2u * i]);
++    second = add64(second, push_args.src.values[2u * i + 1u]);
++  }
++
++  bool result = push_args.mode == 0u
++    ? (first.x | first.y) != 0u
++    : greater64(second, first);
++
++  push_args.dst.value = result ? 1u : 0u;
++}
