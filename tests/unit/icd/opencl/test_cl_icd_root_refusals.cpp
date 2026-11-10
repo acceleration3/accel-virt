@@ -325,7 +325,7 @@ TEST(cl_icd_root_refusals, a_context_made_on_no_device_or_several_is_refused)
   CHECK_EQ(error, CL_INVALID_VALUE);
   error = CL_SUCCESS;
   CHECK(rig.root().create_context(nullptr, devices, 2u, &error) == nullptr);
-  CHECK_EQ(error, CL_INVALID_DEVICE);
+  CHECK_EQ(error, CL_INVALID_VALUE);
   cl_device_id stranger = reinterpret_cast<cl_device_id>(std::uintptr_t{0x1234});
   error = CL_SUCCESS;
   CHECK(rig.root().create_context(nullptr, &stranger, 1u, &error) == nullptr);

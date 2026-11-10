@@ -104,6 +104,10 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     ClObject *const source = judged(image, ClObject::Kind::mem);
     ClObject *const target = judged(buffer, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, source, target);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     if (source->extent().shape() == ClMemExtent::Shape::buffer ||
@@ -160,6 +164,10 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     ClObject *const source = judged(buffer, ClObject::Kind::mem);
     ClObject *const target = judged(image, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, source, target);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     if (source->extent().shape() == ClMemExtent::Shape::image ||
@@ -214,6 +222,10 @@ cl_int ClIcdRoot::enqueue_fill_image(cl_command_queue queue, cl_mem image, const
     if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const named = judged(image, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (named->context() != held->context()) return CL_INVALID_CONTEXT;
     if (colour == nullptr || origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     if (named->extent().shape() == ClMemExtent::Shape::buffer) return CL_INVALID_MEM_OBJECT;
@@ -252,6 +264,10 @@ cl_int ClIcdRoot::enqueue_migrate(cl_command_queue queue, cl_uint count, const c
     for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const object = judged(objects[index], ClObject::Kind::mem);
         if (object == nullptr) return CL_INVALID_MEM_OBJECT;
+        {
+            const cl_int moved = bring(*held, object);
+            if (moved != CL_SUCCESS) return moved;
+        }
         if (object->context() != held->context()) return CL_INVALID_CONTEXT;
         named[index] = object->wire();
     }
@@ -367,6 +383,13 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
     if (named == nullptr) {
         report_error(error, CL_INVALID_MEM_OBJECT);
         return nullptr;
+    }
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) {
+            report_error(error, moved);
+            return nullptr;
+        }
     }
     {
         const cl_int allowed = judge_host_map(*held, *named, flags);

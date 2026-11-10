@@ -524,6 +524,23 @@ TEST(cl_object_table, only_the_queues_of_the_context_that_waited_on_user_events_
   CHECK((buffer->traits() & ClObject::queue_poisoned) == 0u);
   CHECK(rig.objects().invariants_hold()); }
 
+TEST(cl_object, an_object_moved_to_another_session_answers_for_it_and_forgets_the_queue_that_used_it)
+{ av::MockPlatform platform;
+  ClObject buffer(dispatch, platform, ClObject::Kind::mem, 0x900u, some_context, nullptr);
+  CHECK_EQ(buffer.last_queue(), 0u);
+  CHECK((buffer.traits() & ClObject::mem_touched) == 0u);
+  buffer.note_use(0x55u);
+  CHECK_EQ(buffer.last_queue(), 0x55u);
+  CHECK((buffer.traits() & ClObject::mem_touched) != 0u);
+  av::clicd::GuestClContext *const other =
+      reinterpret_cast<av::clicd::GuestClContext *>(std::uintptr_t{0x5678});
+  buffer.rehome(other, 0x901u);
+  CHECK(buffer.context() == other);
+  CHECK_EQ(buffer.wire(), 0x901u);
+  CHECK_EQ(buffer.last_queue(), 0u);
+  CHECK((buffer.traits() & ClObject::mem_touched) != 0u);
+  CHECK(buffer.invariants_hold()); }
+
 TEST(cl_object, an_orphan_with_no_children_does_not_owe_the_parent_one)
 { av::MockPlatform platform;
   ClObject parent(dispatch, platform, ClObject::Kind::command_queue, 0x900u, nullptr, nullptr);

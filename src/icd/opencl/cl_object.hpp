@@ -16,7 +16,9 @@ class HostAllocation;
 
 namespace av::clicd {
 
+class ClKernelArgs;
 class ClKernelShape;
+class ClReplicas;
 class ClProgramSource;
 class GuestClContext;
 
@@ -63,10 +65,18 @@ public:
     static constexpr uint32_t mem_from_gl = 128u;
     static constexpr uint32_t queue_gated = 256u;
     static constexpr uint32_t queue_poisoned = 512u;
+    static constexpr uint32_t mem_touched = 1024u;
 
     void            keep_source(ClProgramSource *source);
     ClProgramSource *source() const;
     void            rewire(uint64_t wire);
+    void            rehome(GuestClContext *context, uint64_t wire);
+    void            note_use(uint64_t queue);
+    uint64_t        last_queue() const;
+    void            keep_replicas(ClReplicas *replicas);
+    ClReplicas     *replicas() const;
+    void            keep_args(ClKernelArgs *args);
+    ClKernelArgs   *args() const;
     void            keep_shape(ClKernelShape *shape);
     ClKernelShape  *shape() const;
     ClMemExtent    &extent();
@@ -112,6 +122,9 @@ private:
     HostAllocation        *lent_;
     ClObject              *sliced_from_;
     ClKernelShape         *shape_;
+    ClReplicas            *replicas_;
+    ClKernelArgs          *args_;
+    uint64_t               last_queue_;
     ClProgramSource       *source_;
     ClObject              *companion_;
     uint64_t               flags_;

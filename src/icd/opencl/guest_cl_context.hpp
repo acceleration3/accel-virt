@@ -38,6 +38,7 @@ class SharedHandles;
 
 namespace av::clicd {
 
+class ClContextGroup;
 struct GuestClContextProbe;
 
 class GuestClContext {
@@ -85,6 +86,8 @@ public:
     ClD3d11Objects   &d3d11();
     ClFormatCache    &formats();
     uint32_t         guest_device() const;
+    void             join(ClContextGroup *group);
+    ClContextGroup  *group() const;
 
     MappedRegion    *take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                   cl_map_flags flags);
@@ -128,6 +131,7 @@ private:
     ClFormatCache                        formats_;
     icd::OpenMappings<MappedRegion>      mappings_;
     ClPropertyList                       properties_;
+    ClContextGroup                      *group_;
     ClContextNotify                      notify_;
     State                                state_;
 };

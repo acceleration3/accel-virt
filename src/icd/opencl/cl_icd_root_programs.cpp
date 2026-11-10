@@ -54,8 +54,14 @@ cl_int ClIcdRoot::program_devices(ClObject &context, cl_uint num_devices, const 
     if ((device_list == nullptr) != (num_devices == 0u)) return CL_INVALID_VALUE;
     GuestClContext *const owner = context.context();
     ClDevice *const       running = owner != nullptr ? devices_.running(*owner) : nullptr;
+    ClContextGroup *const group = owner != nullptr ? owner->group() : nullptr;
     for (cl_uint index = 0u; index < num_devices; ++index) {
         ClObject *const named = judged(device_list[index], ClObject::Kind::device);
+        if (group != nullptr) {
+            ClDevice *const device = named != nullptr ? devices_.of(*named) : nullptr;
+            if (device == nullptr || group->of(device) == nullptr) return CL_INVALID_DEVICE;
+            continue;
+        }
         if (named == nullptr || running == nullptr || devices_.of(*named) != running) return CL_INVALID_DEVICE;
     }
     return CL_SUCCESS;
@@ -88,6 +94,8 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (!ClOptionJudge(options).valid()) return CL_INVALID_BUILD_OPTIONS;
+    ClContextGroup *const group = held->context() != nullptr ? held->context()->group() : nullptr;
+    if (group != nullptr && held->source() != nullptr) return CL_INVALID_OPERATION;
     if (held->source() != nullptr) {
         const cl_int inlined = build_with_includes(*held, *wire, options);
         if (inlined != CL_SUCCESS) return inlined;
@@ -101,10 +109,32 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
                                            ? held->source()->host_options()
                                            : options);
     if (!sent.usable()) return CL_OUT_OF_HOST_MEMORY;
-    const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, sent.for_host());
-    if (built == CL_SUCCESS) held->keep_traits(sent.traits() | (held->traits() & ClObject::program_from_source));
+    auto wanted = [&](ClContextGroup::Member &member) {
+        if (num_devices == 0u) return true;
+        for (cl_uint index = 0u; index < num_devices; ++index)
+            if (devices_.of(*judged(device_list[index], ClObject::Kind::device)) == member.device) return true;
+        return false;
+    };
+    ClContextGroup::Member *const home = group != nullptr ? group->of(held->context()) : nullptr;
+    cl_int built = CL_SUCCESS;
+    if (home == nullptr || wanted(*home))
+        built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, sent.for_host());
+    if (built == CL_SUCCESS && (home == nullptr || wanted(*home)))
+        held->keep_traits(sent.traits() | (held->traits() & ClObject::program_from_source));
     else if (built == CL_BUILD_PROGRAM_FAILURE) held->keep_traits(held->traits() | ClObject::program_failed);
     if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
+    if (group != nullptr && held->replicas() != nullptr) {
+        for (uint32_t index = 0u; index < held->replicas()->count(); ++index) {
+            const ClReplicas::Entry &entry = held->replicas()->at(index);
+            ClContextGroup::Member *const member = group->of(entry.session);
+            ClientTransport *const        peer = entry.session->wire();
+            if (member == nullptr || !wanted(*member) || peer == nullptr) continue;
+            const cl_int peer_built = av::clproto::av_clBuildProgram(*peer, entry.wire, 0u, nullptr, sent.for_host());
+            if (peer_built == CL_SUCCESS && built == CL_SUCCESS)
+                held->keep_traits(sent.traits() | (held->traits() & ClObject::program_from_source));
+            if (peer_built != CL_SUCCESS && built == CL_SUCCESS) built = peer_built;
+        }
+    }
     if (built == CL_SUCCESS || built == CL_BUILD_PROGRAM_FAILURE) notify.tell(program);
     return built;
 }
@@ -400,10 +430,18 @@ cl_int ClIcdRoot::program_info(cl_program program, cl_program_info name, size_t 
         return asked.give(&owner, sizeof owner);
     }
     case CL_PROGRAM_NUM_DEVICES: {
-        const cl_uint one = 1u;
-        return asked.give(&one, sizeof one);
+        ClContextGroup *const group = held->context() != nullptr ? held->context()->group() : nullptr;
+        const cl_uint         count = group != nullptr ? group->count() : 1u;
+        return asked.give(&count, sizeof count);
     }
     case CL_PROGRAM_DEVICES: {
+        ClContextGroup *const group = held->context() != nullptr ? held->context()->group() : nullptr;
+        if (group != nullptr) {
+            cl_device_id listed[ClContextGroup::most] = {};
+            for (uint32_t index = 0u; index < group->count(); ++index)
+                listed[index] = reinterpret_cast<cl_device_id>(group->at(index).device->object());
+            return asked.give(listed, group->count() * sizeof listed[0]);
+        }
         ClDevice *const    on = held->context() != nullptr ? devices_.running(*held->context()) : nullptr;
         const cl_device_id device = on != nullptr ? reinterpret_cast<cl_device_id>(on->object()) : nullptr;
         return asked.give(&device, sizeof device);

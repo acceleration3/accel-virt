@@ -23,7 +23,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
       region_(), grown_(), growing_(false),
-      svm_(memory), external_(handles, memory, lines), d3d11_(memory), formats_(), mappings_(memory), properties_(), notify_(), state_(State::created)
+      svm_(memory), external_(handles, memory, lines), d3d11_(memory), formats_(), mappings_(memory), properties_(), group_(nullptr), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -120,6 +120,18 @@ void GuestClContext::teardown()
     region_.close();
     channel_.close(state_ == State::lost);
     link_.release();
+}
+
+void GuestClContext::join(ClContextGroup *group)
+{
+    AV_SCOPE("GuestClContext::join");
+    group_ = group;
+}
+
+ClContextGroup *GuestClContext::group() const
+{
+    AV_SCOPE("GuestClContext::group");
+    return group_;
 }
 
 bool GuestClContext::exhausted() const

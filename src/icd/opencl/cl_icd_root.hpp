@@ -6,6 +6,7 @@
 #include "icd/common/refused_calls.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
+#include "icd/opencl/cl_context_group.hpp"
 #include "icd/opencl/cl_destructor_callbacks.hpp"
 #include "icd/opencl/cl_host_numbers.hpp"
 #include "icd/opencl/cl_devices.hpp"
@@ -15,7 +16,9 @@
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
 #include "icd/opencl/cl_image_judge.hpp"
+#include "icd/opencl/cl_kernel_args.hpp"
 #include "icd/opencl/cl_kernel_shape.hpp"
+#include "icd/opencl/cl_replicas.hpp"
 #include "icd/opencl/cl_program_source.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
@@ -422,6 +425,24 @@ private:
     cl_int           wait_list(ClObject &queue, cl_uint count, const cl_event *events, ClHostNumbers &room,
                                uint64_t *&into);
     void             heal_queue(ClObject &queue);
+    cl_int           group_devices(cl_uint num_devices, const cl_device_id *devices, ClDevice **members);
+    cl_int           open_session(ClDevice &device, uint32_t gl_share, const cl_context_properties *properties,
+                                  const ClContextNotify &notify, GuestClContext *&session, uint64_t &host_context);
+    void             retire_group(ClContextGroup &group);
+    ClContextGroup::Member *member_of(ClObject &context, ClObject *device);
+    uint64_t         copy_queue_of(ClContextGroup::Member &member);
+    uint64_t         done_event_of(ClContextGroup::Member &member);
+    cl_int           bring(ClObject &queue, ClObject *first, ClObject *second = nullptr);
+    cl_int           bring_mem(ClObject &queue, ClObject &mem);
+    cl_int           migrate_mem(ClObject &mem, GuestClContext &source, GuestClContext &target);
+    cl_int           bring_kernel(ClObject &queue, ClObject &kernel);
+    cl_int           foreign_event(ClObject &queue, ClObject &event, uint64_t &handle);
+    using ReplicaMaker = uint64_t (*)(ClientTransport &wire, uint64_t host_context, const void *what, cl_int &error);
+    cl_int           replicate_to_peers(ClObject &object, ClObject::Kind kind, ReplicaMaker make, const void *what);
+    cl_int           replicate_program(ClObject &program, cl_uint count, const char **sources, const size_t *lengths);
+    cl_int           replicate_sampler(ClObject &sampler, const uint64_t *properties);
+    cl_int           replicate_user_event(ClObject &event);
+    void             release_replicas(ClReplicas &replicas, ClObject::Kind kind);
     cl_int           gl_share_for(const ClPropertyList &list, uint32_t &share);
     ClObject        *gl_sharing(cl_context context, cl_int *error);
     static bool      texture_target(cl_GLenum target);
@@ -483,6 +504,9 @@ private:
     ObjectPool<GuestClContext> contexts_;
     ObjectPool<ClKernelShape>  shapes_;
     ObjectPool<ClProgramSource> sources_;
+    ObjectPool<ClContextGroup>  groups_;
+    ObjectPool<ClReplicas>      replicas_;
+    ObjectPool<ClKernelArgs>    kernel_args_;
     BlockSource           &memory_;
     ThreadLock            &send_lock_;
     ThreadLock            &blocks_lock_;

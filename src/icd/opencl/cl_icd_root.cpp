@@ -79,7 +79,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock,
                      ClIcdBinding &binding)
     : lock_(lock), lines_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), headers_(headers), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(memory, kmt),
-      shared_handles_(kmt, lock, memory), contexts_(memory), shapes_(memory), sources_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
+      shared_handles_(kmt, lock, memory), contexts_(memory), shapes_(memory), sources_(memory), groups_(memory), replicas_(memory), kernel_args_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
       watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), refused_(lines_), refusals_(lines_),
       destructor_callbacks_(memory)
 {
@@ -553,12 +553,13 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, CL_INVALID_VALUE);
         return nullptr;
     }
-    ClObject *const named_device = num_devices == 1u ? judged(devices[0], ClObject::Kind::device) : nullptr;
-    ClDevice *const device = named_device != nullptr ? devices_.of(*named_device) : nullptr;
-    if (device == nullptr) {
-        report_error(error, CL_INVALID_DEVICE);
+    ClDevice *members[ClContextGroup::most] = {};
+    const cl_int named_devices = group_devices(num_devices, devices, members);
+    if (named_devices != CL_SUCCESS) {
+        report_error(error, named_devices);
         return nullptr;
     }
+    ClDevice *const device = members[0];
     void        *d3d11_device = nullptr;
     bool         d3d10_device = false;
     const cl_int d3d11_shared = d3d11_device_for(list, *device, d3d11_device, d3d10_device);
@@ -566,47 +567,45 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, d3d11_shared);
         return nullptr;
     }
+    if (num_devices > 1u && (gl_share != 0u || d3d11_device != nullptr)) {
+        report_error(error, CL_INVALID_OPERATION);
+        return nullptr;
+    }
     const ThreadLockHold locked(lock_);
-    GuestClContext *context = nullptr;
-    Status          made =
-        contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, lines_, shared_handles_);
-    if (made == Status::ok) made = context->make(gl_share, watcher_.wake_handle());
-    if (made == Status::ok) context->keep_properties(properties);
-    if (made == Status::ok) context->notify_with(notify);
-    if (made != Status::ok) {
-        const bool exhausted = context != nullptr && context->exhausted();
-        if (context != nullptr) static_cast<void>(contexts_.destroy(context));
-        report_error(error, exhausted                  ? CL_OUT_OF_RESOURCES
-                            : made == Status::no_memory ? CL_OUT_OF_HOST_MEMORY
-                            : gl_share != 0u            ? CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR
-                                                        : CL_DEVICE_NOT_AVAILABLE);
+    GuestClContext *sessions[ClContextGroup::most] = {};
+    uint64_t        hosts[ClContextGroup::most] = {};
+    cl_int          failed = CL_SUCCESS;
+    uint32_t        opened = 0u;
+    for (; opened < num_devices && failed == CL_SUCCESS; ++opened)
+        failed = open_session(*members[opened], opened == 0u ? gl_share : 0u, properties, notify, sessions[opened],
+                              hosts[opened]);
+    if (failed != CL_SUCCESS) {
+        for (uint32_t index = 0u; index + 1u < opened; ++index) static_cast<void>(contexts_.destroy(sessions[index]));
+        report_error(error, failed);
         return nullptr;
     }
-    ClientTransport *const wire = context->wire();
-    uint64_t              host_platform = 0u;
-    cl_uint               platforms = 0u;
-    uint64_t              host_device = 0u;
-    cl_uint               found = 0u;
-    cl_int                host_error = CL_SUCCESS;
-    uint64_t              host_context = 0u;
-    if (wire != nullptr && av::clproto::av_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) == CL_SUCCESS &&
-        av::clproto::av_clGetDeviceIDs(*wire, host_platform, CL_DEVICE_TYPE_GPU, 1u, &host_device,
-                                        &found) == CL_SUCCESS) {
-        host_context = av::clproto::av_clCreateContext(*wire, nullptr, 1u, &host_device,
-                                                        &host_error);
-    }
-    if (host_context == 0u) {
-        const bool exhausted = context->exhausted();
-        static_cast<void>(contexts_.destroy(context));
-        report_error(error, exhausted                  ? CL_OUT_OF_RESOURCES
-                            : host_error != CL_SUCCESS ? host_error
-                                                       : CL_DEVICE_NOT_AVAILABLE);
+    ClContextGroup *group = nullptr;
+    if (num_devices > 1u && groups_.create(group) != Status::ok) {
+        for (uint32_t index = 0u; index < opened; ++index) static_cast<void>(contexts_.destroy(sessions[index]));
+        report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
     }
-    void *const wrapped = wrap(*wire, ClObject::Kind::context, host_context, context, nullptr, error);
-    if (wrapped == nullptr) static_cast<void>(contexts_.destroy(context));
-    if (wrapped != nullptr && d3d11_device != nullptr) {
-        context->d3d11().share_with(d3d11_device, d3d10_device);
+    ClientTransport *const wire = sessions[0]->wire();
+    void *const            wrapped = wrap(*wire, ClObject::Kind::context, hosts[0], sessions[0], nullptr, error);
+    if (wrapped == nullptr) {
+        for (uint32_t index = 0u; index < opened; ++index) static_cast<void>(contexts_.destroy(sessions[index]));
+        if (group != nullptr) static_cast<void>(groups_.destroy(group));
+        return nullptr;
+    }
+    if (group != nullptr) {
+        group->bind(*static_cast<ClObject *>(wrapped));
+        for (uint32_t index = 0u; index < opened; ++index) {
+            static_cast<void>(group->add(*sessions[index], *members[index], hosts[index]));
+            sessions[index]->join(group);
+        }
+    }
+    if (d3d11_device != nullptr) {
+        sessions[0]->d3d11().share_with(d3d11_device, d3d10_device);
         d3d11_.hold(d3d11_device);
     }
     return static_cast<cl_context>(wrapped);
@@ -697,6 +696,15 @@ ClObject *ClIcdRoot::drop_reference(void *object, ClObject &held, ClObject::Kind
         }
     }
     if (twin != nullptr) d3d11_.let_go(twin);
+    if (last && held.replicas() != nullptr) {
+        release_replicas(*held.replicas(), kind);
+        static_cast<void>(replicas_.destroy(held.replicas()));
+        held.keep_replicas(nullptr);
+    }
+    if (last && held.args() != nullptr) {
+        static_cast<void>(kernel_args_.destroy(held.args()));
+        held.keep_args(nullptr);
+    }
     if (last && kind == ClObject::Kind::program && held.source() != nullptr) {
         static_cast<void>(sources_.destroy(held.source()));
         held.keep_source(nullptr);
@@ -710,6 +718,7 @@ ClObject *ClIcdRoot::drop_reference(void *object, ClObject &held, ClObject::Kind
     uint32_t        went = 0u;
     static_cast<void>(objects_.release(held, freed, gone, ClDestructorCallbacks::max_gone, went));
     if (freed != nullptr) {
+        if (freed->group() != nullptr) retire_group(*freed->group());
         watcher_.forget_context(freed->wire());
         if (freed->d3d11().device() != nullptr) d3d11_.let_go(freed->d3d11().device());
         static_cast<void>(contexts_.destroy(freed));
@@ -758,13 +767,16 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
         return nullptr;
     }
     ClObject *const named_device = judged(device, ClObject::Kind::device);
-    const uint64_t  host_device = host_device_of(*held);
+    ClContextGroup::Member *const member = held->context()->group() != nullptr ? member_of(*held, named_device) : nullptr;
+    GuestClContext *const         session = member != nullptr ? member->session : held->context();
+    const uint64_t                host_device = member != nullptr ? named_device->wire() : host_device_of(*held);
+    const uint64_t                host_context = member != nullptr ? member->host_context : held->wire();
     if (named_device == nullptr || host_device == 0u || named_device->wire() != host_device ||
-        devices_.of(*named_device) != devices_.running(*held->context())) {
+        (member == nullptr && devices_.of(*named_device) != devices_.running(*held->context()))) {
         report_error(error, CL_INVALID_DEVICE);
         return nullptr;
     }
-    ClientTransport *const wire = wire_of(*held);
+    ClientTransport *const wire = session->wire();
     if (wire == nullptr) {
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
@@ -785,13 +797,13 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
     const uint64_t profiled[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), CL_QUEUE_PROFILING_ENABLE, 0u};
     cl_int         host_error = CL_SUCCESS;
     const uint64_t queue = av::clproto::av_clCreateCommandQueueWithProperties(
-        *wire, held->wire(), host_device,
+        *wire, host_context, host_device,
         named && (bits & CL_QUEUE_PROFILING_ENABLE) != 0u ? profiled : nullptr, &host_error);
     if (queue == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    void *const made = wrap(*wire, ClObject::Kind::command_queue, queue, held->context(), held, error);
+    void *const made = wrap(*wire, ClObject::Kind::command_queue, queue, session, held, error);
     if (made != nullptr) static_cast<ClObject *>(made)->keep_flags(bits);
     return static_cast<cl_command_queue>(made);
 }
@@ -819,6 +831,7 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
     ClObject *const object = static_cast<ClObject *>(static_cast<void *>(made));
     object->keep_flags(asked.asked());
     object->extent().as_buffer(0u, bytes);
+    if ((flags & (CL_MEM_COPY_HOST_PTR | CL_MEM_USE_HOST_PTR)) != 0u) object->keep_traits(object->traits() | ClObject::mem_touched);
     return made;
 }
 
@@ -998,6 +1011,12 @@ cl_program ClIcdRoot::create_program(cl_context context, cl_uint count, const ch
     if (made == nullptr) return nullptr;
     ClObject *const object = static_cast<ClObject *>(made);
     object->keep_traits(ClObject::program_from_source);
+    const cl_int replicated = replicate_program(*object, count, sources, lengths);
+    if (replicated != CL_SUCCESS) {
+        static_cast<void>(release(made, ClObject::Kind::program));
+        report_error(error, replicated);
+        return nullptr;
+    }
     bool includes = false;
     for (cl_uint index = 0u; index < count && !includes; ++index) {
         const char *const text = sources[index];
@@ -1044,6 +1063,10 @@ cl_kernel ClIcdRoot::create_kernel(cl_program program, const char *name, cl_int 
     }
     void *const made = wrap(*wire, ClObject::Kind::kernel, kernel, held->context(), held, error);
     if (made != nullptr) static_cast<void>(kernel_shape(*static_cast<ClObject *>(made), *wire));
+    if (made != nullptr && held->context()->group() != nullptr) {
+        ClKernelArgs *record = nullptr;
+        if (kernel_args_.create(record, memory_) == Status::ok) static_cast<ClObject *>(made)->keep_args(record);
+    }
     return static_cast<cl_kernel>(made);
 }
 
@@ -1059,6 +1082,23 @@ cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t by
     if (shape != nullptr) {
         const cl_int judged_argument = judge_kernel_argument(*shape, index, bytes, value);
         if (judged_argument != CL_SUCCESS) return judged_argument;
+    }
+    if (held->args() != nullptr) {
+        ClKernelArgs &record = *held->args();
+        Status        kept = Status::ok;
+        ClObject     *object = nullptr;
+        if (bytes == sizeof(cl_mem) && value != nullptr) {
+            void *named = nullptr;
+            __builtin_memcpy(&named, value, sizeof named);
+            object = judged(named, ClObject::Kind::mem);
+            if (object == nullptr) object = judged(named, ClObject::Kind::sampler);
+        }
+        if (object != nullptr) kept = record.set_object(index, object);
+        else if (value == nullptr) kept = record.set_local(index, bytes);
+        else kept = record.set_value(index, value, bytes);
+        if (kept != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+        if (shape != nullptr) shape->note_set(index, bytes, value);
+        return CL_SUCCESS;
     }
     icd::UnansweredTransport unanswered(*wire);
     if (bytes == sizeof(cl_mem) && value != nullptr) {
@@ -1092,6 +1132,10 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(kernel, ClObject::Kind::kernel);
     if (named == nullptr) return CL_INVALID_KERNEL;
+    {
+        const cl_int moved = bring_kernel(*held, *named);
+        if (moved != CL_SUCCESS) return moved;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (named->context() != held->context()) return CL_INVALID_CONTEXT;
@@ -1171,6 +1215,10 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
+    {
         const cl_int allowed = judge_host_transfer(*held, *named, true);
         if (allowed != CL_SUCCESS) return allowed;
     }
@@ -1243,6 +1291,10 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
     {
         const cl_int allowed = judge_host_transfer(*held, *named, false);
         if (allowed != CL_SUCCESS) return allowed;
@@ -1324,6 +1376,13 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
     if (named == nullptr) {
         report_error(error, CL_INVALID_MEM_OBJECT);
         return nullptr;
+    }
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) {
+            report_error(error, moved);
+            return nullptr;
+        }
     }
     if (bytes == 0u) {
         report_error(error, CL_INVALID_VALUE);
@@ -1453,6 +1512,10 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
     GuestClContext *const context = held->context();
     if (context == nullptr) return CL_INVALID_CONTEXT;
     MappedRegion *const region = context->mapping_at(named->wire(), pointer);
@@ -1650,7 +1713,15 @@ cl_event ClIcdRoot::create_user_event(cl_context context, cl_int *error)
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_event>(wrap(*wire, ClObject::Kind::event, event, held->context(), held, error));
+    void *const made = wrap(*wire, ClObject::Kind::event, event, held->context(), held, error);
+    if (made == nullptr) return nullptr;
+    const cl_int replicated = replicate_user_event(*static_cast<ClObject *>(made));
+    if (replicated != CL_SUCCESS) {
+        static_cast<void>(release(made, ClObject::Kind::event));
+        report_error(error, replicated);
+        return nullptr;
+    }
+    return static_cast<cl_event>(made);
 }
 
 cl_int ClIcdRoot::set_user_event_status(cl_event event, cl_int status)
@@ -1663,7 +1734,16 @@ cl_int ClIcdRoot::set_user_event_status(cl_event event, cl_int status)
     if (held->parent() == nullptr || held->parent()->kind() != ClObject::Kind::context) return CL_INVALID_EVENT;
     if (status > 0 && status != CL_COMPLETE) return CL_INVALID_VALUE;
     if ((held->traits() & ClObject::event_settled) != 0u) return CL_INVALID_OPERATION;
-    const cl_int set = av::clproto::av_clSetUserEventStatus(*wire, held->wire(), status);
+    cl_int set = av::clproto::av_clSetUserEventStatus(*wire, held->wire(), status);
+    if (held->replicas() != nullptr) {
+        for (uint32_t index = 0u; index < held->replicas()->count(); ++index) {
+            const ClReplicas::Entry &entry = held->replicas()->at(index);
+            ClientTransport *const   other = entry.session->wire();
+            const cl_int             copied = other != nullptr ? av::clproto::av_clSetUserEventStatus(*other, entry.wire, status)
+                                                               : CL_OUT_OF_RESOURCES;
+            if (set == CL_SUCCESS) set = copied;
+        }
+    }
     if (set == CL_SUCCESS) held->keep_traits(held->traits() | ClObject::event_settled);
     if (set == CL_SUCCESS && status < 0) static_cast<void>(objects_.poison_gated_queues(held->parent()));
     return set;
@@ -1676,20 +1756,49 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     ClHostNumbers   handles_room(memory_);
     uint64_t *const handles = handles_room.room(count);
     if (handles == nullptr) return CL_OUT_OF_HOST_MEMORY;
-    GuestClContext *context = nullptr;
-    const cl_uint   waited = count;
-    for (cl_uint index = 0u; index < waited; ++index) {
+    GuestClContext *first = nullptr;
+    bool            crossing = false;
+    for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const held = judged(events[index], ClObject::Kind::event);
         if (held == nullptr) return CL_INVALID_EVENT;
-        if (context == nullptr) context = held->context();
-        if (held->context() != context) return CL_INVALID_CONTEXT;
+        if (first == nullptr) first = held->context();
+        if (held->context() != first) {
+            if (first == nullptr || held->context() == nullptr || first->group() == nullptr ||
+                held->context()->group() != first->group())
+                return CL_INVALID_CONTEXT;
+            crossing = true;
+        }
         handles[index] = held->wire();
     }
-    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
-    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const cl_int reached = waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever, context->wakes());
-    const cl_int delivered = deliver_reads(*wire, context->staging(), handles, waited);
-    return reached != CL_SUCCESS ? reached : delivered;
+    if (!crossing) {
+        ClientTransport *const wire = first != nullptr ? first->wire() : nullptr;
+        if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+        const cl_int reached = waits_.until_complete(*wire, handles, count, icd::SlicedWait::forever, first->wakes());
+        const cl_int delivered = deliver_reads(*wire, first->staging(), handles, count);
+        return reached != CL_SUCCESS ? reached : delivered;
+    }
+    cl_int answer = CL_SUCCESS;
+    for (cl_uint index = 0u; index < count; ++index) {
+        ClObject *const held = judged(events[index], ClObject::Kind::event);
+        GuestClContext *const session = held->context();
+        bool                  earlier = false;
+        for (cl_uint before = 0u; before < index; ++before)
+            if (judged(events[before], ClObject::Kind::event)->context() == session) earlier = true;
+        if (earlier) continue;
+        ClHostNumbers   group_room(memory_);
+        uint64_t *const named = group_room.room(count);
+        if (named == nullptr) return CL_OUT_OF_HOST_MEMORY;
+        cl_uint listed = 0u;
+        for (cl_uint other = index; other < count; ++other)
+            if (judged(events[other], ClObject::Kind::event)->context() == session)
+                named[listed++] = judged(events[other], ClObject::Kind::event)->wire();
+        ClientTransport *const wire = session->wire();
+        if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+        const cl_int reached = waits_.until_complete(*wire, named, listed, icd::SlicedWait::forever, session->wakes());
+        const cl_int delivered = deliver_reads(*wire, session->staging(), named, listed);
+        if (answer == CL_SUCCESS) answer = reached != CL_SUCCESS ? reached : delivered;
+    }
+    return answer;
 }
 
 cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
@@ -1761,10 +1870,18 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
         return asked.give(&count, sizeof count);
     }
     case CL_CONTEXT_NUM_DEVICES: {
-        const cl_uint one = 1u;
-        return asked.give(&one, sizeof one);
+        ClContextGroup *const group = held->context()->group();
+        const cl_uint         count = group != nullptr ? group->count() : 1u;
+        return asked.give(&count, sizeof count);
     }
     case CL_CONTEXT_DEVICES: {
+        ClContextGroup *const group = held->context()->group();
+        if (group != nullptr) {
+            cl_device_id listed[ClContextGroup::most] = {};
+            for (uint32_t index = 0u; index < group->count(); ++index)
+                listed[index] = reinterpret_cast<cl_device_id>(group->at(index).device->object());
+            return asked.give(listed, group->count() * sizeof listed[0]);
+        }
         ClDevice *const    on = devices_.running(*held->context());
         const cl_device_id device = on != nullptr ? reinterpret_cast<cl_device_id>(on->object()) : nullptr;
         return asked.give(&device, sizeof device);
@@ -2099,6 +2216,15 @@ cl_int ClIcdRoot::program_build_info(cl_program program, cl_device_id device,
     ClObject *const held = judged(program, ClObject::Kind::program);
     if (held == nullptr) return CL_INVALID_PROGRAM;
     ClObject *const named_device = judged(device, ClObject::Kind::device);
+    ClContextGroup::Member *const member =
+        held->context() != nullptr && held->context()->group() != nullptr ? member_of(*held, named_device) : nullptr;
+    if (member != nullptr && member->session != held->context()) {
+        const uint64_t replica = held->replicas() != nullptr ? held->replicas()->in(member->session) : 0u;
+        ClientTransport *const peer = member->session->wire();
+        if (replica == 0u || peer == nullptr) return CL_INVALID_DEVICE;
+        return av::clproto::av_clGetProgramBuildInfo(*peer, replica, named_device->wire(), name, value_bytes, value,
+                                                      size_ret);
+    }
     const uint64_t  host_device = host_device_of(*held);
     if (named_device == nullptr || host_device == 0u || named_device->wire() != host_device ||
         devices_.of(*named_device) != devices_.running(*held->context()))
@@ -2166,6 +2292,10 @@ cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_me
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, source, target);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     {
         const cl_int from_range = judge_buffer_range(*source, from_offset, bytes);
@@ -2202,6 +2332,10 @@ cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, con
     if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (pattern == nullptr || pattern_bytes == 0u) return CL_INVALID_VALUE;
     if (named->context() != held->context()) return CL_INVALID_CONTEXT;
     {
@@ -2237,6 +2371,10 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, source, target);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (source->extent().shape() == ClMemExtent::Shape::buffer ||
@@ -2497,6 +2635,10 @@ cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const
     ClObject *const named = judged(image, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
+    {
         const cl_int allowed = judge_host_transfer(*held, *named, true);
         if (allowed != CL_SUCCESS) return allowed;
     }
@@ -2530,6 +2672,10 @@ cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, cons
     ClObject *const named = judged(image, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
+    {
         const cl_int allowed = judge_host_transfer(*held, *named, false);
         if (allowed != CL_SUCCESS) return allowed;
     }
@@ -2562,6 +2708,10 @@ cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
+    {
         const cl_int allowed = judge_host_transfer(*held, *named, true);
         if (allowed != CL_SUCCESS) return allowed;
     }
@@ -2591,6 +2741,10 @@ cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffe
     if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, named);
+        if (moved != CL_SUCCESS) return moved;
+    }
     {
         const cl_int allowed = judge_host_transfer(*held, *named, false);
         if (allowed != CL_SUCCESS) return allowed;
@@ -2624,6 +2778,10 @@ cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, 
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    {
+        const cl_int moved = bring(*held, source, target);
+        if (moved != CL_SUCCESS) return moved;
+    }
     if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     {
@@ -2679,8 +2837,15 @@ cl_sampler ClIcdRoot::create_sampler(cl_context context, const uint64_t *propert
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_sampler>(
-        wrap(*wire, ClObject::Kind::sampler, sampler, held->context(), held, error));
+    void *const made = wrap(*wire, ClObject::Kind::sampler, sampler, held->context(), held, error);
+    if (made == nullptr) return nullptr;
+    const cl_int replicated = replicate_sampler(*static_cast<ClObject *>(made), properties);
+    if (replicated != CL_SUCCESS) {
+        static_cast<void>(release(made, ClObject::Kind::sampler));
+        report_error(error, replicated);
+        return nullptr;
+    }
+    return static_cast<cl_sampler>(made);
 }
 
 }
@@ -2762,7 +2927,12 @@ cl_int ClIcdRoot::wait_list(ClObject &queue, cl_uint count, const cl_event *even
     bool gated = false;
     for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const held = judged(events[index], ClObject::Kind::event);
-        if (held == nullptr || held->context() != queue.context()) return CL_INVALID_EVENT_WAIT_LIST;
+        if (held == nullptr) return CL_INVALID_EVENT_WAIT_LIST;
+        if (held->context() != queue.context()) {
+            const cl_int met = foreign_event(queue, *held, into[index]);
+            if (met != CL_SUCCESS) return met;
+            continue;
+        }
         into[index] = held->wire();
         if (held->parent() != nullptr && held->parent()->kind() == ClObject::Kind::context) gated = true;
     }
@@ -2778,14 +2948,18 @@ void ClIcdRoot::heal_queue(ClObject &queue)
     GuestClContext *const  context = queue.context();
     ClObject *const        owner = queue.parent();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
-    const uint64_t         host_device = owner != nullptr ? host_device_of(*owner) : 0u;
+    ClDevice *const        running = context != nullptr ? devices_.running(*context) : nullptr;
+    const uint64_t         host_device = running != nullptr && running->object() != nullptr ? running->object()->wire() : 0u;
+    ClContextGroup::Member *const member =
+        context != nullptr && context->group() != nullptr ? context->group()->of(context) : nullptr;
+    const uint64_t         host_context = member != nullptr ? member->host_context : owner->wire();
     if (wire == nullptr || host_device == 0u) return;
     static_cast<void>(drain(*wire, queue.wire(), context->wakes(), nullptr, 0u));
     static_cast<void>(deliver_queued(*wire, context->staging(), queue.wire()));
     const uint64_t profiled[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), CL_QUEUE_PROFILING_ENABLE, 0u};
     cl_int         host_error = CL_SUCCESS;
     const uint64_t fresh = av::clproto::av_clCreateCommandQueueWithProperties(
-        *wire, owner->wire(), host_device, (queue.flags() & CL_QUEUE_PROFILING_ENABLE) != 0u ? profiled : nullptr,
+        *wire, host_context, host_device, (queue.flags() & CL_QUEUE_PROFILING_ENABLE) != 0u ? profiled : nullptr,
         &host_error);
     if (fresh == 0u) return;
     const uint64_t failed = queue.wire();

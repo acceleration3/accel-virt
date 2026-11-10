@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire,
                    GuestClContext *context, ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), source_(nullptr), companion_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), shape_(nullptr), replicas_(nullptr), args_(nullptr), last_queue_(0u), source_(nullptr), companion_(nullptr), flags_(0u), extent_(), command_type_(0u), traits_(0u), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -196,6 +196,51 @@ void ClObject::rewire(uint64_t wire)
 {
     AV_SCOPE("ClObject::rewire");
     wire_ = wire;
+}
+
+void ClObject::rehome(GuestClContext *context, uint64_t wire)
+{
+    AV_SCOPE("ClObject::rehome");
+    context_ = context;
+    wire_ = wire;
+    last_queue_ = 0u;
+}
+
+void ClObject::note_use(uint64_t queue)
+{
+    AV_SCOPE("ClObject::note_use");
+    last_queue_ = queue;
+    traits_ |= mem_touched;
+}
+
+uint64_t ClObject::last_queue() const
+{
+    AV_SCOPE("ClObject::last_queue");
+    return last_queue_;
+}
+
+void ClObject::keep_replicas(ClReplicas *replicas)
+{
+    AV_SCOPE("ClObject::keep_replicas");
+    replicas_ = replicas;
+}
+
+ClReplicas *ClObject::replicas() const
+{
+    AV_SCOPE("ClObject::replicas");
+    return replicas_;
+}
+
+void ClObject::keep_args(ClKernelArgs *args)
+{
+    AV_SCOPE("ClObject::keep_args");
+    args_ = args;
+}
+
+ClKernelArgs *ClObject::args() const
+{
+    AV_SCOPE("ClObject::args");
+    return args_;
 }
 
 void ClObject::keep_shape(ClKernelShape *shape)
