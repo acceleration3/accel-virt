@@ -7,8 +7,6 @@
 
 namespace av::vkproto {
 
-// Bytes and texel extent of one block of a format's aspect in host memory, from the
-// registry's <formats>. Multi-planar formats are absent: false answers for them.
 struct FormatLayout {
     uint32_t block_bytes;
     uint32_t block_width;
@@ -700,4 +698,4 @@ inline bool format_layout(VkFormat format, VkImageAspectFlagBits aspect, FormatL
     }
 }
 
-}  // namespace av::vkproto
+}

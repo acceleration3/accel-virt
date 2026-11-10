@@ -6730,7 +6730,7 @@ void av_vkCmdDrawMultiEXT(::av::ClientTransport& t, HandleTranslation& handles, 
     }
     payload.write_pod(instanceCount);
     payload.write_pod(firstInstance);
-    (void)stride;  // the array is sent packed
+    (void)stride;
     if (t.send_async(::av::vkproto::kCmd_vkCmdDrawMultiEXT, payload) != ::av::TransportResult::ok) {
         return;
     }
@@ -6746,7 +6746,7 @@ void av_vkCmdDrawMultiIndexedEXT(::av::ClientTransport& t, HandleTranslation& ha
     }
     payload.write_pod(instanceCount);
     payload.write_pod(firstInstance);
-    (void)stride;  // the array is sent packed
+    (void)stride;
     payload.write_pod<uint8_t>(pVertexOffset != nullptr ? 1 : 0);
     if (pVertexOffset != nullptr) { payload.write_pod(*pVertexOffset); }
     if (t.send_async(::av::vkproto::kCmd_vkCmdDrawMultiIndexedEXT, payload) != ::av::TransportResult::ok) {

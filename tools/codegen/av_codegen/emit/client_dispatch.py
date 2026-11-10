@@ -90,7 +90,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             else:
                 lines.append(f"payload.write_pod({p.name});")
         elif kind == "in_stride":
-            lines.append(f"(void){p.name};  // the array is sent packed")
+            lines.append(f"(void){p.name};")
         elif kind == "in_pod_ptr":
             lines.append(f"payload.write_pod<uint8_t>({p.name} != nullptr ? 1 : 0);")
             lines.append(f"if ({p.name} != nullptr) {{ payload.write_pod(*{p.name}); }}")
