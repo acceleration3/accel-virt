@@ -145,7 +145,8 @@ fields = ["u32 layout", "u32 feature_level", "u32 shader_model", "u32 resource_b
           "u32 depth_bounds", "u32 view_instancing_tier", "u32 mesh_shader_tier",
           "u32 vrs_tier", "u32 vrs_additional_rates", "u32 vrs_tile_size", "u32 vrs_per_primitive_viewport",
           "u32 vrs_sum_combiner", "u32 enhanced_barriers", "u32 relaxed_format_casting", "u32 write_immediate_queues",
-          "u32 copy_queue_timestamps", "u32 atomic_int64_heap"]
+          "u32 copy_queue_timestamps", "u32 atomic_int64_heap",
+          "u32 programmable_sample_positions_tier", "u32 render_pass_tier"]
 
 [[command]]
 name = "OpenDevice12"

@@ -124,6 +124,9 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     answer.TiledResourcesTier = static_cast<D3D12DDI_TILED_RESOURCES_TIER>(tiled_tier());
     answer.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
     answer.OutputMergerLogicOp = caps_.output_merger_logic_op != 0u;
+    answer.ProgrammableSamplePositionsTier =
+        static_cast<D3D12DDI_PROGRAMMABLE_SAMPLE_POSITIONS_TIER>(caps_.programmable_sample_positions_tier);
+    answer.RenderPassTier = static_cast<D3D12DDI_RENDER_PASS_TIER>(caps_.render_pass_tier);
     answer.DepthBoundsTestSupported = caps_.depth_bounds != 0u;
     answer.ViewInstancingTier = static_cast<D3D12DDI_VIEW_INSTANCING_TIER>(
         caps_.view_instancing_tier < most_view_instancing_tier ? caps_.view_instancing_tier : most_view_instancing_tier);

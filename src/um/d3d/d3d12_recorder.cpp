@@ -404,7 +404,7 @@ VOID D3d12Recorder::set_sample_positions(D3D12DDI_HCOMMANDLIST handle, UINT samp
     AV_SCOPE("D3d12Recorder::set_sample_positions");
     SamplePosition made[most_sample_positions] = {};
     const uint64_t total = static_cast<uint64_t>(samples) * pixels;
-    if (positions == nullptr || total > most_sample_positions) {
+    if (total != 0u && (positions == nullptr || total > most_sample_positions)) {
         device_.lost("sample positions that do not fit the most a pixel grid holds");
         return;
     }

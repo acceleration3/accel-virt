@@ -1,0 +1,358 @@
+From: accel-virt
+Subject: [PATCH] SetSamplePositions sets dynamic sample locations and the device reports the programmable sample positions tier
+
+The command list stored nothing and the device reported no support. When the
+host has VK_EXT_sample_locations with dynamic enable, SetSamplePositions now
+programmes the locations of the draws that follow, replicated over the grid the
+host asks for: tier 2 when every grid is made of 2x2 pixels, tier 1 otherwise.
+Multisampled depth targets are created compatible with sample locations.
+---
+diff --git a/libs/vkd3d/command.c b/libs/vkd3d/command.c
+index dbce0af..da9242d 100644
+--- a/libs/vkd3d/command.c
++++ b/libs/vkd3d/command.c
+@@ -7762,7 +7762,7 @@ static bool d3d12_command_list_update_graphics_pipeline(struct d3d12_command_lis
+      * not track this as part of command list state. This is only relevant if the PSO statically
+      * enables any DSV or RTV but none are bound to the command list. */
+     if (!list->dynamic_state.rasterization_samples)
+-        list->dynamic_state.dirty_flags |= VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES;
++        list->dynamic_state.dirty_flags |= VKD3D_DYNAMIC_STATE_MULTISAMPLE_MASK;
+ 
+     list->dynamic_state.active_flags = new_active_flags;
+     list->current_pipeline = vk_pipeline;
+@@ -8515,14 +8515,38 @@ static void d3d12_command_list_update_dynamic_state(struct d3d12_command_list *l
+                 dyn_state->fragment_shading_rate.combiner_ops));
+     }
+ 
+-    if (dyn_state->dirty_flags & VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES)
++    if (dyn_state->dirty_flags & VKD3D_DYNAMIC_STATE_MULTISAMPLE_MASK)
+     {
+         rasterization_samples = dyn_state->rasterization_samples;
+ 
+         if (!rasterization_samples)
+             rasterization_samples = list->state->graphics.ms_desc.rasterizationSamples;
+ 
+-        VK_CALL(vkCmdSetRasterizationSamplesEXT(list->cmd.vk_command_buffer, rasterization_samples));
++        if (dyn_state->dirty_flags & VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES)
++            VK_CALL(vkCmdSetRasterizationSamplesEXT(list->cmd.vk_command_buffer, rasterization_samples));
++
++        if (dyn_state->dirty_flags & VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS)
++        {
++            VkSampleLocationsInfoEXT locations_info;
++            bool enable;
++
++            enable = dyn_state->sample_locations.samples_per_pixel &&
++                    dyn_state->sample_locations.samples_per_pixel == rasterization_samples;
++
++            VK_CALL(vkCmdSetSampleLocationsEnableEXT(list->cmd.vk_command_buffer, enable));
++
++            if (enable)
++            {
++                locations_info.sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT;
++                locations_info.pNext = NULL;
++                locations_info.sampleLocationsPerPixel = rasterization_samples;
++                locations_info.sampleLocationGridSize = dyn_state->sample_locations.grid;
++                locations_info.sampleLocationsCount = rasterization_samples *
++                        dyn_state->sample_locations.grid.width * dyn_state->sample_locations.grid.height;
++                locations_info.pSampleLocations = dyn_state->sample_locations.locations;
++                VK_CALL(vkCmdSetSampleLocationsEXT(list->cmd.vk_command_buffer, &locations_info));
++            }
++        }
+     }
+ 
+     dyn_state->dirty_flags = 0;
+@@ -14434,7 +14458,7 @@ static void d3d12_command_list_recompute_fb_size(struct d3d12_command_list *list
+     if (list->dynamic_state.rasterization_samples != sample_count)
+     {
+         list->dynamic_state.rasterization_samples = sample_count;
+-        list->dynamic_state.dirty_flags |= VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES;
++        list->dynamic_state.dirty_flags |= VKD3D_DYNAMIC_STATE_MULTISAMPLE_MASK;
+ 
+         if (!list->device->device_info.extended_dynamic_state3_features.extendedDynamicState3RasterizationSamples)
+             d3d12_command_list_invalidate_current_pipeline(list, false);
+@@ -17652,8 +17676,67 @@ static void STDMETHODCALLTYPE d3d12_command_list_OMSetDepthBounds(d3d12_command_
+ static void STDMETHODCALLTYPE d3d12_command_list_SetSamplePositions(d3d12_command_list_iface *iface,
+         UINT sample_count, UINT pixel_count, D3D12_SAMPLE_POSITION *sample_positions)
+ {
+-    FIXME("iface %p, sample_count %u, pixel_count %u, sample_positions %p stub!\n",
++    struct d3d12_command_list *list = impl_from_ID3D12GraphicsCommandList(iface);
++    struct vkd3d_dynamic_state *dyn_state = &list->dynamic_state;
++    unsigned int tile_width, tile_height, x, y, s;
++    const struct vkd3d_physical_device_info *info;
++    VkExtent2D grid;
++
++    TRACE("iface %p, sample_count %u, pixel_count %u, sample_positions %p.\n",
+             iface, sample_count, pixel_count, sample_positions);
++
++    info = &list->device->device_info;
++
++    if (!sample_count && !pixel_count)
++    {
++        dyn_state->sample_locations.samples_per_pixel = 0;
++        dyn_state->dirty_flags |= VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS;
++        return;
++    }
++
++    if (!list->device->d3d12_caps.options2.ProgrammableSamplePositionsTier)
++    {
++        WARN("Programmable sample positions are not supported.\n");
++        return;
++    }
++
++    if (!sample_positions || !sample_count || sample_count > 16 || !is_power_of_two(sample_count) ||
++            (pixel_count != 1 && pixel_count != 4) ||
++            (pixel_count == 4 &&
++            list->device->d3d12_caps.options2.ProgrammableSamplePositionsTier < D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_2))
++    {
++        WARN("Invalid sample positions: sample count %u, pixel count %u.\n", sample_count, pixel_count);
++        return;
++    }
++
++    grid = info->sample_location_grids[vkd3d_log2i(sample_count)];
++    if (!grid.width)
++    {
++        WARN("Sample count %u has no programmable positions.\n", sample_count);
++        return;
++    }
++
++    tile_width = pixel_count == 4 ? 2 : 1;
++    tile_height = pixel_count == 4 ? 2 : 1;
++
++    for (y = 0; y < grid.height; y++)
++    {
++        for (x = 0; x < grid.width; x++)
++        {
++            const D3D12_SAMPLE_POSITION *source = &sample_positions[((y % tile_height) * tile_width + (x % tile_width)) * sample_count];
++            VkSampleLocationEXT *target = &dyn_state->sample_locations.locations[(y * grid.width + x) * sample_count];
++
++            for (s = 0; s < sample_count; s++)
++            {
++                target[s].x = 0.5f + (float)max(min(source[s].X, 7), -8) / 16.0f;
++                target[s].y = 0.5f + (float)max(min(source[s].Y, 7), -8) / 16.0f;
++            }
++        }
++    }
++
++    dyn_state->sample_locations.samples_per_pixel = sample_count;
++    dyn_state->sample_locations.grid = grid;
++    dyn_state->dirty_flags |= VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS;
+ }
+ 
+ static bool d3d12_command_list_validate_sampler_feedback_transcode(
+diff --git a/libs/vkd3d/device.c b/libs/vkd3d/device.c
+index 51fafc9..c3fb490 100644
+--- a/libs/vkd3d/device.c
++++ b/libs/vkd3d/device.c
+@@ -110,6 +110,7 @@ static const struct vkd3d_optional_extension_info optional_device_extensions[] =
+     VK_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR, EXT_vertex_attribute_divisor),
+     VK_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE_2, EXT_extended_dynamic_state2),
+     VK_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE_3, EXT_extended_dynamic_state3),
++    VK_EXTENSION(EXT_SAMPLE_LOCATIONS, EXT_sample_locations),
+     VK_EXTENSION(EXT_EXTERNAL_MEMORY_HOST, EXT_external_memory_host),
+     VK_EXTENSION(KHR_EXTERNAL_MEMORY_FD, KHR_external_memory_fd),
+     VK_EXTENSION(EXT_EXTERNAL_MEMORY_DMA_BUF, EXT_external_memory_dma_buf),
+@@ -2098,6 +2099,12 @@ static void vkd3d_physical_device_info_init(struct vkd3d_physical_device_info *i
+         vk_prepend_struct(&info->features2, &info->extended_dynamic_state3_features);
+     }
+ 
++    if (vulkan_info->EXT_sample_locations)
++    {
++        info->sample_locations_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT;
++        vk_prepend_struct(&info->properties2, &info->sample_locations_properties);
++    }
++
+     if (vulkan_info->EXT_external_memory_host)
+     {
+         info->external_memory_host_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT;
+@@ -3222,7 +3229,7 @@ static HRESULT vkd3d_init_device_caps(struct d3d12_device *device,
+     descriptor_buffer->descriptorBufferCaptureReplay = VK_FALSE;
+     descriptor_buffer->descriptorBufferImageLayoutIgnored = VK_FALSE;
+ 
+-    /* We only use dynamic rasterization samples. Also Keep the following enabled for 11on12:
++    /* We only use dynamic rasterization samples and sample locations enable. Also Keep the following enabled for 11on12:
+      * alphaToCoverage, sampleMask, lineRasterizationMode, depthClipEnable. */
+     extended_dynamic_state3 = &physical_device_info->extended_dynamic_state3_features;
+     extended_dynamic_state3->extendedDynamicState3TessellationDomainOrigin = VK_FALSE;
+@@ -3236,7 +3243,6 @@ static HRESULT vkd3d_init_device_caps(struct d3d12_device *device,
+     extended_dynamic_state3->extendedDynamicState3RasterizationStream = VK_FALSE;
+     extended_dynamic_state3->extendedDynamicState3ConservativeRasterizationMode = VK_FALSE;
+     extended_dynamic_state3->extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_FALSE;
+-    extended_dynamic_state3->extendedDynamicState3SampleLocationsEnable = VK_FALSE;
+     extended_dynamic_state3->extendedDynamicState3ColorBlendAdvanced = VK_FALSE;
+     extended_dynamic_state3->extendedDynamicState3ProvokingVertexMode = VK_FALSE;
+     extended_dynamic_state3->extendedDynamicState3LineStippleEnable = VK_FALSE;
+@@ -9526,14 +9532,67 @@ static void d3d12_device_caps_init_feature_options1(struct d3d12_device *device)
+     FIXME("TotalLaneCount = %u, may be inaccurate.\n", options1->TotalLaneCount);
+ }
+ 
++static D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER d3d12_device_determine_programmable_sample_positions_tier(
++        struct d3d12_device *device)
++{
++    const struct vkd3d_vk_instance_procs *vk_procs = &device->vkd3d_instance->vk_procs;
++    const VkPhysicalDeviceSampleLocationsPropertiesEXT *properties = &device->device_info.sample_locations_properties;
++    VkMultisamplePropertiesEXT multisample_properties;
++    D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER tier;
++    unsigned int i;
++
++    memset(device->device_info.sample_location_grids, 0, sizeof(device->device_info.sample_location_grids));
++
++    if (!device->vk_info.EXT_sample_locations || !vk_procs->vkGetPhysicalDeviceMultisamplePropertiesEXT ||
++            !device->device_info.extended_dynamic_state3_features.extendedDynamicState3SampleLocationsEnable ||
++            !device->device_info.extended_dynamic_state3_features.extendedDynamicState3RasterizationSamples)
++        return D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED;
++
++    if (properties->sampleLocationSubPixelBits < 4 || properties->sampleLocationCoordinateRange[0] > 0.0f ||
++            properties->sampleLocationCoordinateRange[1] < 15.0f / 16.0f)
++        return D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED;
++
++    for (i = 1; i < ARRAY_SIZE(device->device_info.sample_location_grids); i++)
++    {
++        if (!(properties->sampleLocationSampleCounts & (1u << i)))
++            continue;
++
++        memset(&multisample_properties, 0, sizeof(multisample_properties));
++        multisample_properties.sType = VK_STRUCTURE_TYPE_MULTISAMPLE_PROPERTIES_EXT;
++        VK_CALL(vkGetPhysicalDeviceMultisamplePropertiesEXT(device->vk_physical_device,
++                (VkSampleCountFlagBits)(1u << i), &multisample_properties));
++
++        if (!multisample_properties.maxSampleLocationGridSize.width ||
++                !multisample_properties.maxSampleLocationGridSize.height ||
++                multisample_properties.maxSampleLocationGridSize.width *
++                multisample_properties.maxSampleLocationGridSize.height * (1u << i) > VKD3D_MAX_SAMPLE_LOCATIONS)
++            continue;
++
++        device->device_info.sample_location_grids[i] = multisample_properties.maxSampleLocationGridSize;
++    }
++
++    if (!device->device_info.sample_location_grids[2].width)
++        return D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED;
++
++    tier = D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_2;
++    for (i = 1; i < ARRAY_SIZE(device->device_info.sample_location_grids); i++)
++    {
++        const VkExtent2D *grid = &device->device_info.sample_location_grids[i];
++
++        if (grid->width && ((grid->width & 1) || (grid->height & 1)))
++            tier = D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_1;
++    }
++
++    return tier;
++}
++
+ static void d3d12_device_caps_init_feature_options2(struct d3d12_device *device)
+ {
+     const VkPhysicalDeviceFeatures *features = &device->device_info.features2.features;
+     D3D12_FEATURE_DATA_D3D12_OPTIONS2 *options2 = &device->d3d12_caps.options2;
+ 
+     options2->DepthBoundsTestSupported = features->depthBounds;
+-    /* Requires VK_EXT_sample_locations */
+-    options2->ProgrammableSamplePositionsTier = D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED;
++    options2->ProgrammableSamplePositionsTier = d3d12_device_determine_programmable_sample_positions_tier(device);
+ }
+ 
+ static void d3d12_device_caps_init_feature_options3(struct d3d12_device *device)
+diff --git a/libs/vkd3d/resource.c b/libs/vkd3d/resource.c
+index f1b849d..8c95ca2 100644
+--- a/libs/vkd3d/resource.c
++++ b/libs/vkd3d/resource.c
+@@ -884,6 +884,11 @@ static HRESULT vkd3d_get_image_create_info(struct d3d12_device *device,
+             && desc->SampleDesc.Count == 1)
+         image_info->flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+ 
++    if (device->d3d12_caps.options2.ProgrammableSamplePositionsTier && desc->SampleDesc.Count > 1 &&
++            (desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) &&
++            (format->vk_aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)))
++        image_info->flags |= VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT;
++
+     if (sparse_resource)
+     {
+         image_info->flags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+diff --git a/libs/vkd3d/state.c b/libs/vkd3d/state.c
+index 1e9f3df..b22f82e 100644
+--- a/libs/vkd3d/state.c
++++ b/libs/vkd3d/state.c
+@@ -3958,6 +3958,8 @@ vkd3d_dynamic_state_list[] =
+     { VKD3D_DYNAMIC_STATE_DEPTH_BIAS,            VK_DYNAMIC_STATE_DEPTH_BIAS },
+     { VKD3D_DYNAMIC_STATE_DEPTH_BIAS,            VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE },
+     { VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES, VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT },
++    { VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS,      VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT },
++    { VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS,      VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT },
+ };
+ 
+ uint32_t vkd3d_init_dynamic_state_array(VkDynamicState *dynamic_states, uint32_t dynamic_state_flags)
+@@ -4329,6 +4331,10 @@ uint32_t d3d12_graphics_pipeline_state_get_dynamic_state_flags(struct d3d12_pipe
+             state->device->device_info.extended_dynamic_state3_features.extendedDynamicState3RasterizationSamples)
+         dynamic_state_flags |= VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES;
+ 
++    if ((dynamic_state_flags & VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES) &&
++            state->device->d3d12_caps.options2.ProgrammableSamplePositionsTier)
++        dynamic_state_flags |= VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS;
++
+     return dynamic_state_flags;
+ }
+ 
+diff --git a/libs/vkd3d/vkd3d_private.h b/libs/vkd3d/vkd3d_private.h
+index 3b7bcbb..28c0793 100644
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -166,6 +166,7 @@ struct vkd3d_vulkan_info
+     bool EXT_vertex_attribute_divisor;
+     bool EXT_extended_dynamic_state2;
+     bool EXT_extended_dynamic_state3;
++    bool EXT_sample_locations;
+     bool EXT_external_memory_host;
+     bool KHR_external_memory_fd;
+     bool EXT_external_memory_dma_buf;
+@@ -2072,8 +2073,13 @@ enum vkd3d_dynamic_state_flag
+     VKD3D_DYNAMIC_STATE_STENCIL_WRITE_MASK    = (1 << 11),
+     VKD3D_DYNAMIC_STATE_DEPTH_BIAS            = (1 << 12),
+     VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES = (1 << 13),
++    VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS      = (1 << 14),
+ };
+ 
++#define VKD3D_DYNAMIC_STATE_MULTISAMPLE_MASK (VKD3D_DYNAMIC_STATE_RASTERIZATION_SAMPLES |\
++        VKD3D_DYNAMIC_STATE_SAMPLE_LOCATIONS)
++#define VKD3D_MAX_SAMPLE_LOCATIONS 64u
++
+ struct vkd3d_shader_debug_ring_spec_constants
+ {
+     uint64_t hash;
+@@ -2748,6 +2754,13 @@ struct vkd3d_dynamic_state
+     VkSampleCountFlagBits rasterization_samples;
+     uint32_t view_mask;
+ 
++    struct
++    {
++        uint32_t samples_per_pixel;
++        VkExtent2D grid;
++        VkSampleLocationEXT locations[VKD3D_MAX_SAMPLE_LOCATIONS];
++    } sample_locations;
++
+     float blend_constants[4];
+ 
+     struct
+@@ -5072,6 +5085,8 @@ struct vkd3d_physical_device_info
+     VkPhysicalDeviceAccelerationStructurePropertiesKHR acceleration_structure_properties;
+     VkPhysicalDeviceFragmentShadingRatePropertiesKHR fragment_shading_rate_properties;
+     VkPhysicalDeviceConservativeRasterizationPropertiesEXT conservative_rasterization_properties;
++    VkPhysicalDeviceSampleLocationsPropertiesEXT sample_locations_properties;
++    VkExtent2D sample_location_grids[5];
+     VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT device_generated_commands_properties;
+     VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties;
+     VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT shader_module_identifier_properties;
+diff --git a/libs/vkd3d/vulkan_procs.h b/libs/vkd3d/vulkan_procs.h
+index 55f0642..2c0cfe7 100644
+--- a/libs/vkd3d/vulkan_procs.h
++++ b/libs/vkd3d/vulkan_procs.h
+@@ -267,6 +267,11 @@ VK_DEVICE_EXT_PFN(vkCmdSetPatchControlPointsEXT)
+ 
+ /* VK_EXT_extended_dynamic_state3 */
+ VK_DEVICE_EXT_PFN(vkCmdSetRasterizationSamplesEXT)
++VK_DEVICE_EXT_PFN(vkCmdSetSampleLocationsEnableEXT)
++
++/* VK_EXT_sample_locations */
++VK_INSTANCE_EXT_PFN(vkGetPhysicalDeviceMultisamplePropertiesEXT)
++VK_DEVICE_EXT_PFN(vkCmdSetSampleLocationsEXT)
+ 
+ /* VK_EXT_external_memory_host */
+ VK_DEVICE_EXT_PFN(vkGetMemoryHostPointerPropertiesEXT)

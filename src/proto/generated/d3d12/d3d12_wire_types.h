@@ -452,8 +452,10 @@ struct Caps12 {
     uint32_t write_immediate_queues;
     uint32_t copy_queue_timestamps;
     uint32_t atomic_int64_heap;
+    uint32_t programmable_sample_positions_tier;
+    uint32_t render_pass_tier;
 };
-static_assert(sizeof(Caps12) == 184, "Caps12 crosses as 184 bytes");
+static_assert(sizeof(Caps12) == 192, "Caps12 crosses as 192 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto
