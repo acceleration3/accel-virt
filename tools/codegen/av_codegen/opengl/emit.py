@@ -643,6 +643,8 @@ VRAM_GUARDED = (
     "glRenderbufferStorage", "glRenderbufferStorageMultisample", "glNamedRenderbufferStorage",
     "glNamedRenderbufferStorageMultisample",
     "glDeleteRenderbuffers", "glDeleteBuffers", "glDeleteTextures",
+    "glTexParameteri", "glTexParameteriv", "glTextureParameteri", "glTextureParameteriv",
+    "glTexPageCommitmentARB", "glTexturePageCommitmentEXT",
 )
 
 TEXTURE_FOLLOWED = ("glCreateTextures", "glGenTextures", "glBindTexture", "glBindMultiTextureEXT", "glTextureImage1DEXT",

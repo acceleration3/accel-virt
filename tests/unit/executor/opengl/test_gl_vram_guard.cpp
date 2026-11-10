@@ -77,7 +77,7 @@ TEST(gl_vram_guard, installing_puts_the_guard_in_front_of_every_allocating_comma
 { Rig rig;
   CHECK(rig.gl().av_vram_hook != nullptr);
   CHECK(rig.gl().av_vram_user == &rig.guard());
-  CHECK_EQ(kVramCommands, 31u); }
+  CHECK_EQ(kVramCommands, 37u); }
 
 TEST(gl_vram_guard, a_buffer_that_fits_is_counted_and_one_past_the_cap_is_out_of_memory)
 { Rig rig;
@@ -171,6 +171,48 @@ TEST(gl_vram_guard, a_compressed_image_costs_the_size_the_guest_gave)
   CHECK_EQ(rig.ledger().used(), 32768u);
   CHECK(rig.run(kVram_glCompressedTexImage2D, {texture_2d, 0, 0x83F1u, 256, 256, 0, 0, 0}));
   CHECK_EQ(rig.ledger().used(), 32768u); }
+
+TEST(gl_vram_guard, a_sparse_texture_costs_nothing_until_pages_are_committed_and_gives_them_back_on_decommit)
+{ Rig rig;
+  bind(texture_2d_binding, 5);
+  CHECK(rig.run(kVram_glTexParameteri, {texture_2d, 0x91A6u, 1u}));
+  CHECK(rig.run(kVram_glTexStorage2D, {texture_2d, 1u, rgba8, 16384u, 16384u}));
+  CHECK_EQ(rig.ledger().used(), 0u);
+  CHECK(rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 0u, 0u, 0u, 128u, 64u, 1u, 1u}));
+  CHECK_EQ(rig.ledger().used(), 128u * 64u * 4u);
+  CHECK(rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 128u, 0u, 0u, 128u, 64u, 1u, 1u}));
+  CHECK_EQ(rig.ledger().used(), 2u * 128u * 64u * 4u);
+  CHECK(rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 0u, 0u, 0u, 128u, 64u, 1u, 0u}));
+  CHECK_EQ(rig.ledger().used(), 128u * 64u * 4u);
+  CHECK(rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 0u, 0u, 0u, 4096u, 4096u, 1u, 0u}));
+  CHECK_EQ(rig.ledger().used(), 0u);
+  CHECK(rig.guard().invariants_hold()); }
+
+TEST(gl_vram_guard, a_commitment_past_the_cap_is_out_of_memory_and_deleting_the_texture_returns_what_was_committed)
+{ Rig rig;
+  bind(texture_2d_binding, 6);
+  CHECK(rig.run(kVram_glTexParameteri, {texture_2d, 0x91A6u, 1u}));
+  CHECK(rig.run(kVram_glTexStorage2D, {texture_2d, 1u, rgba8, 16384u, 16384u}));
+  CHECK(rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 0u, 0u, 0u, 4096u, 4096u, 1u, 1u}));
+  CHECK_EQ(rig.ledger().used(), 64 * mib);
+  CHECK(!rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 0u, 0u, 0u, 32768u, 32768u, 1u, 1u}));
+  CHECK_EQ(rig.word().count(out_of_memory_kind), 1u);
+  CHECK_EQ(rig.ledger().used(), 64 * mib);
+  const std::uint32_t names[] = {6u};
+  CHECK(rig.run(kVram_glDeleteTextures, {1u, reinterpret_cast<std::uintptr_t>(names)}));
+  CHECK_EQ(rig.ledger().used(), 0u);
+  CHECK(rig.guard().invariants_hold()); }
+
+TEST(gl_vram_guard, a_texture_that_is_not_sparse_ignores_commitment_and_keeps_charging_its_storage)
+{ Rig rig;
+  bind(texture_2d_binding, 7);
+  CHECK(rig.run(kVram_glTexStorage2D, {texture_2d, 1u, rgba8, 64u, 64u}));
+  CHECK_EQ(rig.ledger().used(), 64u * 64u * 4u);
+  CHECK(rig.run(kVram_glTexPageCommitmentARB, {texture_2d, 0u, 0u, 0u, 0u, 64u, 64u, 1u, 1u}));
+  CHECK_EQ(rig.ledger().used(), 64u * 64u * 4u);
+  const std::int32_t off = 0;
+  CHECK(rig.run(kVram_glTexParameteriv, {texture_2d, 0x91A6u, reinterpret_cast<std::uintptr_t>(&off)}));
+  CHECK(rig.guard().invariants_hold()); }
 
 TEST(gl_vram_guard, a_renderbuffer_counts_by_name_or_by_binding_and_is_freed_by_deletion)
 { Rig rig;

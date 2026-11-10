@@ -19246,6 +19246,10 @@ static bool decode_glTexParameteri(const RealGl& av_gl, ::av::WireReader& av_r, 
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       param = static_cast<GLint>(av_v); }
     if (av_gl.glTexParameteri == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(pname), static_cast<uint64_t>(param)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexParameteri, av_vram_args)) return true;
+    }
     av_gl.glTexParameteri(target, pname, param);
     return true;
 }
@@ -19286,6 +19290,10 @@ static bool decode_glTexParameteriv(const RealGl& av_gl, ::av::WireReader& av_r,
     if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLint)), &params_needed)) return false;
     if (params == nullptr ? (params_needed != 0 && !(false)) : params_room < params_needed) return false;
     if (av_gl.glTexParameteriv == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(pname), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(params))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexParameteriv, av_vram_args)) return true;
+    }
     av_gl.glTexParameteriv(target, pname, params);
     return true;
 }
@@ -19880,6 +19888,10 @@ static bool decode_glTextureParameteri(const RealGl& av_gl, ::av::WireReader& av
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       param = static_cast<GLint>(av_v); }
     if (av_gl.glTextureParameteri == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(pname), static_cast<uint64_t>(param)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureParameteri, av_vram_args)) return true;
+    }
     av_gl.glTextureParameteri(texture, pname, param);
     return true;
 }
@@ -19920,6 +19932,10 @@ static bool decode_glTextureParameteriv(const RealGl& av_gl, ::av::WireReader& a
     if (__builtin_mul_overflow(param_elements, static_cast<uint64_t>(sizeof(GLint)), &param_needed)) return false;
     if (param == nullptr ? (param_needed != 0 && !(false)) : param_room < param_needed) return false;
     if (av_gl.glTextureParameteriv == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(pname), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(param))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureParameteriv, av_vram_args)) return true;
+    }
     av_gl.glTextureParameteriv(texture, pname, param);
     return true;
 }
@@ -37893,6 +37909,10 @@ static bool decode_glTexPageCommitmentARB(const RealGl& av_gl, ::av::WireReader&
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       commit = static_cast<GLboolean>(av_v); }
     if (av_gl.glTexPageCommitmentARB == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(xoffset), static_cast<uint64_t>(yoffset), static_cast<uint64_t>(zoffset), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(commit)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexPageCommitmentARB, av_vram_args)) return true;
+    }
     av_gl.glTexPageCommitmentARB(target, level, xoffset, yoffset, zoffset, width, height, depth, commit);
     return true;
 }
@@ -37988,6 +38008,10 @@ static bool decode_glTexturePageCommitmentEXT(const RealGl& av_gl, ::av::WireRea
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       commit = static_cast<GLboolean>(av_v); }
     if (av_gl.glTexturePageCommitmentEXT == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(level), static_cast<uint64_t>(xoffset), static_cast<uint64_t>(yoffset), static_cast<uint64_t>(zoffset), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(commit)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexturePageCommitmentEXT, av_vram_args)) return true;
+    }
     av_gl.glTexturePageCommitmentEXT(texture, level, xoffset, yoffset, zoffset, width, height, depth, commit);
     return true;
 }

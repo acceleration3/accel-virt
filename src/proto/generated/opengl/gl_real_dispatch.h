@@ -43,7 +43,13 @@ constexpr uint32_t kVram_glNamedRenderbufferStorageMultisample = 27u;
 constexpr uint32_t kVram_glDeleteRenderbuffers = 28u;
 constexpr uint32_t kVram_glDeleteBuffers = 29u;
 constexpr uint32_t kVram_glDeleteTextures = 30u;
-constexpr uint32_t kVramCommands = 31u;
+constexpr uint32_t kVram_glTexParameteri = 31u;
+constexpr uint32_t kVram_glTexParameteriv = 32u;
+constexpr uint32_t kVram_glTextureParameteri = 33u;
+constexpr uint32_t kVram_glTextureParameteriv = 34u;
+constexpr uint32_t kVram_glTexPageCommitmentARB = 35u;
+constexpr uint32_t kVram_glTexturePageCommitmentEXT = 36u;
+constexpr uint32_t kVramCommands = 37u;
 
 // The host's OpenGL, by name.
 //
