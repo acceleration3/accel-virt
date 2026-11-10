@@ -255,6 +255,7 @@ synchronous = ["glFinish"]
 read_into_blob = ["glGetTextureSubImage"]
 
 excluded = [
+    "glGetTextureHandleNV", "glGetTextureSamplerHandleNV", "glMakeTextureHandleResidentNV", "glMakeTextureHandleNonResidentNV", "glGetImageHandleNV", "glMakeImageHandleResidentNV", "glMakeImageHandleNonResidentNV", "glUniformHandleui64NV", "glUniformHandleui64vNV", "glProgramUniformHandleui64NV", "glProgramUniformHandleui64vNV", "glIsTextureHandleResidentNV", "glIsImageHandleResidentNV",
     "glGetVertexAttribPointervARB",
     "glGetBufferPointerv",
     "glGetVertexAttribPointerv",

@@ -12,6 +12,7 @@
 #include "icd/opengl/granted_profile.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/opengl/bindless_handles.hpp"
 #include "icd/opengl/buffer_pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -1048,6 +1049,91 @@ void ManualCalls::capability(uint32_t cap, bool on)
     if (wire == nullptr) return;
     if (on) glproto::av_glEnable(*wire, cap);
     else glproto::av_glDisable(*wire, cap);
+}
+
+uint64_t ManualCalls::texture_handle(uint32_t texture, uint32_t sampler, bool with_sampler)
+{
+    AV_SCOPE("ManualCalls::texture_handle");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return 0u;
+    ClientTransport &wire = *context->wire();
+    const uint64_t   handle = with_sampler ? glproto::av_glGetTextureSamplerHandleARB(wire, texture, sampler)
+                                          : glproto::av_glGetTextureHandleARB(wire, texture);
+    if (handle != 0u &&
+        contexts_.bindless().add(context->group_root(), handle, BindlessHandles::Kind::texture, texture) != Status::ok)
+        return 0u;
+    return handle;
+}
+
+uint64_t ManualCalls::image_handle(uint32_t texture, int32_t level, bool layered, int32_t layer, uint32_t format)
+{
+    AV_SCOPE("ManualCalls::image_handle");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return 0u;
+    const uint64_t handle =
+        glproto::av_glGetImageHandleARB(*context->wire(), texture, level, layered ? 1 : 0, layer, format);
+    if (handle != 0u &&
+        contexts_.bindless().add(context->group_root(), handle, BindlessHandles::Kind::image, texture) != Status::ok)
+        return 0u;
+    return handle;
+}
+
+void ManualCalls::make_handle_resident(uint64_t handle, bool image, bool resident, uint32_t access)
+{
+    AV_SCOPE("ManualCalls::make_handle_resident");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const BindlessHandles::Kind kind = image ? BindlessHandles::Kind::image : BindlessHandles::Kind::texture;
+    if (!contexts_.bindless().valid(context->group_root(), handle, kind)) return record(gl_invalid_operation);
+    ClientTransport &wire = *context->wire();
+    if (image && resident) glproto::av_glMakeImageHandleResidentARB(wire, handle, access);
+    else if (image) glproto::av_glMakeImageHandleNonResidentARB(wire, handle);
+    else if (resident) glproto::av_glMakeTextureHandleResidentARB(wire, handle);
+    else glproto::av_glMakeTextureHandleNonResidentARB(wire, handle);
+}
+
+bool ManualCalls::handle_resident(uint64_t handle, bool image)
+{
+    AV_SCOPE("ManualCalls::handle_resident");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return false;
+    const BindlessHandles::Kind kind = image ? BindlessHandles::Kind::image : BindlessHandles::Kind::texture;
+    if (!contexts_.bindless().valid(context->group_root(), handle, kind)) {
+        record(gl_invalid_operation);
+        return false;
+    }
+    ClientTransport &wire = *context->wire();
+    return (image ? glproto::av_glIsImageHandleResidentARB(wire, handle)
+                  : glproto::av_glIsTextureHandleResidentARB(wire, handle)) != 0;
+}
+
+void ManualCalls::uniform_handles(uint32_t program, bool with_program, int32_t location, int32_t count,
+                                  const uint64_t *values)
+{
+    AV_SCOPE("ManualCalls::uniform_handles");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (count < 0) return record(gl_invalid_value);
+    if (values == nullptr && count > 0) return record(gl_invalid_value);
+    const uint32_t group = context->group_root();
+    for (int32_t at = 0; at < count; at++) {
+        const bool known = contexts_.bindless().valid(group, values[at], BindlessHandles::Kind::texture) ||
+                           contexts_.bindless().valid(group, values[at], BindlessHandles::Kind::image);
+        if (!known) return record(gl_invalid_operation);
+    }
+    ClientTransport &wire = *context->wire();
+    if (with_program) glproto::av_glProgramUniformHandleui64vARB(wire, program, location, count, values);
+    else glproto::av_glUniformHandleui64vARB(wire, location, count, values);
+}
+
+void ManualCalls::delete_textures(int32_t count, const uint32_t *textures)
+{
+    AV_SCOPE("ManualCalls::delete_textures");
+    forget_bindings();
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || context->wire() == nullptr) return;
+    contexts_.bindless().forget_textures(context->group_root(), count, textures);
+    glproto::av_glDeleteTextures(*context->wire(), count, textures);
 }
 
 void ManualCalls::link_program(uint32_t program)

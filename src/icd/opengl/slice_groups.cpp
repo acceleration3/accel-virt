@@ -40,6 +40,12 @@ uint32_t SliceGroups::root_of(uint32_t token) const
     return token;
 }
 
+uint32_t SliceGroups::root(uint32_t token) const
+{
+    AV_SCOPE("SliceGroups::root");
+    return root_of(token);
+}
+
 uint64_t SliceGroups::key_of(uint32_t group, uint32_t buffer) const
 {
     AV_SCOPE("SliceGroups::key_of");

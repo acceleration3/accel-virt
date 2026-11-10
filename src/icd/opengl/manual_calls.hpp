@@ -174,6 +174,13 @@ public:
     void     finish();
     void debug_message_callback(void *callback, const void *user);
     void capability(uint32_t cap, bool on);
+    uint64_t texture_handle(uint32_t texture, uint32_t sampler, bool with_sampler);
+    uint64_t image_handle(uint32_t texture, int32_t level, bool layered, int32_t layer, uint32_t format);
+    void     make_handle_resident(uint64_t handle, bool image, bool resident, uint32_t access);
+    bool     handle_resident(uint64_t handle, bool image);
+    void     uniform_handles(uint32_t program, bool with_program, int32_t location, int32_t count,
+                             const uint64_t *values);
+    void     delete_textures(int32_t count, const uint32_t *textures);
     void link_program(uint32_t program);
     void delete_program(uint32_t program);
     int32_t attrib_location(uint32_t program, const char *name);

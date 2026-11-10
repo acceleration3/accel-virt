@@ -327,6 +327,12 @@ uint32_t GuestGlContext::slice_group() const
     return slices_.group();
 }
 
+uint32_t GuestGlContext::group_root() const
+{
+    AV_SCOPE("GuestGlContext::group_root");
+    return slices_.group_root();
+}
+
 uint32_t GuestGlContext::slices_owned() const
 {
     AV_SCOPE("GuestGlContext::slices_owned");

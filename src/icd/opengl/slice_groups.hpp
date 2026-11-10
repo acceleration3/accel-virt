@@ -45,6 +45,7 @@ public:
     [[nodiscard]] Status admit_join(uint32_t joiner);
     [[nodiscard]] Status join(uint32_t joiner, uint32_t target);
     bool                 same(uint32_t first, uint32_t second) const;
+    uint32_t             root(uint32_t token) const;
 
     [[nodiscard]] Status insert(uint32_t group, uint32_t buffer, const Row &row);
     Row                 *find(uint32_t group, uint32_t buffer);

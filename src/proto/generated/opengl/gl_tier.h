@@ -443,7 +443,6 @@ inline constexpr const char* kCarriedExtensions[] = {
     "GL_NVX_blend_equation_advanced_multi_draw_buffers",
     "GL_NVX_cross_process_interop",
     "GL_NVX_gpu_memory_info",
-    "GL_NV_bindless_texture",
     "GL_NV_blend_equation_advanced_coherent",
     "GL_NV_blend_minmax_factor",
     "GL_NV_blend_square",

@@ -80,6 +80,90 @@ void APIENTRY Wrap_glDisable(GLenum cap)
     ::av::glicd::gl_icd_binding.root().manual().capability(cap, false);
 }
 
+GLuint64 APIENTRY Wrap_glGetTextureHandleARB(GLuint texture)
+{
+    AV_SCOPE("Wrap_glGetTextureHandleARB");
+    return ::av::glicd::gl_icd_binding.root().manual().texture_handle(texture, 0u, false);
+}
+
+GLuint64 APIENTRY Wrap_glGetTextureSamplerHandleARB(GLuint texture, GLuint sampler)
+{
+    AV_SCOPE("Wrap_glGetTextureSamplerHandleARB");
+    return ::av::glicd::gl_icd_binding.root().manual().texture_handle(texture, sampler, true);
+}
+
+GLuint64 APIENTRY Wrap_glGetImageHandleARB(GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum format)
+{
+    AV_SCOPE("Wrap_glGetImageHandleARB");
+    return ::av::glicd::gl_icd_binding.root().manual().image_handle(texture, level, layered != 0, layer, format);
+}
+
+void APIENTRY Wrap_glMakeTextureHandleResidentARB(GLuint64 handle)
+{
+    AV_SCOPE("Wrap_glMakeTextureHandleResidentARB");
+    ::av::glicd::gl_icd_binding.root().manual().make_handle_resident(handle, false, true, 0u);
+}
+
+void APIENTRY Wrap_glMakeTextureHandleNonResidentARB(GLuint64 handle)
+{
+    AV_SCOPE("Wrap_glMakeTextureHandleNonResidentARB");
+    ::av::glicd::gl_icd_binding.root().manual().make_handle_resident(handle, false, false, 0u);
+}
+
+void APIENTRY Wrap_glMakeImageHandleResidentARB(GLuint64 handle, GLenum access)
+{
+    AV_SCOPE("Wrap_glMakeImageHandleResidentARB");
+    ::av::glicd::gl_icd_binding.root().manual().make_handle_resident(handle, true, true, access);
+}
+
+void APIENTRY Wrap_glMakeImageHandleNonResidentARB(GLuint64 handle)
+{
+    AV_SCOPE("Wrap_glMakeImageHandleNonResidentARB");
+    ::av::glicd::gl_icd_binding.root().manual().make_handle_resident(handle, true, false, 0u);
+}
+
+GLboolean APIENTRY Wrap_glIsTextureHandleResidentARB(GLuint64 handle)
+{
+    AV_SCOPE("Wrap_glIsTextureHandleResidentARB");
+    return ::av::glicd::gl_icd_binding.root().manual().handle_resident(handle, false) ? 1 : 0;
+}
+
+GLboolean APIENTRY Wrap_glIsImageHandleResidentARB(GLuint64 handle)
+{
+    AV_SCOPE("Wrap_glIsImageHandleResidentARB");
+    return ::av::glicd::gl_icd_binding.root().manual().handle_resident(handle, true) ? 1 : 0;
+}
+
+void APIENTRY Wrap_glUniformHandleui64ARB(GLint location, GLuint64 value)
+{
+    AV_SCOPE("Wrap_glUniformHandleui64ARB");
+    ::av::glicd::gl_icd_binding.root().manual().uniform_handles(0u, false, location, 1, &value);
+}
+
+void APIENTRY Wrap_glUniformHandleui64vARB(GLint location, GLsizei count, const GLuint64 *value)
+{
+    AV_SCOPE("Wrap_glUniformHandleui64vARB");
+    ::av::glicd::gl_icd_binding.root().manual().uniform_handles(0u, false, location, count, value);
+}
+
+void APIENTRY Wrap_glProgramUniformHandleui64ARB(GLuint program, GLint location, GLuint64 value)
+{
+    AV_SCOPE("Wrap_glProgramUniformHandleui64ARB");
+    ::av::glicd::gl_icd_binding.root().manual().uniform_handles(program, true, location, 1, &value);
+}
+
+void APIENTRY Wrap_glProgramUniformHandleui64vARB(GLuint program, GLint location, GLsizei count, const GLuint64 *values)
+{
+    AV_SCOPE("Wrap_glProgramUniformHandleui64vARB");
+    ::av::glicd::gl_icd_binding.root().manual().uniform_handles(program, true, location, count, values);
+}
+
+void APIENTRY Wrap_glDeleteTextures(GLsizei n, const GLuint *textures)
+{
+    AV_SCOPE("Wrap_glDeleteTextures");
+    ::av::glicd::gl_icd_binding.root().manual().delete_textures(n, textures);
+}
+
 void APIENTRY Wrap_glFinish(void)
 {
     AV_SCOPE("Wrap_glFinish");

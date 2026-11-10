@@ -89,6 +89,7 @@ public:
     uint64_t completed() const;
     [[nodiscard]] Status enroll();
     uint32_t group() const;
+    uint32_t group_root() const;
 
     void report(StateWriter &writer) const;
 

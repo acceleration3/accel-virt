@@ -11,7 +11,7 @@ GlContextTable::GlContextTable(BlockSource &memory, icd::IcdConnection &connecti
                                ThreadLock &send_lock, ThreadLock &slice_lock, KeyedLog &lines,
                                const GlExtensionPolicy &extensions, icd::SharedHandles &handles)
     : memory_(memory), connection_(connection), lock_(lock), send_lock_(send_lock), lines_(lines),
-      extensions_(extensions), handles_(handles), groups_(memory, slice_lock), pool_(memory),
+      extensions_(extensions), handles_(handles), groups_(memory, slice_lock), bindless_(memory), pool_(memory),
       contexts_(memory, Pool::paged), retired_(memory, Pool::paged), retired_count_(0u), next_(1u)
 {
     AV_SCOPE("GlContextTable::GlContextTable");
@@ -58,6 +58,12 @@ Status GlContextTable::join(uint64_t joiner, uint64_t target)
     if (grouped != Status::ok) return grouped;
     lender->lend();
     return Status::ok;
+}
+
+BindlessHandles &GlContextTable::bindless()
+{
+    AV_SCOPE("GlContextTable::bindless");
+    return bindless_;
 }
 
 GuestGlContext *GlContextTable::resolve(uint64_t handle) const

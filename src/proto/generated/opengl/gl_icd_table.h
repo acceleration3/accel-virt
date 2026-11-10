@@ -1160,19 +1160,6 @@ inline const NamedEntry kNamedEntries[] = {
     {"glVertexAttribL1ui64ARB", reinterpret_cast<GlProc>(&Wrap_glVertexAttribL1ui64ARB)},
     {"glVertexAttribL1ui64vARB", reinterpret_cast<GlProc>(&Wrap_glVertexAttribL1ui64vARB)},
     {"glGetVertexAttribLui64vARB", reinterpret_cast<GlProc>(&Wrap_glGetVertexAttribLui64vARB)},
-    {"glGetTextureHandleNV", reinterpret_cast<GlProc>(&Wrap_glGetTextureHandleNV)},
-    {"glGetTextureSamplerHandleNV", reinterpret_cast<GlProc>(&Wrap_glGetTextureSamplerHandleNV)},
-    {"glMakeTextureHandleResidentNV", reinterpret_cast<GlProc>(&Wrap_glMakeTextureHandleResidentNV)},
-    {"glMakeTextureHandleNonResidentNV", reinterpret_cast<GlProc>(&Wrap_glMakeTextureHandleNonResidentNV)},
-    {"glGetImageHandleNV", reinterpret_cast<GlProc>(&Wrap_glGetImageHandleNV)},
-    {"glMakeImageHandleResidentNV", reinterpret_cast<GlProc>(&Wrap_glMakeImageHandleResidentNV)},
-    {"glMakeImageHandleNonResidentNV", reinterpret_cast<GlProc>(&Wrap_glMakeImageHandleNonResidentNV)},
-    {"glUniformHandleui64NV", reinterpret_cast<GlProc>(&Wrap_glUniformHandleui64NV)},
-    {"glUniformHandleui64vNV", reinterpret_cast<GlProc>(&Wrap_glUniformHandleui64vNV)},
-    {"glProgramUniformHandleui64NV", reinterpret_cast<GlProc>(&Wrap_glProgramUniformHandleui64NV)},
-    {"glProgramUniformHandleui64vNV", reinterpret_cast<GlProc>(&Wrap_glProgramUniformHandleui64vNV)},
-    {"glIsTextureHandleResidentNV", reinterpret_cast<GlProc>(&Wrap_glIsTextureHandleResidentNV)},
-    {"glIsImageHandleResidentNV", reinterpret_cast<GlProc>(&Wrap_glIsImageHandleResidentNV)},
     {"glBufferStorageMemEXT", reinterpret_cast<GlProc>(&Wrap_glBufferStorageMemEXT)},
     {"glTextureStorageMem2DEXT", reinterpret_cast<GlProc>(&Wrap_glTextureStorageMem2DEXT)},
     {"glDeleteMemoryObjectsEXT", reinterpret_cast<GlProc>(&Wrap_glDeleteMemoryObjectsEXT)},
@@ -2022,6 +2009,6 @@ inline const NamedEntry kNamedEntries[] = {
     {"glWindowPos3svMESA", reinterpret_cast<GlProc>(&Wrap_glWindowPos3sv)},
 };
 
-inline constexpr uint32_t kNamedEntryCount = 1646u;
+inline constexpr uint32_t kNamedEntryCount = 1633u;
 
 }  // namespace av::glicd::generated

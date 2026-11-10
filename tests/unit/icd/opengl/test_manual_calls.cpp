@@ -610,6 +610,35 @@ TEST(manual_calls, the_debug_callback_is_kept_for_the_pointer_query)
   gen::Wrap_glGetPointerv(0x8244u, nullptr);
   CHECK_EQ(current.sent(), 0u); }
 
+TEST(manual_calls, a_bindless_handle_is_used_only_after_this_share_group_was_given_it)
+{ Current current;
+  const GLuint64 stranger = 0x77u;
+  gen::Wrap_glUniformHandleui64ARB(3, stranger);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  gen::Wrap_glMakeTextureHandleResidentARB(stranger);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  gen::Wrap_glProgramUniformHandleui64ARB(2u, 3, stranger);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  CHECK_EQ(current.sent(), 0u);
+  current.rig().host().gl_varint(0x1234u);
+  const GLuint64 handle = gen::Wrap_glGetTextureHandleARB(9u);
+  CHECK_EQ(handle, 0x1234u);
+  const std::uint32_t before = current.sent();
+  gen::Wrap_glUniformHandleui64ARB(3, handle);
+  CHECK_EQ(current.sent() - before, 1u);
+  gen::Wrap_glMakeImageHandleResidentARB(handle, 0x88B9u);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  const std::uint32_t resident = current.sent();
+  gen::Wrap_glMakeTextureHandleResidentARB(handle);
+  CHECK_EQ(current.sent() - resident, 1u);
+  const GLuint64 two[2] = {handle, stranger};
+  gen::Wrap_glUniformHandleui64vARB(3, 2, two);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  const GLuint deleted = 9u;
+  gen::Wrap_glDeleteTextures(1, &deleted);
+  gen::Wrap_glUniformHandleui64ARB(3, handle);
+  CHECK_EQ(current.error(), gl_invalid_operation); }
+
 TEST(manual_calls, legacy_client_arrays_are_kept_by_the_guest_and_sent_with_the_draw_that_reads_them)
 { Current current;
   const float positions[8] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};

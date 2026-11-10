@@ -524,6 +524,12 @@ uint32_t SlicedBuffers::busy() const
     return rows + waiting + pinned();
 }
 
+uint32_t SlicedBuffers::group_root() const
+{
+    AV_SCOPE("SlicedBuffers::group_root");
+    return groups_.root(group_);
+}
+
 uint32_t SlicedBuffers::group() const
 {
     AV_SCOPE("SlicedBuffers::group");

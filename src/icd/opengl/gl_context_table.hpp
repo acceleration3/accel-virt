@@ -5,6 +5,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
+#include "icd/opengl/bindless_handles.hpp"
 #include "icd/opengl/slice_groups.hpp"
 
 #include <stdint.h>
@@ -33,6 +34,7 @@ public:
     [[nodiscard]] Status create(int32_t pixel_format, const GlContextOptions &options, uint64_t &handle);
     [[nodiscard]] Status join(uint64_t joiner, uint64_t target);
     GuestGlContext      *resolve(uint64_t handle) const;
+    BindlessHandles     &bindless();
     [[nodiscard]] Status destroy(uint64_t handle);
     void                 reap();
     void                 reap_held();
@@ -59,6 +61,7 @@ private:
     const GlExtensionPolicy    &extensions_;
     icd::SharedHandles         &handles_;
     SliceGroups                 groups_;
+    BindlessHandles             bindless_;
     ObjectPool<GuestGlContext>  pool_;
     KeyedSlots<uint64_t, GuestGlContext *> contexts_;
     KeyedSlots<uint64_t, GuestGlContext *> retired_;

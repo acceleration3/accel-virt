@@ -1131,19 +1131,6 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_glVertexAttribL1ui64ARB: return "glVertexAttribL1ui64ARB";
         case kCmd_glVertexAttribL1ui64vARB: return "glVertexAttribL1ui64vARB";
         case kCmd_glGetVertexAttribLui64vARB: return "glGetVertexAttribLui64vARB";
-        case kCmd_glGetTextureHandleNV: return "glGetTextureHandleNV";
-        case kCmd_glGetTextureSamplerHandleNV: return "glGetTextureSamplerHandleNV";
-        case kCmd_glMakeTextureHandleResidentNV: return "glMakeTextureHandleResidentNV";
-        case kCmd_glMakeTextureHandleNonResidentNV: return "glMakeTextureHandleNonResidentNV";
-        case kCmd_glGetImageHandleNV: return "glGetImageHandleNV";
-        case kCmd_glMakeImageHandleResidentNV: return "glMakeImageHandleResidentNV";
-        case kCmd_glMakeImageHandleNonResidentNV: return "glMakeImageHandleNonResidentNV";
-        case kCmd_glUniformHandleui64NV: return "glUniformHandleui64NV";
-        case kCmd_glUniformHandleui64vNV: return "glUniformHandleui64vNV";
-        case kCmd_glProgramUniformHandleui64NV: return "glProgramUniformHandleui64NV";
-        case kCmd_glProgramUniformHandleui64vNV: return "glProgramUniformHandleui64vNV";
-        case kCmd_glIsTextureHandleResidentNV: return "glIsTextureHandleResidentNV";
-        case kCmd_glIsImageHandleResidentNV: return "glIsImageHandleResidentNV";
         case kCmd_glBufferStorageMemEXT: return "glBufferStorageMemEXT";
         case kCmd_glTextureStorageMem2DEXT: return "glTextureStorageMem2DEXT";
         case kCmd_glDeleteMemoryObjectsEXT: return "glDeleteMemoryObjectsEXT";
@@ -2593,19 +2580,6 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case kCmd_glVertexAttribL1ui64ARB:
         case kCmd_glVertexAttribL1ui64vARB:
         case kCmd_glGetVertexAttribLui64vARB:
-        case kCmd_glGetTextureHandleNV:
-        case kCmd_glGetTextureSamplerHandleNV:
-        case kCmd_glMakeTextureHandleResidentNV:
-        case kCmd_glMakeTextureHandleNonResidentNV:
-        case kCmd_glGetImageHandleNV:
-        case kCmd_glMakeImageHandleResidentNV:
-        case kCmd_glMakeImageHandleNonResidentNV:
-        case kCmd_glUniformHandleui64NV:
-        case kCmd_glUniformHandleui64vNV:
-        case kCmd_glProgramUniformHandleui64NV:
-        case kCmd_glProgramUniformHandleui64vNV:
-        case kCmd_glIsTextureHandleResidentNV:
-        case kCmd_glIsImageHandleResidentNV:
         case kCmd_glBufferStorageMemEXT:
         case kCmd_glTextureStorageMem2DEXT:
         case kCmd_glDeleteMemoryObjectsEXT:

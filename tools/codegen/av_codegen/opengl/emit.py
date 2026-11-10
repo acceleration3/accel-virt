@@ -1894,7 +1894,8 @@ HANDWRITTEN = {
     "glGetUniformLocation", "glGetAttribLocation",
     "glLinkProgram", "glDeleteProgram",
     "glGenBuffers", "glGenVertexArrays", "glGenTextures",
-    "glFlush", "glEnable", "glDisable",
+    "glFlush", "glEnable", "glDisable", "glDeleteTextures",
+    "glGetTextureHandleARB", "glGetTextureSamplerHandleARB", "glMakeTextureHandleResidentARB", "glMakeTextureHandleNonResidentARB", "glGetImageHandleARB", "glMakeImageHandleResidentARB", "glMakeImageHandleNonResidentARB", "glUniformHandleui64ARB", "glUniformHandleui64vARB", "glProgramUniformHandleui64ARB", "glProgramUniformHandleui64vARB", "glIsTextureHandleResidentARB", "glIsImageHandleResidentARB",
     "glBindFramebuffer", "glIsFramebuffer", "glDrawBuffer", "glReadBuffer", "glReadPixels", "glViewport",
 
     "glVertexPointer", "glNormalPointer", "glColorPointer",

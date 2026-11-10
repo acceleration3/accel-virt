@@ -83,6 +83,7 @@ public:
     [[nodiscard]] Status share(uint32_t share_name);
     void                 lend();
     uint32_t             slice_group() const;
+    uint32_t             group_root() const;
     uint32_t             slices_owned() const;
     uint32_t             slices_pinned() const;
     uint32_t             slices_busy() const;
