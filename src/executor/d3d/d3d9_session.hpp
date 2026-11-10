@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d9_lanes.hpp"
+#include "executor/d3d/d3d9_lent_copies.hpp"
 #include "executor/d3d/d3d9_flip_shares.hpp"
 #include "executor/d3d/d3d9_refused_queries.hpp"
 #include "executor/d3d/d3d9_slices.hpp"
@@ -96,6 +97,8 @@ public:
                          const d3d9proto::Rect &destination_rect, uint32_t filter) override;
     bool on_ColorFill9(uint32_t surface, uint32_t subresource, const d3d9proto::Rect &rect, uint32_t color) override;
     bool on_PresentPoint9(uint32_t surface, uint32_t subresource, uint64_t key, uint32_t point) override;
+    bool on_CopyToLent9(uint32_t surface, uint32_t subresource, const d3d9proto::Rect &source_rect, uint64_t memory,
+                        uint32_t pitch, uint32_t x, uint32_t y) override;
 
     bool on_CreateVertexShader9(uint32_t shader, const uint8_t *code, uint64_t code_size) override;
     bool on_CreatePixelShader9(uint32_t shader, const uint8_t *code, uint64_t code_size) override;
@@ -160,6 +163,8 @@ private:
     D3d9HostDevice *host_;
     SharedSurfaces *surfaces_;
     D3d9FlipShares  flips_;
+    D3d9LentCopies  lent_;
+    ImportTable    *imports_;
     D3dObjectTable &objects_;
     WatchedBlocks  &blocks_;
     GuestDevices<IDirect3DDevice9> devices_;

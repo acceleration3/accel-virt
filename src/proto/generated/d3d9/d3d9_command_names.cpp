@@ -29,6 +29,7 @@ const char* command_name(uint32_t id) {
         case kCmd_QueryBufferSlices9: return "QueryBufferSlices9";
         case kCmd_BindBufferSlice9: return "BindBufferSlice9";
         case kCmd_QueryDeviceSlices9: return "QueryDeviceSlices9";
+        case kCmd_CopyToLent9: return "CopyToLent9";
         case kCmd_SetRenderTarget9: return "SetRenderTarget9";
         case kCmd_Clear9: return "Clear9";
         case kCmd_CreateVertexShader9: return "CreateVertexShader9";

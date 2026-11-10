@@ -6,6 +6,8 @@
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "executor/import_table.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "proto/d3d/buffer_slice_support.hpp"
@@ -477,6 +479,20 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
     PresentedSurface presented(*host_, device(), source);
     surfaces_->stage(SurfacePoint(key, point), SharedSurfaces::Staging::every_present, presented);
     return true;
+}
+
+bool D3d9Session::on_CopyToLent9(uint32_t surface_id, uint32_t subresource, const d3d9proto::Rect &source_rect,
+                                 uint64_t memory, uint32_t pitch, uint32_t x, uint32_t y)
+{
+    AV_SCOPE("D3d9Session::on_CopyToLent9");
+    lanes_.touch(device());
+    SourceMemory *const lent = imports_ != nullptr ? imports_->named(memory) : nullptr;
+    IDirect3DSurface9 *const source = lent != nullptr ? surface(surface_id, subresource) : nullptr;
+    if (source == nullptr) return false;
+    ScopeExit release([source] { source->Release(); });
+    const Status copied = lent_.copy(device(), source, source_rect, memory, *lent, pitch, x, y);
+    if (copied != Status::ok) lines_.note_hex("a copy into lent memory was refused, status", static_cast<uint32_t>(copied), 8u);
+    return copied == Status::ok;
 }
 
 }

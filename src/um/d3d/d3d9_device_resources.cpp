@@ -1,4 +1,5 @@
 #include "core/platform/block_source.hpp"
+#include "guest/transport/host_allocation.hpp"
 #include "core/log/log_line.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -193,6 +194,8 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     }
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
+    if (resource.lent != nullptr) lender_.retire(*resource.lent);
+    resource.lent = nullptr;
     if (!resource.opened) allocations_.give_back(resource.allocation, resource.allocation_resource);
 }
 
@@ -247,6 +250,15 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     made->allocation_pitch = layout.pitch();
     made->opened = true;
     made->cross_adapter = descriptor.kind() == AllocationKind::cross_adapter;
+    if (made->cross_adapter) {
+        if (lender_.lend(made->allocation, descriptor.size(), made->lent) != Status::ok) {
+            lines_.write("the device took no opened cross-adapter surface's pages");
+            release_resource(*made);
+            static_cast<void>(resources_.destroy(made));
+            return E_OUTOFMEMORY;
+        }
+        if (packets_.constructed()) packets_.object().engage();
+    }
     if (FAILED(allocations_.keep_resident(made->allocation))) {
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
@@ -853,34 +865,22 @@ HRESULT D3d9Device::blt_to_cross_adapter(const D3d9Resource &source, const D3d9R
                                          const D3DDDIARG_BLT &blt)
 {
     AV_SCOPE("D3d9Device::blt_to_cross_adapter");
-    if (source.format != destination.format || source.kind == D3d9Resource::Kind::system) return E_NOTIMPL;
+    if (source.format != destination.format || source.kind == D3d9Resource::Kind::system ||
+        destination.lent == nullptr)
+        return E_NOTIMPL;
     const LONG wide = blt.SrcRect.right - blt.SrcRect.left, high = blt.SrcRect.bottom - blt.SrcRect.top;
     if (wide <= 0 || high <= 0 || wide != blt.DstRect.right - blt.DstRect.left ||
-        high != blt.DstRect.bottom - blt.DstRect.top)
+        high != blt.DstRect.bottom - blt.DstRect.top || blt.DstRect.left < 0 || blt.DstRect.top < 0)
         return E_NOTIMPL;
+    uint32_t id = 0u, subresource = 0u;
+    if (!surface_of(source, blt.SrcSubResourceIndex, id, subresource)) return E_NOTIMPL;
     if (!send_states()) return lost(__func__);
-    uint32_t pitch = 0u, rows = 0u;
-    const HRESULT read = read_surface(source, blt.SrcSubResourceIndex, pitch, rows);
-    if (FAILED(read)) return read;
-    const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
-    auto *const            pixels = static_cast<uint8_t *>(kernel_.lock_to_write(destination.allocation));
-    if (pixels == nullptr) return E_FAIL;
-    const uint32_t top = static_cast<uint32_t>(blt.SrcRect.top);
-    const size_t   line = layout.row_bytes(static_cast<uint32_t>(wide));
-    const size_t   first = static_cast<size_t>(layout.offset_of(static_cast<uint32_t>(blt.SrcRect.left), top, pitch));
-    const size_t   start = static_cast<size_t>(layout.offset_of(static_cast<uint32_t>(blt.DstRect.left),
-                                                                static_cast<uint32_t>(blt.DstRect.top),
-                                                                destination.allocation_pitch));
-    const uint32_t limit = destination.subresources[0].height;
-    for (uint32_t row = 0u; row < layout.rows(static_cast<uint32_t>(high)) && top / layout.element_height() + row < rows &&
-                            static_cast<uint32_t>(blt.DstRect.top) / layout.element_height() + row < limit;
-         row++) {
-        const size_t from = first + size_t{row} * pitch;
-        const size_t into = start + size_t{row} * destination.allocation_pitch;
-        if (from + line > readback_bytes_ || line > destination.allocation_pitch) break;
-        memcpy(pixels + into, readback_ + from, line);
-    }
-    kernel_.unlock(destination.allocation);
+    const d3d9proto::Rect area = {blt.SrcRect.left, blt.SrcRect.top, blt.SrcRect.right, blt.SrcRect.bottom};
+    if (!d3d9proto::av_d3d9_CopyToLent9(wire(), id, subresource, area, destination.lent->handle(),
+                                        destination.allocation_pitch, static_cast<uint32_t>(blt.DstRect.left),
+                                        static_cast<uint32_t>(blt.DstRect.top)) ||
+        wire().flush() != Status::ok)
+        return lost(__func__);
     return S_OK;
 }
 

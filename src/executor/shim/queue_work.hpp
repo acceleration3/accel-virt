@@ -26,6 +26,8 @@ public:
 
     [[nodiscard]] bool copy(VkImage source, VkImageLayout layout, VkImage destination, uint32_t width,
                             uint32_t height, const VulkanTimeline &signal, uint64_t value);
+    [[nodiscard]] bool copy_to_buffer(VkImage source, VkImageLayout layout, VkBuffer destination,
+                                      const VkBufferImageCopy &region, const VulkanTimeline &signal, uint64_t value);
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
     [[nodiscard]] bool signal(const VulkanTimeline &timeline, uint64_t value);
     void               idle();

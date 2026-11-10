@@ -695,6 +695,54 @@ void fill_buffer(IDirect3DVertexBuffer9 *buffer, std::uint8_t byte)
 
 }
 
+TEST(d3d9_session_device, a_render_target_is_copied_into_lent_memory_row_by_row_and_a_copy_that_does_not_fit_is_refused)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice  *device11 = nullptr;
+    av::D3d9HostDevice   *device9 = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device11, device9, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports, source, 16u << 20u, 8u << 20u);
+    constexpr std::uint32_t pitch = size * 4u + 32u;
+    const std::uint64_t memory = wire.open_memory(av::HostMemoryRequest(av::HostMemoryRequest::Kind::readback, 0u),
+                                                  std::size_t{pitch} * size);
+    av::SourceMemory *const store = rig.imports.named(memory);
+    CHECK(store != nullptr);
+    std::memset(store->pointer(), 0x5a, store->size());
+
+    std::uint32_t hresult = 1u;
+    CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
+    CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, red, 1.0f, 0u));
+    const Rect right = {static_cast<std::int32_t>(size / 2u), 0, static_cast<std::int32_t>(size),
+                        static_cast<std::int32_t>(size)};
+    CHECK(av_d3d9_Clear9(wire, 1u, &right, clear_target, blue, 1.0f, 0u));
+    const Rect all = {0, 0, static_cast<std::int32_t>(size), static_cast<std::int32_t>(size)};
+    CHECK(av_d3d9_CopyToLent9(wire, target, 0u, all, memory, pitch, 0u, 0u));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    for (std::uint32_t y = 0u; y < size; y += 9u) {
+        const std::uint8_t *const row = store->pointer() + std::size_t{y} * pitch;
+        std::uint32_t left = 0u, edge = 0u;
+        std::memcpy(&left, row, sizeof(left));
+        std::memcpy(&edge, row + (size / 2u) * 4u, sizeof(edge));
+        CHECK_EQ(left, red);
+        CHECK_EQ(edge, blue);
+        CHECK_EQ(row[size * 4u], 0x5au);
+    }
+    CHECK(av_d3d9_CopyToLent9(wire, target, 0u, all, memory, size * 4u - 4u, 0u, 0u));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK(hresult != 0u);
+    wire.close_memory(memory);
+    backend.shut_down();
+}
+
 TEST(d3d9_session_device, a_buffer_on_a_slice_it_cannot_be_drawn_from_in_place_is_copied_into_before_each_draw)
 {
     av::ExecutorLogRig rig;

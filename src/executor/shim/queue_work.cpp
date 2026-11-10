@@ -137,6 +137,29 @@ bool QueueWork::copy(VkImage source, VkImageLayout layout, VkImage destination, 
     return send(slot, buffer, signal, value);
 }
 
+bool QueueWork::copy_to_buffer(VkImage source, VkImageLayout layout, VkBuffer destination,
+                               const VkBufferImageCopy &region, const VulkanTimeline &signal, uint64_t value)
+{
+    AV_SCOPE("QueueWork::copy_to_buffer");
+    if (!opened() || source == VK_NULL_HANDLE || destination == VK_NULL_HANDLE || !signal.made()) return false;
+    queue_->flush();
+    const uint32_t        slot = next_;
+    const VkCommandBuffer buffer = next_buffer();
+    if (!table_->begin(buffer)) return false;
+    const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+    const VkImageMemoryBarrier    before = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, VK_ACCESS_MEMORY_WRITE_BIT,
+                                            VK_ACCESS_TRANSFER_READ_BIT, layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, source, whole};
+    table_->barrier(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 1u, &before);
+    table_->copy_image_to_buffer(buffer, source, destination, region);
+    const VkImageMemoryBarrier after = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, VK_ACCESS_TRANSFER_READ_BIT,
+                                        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, layout, VK_QUEUE_FAMILY_IGNORED,
+                                        VK_QUEUE_FAMILY_IGNORED, source, whole};
+    table_->barrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 1u, &after);
+    return send(slot, buffer, signal, value);
+}
+
 bool QueueWork::send(uint32_t slot, VkCommandBuffer buffer, const VulkanTimeline &signal, uint64_t value)
 {
     AV_SCOPE("QueueWork::send");

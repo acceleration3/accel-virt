@@ -196,6 +196,16 @@ present that names the point is refused."""
 params = ["u32 surface", "u32 subresource", "u64 key", "u32 point"]
 
 [[command]]
+name = "CopyToLent9"
+id = 0x210e
+doc = """The pixels of `source_rect` of a render-target surface (or texture level), as the commands before this one left
+them, copied on the host GPU to rows of `pitch` bytes of guest memory the guest lent beforehand (docs/host-memory.md,
+named by the handle IMPORT_BLOB answered as `memory`), the first row at (`x`, `y`) of the lent surface. The lent memory
+is a cross-adapter allocation of the display adapter, which reads it in place. A copy that does not fit the memory, a
+surface that cannot be copied, or a device without Vulkan interop is refused."""
+params = ["u32 surface", "u32 subresource", "Rect source_rect", "u64 memory", "u32 pitch", "u32 x", "u32 y"]
+
+[[command]]
 name = "CreateVertexShader9"
 id = 0x2300
 doc = """A vertex shader from its Direct3D 9 token stream, as IDirect3DDevice9::CreateVertexShader takes it."""

@@ -92,6 +92,12 @@ namespace av::d3d9proto {
 // scanout open by it. Nothing is answered; a key of 0, or a surface not of four-byte pixels, stages nothing, and the
 // present that names the point is refused.
 [[nodiscard]] bool av_d3d9_PresentPoint9(::av::ClientTransport& t, uint32_t surface, uint32_t subresource, uint64_t key, uint32_t point);
+// The pixels of `source_rect` of a render-target surface (or texture level), as the commands before this one left
+// them, copied on the host GPU to rows of `pitch` bytes of guest memory the guest lent beforehand (docs/host-memory.md,
+// named by the handle IMPORT_BLOB answered as `memory`), the first row at (`x`, `y`) of the lent surface. The lent memory
+// is a cross-adapter allocation of the display adapter, which reads it in place. A copy that does not fit the memory, a
+// surface that cannot be copied, or a device without Vulkan interop is refused.
+[[nodiscard]] bool av_d3d9_CopyToLent9(::av::ClientTransport& t, uint32_t surface, uint32_t subresource, const Rect& source_rect, uint64_t memory, uint32_t pitch, uint32_t x, uint32_t y);
 // A vertex shader from its Direct3D 9 token stream, as IDirect3DDevice9::CreateVertexShader takes it.
 [[nodiscard]] bool av_d3d9_CreateVertexShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size);
 [[nodiscard]] bool av_d3d9_CreatePixelShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size);

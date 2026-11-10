@@ -68,6 +68,8 @@ public:
                                uint32_t count, const VkImageMemoryBarrier *barriers) const;
     void               copy_image(VkCommandBuffer buffer, VkImage source, VkImage destination,
                                   const VkImageCopy &region) const;
+    void               copy_image_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination,
+                                            const VkBufferImageCopy &region) const;
     [[nodiscard]] bool submit(VkQueue queue, const VkSubmitInfo &submit) const;
     void               queue_idle(VkQueue queue) const;
 
@@ -108,6 +110,7 @@ private:
     PFN_vkResetCommandBuffer         reset_;
     PFN_vkCmdPipelineBarrier         barrier_;
     PFN_vkCmdCopyImage               copy_image_;
+    PFN_vkCmdCopyImageToBuffer       copy_image_to_buffer_;
     PFN_vkQueueSubmit                submit_;
     PFN_vkQueueWaitIdle              queue_idle_;
     void (*lose_)(VkDevice device);

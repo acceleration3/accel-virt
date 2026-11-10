@@ -49,6 +49,7 @@ public:
     virtual bool on_StretchRect9(uint32_t source, uint32_t source_subresource, const Rect& source_rect, uint32_t destination, uint32_t destination_subresource, const Rect& destination_rect, uint32_t filter) = 0;
     virtual bool on_ColorFill9(uint32_t surface, uint32_t subresource, const Rect& rect, uint32_t color) = 0;
     virtual bool on_PresentPoint9(uint32_t surface, uint32_t subresource, uint64_t key, uint32_t point) = 0;
+    virtual bool on_CopyToLent9(uint32_t surface, uint32_t subresource, const Rect& source_rect, uint64_t memory, uint32_t pitch, uint32_t x, uint32_t y) = 0;
     virtual bool on_CreateVertexShader9(uint32_t shader, const uint8_t* code, uint64_t code_size) = 0;
     virtual bool on_CreatePixelShader9(uint32_t shader, const uint8_t* code, uint64_t code_size) = 0;
     virtual bool on_CreateVertexDeclaration9(uint32_t declaration, uint32_t count, const VertexElement* elements) = 0;

@@ -21,7 +21,7 @@ VulkanDeviceTable::VulkanDeviceTable()
       bind_(nullptr), layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
       import_semaphore_(nullptr), semaphore_fd_(nullptr), wait_semaphores_(nullptr), create_pool_(nullptr),
       destroy_pool_(nullptr), allocate_buffers_(nullptr), begin_(nullptr), end_(nullptr), reset_(nullptr),
-      barrier_(nullptr), copy_image_(nullptr), submit_(nullptr), queue_idle_(nullptr), lose_(nullptr)
+      barrier_(nullptr), copy_image_(nullptr), copy_image_to_buffer_(nullptr), submit_(nullptr), queue_idle_(nullptr), lose_(nullptr)
 {
     AV_SCOPE("VulkanDeviceTable::VulkanDeviceTable");
 }
@@ -70,6 +70,7 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     reset_ = reinterpret_cast<PFN_vkResetCommandBuffer>(entry("vkResetCommandBuffer"));
     barrier_ = reinterpret_cast<PFN_vkCmdPipelineBarrier>(entry("vkCmdPipelineBarrier"));
     copy_image_ = reinterpret_cast<PFN_vkCmdCopyImage>(entry("vkCmdCopyImage"));
+    copy_image_to_buffer_ = reinterpret_cast<PFN_vkCmdCopyImageToBuffer>(entry("vkCmdCopyImageToBuffer"));
     submit_ = reinterpret_cast<PFN_vkQueueSubmit>(entry("vkQueueSubmit"));
     queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(entry("vkQueueWaitIdle"));
     lose_ = reinterpret_cast<void (*)(VkDevice)>(entry("vkAvLoseDeviceAV"));
@@ -532,6 +533,14 @@ void VulkanDeviceTable::copy_image(VkCommandBuffer buffer, VkImage source, VkIma
     if (loaded())
         copy_image_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
+}
+
+void VulkanDeviceTable::copy_image_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination,
+                                             const VkBufferImageCopy &region) const
+{
+    AV_SCOPE("VulkanDeviceTable::copy_image_to_buffer");
+    if (loaded() && copy_image_to_buffer_ != nullptr)
+        copy_image_to_buffer_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination, 1u, &region);
 }
 
 bool VulkanDeviceTable::submit(VkQueue queue, const VkSubmitInfo &submitted) const
