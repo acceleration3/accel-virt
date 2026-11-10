@@ -100,7 +100,8 @@ constexpr uint32_t hardware_queue_node = 1u;
 
 }
 
-GdiKmt::GdiKmt() : clock_(), event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u)
+GdiKmt::GdiKmt() : clock_(), event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u),
+                   display_adapter_(0u), display_source_(0u), display_tried_(false)
 {
     AV_SCOPE("GdiKmt::GdiKmt");
 }
@@ -109,6 +110,11 @@ GdiKmt::~GdiKmt()
 {
     AV_SCOPE("GdiKmt::~GdiKmt");
     if (event_ != nullptr) CloseHandle(event_);
+    if (display_adapter_ != 0u) {
+        D3DKMT_CLOSEADAPTER close = {};
+        close.hAdapter = display_adapter_;
+        static_cast<void>(D3DKMTCloseAdapter(&close));
+    }
 }
 
 Status GdiKmt::initialize()
@@ -802,6 +808,27 @@ Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
     return status;
 }
 
+Status GdiKmt::open_display(uint32_t &adapter, uint32_t &source)
+{
+    AV_SCOPE("GdiKmt::open_display");
+    if (!display_tried_) {
+        display_tried_ = true;
+        const HDC screen = CreateDCW(L"DISPLAY", nullptr, nullptr, nullptr);
+        if (screen != nullptr) {
+            D3DKMT_OPENADAPTERFROMHDC open = {};
+            open.hDc = screen;
+            if (D3DKMTOpenAdapterFromHdc(&open) == 0) {
+                display_adapter_ = open.hAdapter;
+                display_source_ = open.VidPnSourceId;
+            }
+            static_cast<void>(DeleteDC(screen));
+        }
+    }
+    adapter = display_adapter_;
+    source = display_source_;
+    return adapter != 0u ? Status::ok : Status::not_found;
+}
+
 Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source)
 {
     AV_SCOPE("GdiKmt::wait_for_vertical_blank");
@@ -809,7 +836,13 @@ Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32
     wait.hAdapter = adapter;
     wait.hDevice = device;
     wait.VidPnSourceId = source;
-    return answer(D3DKMTWaitForVerticalBlankEvent(&wait));
+    const Status own = answer(D3DKMTWaitForVerticalBlankEvent(&wait));
+    uint32_t     display = 0u, display_source = 0u;
+    if (own == Status::ok || open_display(display, display_source) != Status::ok || display == adapter) return own;
+    D3DKMT_WAITFORVERTICALBLANKEVENT shown = {};
+    shown.hAdapter = display;
+    shown.VidPnSourceId = display_source;
+    return answer(D3DKMTWaitForVerticalBlankEvent(&shown));
 }
 
 Status GdiKmt::scan_line(uint32_t adapter, uint32_t source, BeamPosition &position)
@@ -818,7 +851,14 @@ Status GdiKmt::scan_line(uint32_t adapter, uint32_t source, BeamPosition &positi
     D3DKMT_GETSCANLINE read = {};
     read.hAdapter = adapter;
     read.VidPnSourceId = source;
-    const Status answered = answer(D3DKMTGetScanLine(&read));
+    Status answered = answer(D3DKMTGetScanLine(&read));
+    uint32_t display = 0u, display_source = 0u;
+    if (answered != Status::ok && open_display(display, display_source) == Status::ok && display != adapter) {
+        read = {};
+        read.hAdapter = display;
+        read.VidPnSourceId = display_source;
+        answered = answer(D3DKMTGetScanLine(&read));
+    }
     if (answered == Status::ok) position = BeamPosition(read.InVerticalBlank != FALSE, read.ScanLine);
     return answered;
 }
@@ -833,7 +873,14 @@ Status GdiKmt::refresh_millihz(uint32_t adapter, uint32_t source, uint32_t &mill
     query.Type = KMTQAITYPE_CURRENTDISPLAYMODE;
     query.pPrivateDriverData = &current;
     query.PrivateDriverDataSize = sizeof current;
-    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    Status   status = answer(D3DKMTQueryAdapterInfo(&query));
+    uint32_t display = 0u, display_source = 0u;
+    if (status != Status::ok && open_display(display, display_source) == Status::ok && display != adapter) {
+        current = {};
+        current.VidPnSourceId = display_source;
+        query.hAdapter = display;
+        status = answer(D3DKMTQueryAdapterInfo(&query));
+    }
     if (status != Status::ok) return status;
     const D3DDDI_RATIONAL &rate = current.DisplayMode.RefreshRate;
     const uint64_t         exact = rate.Denominator != 0u

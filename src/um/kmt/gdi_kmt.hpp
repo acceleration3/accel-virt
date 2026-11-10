@@ -91,6 +91,7 @@ private:
     Status await_event();
     void   remember(uint32_t adapter, uint64_t luid);
     void   forget(uint32_t adapter);
+    [[nodiscard]] Status open_display(uint32_t &adapter, uint32_t &source);
 
     static constexpr uint32_t max_adapters = 16u;
     static constexpr uint32_t known_capacity = 2u * max_adapters;
@@ -101,6 +102,9 @@ private:
     uint32_t known_adapters_[known_capacity];
     uint64_t known_luids_[known_capacity];
     uint32_t known_;
+    uint32_t display_adapter_;
+    uint32_t display_source_;
+    bool     display_tried_;
 };
 
 }
