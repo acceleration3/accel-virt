@@ -50,6 +50,7 @@ bool             stage_client_multi_elements(const GLsizei *count, GLenum type, 
 bool             refuse_client_arrays() noexcept;
 void             finish_client_draw() noexcept;
 void             begin_client_primitives() noexcept;
+bool             answer_device_luid(GLenum pname, GLubyte *data) noexcept;
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint *params) noexcept;
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint64 *params) noexcept;
 bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint *params) noexcept;

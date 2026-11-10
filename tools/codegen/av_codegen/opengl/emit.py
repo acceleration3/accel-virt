@@ -1924,6 +1924,7 @@ BIND_SHADOW = {
 }
 
 ANSWERED_BY_GUEST_NAMES = {
+    "glGetUnsignedBytevEXT": "::av::glicd::answer_device_luid(pname, data)",
     "glGetBufferParameteriv": "::av::glicd::answer_buffer_map_state(target, pname, params)",
     "glGetBufferParameteri64v": "::av::glicd::answer_buffer_map_state(target, pname, params)",
     "glGetNamedBufferParameteriv": "::av::glicd::answer_named_buffer_map_state(buffer, pname, params)",

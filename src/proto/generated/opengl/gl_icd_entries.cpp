@@ -9389,6 +9389,7 @@ void APIENTRY Wrap_glGetUnsignedBytevEXT(GLenum pname, GLubyte* data) {
     AV_SCOPE("glGetUnsignedBytevEXT");
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
+    if (::av::glicd::answer_device_luid(pname, data)) return;
     ::av::glproto::av_glGetUnsignedBytevEXT(*av_t, pname, data);
 }
 

@@ -390,6 +390,17 @@ void begin_client_primitives() noexcept
     if (gl_icd_binding.bound()) gl_icd_binding.root().manual().begin_primitives();
 }
 
+bool answer_device_luid(GLenum pname, GLubyte *data) noexcept
+{
+    AV_SCOPE("answer_device_luid");
+    constexpr GLenum gl_device_luid = 0x9599u;
+    const GuestGlContext *const context = current_context();
+    if (pname != gl_device_luid || data == nullptr || context == nullptr || context->adapter_luid() == 0u) return false;
+    const uint64_t luid = context->adapter_luid();
+    __builtin_memcpy(data, &luid, sizeof luid);
+    return true;
+}
+
 bool legacy_calls_live() noexcept
 {
     AV_SCOPE("legacy_calls_live");
