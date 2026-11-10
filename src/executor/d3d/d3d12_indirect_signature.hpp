@@ -17,9 +17,11 @@ class D3d12IndirectSignature {
 public:
     static constexpr uint32_t max_arguments = 16u;
     static constexpr uint32_t max_stride = 1u << 16u;
+    static constexpr uint32_t max_vertex_slots = 16u;
 
     D3d12IndirectSignature(const d3d12proto::IndirectArgument *arguments, uint32_t count, uint32_t stride);
 
+    bool                    addressed() const;
     bool                    holds(const D3d12RootLayout *root, bool mesh_shaders = false) const;
     ID3D12CommandSignature *make(ID3D12Device *device, ID3D12RootSignature *root) const;
 
@@ -38,6 +40,7 @@ private:
         dispatch_mesh,
     };
     static constexpr uint32_t word_bytes = 4u;
+    static constexpr uint32_t root_cbv = 2u;
 
     uint64_t bytes_of(const d3d12proto::IndirectArgument &argument, const D3d12RootLayout *root) const;
 

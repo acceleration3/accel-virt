@@ -134,7 +134,7 @@ StagedFrame *PresentedResource::stage()
 D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
                            EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
-      joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
+      joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks), indirect_table_(addresses_),
       progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), allocators_(blocks), queries_(blocks), refused_creates_(), views_(objects_, addresses_),
       pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), retained_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), polled_at_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
 {
@@ -184,6 +184,7 @@ void D3d12Session::shut_down()
     presentation_.bind(nullptr, nullptr, nullptr);
     progress_.clear();
     addresses_.clear();
+    indirect_table_.forget();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
     if (drained) block_heaps_.destroy_all();
     else block_heaps_.leak_all();
@@ -903,6 +904,7 @@ bool D3d12Session::on_CreateCommandSignature12(uint32_t signature, uint32_t root
     D3d12RootLayout layout;
     if (device_ == nullptr || (root != 0u && (rooted == nullptr || !layout.read(rooted)))) return false;
     const D3d12IndirectSignature made(arguments, argument_count, byte_stride);
+    if (made.addressed() && !device_->translates_indirect_addresses()) return false;
     if (!made.holds(rooted != nullptr ? &layout : nullptr, device_->capabilities().caps().mesh_shader_tier != 0u)) return false;
     return kept(signature, D3dObjectKind::command_signature12, made.make(device_->device(), rooted));
 }

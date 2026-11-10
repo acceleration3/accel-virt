@@ -443,8 +443,15 @@ bool D3d12Session::on_ExecuteIndirect12(uint32_t id, uint32_t signature, uint32_
     if (!retain(id, signed_by, nullptr) || !retain_resource(id, argument_buffer) ||
         (counts != nullptr && !retain_resource(id, count_buffer)))
         return false;
+    uint64_t table_address = 0u;
+    if (stride.addressed()) {
+        ID3D12Resource *const table = indirect_table_.current(*device_->device(), table_address);
+        if (table == nullptr || !retain(id, table, nullptr)) return false;
+        device_->set_indirect_va_table(recorded, table_address);
+    }
     recorded->ExecuteIndirect(signed_by, max_count, arguments, argument_offset, counts,
                               counts != nullptr ? count_offset : 0u);
+    if (stride.addressed()) device_->set_indirect_va_table(recorded, 0u);
     return true;
 }
 

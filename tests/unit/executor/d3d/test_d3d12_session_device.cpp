@@ -490,6 +490,93 @@ TEST(d3d12_session_device, a_triangle_drawn_indirectly_reads_back_where_it_was_d
     backend.shut_down();
 }
 
+namespace {
+
+constexpr IndirectArgument vertex_view_argument = {3u, 0u, 0u, 0u};
+constexpr std::uint32_t view_command_bytes = 32u;
+
+void indirect_through_a_vertex_view(av::D3dLoopback &wire, std::uint64_t view_address, bool &translated)
+{
+    make_frame(wire);
+    make_triangle(wire, false);
+    struct Command {
+        std::uint64_t address;
+        std::uint32_t size, stride;
+        std::uint32_t draw[4];
+    } command = {view_address, 3u * sizeof(Vertex), sizeof(Vertex), {3u, 1u, 0u, 0u}};
+    std::memcpy(wire.memory(heaps.upload, arguments_at), &command, sizeof command);
+    CHECK(av_d3d12_CreatePlacedResource12(wire, arguments, upload_heap, arguments_at, buffer_of(argument_bytes),
+                                           state_generic_read, ClearValue{}, upload_address + arguments_at));
+    const IndirectArgument taken[2] = {vertex_view_argument, draw_argument};
+    translated = av_d3d12_CreateCommandSignature12(wire, signature, 0u, view_command_bytes, 2u, taken);
+}
+
+}
+
+TEST(d3d12_session_device, a_vertex_buffer_view_in_an_argument_buffer_reaches_the_host_translated)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    if (!imports(*device12, wire) || !device12->translates_indirect_addresses()) {
+        std::fprintf(stderr, "this vkd3d-proton translates no indirect addresses: nothing judged\n");
+        backend.shut_down();
+        return;
+    }
+    bool made = false;
+    indirect_through_a_vertex_view(wire, upload_address, made);
+    CHECK(made);
+    bind_triangle(wire);
+    const VertexBufferView emptied = {upload_address, 0u, sizeof(Vertex)};
+    CHECK(av_d3d12_SetVertexBuffers12(wire, list, 0u, 1u, &emptied));
+    CHECK(av_d3d12_ExecuteIndirect12(wire, list, signature, 1u, arguments, 0u, 0u, 0u));
+    read_frame(wire);
+    judge_triangle(wire);
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    backend.shut_down();
+}
+
+TEST(d3d12_session_device, a_vertex_buffer_view_naming_no_buffer_draws_nothing_and_leaves_the_device_healthy)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    if (!imports(*device12, wire) || !device12->translates_indirect_addresses()) {
+        backend.shut_down();
+        return;
+    }
+    bool made = false;
+    indirect_through_a_vertex_view(wire, 0x7ead00000000ull, made);
+    CHECK(made);
+    bind_triangle(wire);
+    CHECK(av_d3d12_ExecuteIndirect12(wire, list, signature, 1u, arguments, 0u, 0u, 0u));
+    read_frame(wire);
+    CHECK_EQ(pixel(wire, 4u, size / 2u), 0xff0000ffu);
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    backend.shut_down();
+}
+
 TEST(d3d12_session_device, each_indirect_misuse_removes_a_healthy_device)
 {
     av::ExecutorLogRig rig;

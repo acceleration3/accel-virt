@@ -14,6 +14,7 @@
 #include "executor/d3d/d3d12_query_heaps.hpp"
 #include "executor/d3d/d3d12_refused_creates.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
+#include "executor/d3d/d3d12_indirect_table.hpp"
 #include "executor/d3d/d3d12_retain_memo.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
@@ -234,6 +235,7 @@ private:
     D3dObjectTable        &objects_;
     WatchedBlocks         &blocks_;
     D3d12AddressMap        addresses_;
+    D3d12IndirectTable     indirect_table_;
     D3d12QueueProgress     progress_;
     GpuWorkWindow          work_window_;
     D3d12BlockHeaps        block_heaps_;

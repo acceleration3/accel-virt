@@ -3,6 +3,7 @@
 
 #include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
+#include "executor/gpu_range_table.hpp"
 
 #include <stdint.h>
 
@@ -20,6 +21,8 @@ public:
     uint32_t           owner(uint64_t guest, uint64_t &offset) const;
     void               clear();
     uint32_t           count() const;
+    uint32_t           version() const;
+    uint32_t           rows(GpuRangeTable::Row *out, uint32_t capacity) const;
 
     bool invariants_hold() const;
 
@@ -34,6 +37,7 @@ private:
     uint32_t below(uint64_t guest) const;
 
     GrowableArray<Range> ranges_;
+    uint32_t             version_;
 };
 
 }

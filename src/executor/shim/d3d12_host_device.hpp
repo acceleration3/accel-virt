@@ -14,6 +14,7 @@
 struct ID3D12CommandQueue;
 struct ID3D12Device;
 struct ID3D12Fence;
+struct ID3D12GraphicsCommandList;
 struct ID3D12Heap;
 struct ID3D12Resource;
 struct ID3D12RootSignature;
@@ -54,6 +55,8 @@ public:
     ID3D12Heap                *import_dmabuf_heap(void *address, int fd, uint64_t size) const;
     ID3D12RootSignature       *root_signature(const void *desc) const;
     [[nodiscard]] bool         export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const;
+    bool                       translates_indirect_addresses() const;
+    void                       set_indirect_va_table(ID3D12GraphicsCommandList *list, uint64_t table) const;
     [[nodiscard]] bool         export_fence(ID3D12Fence *fence, OwnedFd &descriptor) const;
     StagedFrame               *stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source);
 

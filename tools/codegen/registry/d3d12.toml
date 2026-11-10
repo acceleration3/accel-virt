@@ -321,8 +321,7 @@ id = 0x1303
 doc = """What ExecuteIndirect12 reads each command from: byte_stride bytes a command, laid out as the
 arguments say. root is the root signature the arguments that set root parameters name, 0 for none. An argument
 that carries a GPU address - a vertex or index buffer view, a constant buffer, shader resource or unordered access
-view buffer - is refused: the GPU would read the guest's address from the argument buffer, which the host cannot
-translate."""
+view buffer - holds the guest's address, which the host translates on the GPU before ExecuteIndirect12 runs."""
 params = ["u32 signature", "u32 root", "u32 byte_stride", "u32 argument_count",
           "IndirectArgument arguments[argument_count] max 16"]
 

@@ -1,0 +1,235 @@
+From: accel-virt
+Subject: [PATCH] the ExecuteIndirect state patch pass translates the addresses of vertex, index and root descriptor arguments through a table the caller sets
+
+accel-virt: the application GPU virtual addresses in an argument buffer are not the device addresses. vkd3d_set_indirect_va_table gives a command list the address of a sorted range table; with it set, every ExecuteIndirect whose signature carries an address argument is patched, each address argument is looked up, an address outside every range becomes the table's fallback address and the size of a vertex or index buffer view is cut to the room the range leaves (zero outside every range), and commands are not batched.
+---
+--- a/libs/vkd3d/command.c
++++ b/libs/vkd3d/command.c
+@@ -16702,6 +16702,7 @@
+     bool restart_predication;
+     bool explicit_preprocess;
+     bool require_ibo_update;
++    bool require_va_translation;
+     bool require_patch;
+     const char *tag;
+     unsigned int i;
+@@ -16783,7 +16784,7 @@
+ 
+     /* Don't try to batch if we have predication since it's just needless complexity.
+      * Don't do this on tilers since we'll be introducing more technically unnecessary render pass flushes. */
+-    if (!list->predication.va && dgc_mode == VKD3D_DGC_MODE_APPLICATION_CALL &&
++    if (!list->predication.va && dgc_mode == VKD3D_DGC_MODE_APPLICATION_CALL && !list->indirect_va_table &&
+         !list->device->workarounds.tiler_suspend_resume &&
+         !explicit_preprocess && list->state && list->state->pipeline_type != VKD3D_PIPELINE_TYPE_COMPUTE)
+     {
+@@ -16841,6 +16842,7 @@
+ 
+     /* If everything regarding alignment works out, we can just reuse the app indirect buffer instead. */
+     require_ibo_update = false;
++    require_va_translation = false;
+     require_patch = false;
+ 
+     /* Bind IBO. If we always update the IBO indirectly, do not validate the index buffer here.
+@@ -16854,8 +16856,27 @@
+         }
+     }
+ 
++    if (list->indirect_va_table)
++    {
++        for (i = 0; i < signature->desc.NumArgumentDescs; i++)
++        {
++            switch (signature->desc.pArgumentDescs[i].Type)
++            {
++                case D3D12_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW:
++                case D3D12_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW:
++                case D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW:
++                case D3D12_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW:
++                case D3D12_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW:
++                    require_va_translation = true;
++                    break;
++                default:
++                    break;
++            }
++        }
++    }
++
+     if ((signature->state_template.dgc.stride != signature->desc.ByteStride && max_command_count > 1) ||
+-            patch_args.debug_tag)
++            patch_args.debug_tag || require_va_translation)
+     {
+         require_patch = true;
+     }
+@@ -16889,6 +16910,7 @@
+         }
+ 
+         patch_args.template_va = signature->state_template.dgc.buffer_va;
++        patch_args.translation_va = require_va_translation ? list->indirect_va_table : 0;
+         patch_args.api_buffer_va = arg_buffer->res.va + arg_buffer_offset;
+         patch_args.device_generated_commands_va = stream_allocation.va;
+         patch_args.indirect_count_va = count_buffer ? count_buffer->res.va + count_buffer_offset : 0;
+@@ -25797,3 +25819,17 @@
+     }
+     return S_OK;
+ }
++
++/* accel-virt: the address of a table that maps the GPU virtual addresses an
++ * application wrote into argument buffers to the device's own, which the
++ * state patch pass of ExecuteIndirect applies to every address argument. */
++HRESULT vkd3d_set_indirect_va_table(ID3D12GraphicsCommandList *iface, UINT64 table_va)
++{
++    struct d3d12_command_list *list;
++
++    if (!iface)
++        return E_INVALIDARG;
++    list = impl_from_ID3D12GraphicsCommandList((d3d12_command_list_iface *)iface);
++    list->indirect_va_table = table_va;
++    return S_OK;
++}
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -3207,6 +3207,7 @@
+ struct d3d12_command_list
+ {
+     d3d12_command_list_iface ID3D12GraphicsCommandList_iface;
++    VkDeviceAddress indirect_va_table;
+     d3d12_command_list_vkd3d_ext_iface ID3D12GraphicsCommandListExt_iface;
+     LONG refcount;
+ 
+@@ -4797,6 +4798,8 @@
+     /* Arbitrary tag used for debug version of state patcher. Debug messages from tag 0 are ignored. */
+     uint32_t debug_tag;
+     uint32_t implicit_instance;
++
++    VkDeviceAddress translation_va;
+ };
+ 
+ struct vkd3d_execute_indirect_pipeline
+--- a/include/vkd3d.h
++++ b/include/vkd3d.h
+@@ -227,6 +227,13 @@
+  * values are the fence's own. */
+ HRESULT vkd3d_export_fence(ID3D12Fence *fence, int *fd);
+ 
++/* The address of a table that maps application GPU virtual addresses in
++ * ExecuteIndirect argument buffers to device addresses, or 0 for none:
++ * u32 count, u32 pad, u64 address used for an unmapped argument, then count
++ * ranges of {u64 application address, u64 bytes, u64 device address} sorted
++ * by application address. */
++HRESULT vkd3d_set_indirect_va_table(ID3D12GraphicsCommandList *list, UINT64 table_va);
++
+ HRESULT vkd3d_serialize_root_signature(const D3D12_ROOT_SIGNATURE_DESC *desc,
+         D3D_ROOT_SIGNATURE_VERSION version, ID3DBlob **blob, ID3DBlob **error_blob);
+ HRESULT vkd3d_create_root_signature_deserializer(const void *data, SIZE_T data_size,
+--- a/libs/d3d12core/d3d12core.def
++++ b/libs/d3d12core/d3d12core.def
+@@ -8,4 +8,5 @@
+     vkd3d_proton_abandon_waits
+     vkd3d_proton_export_image
+     vkd3d_proton_export_fence
++    vkd3d_proton_set_indirect_va_table
+     D3D12SDKVersion DATA PRIVATE
+--- a/libs/d3d12core/main.c
++++ b/libs/d3d12core/main.c
+@@ -1387,6 +1387,11 @@
+     return vkd3d_export_fence(fence, fd);
+ }
+ 
++HRESULT WINAPI DLLEXPORT vkd3d_proton_set_indirect_va_table(ID3D12GraphicsCommandList *list, UINT64 table_va)
++{
++    return vkd3d_set_indirect_va_table(list, table_va);
++}
++
+ HRESULT WINAPI DLLEXPORT vkd3d_proton_open_heap_from_host_pointer(ID3D12Device *device, void *address,
+         UINT64 size, REFIID iid, void **heap)
+ {
+--- a/libs/vkd3d/shaders/cs_execute_indirect_patch.comp
++++ b/libs/vkd3d/shaders/cs_execute_indirect_patch.comp
+@@ -1,6 +1,7 @@
+ #version 450
+ #extension GL_EXT_buffer_reference : require
+ #extension GL_EXT_buffer_reference_uvec2 : require
++#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+ 
+ layout(local_size_x_id = 0) in;
+ 
+@@ -32,6 +33,20 @@
+ 	uint count;
+ };
+ 
++struct TranslationRange
++{
++	uint64_t guest;
++	uint64_t bytes;
++	uint64_t host;
++};
++
++layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer Translation {
++	uint count;
++	uint pad;
++	uint64_t unmapped;
++	TranslationRange ranges[];
++};
++
+ layout(push_constant) uniform Registers
+ {
+ 	Commands commands_va;
+@@ -41,6 +56,9 @@
+ 	IndirectCountWrite dst_indirect_count_va;
+ 	uint src_stride;
+ 	uint dst_stride;
++	uint debug_tag;
++	uint implicit_instance;
++	Translation translation_va;
+ };
+ 
+ void main()
+@@ -62,6 +80,49 @@
+ 		uint src_offset = src_stride * draw_id + cmd.src_offset;
+ 		uint dst_offset = dst_stride * draw_id + cmd.dst_offset;
+ 		uint src_value = src_buffer_va.values[src_offset];
++
++		if (uvec2(translation_va) != uvec2(0))
++		{
++			uint token = cmd.type;
++			bool is_lo = token == 1u || token == 5u || token == 9u;
++			bool is_hi = token == 2u || token == 6u || token == 10u;
++			bool is_size = token == 3u || token == 7u;
++			if (is_lo || is_hi || is_size)
++			{
++				uint va_word = src_stride * draw_id + cmd.src_offset - (is_hi ? 1u : (is_size ? 2u : 0u));
++				uint64_t va = uint64_t(src_buffer_va.values[va_word]) | (uint64_t(src_buffer_va.values[va_word + 1u]) << 32);
++				uint lo_index = 0u;
++				uint hi_index = translation_va.count;
++				while (lo_index < hi_index)
++				{
++					uint mid = (lo_index + hi_index) >> 1u;
++					if (translation_va.ranges[mid].guest <= va)
++						lo_index = mid + 1u;
++					else
++						hi_index = mid;
++				}
++				bool mapped = false;
++				uint64_t host = translation_va.unmapped;
++				uint64_t room = 0ul;
++				if (lo_index != 0u)
++				{
++					TranslationRange range = translation_va.ranges[lo_index - 1u];
++					uint64_t into = va - range.guest;
++					if (into < range.bytes)
++					{
++						mapped = true;
++						host = range.host + into;
++						room = range.bytes - into;
++					}
++				}
++				if (is_size)
++					src_value = mapped ? uint(min(uint64_t(src_value), room)) : 0u;
++				else if (is_lo)
++					src_value = uint(host & 0xfffffffful);
++				else
++					src_value = uint(host >> 32);
++			}
++		}
+ 		dst_buffer_va.values[dst_offset] = src_value;
+ 	}
+ }

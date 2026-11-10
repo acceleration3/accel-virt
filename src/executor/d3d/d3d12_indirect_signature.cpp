@@ -14,6 +14,18 @@ D3d12IndirectSignature::D3d12IndirectSignature(const d3d12proto::IndirectArgumen
     AV_SCOPE("D3d12IndirectSignature::D3d12IndirectSignature");
 }
 
+bool D3d12IndirectSignature::addressed() const
+{
+    AV_SCOPE("D3d12IndirectSignature::addressed");
+    for (uint32_t index = 0u; index < count_; index++) {
+        const uint32_t type = arguments_[index].type;
+        if (type == vertex_buffer_view || type == index_buffer_view || type == constant_buffer_view ||
+            type == shader_resource_view || type == unordered_access_view)
+            return true;
+    }
+    return false;
+}
+
 bool D3d12IndirectSignature::holds(const D3d12RootLayout *root, bool mesh_shaders) const
 {
     AV_SCOPE("D3d12IndirectSignature::holds");
@@ -40,6 +52,14 @@ uint64_t D3d12IndirectSignature::bytes_of(const d3d12proto::IndirectArgument &ar
     case draw_indexed: return sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
     case dispatch:
     case dispatch_mesh: return sizeof(D3D12_DISPATCH_ARGUMENTS);
+    case vertex_buffer_view: return argument.a < max_vertex_slots ? sizeof(D3D12_VERTEX_BUFFER_VIEW) : 0u;
+    case index_buffer_view: return sizeof(D3D12_INDEX_BUFFER_VIEW);
+    case constant_buffer_view:
+    case shader_resource_view:
+    case unordered_access_view:
+        return root != nullptr && root->has_descriptor(argument.a, argument.type - constant_buffer_view + root_cbv)
+                   ? sizeof(D3D12_GPU_VIRTUAL_ADDRESS)
+                   : 0u;
     case constant:
         return root != nullptr && root->has_constants(argument.a, argument.b, argument.c)
                    ? uint64_t{argument.c} * word_bytes
@@ -63,7 +83,7 @@ ID3D12CommandSignature *D3d12IndirectSignature::make(ID3D12Device *device, ID3D1
     if (FAILED(device->CreateCommandSignature(&desc, root, __uuidof(ID3D12CommandSignature),
                                               reinterpret_cast<void **>(&made))))
         return nullptr;
-    if (D3d12IndirectStride(stride_).stamp(made)) return made;
+    if (D3d12IndirectStride(stride_, addressed()).stamp(made)) return made;
     made->Release();
     return nullptr;
 }

@@ -79,8 +79,7 @@ namespace av::d3d12proto {
 // What ExecuteIndirect12 reads each command from: byte_stride bytes a command, laid out as the
 // arguments say. root is the root signature the arguments that set root parameters name, 0 for none. An argument
 // that carries a GPU address - a vertex or index buffer view, a constant buffer, shader resource or unordered access
-// view buffer - is refused: the GPU would read the guest's address from the argument buffer, which the host cannot
-// translate.
+// view buffer - holds the guest's address, which the host translates on the GPU before ExecuteIndirect12 runs.
 [[nodiscard]] bool av_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments);
 // A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
 // container, a DXIL program, or a DXBC token stream - and empty for a stage the pipeline does not have; the

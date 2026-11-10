@@ -5,7 +5,7 @@
 
 namespace av {
 
-D3d12AddressMap::D3d12AddressMap(BlockSource &blocks) : ranges_(blocks, Pool::paged)
+D3d12AddressMap::D3d12AddressMap(BlockSource &blocks) : ranges_(blocks, Pool::paged), version_(0u)
 {
     AV_SCOPE("D3d12AddressMap::D3d12AddressMap");
 }
@@ -25,7 +25,9 @@ Status D3d12AddressMap::insert(uint64_t guest, uint64_t size, uint64_t host, uin
     if (before != count && guest - ranges_.at(before).guest_ < ranges_.at(before).size_) return Status::conflict;
     const uint32_t at = before == count ? 0u : before + 1u;
     if (at < count && ranges_.at(at).guest_ - guest < size) return Status::conflict;
-    return ranges_.insert_at(at, Range{guest, size, host, id});
+    const Status inserted = ranges_.insert_at(at, Range{guest, size, host, id});
+    if (inserted == Status::ok) version_++;
+    return inserted;
 }
 
 void D3d12AddressMap::remove(uint32_t id)
@@ -34,6 +36,7 @@ void D3d12AddressMap::remove(uint32_t id)
     for (uint32_t index = 0u; index < ranges_.size(); index++) {
         if (ranges_.at(index).id_ != id) continue;
         ranges_.remove_at(index);
+        version_++;
         return;
     }
 }
@@ -63,12 +66,30 @@ void D3d12AddressMap::clear()
 {
     AV_SCOPE("D3d12AddressMap::clear");
     ranges_.clear();
+    version_++;
 }
 
 uint32_t D3d12AddressMap::count() const
 {
     AV_SCOPE("D3d12AddressMap::count");
     return ranges_.size();
+}
+
+uint32_t D3d12AddressMap::version() const
+{
+    AV_SCOPE("D3d12AddressMap::version");
+    return version_;
+}
+
+uint32_t D3d12AddressMap::rows(GpuRangeTable::Row *out, uint32_t capacity) const
+{
+    AV_SCOPE("D3d12AddressMap::rows");
+    const uint32_t taken = ranges_.size() < capacity ? ranges_.size() : capacity;
+    for (uint32_t index = 0u; index < taken; index++) {
+        const Range &range = ranges_.at(index);
+        out[index] = GpuRangeTable::Row{range.guest_, range.size_, range.host_};
+    }
+    return taken;
 }
 
 bool D3d12AddressMap::invariants_hold() const

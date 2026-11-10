@@ -35,6 +35,8 @@ public:
     int32_t export_image(void *resource, Vkd3dImageExport &image) const;
     int32_t export_fence(void *fence, int &fd) const;
     void    abandon_waits(void *device) const;
+    bool    translates_indirect_addresses() const;
+    void    set_indirect_va_table(void *list, uint64_t table) const;
     int32_t serialize_root_signature(const void *desc, void *&blob) const;
 
 private:
@@ -51,6 +53,7 @@ private:
     using ExportFence = int32_t (*)(void *fence, int *fd);
     using SetVramGate = void (*)(const AvVramGate *gate);
     using AbandonWaits = void (*)(void *device);
+    using SetIndirectTable = int32_t (*)(void *list, uint64_t table);
 
     void *open_library(const char *name) const;
     uint32_t vulkan_index(const uint8_t *uuid) const;
@@ -69,6 +72,7 @@ private:
     ExportImage    export_image_;
     ExportFence    export_fence_;
     AbandonWaits   abandon_waits_;
+    SetIndirectTable set_indirect_table_;
 };
 
 }

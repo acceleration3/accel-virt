@@ -33,7 +33,7 @@ D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), d3d9_(nullptr), create_factory_(nullptr),
       create_device11_(nullptr), get_interface12_(nullptr), create9_(nullptr),
       open_dmabuf_heap_(nullptr),
-      serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr), abandon_waits_(nullptr)
+      serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr), abandon_waits_(nullptr), set_indirect_table_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
 }
@@ -73,6 +73,8 @@ bool D3dRuntime::open()
         export_image_ = reinterpret_cast<ExportImage>(dlsym(d3d12core_, "vkd3d_proton_export_image"));
         export_fence_ = reinterpret_cast<ExportFence>(dlsym(d3d12core_, "vkd3d_proton_export_fence"));
         abandon_waits_ = reinterpret_cast<AbandonWaits>(dlsym(d3d12core_, "vkd3d_proton_abandon_waits"));
+        set_indirect_table_ =
+            reinterpret_cast<SetIndirectTable>(dlsym(d3d12core_, "vkd3d_proton_set_indirect_va_table"));
     }
     d3d9_ = open_library("libdxvk_d3d9.so");
     if (d3d9_ != nullptr) create9_ = reinterpret_cast<Create9>(dlsym(d3d9_, "Direct3DCreate9"));
@@ -91,6 +93,7 @@ void D3dRuntime::close()
     export_image_ = nullptr;
     export_fence_ = nullptr;
     abandon_waits_ = nullptr;
+    set_indirect_table_ = nullptr;
     dxgi_ = nullptr;
     d3d11_ = nullptr;
     d3d12core_ = nullptr;
@@ -232,6 +235,18 @@ void D3dRuntime::abandon_waits(void *device) const
 {
     AV_SCOPE("D3dRuntime::abandon_waits");
     if (abandon_waits_ != nullptr && device != nullptr) abandon_waits_(device);
+}
+
+bool D3dRuntime::translates_indirect_addresses() const
+{
+    AV_SCOPE("D3dRuntime::translates_indirect_addresses");
+    return set_indirect_table_ != nullptr;
+}
+
+void D3dRuntime::set_indirect_va_table(void *list, uint64_t table) const
+{
+    AV_SCOPE("D3dRuntime::set_indirect_va_table");
+    if (set_indirect_table_ != nullptr && list != nullptr) static_cast<void>(set_indirect_table_(list, table));
 }
 
 int32_t D3dRuntime::export_fence(void *fence, int &fd) const

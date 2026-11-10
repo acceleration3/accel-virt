@@ -177,6 +177,18 @@ bool D3d12HostDevice::export_image(ID3D12Resource *resource, Vkd3dImageExport &i
     return runtime_ != nullptr && SUCCEEDED(runtime_->export_image(resource, image));
 }
 
+bool D3d12HostDevice::translates_indirect_addresses() const
+{
+    AV_SCOPE("D3d12HostDevice::translates_indirect_addresses");
+    return runtime_ != nullptr && runtime_->translates_indirect_addresses();
+}
+
+void D3d12HostDevice::set_indirect_va_table(ID3D12GraphicsCommandList *list, uint64_t table) const
+{
+    AV_SCOPE("D3d12HostDevice::set_indirect_va_table");
+    if (runtime_ != nullptr) runtime_->set_indirect_va_table(list, table);
+}
+
 bool D3d12HostDevice::export_fence(ID3D12Fence *fence, OwnedFd &descriptor) const
 {
     AV_SCOPE("D3d12HostDevice::export_fence");
