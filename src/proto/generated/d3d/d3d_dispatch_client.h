@@ -135,6 +135,9 @@ namespace av::d3dproto {
 // One subresource's contents, tightly packed: rows of row_pitch bytes (the format's bytes per row, or
 // block row), depth_pitch bytes a slice. Everything sent before it has run when it answers.
 [[nodiscard]] bool av_d3d_ReadSubresource(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t* hresult, uint32_t* row_pitch, uint32_t* depth_pitch, void* data, uint64_t data_capacity, uint64_t* data_size);
+// The bytes of one subresource ReadSubresource would answer, from `offset` into its tightly packed contents for
+// as many as the answer holds, for a subresource larger than one answer.
+[[nodiscard]] bool av_d3d_ReadSubresourceRange(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint64_t offset, uint32_t* hresult, uint32_t* row_pitch, uint32_t* depth_pitch, void* data, uint64_t data_capacity, uint64_t* data_size);
 // A blt-model present of a shared resource, the `point`th on it: the subresource as the commands before this
 // one left it, copied on the host GPU into a frame the present engine reads by the resource's shared id and this
 // point (docs/shared-surfaces.md, docs/protocol.md "Present engine"). Nothing is answered; a point of 0, a resource

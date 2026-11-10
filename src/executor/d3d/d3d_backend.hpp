@@ -193,6 +193,9 @@ public:
     bool on_ReadSubresource(uint32_t resource, uint32_t subresource, uint32_t &hresult, uint32_t &row_pitch,
                             uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity,
                             uint64_t &data_size) override;
+    bool on_ReadSubresourceRange(uint32_t resource, uint32_t subresource, uint64_t offset, uint32_t &hresult,
+                                 uint32_t &row_pitch, uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity,
+                                 uint64_t &data_size) override;
     bool on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point) override;
     bool on_QueryBufferSlices11(uint32_t &supported) override;
     bool on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes) override;
@@ -243,6 +246,9 @@ private:
     bool                     extent_of(ID3D11Resource *resource, uint32_t subresource, uint32_t &width,
                                        uint32_t &height, uint32_t &depth, uint32_t &format) const;
     void                     await_gpu_unlocked();
+    bool                     read_packed(uint32_t resource, uint32_t subresource, uint64_t offset, uint32_t &hresult,
+                                         uint32_t &row_pitch, uint32_t &depth_pitch, uint8_t *data,
+                                         uint64_t data_capacity, uint64_t &data_size, uint64_t &total);
     ID3D11Resource          *staging_for(ID3D11Resource *resource, uint32_t subresource, uint32_t width,
                                          uint32_t height, uint32_t depth, uint32_t format);
 

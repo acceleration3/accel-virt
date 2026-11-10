@@ -215,6 +215,23 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK_EQ(pixel(pixels, size - 4u, size / 2u), 0xff0000ffu);
     CHECK_EQ(wire.refused(), 0u);
 
+    static std::uint8_t pieces[size * size * 4u];
+    constexpr std::uint64_t first_piece = size * 4u * 3u + 5u;
+    std::uint64_t first_read = 0u, second_read = 0u;
+    CHECK(av_d3d_ReadSubresourceRange(wire, 1u, 0u, 0u, &hresult, &row_pitch, &depth_pitch, pieces, first_piece, &first_read));
+    CHECK_EQ(hresult, 0u);
+    CHECK_EQ(first_read, first_piece);
+    CHECK(av_d3d_ReadSubresourceRange(wire, 1u, 0u, first_piece, &hresult, &row_pitch, &depth_pitch, pieces + first_piece,
+                                      sizeof(pieces), &second_read));
+    CHECK_EQ(hresult, 0u);
+    CHECK_EQ(second_read, sizeof(pieces) - first_piece);
+    CHECK(std::memcmp(pieces, pixels, sizeof(pieces)) == 0);
+    CHECK(av_d3d_ReadSubresourceRange(wire, 1u, 0u, sizeof(pieces) + 1u, &hresult, &row_pitch, &depth_pitch, pieces, 16u,
+                                      &second_read));
+    CHECK_EQ(hresult, static_cast<std::uint32_t>(0x80070057u));
+    CHECK_EQ(second_read, std::uint64_t{0});
+    CHECK_EQ(wire.refused(), 0u);
+
     std::uint32_t removed = 1u;
     CHECK(av_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, 0u);

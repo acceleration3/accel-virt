@@ -16,6 +16,7 @@ public:
     static constexpr size_t lent_bytes = static_cast<size_t>(GuestBytes::slot_bytes / 2u);
     static constexpr size_t floor_bytes = size_t{4} << 20u;
     static constexpr size_t lent_read_bytes = size_t{4} << 20u;
+    static constexpr size_t whole_read_most = static_cast<size_t>(GuestBytes::slot_bytes) - (size_t{1} << 20u);
 
     TransferRoom(size_t staging_bytes, size_t reply_bytes);
 

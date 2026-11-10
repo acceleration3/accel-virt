@@ -523,6 +523,14 @@ params = ["u32 resource", "u32 subresource"]
 reply = ["u32 hresult", "u32 row_pitch", "u32 depth_pitch", "out_bytes data"]
 
 [[command]]
+name = "ReadSubresourceRange"
+id = 0x0418
+doc = """The bytes of one subresource ReadSubresource would answer, from `offset` into its tightly packed contents for
+as many as the answer holds, for a subresource larger than one answer."""
+params = ["u32 resource", "u32 subresource", "u64 offset"]
+reply = ["u32 hresult", "u32 row_pitch", "u32 depth_pitch", "out_bytes data"]
+
+[[command]]
 name = "PresentPoint"
 id = 0x040d
 doc = """A blt-model present of a shared resource, the `point`th on it: the subresource as the commands before this

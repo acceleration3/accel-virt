@@ -2126,10 +2126,41 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
                                     uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity, uint64_t &data_size)
 {
     AV_SCOPE("D3dBackend::on_ReadSubresource");
+    uint64_t total = 0u;
+    if (!read_packed(resource, subresource, 0u, hresult, row_pitch, depth_pitch, data, data_capacity, data_size, total))
+        return false;
+    if (hresult == static_cast<uint32_t>(S_OK) && total > data_capacity) {
+        hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
+        data_size = 0u;
+    }
+    return true;
+}
+
+bool D3dBackend::on_ReadSubresourceRange(uint32_t resource, uint32_t subresource, uint64_t offset, uint32_t &hresult,
+                                         uint32_t &row_pitch, uint32_t &depth_pitch, uint8_t *data,
+                                         uint64_t data_capacity, uint64_t &data_size)
+{
+    AV_SCOPE("D3dBackend::on_ReadSubresourceRange");
+    uint64_t total = 0u;
+    if (!read_packed(resource, subresource, offset, hresult, row_pitch, depth_pitch, data, data_capacity, data_size, total))
+        return false;
+    if (hresult == static_cast<uint32_t>(S_OK) && offset > total) {
+        hresult = static_cast<uint32_t>(E_INVALIDARG);
+        data_size = 0u;
+    }
+    return true;
+}
+
+bool D3dBackend::read_packed(uint32_t resource, uint32_t subresource, uint64_t offset, uint32_t &hresult,
+                             uint32_t &row_pitch, uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity,
+                             uint64_t &data_size, uint64_t &total)
+{
+    AV_SCOPE("D3dBackend::read_packed");
     hresult = static_cast<uint32_t>(E_FAIL);
     row_pitch = 0u;
     depth_pitch = 0u;
     data_size = 0u;
+    total = 0u;
     ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
@@ -2155,20 +2186,21 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     const DxgiFormatLayout layout(format);
     const uint32_t row = layout.copied_row_bytes(width);
     const uint32_t rows = layout.rows(height);
-    const uint64_t total = static_cast<uint64_t>(row) * rows * depth;
-    if (total <= data_capacity) {
-        for (uint32_t slice = 0u; slice < depth; slice++)
-            for (uint32_t line = 0u; line < rows; line++)
-                __builtin_memcpy(data + (static_cast<uint64_t>(slice) * rows + line) * row,
-                                 static_cast<const uint8_t *>(mapped.pData) +
-                                     static_cast<uint64_t>(slice) * mapped.DepthPitch +
-                                     static_cast<uint64_t>(line) * mapped.RowPitch,
-                                 row);
-        data_size = total;
-        hresult = static_cast<uint32_t>(S_OK);
-    } else {
-        hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
-    }
+    total = static_cast<uint64_t>(row) * rows * depth;
+    const uint64_t end = offset + data_capacity < offset ? total : (offset + data_capacity < total ? offset + data_capacity : total);
+    for (uint32_t slice = 0u; slice < depth; slice++)
+        for (uint32_t line = 0u; line < rows; line++) {
+            const uint64_t from = (static_cast<uint64_t>(slice) * rows + line) * row;
+            const uint64_t first = from > offset ? from : offset;
+            const uint64_t last = from + row < end ? from + row : end;
+            if (first >= last) continue;
+            __builtin_memcpy(data + (first - offset),
+                             static_cast<const uint8_t *>(mapped.pData) + static_cast<uint64_t>(slice) * mapped.DepthPitch +
+                                 static_cast<uint64_t>(line) * mapped.RowPitch + (first - from),
+                             last - first);
+        }
+    data_size = end > offset ? end - offset : 0u;
+    hresult = static_cast<uint32_t>(S_OK);
     context->Unmap(staging, 0u);
     staging->Release();
     row_pitch = row;

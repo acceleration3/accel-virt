@@ -787,6 +787,31 @@ bool av_d3d_ReadSubresource(::av::ClientTransport& t, uint32_t resource, uint32_
     return r.remaining() == 0u;
 }
 
+bool av_d3d_ReadSubresourceRange(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint64_t offset, uint32_t* hresult, uint32_t* row_pitch, uint32_t* depth_pitch, void* data, uint64_t data_capacity, uint64_t* data_size) {
+    AV_SCOPE("av_d3d_ReadSubresourceRange");
+    const uint64_t blob_sizes[] = {data_capacity > inline_reply_bytes ? data_capacity : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod<uint32_t>(subresource);
+    b.write_pod<uint64_t>(offset);
+    ::av::ClientBlobLease data_lease;
+    if (!ask_bytes(t, b, data, data_capacity, data_lease)) return abandon(t);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_ReadSubresourceRange, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (hresult != nullptr) *hresult = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (row_pitch != nullptr) *row_pitch = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (depth_pitch != nullptr) *depth_pitch = value; }
+    if (!take_bytes(r, data, data_capacity, data_lease, data_size)) return false;
+    return r.remaining() == 0u;
+}
+
 bool av_d3d_PresentPoint(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t point) {
     AV_SCOPE("av_d3d_PresentPoint");
     ::av::WireWriter b = t.request_writer();

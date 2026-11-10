@@ -140,6 +140,7 @@ private:
                                        const void *data, size_t bytes, uint32_t row_pitch, uint32_t depth_pitch,
                                        uint32_t copy_flags);
     bool   read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity);
+    bool   read_piece_of(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity);
     void   map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP type, UINT flags,
                D3D10DDI_MAPPED_SUBRESOURCE *mapped);
     void   unmap(D3D10DDI_HRESOURCE handle, UINT subresource);

@@ -81,6 +81,7 @@ inline constexpr uint32_t kCmd_CopyTiles11 = 0x00040414;
 inline constexpr uint32_t kCmd_UpdateTiles11 = 0x00040415;
 inline constexpr uint32_t kCmd_ResizeTilePool11 = 0x00040416;
 inline constexpr uint32_t kCmd_TiledResourceBarrier11 = 0x00040417;
+inline constexpr uint32_t kCmd_ReadSubresourceRange = 0x00040418;
 inline constexpr uint32_t kCmd_BeginQuery = 0x00040500;
 inline constexpr uint32_t kCmd_EndQuery = 0x00040501;
 inline constexpr uint32_t kCmd_GetQueryData = 0x00040502;

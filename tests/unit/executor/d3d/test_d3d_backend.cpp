@@ -281,6 +281,7 @@ TEST(d3d_backend, nothing_is_bound_drawn_cleared_or_copied_with_no_device_select
   CHECK(!backend.on_TiledResourceBarrier11(1u, 2u));
   CHECK(!backend.on_UpdateSubresource(nobody, 0u, 0u, box, 16u, 16u, 0u, data, sizeof data));
   CHECK(!backend.on_ReadSubresource(nobody, 0u, hresult, row_pitch, depth_pitch, out, sizeof out, size));
+  CHECK(!backend.on_ReadSubresourceRange(nobody, 0u, 16u, hresult, row_pitch, depth_pitch, out, sizeof out, size));
   CHECK(!backend.on_PresentPoint(nobody, 0u, 1u));
   CHECK(!backend.on_BeginQuery(nobody));
   CHECK(!backend.on_EndQuery(nobody));

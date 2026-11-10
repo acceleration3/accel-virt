@@ -351,6 +351,25 @@ bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
 bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity)
 {
     AV_SCOPE("D3d11Device::read_back");
+    if (capacity <= TransferRoom::whole_read_most) return read_piece_of(resource, subresource, out, capacity);
+    for (size_t offset = 0u; offset < capacity;) {
+        const size_t piece = capacity - offset < TransferRoom::lent_bytes ? capacity - offset : TransferRoom::lent_bytes;
+        const uint64_t wanted[1] = {static_cast<uint64_t>(piece)};
+        if (!wire().make_room_for_blobs(wanted, 1u)) return false;
+        uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
+        uint64_t read = 0u;
+        if (!d3dproto::av_d3d_ReadSubresourceRange(wire(), resource.stamp.id(), subresource, offset, &hresult, &row_pitch,
+                                                    &depth_pitch, out + offset, piece, &read) ||
+            hresult != 0u || read != piece)
+            return false;
+        offset += piece;
+    }
+    return true;
+}
+
+bool D3d11Device::read_piece_of(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity)
+{
+    AV_SCOPE("D3d11Device::read_piece_of");
     const uint64_t wanted_2[1] = {static_cast<uint64_t>(capacity)};
     if (!wire().make_room_for_blobs(wanted_2, 1u)) return false;
     uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;

@@ -1321,6 +1321,34 @@ static bool decode_ReadSubresource(ServerDispatch& s, ::av::WireReader& r, ::av:
     return true;
 }
 
+static bool decode_ReadSubresourceRange(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:ReadSubresourceRange");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    uint32_t subresource{};
+    if (!r.read_pod(subresource)) return false;
+    uint64_t offset{};
+    if (!r.read_pod(offset)) return false;
+    uint32_t hresult{};
+    uint32_t row_pitch{};
+    uint32_t depth_pitch{};
+    uint8_t* data = nullptr;
+    uint64_t data_capacity = 0u;
+    uint64_t data_size = 0u;
+    bool data_in_blob = false;
+    if (!read_out_bytes(s, r, arena, data, data_capacity, data_in_blob)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ReadSubresourceRange(resource, subresource, offset, hresult, row_pitch, depth_pitch, data, data_capacity, data_size)) return false;
+    reply.write_pod(hresult);
+    reply.write_pod(row_pitch);
+    reply.write_pod(depth_pitch);
+    write_out_bytes(reply, data, data_size, data_capacity, data_in_blob);
+    return true;
+}
+
 static bool decode_PresentPoint(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d:PresentPoint");
     (void)s;
@@ -1508,6 +1536,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CopyStructureCount:
         case kCmd_UpdateSubresource:
         case kCmd_ReadSubresource:
+        case kCmd_ReadSubresourceRange:
         case kCmd_PresentPoint:
         case kCmd_QueryBufferSlices11:
         case kCmd_BindBufferSlice:
@@ -1593,6 +1622,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CopyStructureCount: return decode_CopyStructureCount(s, r, reply, arena);
         case kCmd_UpdateSubresource: return decode_UpdateSubresource(s, r, reply, arena);
         case kCmd_ReadSubresource: return decode_ReadSubresource(s, r, reply, arena);
+        case kCmd_ReadSubresourceRange: return decode_ReadSubresourceRange(s, r, reply, arena);
         case kCmd_PresentPoint: return decode_PresentPoint(s, r, reply, arena);
         case kCmd_QueryBufferSlices11: return decode_QueryBufferSlices11(s, r, reply, arena);
         case kCmd_BindBufferSlice: return decode_BindBufferSlice(s, r, reply, arena);

@@ -81,6 +81,7 @@ const char* command_name(uint32_t id) {
         case kCmd_UpdateTiles11: return "UpdateTiles11";
         case kCmd_ResizeTilePool11: return "ResizeTilePool11";
         case kCmd_TiledResourceBarrier11: return "TiledResourceBarrier11";
+        case kCmd_ReadSubresourceRange: return "ReadSubresourceRange";
         case kCmd_BeginQuery: return "BeginQuery";
         case kCmd_EndQuery: return "EndQuery";
         case kCmd_GetQueryData: return "GetQueryData";
