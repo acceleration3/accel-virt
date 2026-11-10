@@ -274,6 +274,15 @@ TEST(guest_gl_context, a_host_that_refuses_every_rung_holds_nothing)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
+TEST(guest_gl_context, a_kernel_without_resources_for_the_context_is_no_memory_and_not_a_profile_refusal)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.kmt().fail_first(MockKmt::Call::create_context_virtual, 3u, 0xC000009Au);
+  CHECK_STATUS(context->make(), Status::no_memory);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 1u);
+  CHECK(context->state() == State::created);
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
 TEST(guest_gl_context, a_refusal_that_is_not_the_profiles_stops_the_ladder)
 { GlContextRig rig;
   Context context(rig);

@@ -9,6 +9,7 @@
 #include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
+#include "icd/opengl/gl_poll_clock.hpp"
 #include "icd/opengl/manual_calls.hpp"
 #include "icd/opengl/pixel_format_query.hpp"
 #include "icd/opengl/preferred_adapter.hpp"
@@ -53,6 +54,8 @@ public:
     };
     enum : uint32_t { gl_invalid_operation = 0x0502u, gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u };
     static constexpr uint32_t swap_main_plane = 1u;
+    static constexpr uint32_t make_attempts = 20u;
+    static constexpr uint64_t make_pause_nanoseconds = 50000000u;
 
     GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &slice_lock, KeyedLog &log,
               icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentQueue &presents,
@@ -122,6 +125,7 @@ private:
     GuestGlContext *shared_context(void *share, uint64_t &handle);
     bool            shares_into(uint64_t first, uint64_t second) const;
     [[nodiscard]] Status make_chain(GuestGlContext &context);
+    [[nodiscard]] Status make_patiently(GuestGlContext &context);
     GuestGlContext      &farthest_unmade(GuestGlContext &context) const;
     void                 note_profile(const GuestGlContext &context);
 
@@ -150,6 +154,7 @@ private:
     generated::GlProcTable proc_table_;
     KeyedSlots<uint32_t, uint64_t> pending_;
     icd::IdMint<uint64_t> sync_tokens_;
+    GlPollClock       clock_;
 
     friend struct GlIcdRootProbe;
 };

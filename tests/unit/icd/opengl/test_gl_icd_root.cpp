@@ -351,6 +351,29 @@ TEST(gl_icd_root, a_make_that_fails_answers_why_and_leaves_the_context_to_retry)
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) != nullptr);
   CHECK(rig.root().invariants_hold()); }
 
+TEST(gl_icd_root, a_make_the_kernel_has_no_resources_for_is_tried_again_until_it_has_them)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  const std::uint64_t handle = rig.root().create_context(rig.dc());
+  rig.kmt().fail_first(MockKmt::Call::create_context_virtual, 2u, 0xC000009Au);
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  rig.host().gl_window(1u, 1u);
+  CHECK(rig.root().set_context(rig.dc(), handle, nullptr) != nullptr);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 3u);
+  CHECK_EQ(rig.threads().last_error(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_icd_root, a_make_the_kernel_never_has_resources_for_is_out_of_memory_after_the_patience_is_spent)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  const std::uint64_t handle = rig.root().create_context(rig.dc());
+  rig.kmt().fail_first(MockKmt::Call::create_context_virtual, 1000u, 0xC000009Au);
+  CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
+  check_error(rig, Root::error_not_enough_memory);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), Root::make_attempts);
+  CHECK(rig.root().invariants_hold()); }
+
 TEST(gl_icd_root, deleting_the_current_context_releases_it_and_the_last_closes_the_device)
 { GlIcdRig rig;
   rig.load_with_format();

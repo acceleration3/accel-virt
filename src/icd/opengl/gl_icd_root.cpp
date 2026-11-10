@@ -134,6 +134,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock
     generated::fill_proc_table(proc_table_);
     proc_table_.slots[get_error_slot] = reinterpret_cast<GlProc>(&entry::get_error);
     proc_table_.slots[get_integerv_slot] = reinterpret_cast<GlProc>(&entry::get_integerv);
+    clock_.bind(kmt);
     binding_.bind(*this);
 }
 
@@ -521,7 +522,7 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
         grouped = contexts_.join(handle, share_handle);
         if (grouped == Status::ok) static_cast<void>(context->share(share_name));
     }
-    const Status made = grouped == Status::ok ? context->make() : grouped;
+    const Status made = grouped == Status::ok ? make_patiently(*context) : grouped;
     Status       pended = made;
     if (made == Status::ok) {
         const ThreadLockHold locked(lock_);
@@ -781,10 +782,21 @@ Status GlIcdRoot::make_chain(GuestGlContext &context)
             target->lend();
             static_cast<void>(link.share(target->share_name()));
         }
-        const Status made = link.make();
+        const Status made = make_patiently(link);
         if (made != Status::ok) return made;
     }
     return Status::ok;
+}
+
+Status GlIcdRoot::make_patiently(GuestGlContext &context)
+{
+    AV_SCOPE("GlIcdRoot::make_patiently");
+    Status made = context.make();
+    for (uint32_t attempt = 1u; made == Status::no_memory && attempt < make_attempts; attempt++) {
+        clock_.pause(make_pause_nanoseconds);
+        made = context.make();
+    }
+    return made;
 }
 
 GuestGlContext &GlIcdRoot::farthest_unmade(GuestGlContext &context) const
