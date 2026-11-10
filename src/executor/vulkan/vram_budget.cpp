@@ -50,7 +50,8 @@ void VramBudget::report(VkPhysicalDeviceMemoryBudgetPropertiesEXT &budget) const
 {
     AV_SCOPE("VramBudget::report");
     const uint64_t cap = account_.cap();
-    const uint64_t ledger_used = account_.used();
+    const uint64_t held = account_.held();
+    const uint64_t room = account_.free_bytes();
     const uint64_t host_cap = host_account_.cap();
     const uint64_t host_used = host_account_.used();
     for (uint32_t heap = 0u; heap < VK_MAX_MEMORY_HEAPS; heap++) {
@@ -61,8 +62,8 @@ void VramBudget::report(VkPhysicalDeviceMemoryBudgetPropertiesEXT &budget) const
         }
         const bool     local = capped(heap);
         const uint64_t size = host_.memoryHeaps[heap].size;
-        const uint64_t usage = local ? ledger_used : (host_account_.bound() ? host_used : used_[heap]);
-        const uint64_t ceiling = local ? cap : host_cap;
+        const uint64_t usage = local ? held : (host_account_.bound() ? host_used : used_[heap]);
+        const uint64_t ceiling = local ? (usage >= cap || room >= cap - usage ? cap : usage + room) : host_cap;
         const uint64_t limit = ceiling < size ? ceiling : size;
         budget.heapUsage[heap] = usage;
         budget.heapBudget[heap] = limit > usage ? limit : usage;

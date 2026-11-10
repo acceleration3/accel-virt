@@ -197,7 +197,7 @@ TEST(vram_budget, the_budget_report_follows_commits_and_releases)
   CHECK_EQ(budget.used(0u), std::uint64_t{0});
   CHECK(budget.invariants_hold()); }
 
-TEST(vram_budget, the_cap_and_usage_are_the_ledgers_so_other_apis_show_in_the_report)
+TEST(vram_budget, usage_is_the_sessions_own_and_the_budget_shrinks_with_what_other_apis_hold)
 { av::FailingBlocks blocks;
   VramLedger ledger;
   ledger.learn(8 * gib);
@@ -208,8 +208,8 @@ TEST(vram_budget, the_cap_and_usage_are_the_ledgers_so_other_apis_show_in_the_re
   budget.learn(guest_view());
   VkPhysicalDeviceMemoryBudgetPropertiesEXT report = {};
   budget.report(report);
-  CHECK_EQ(report.heapUsage[0], 3 * gib);
-  CHECK_EQ(report.heapBudget[0], 7 * gib);
+  CHECK_EQ(report.heapUsage[0], std::uint64_t{0});
+  CHECK_EQ(report.heapBudget[0], 4 * gib);
   CHECK(!budget.admit(0u, 4 * gib + 1u));
   CHECK(budget.admit(0u, 4 * gib));
   ledger.reserve_vram(4096u);
@@ -338,10 +338,12 @@ TEST(vulkan_vram_cap, vulkan_and_another_api_on_the_same_gpu_share_one_cap)
   query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
   query.pNext = &budget;
   rig.backend().on_vkGetPhysicalDeviceMemoryProperties2(rig.physical(), &query);
-  CHECK_EQ(budget.heapUsage[0], 7 * gib);
+  CHECK_EQ(budget.heapUsage[0], 2 * gib);
+  CHECK_EQ(budget.heapBudget[0], 2 * gib);
   other.give(5 * gib);
   rig.backend().on_vkGetPhysicalDeviceMemoryProperties2(rig.physical(), &query);
-  CHECK_EQ(budget.heapUsage[0], 2 * gib); }
+  CHECK_EQ(budget.heapUsage[0], 2 * gib);
+  CHECK_EQ(budget.heapBudget[0], 7 * gib); }
 
 TEST(vulkan_vram_cap, shutting_down_gives_the_held_memory_back)
 { Rig rig;
