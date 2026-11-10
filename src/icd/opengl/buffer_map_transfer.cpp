@@ -38,6 +38,13 @@ void BufferMapTransfer::start(ClientTransport &wire, BufferMapping &mapping)
     shadows_.keep(mapping.buffer(), mapping.offset(), mapping.bytes(), mapping.at());
 }
 
+void BufferMapTransfer::refresh(ClientTransport &wire, BufferMapping &mapping)
+{
+    AV_SCOPE("BufferMapTransfer::refresh");
+    if (mapping.persistent_writes()) write_back(wire, mapping);
+    read(wire, mapping);
+}
+
 void BufferMapTransfer::write_back(ClientTransport &wire, BufferMapping &mapping)
 {
     AV_SCOPE("BufferMapTransfer::write_back");

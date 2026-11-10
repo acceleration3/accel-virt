@@ -22,6 +22,7 @@ public:
 
     void start(ClientTransport &wire, BufferMapping &mapping);
     void write_back(ClientTransport &wire, BufferMapping &mapping);
+    void refresh(ClientTransport &wire, BufferMapping &mapping);
 
 private:
     static constexpr uint64_t word = 8u;

@@ -432,3 +432,14 @@ TEST(mapped_buffers, map_state_answers_a_sliced_buffers_storage_flags_and_its_ma
   CHECK_EQ(value, 16);
   CHECK(rig.mappings.map_state(1u, length, value));
   CHECK_EQ(value, 64); }
+
+TEST(mapped_buffers, a_persistent_read_mapping_is_read_again_and_other_mappings_are_left_alone)
+{ Rig rig;
+  CHECK(rig.map(1u, 4, 0, 4, write, no_error) != nullptr);
+  CHECK(rig.map(2u, 4, 0, 4, read | persistent, no_error) != nullptr);
+  CHECK(rig.map(3u, 4, 0, 4, write | persistent, no_error) != nullptr);
+  const std::uint32_t before = rig.commands();
+  rig.mappings.refresh_persistent(rig.wire());
+  CHECK_EQ(rig.commands() - before, 1u);
+  CHECK_EQ(rig.id(before), ids::kCmd_glGetNamedBufferSubData);
+  CHECK_EQ(rig.mappings.held(), 3u); }

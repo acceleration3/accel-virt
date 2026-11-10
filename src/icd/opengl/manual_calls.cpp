@@ -1006,7 +1006,9 @@ uint32_t ManualCalls::client_wait_sync(void *sync, uint32_t flags, uint64_t time
     SyncWaitProbe           probe(*context->wire(), address_of(sync), flags);
     icd::HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
-    return probe.result();
+    const uint32_t result = probe.result();
+    if (result == 0x911Au || result == 0x911Cu) context->mappings().refresh_persistent(*context->wire());
+    return result;
 }
 
 void ManualCalls::finish()
@@ -1022,6 +1024,7 @@ void ManualCalls::finish()
     icd::HostCompletionWait wait(kmt_, icd::SlicedWait::forever);
     static_cast<void>(wait.run(probe));
     glproto::av_glDeleteSync(wire, fence);
+    context->mappings().refresh_persistent(wire);
     context->pinned().reclaim();
 }
 

@@ -185,6 +185,15 @@ void MappedBuffers::flush_persistent(ClientTransport &wire)
     });
 }
 
+void MappedBuffers::refresh_persistent(ClientTransport &wire)
+{
+    AV_SCOPE("MappedBuffers::refresh_persistent");
+    constexpr uint32_t wanted = BufferMapping::map_persistent | BufferMapping::map_read;
+    mappings_.for_each([this, &wire](BufferMapping &mapping) {
+        if ((mapping.access() & wanted) == wanted) transfer_.refresh(wire, mapping);
+    });
+}
+
 void MappedBuffers::forget(int32_t count, const uint32_t *buffers)
 {
     AV_SCOPE("MappedBuffers::forget");
