@@ -202,6 +202,7 @@ TEST(cl_icd_root_programs, a_compile_or_link_the_api_or_the_host_refuses_tells_n
         nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
   rig.host().cl_handle(0u, CL_SUCCESS);
+  rig.host().cl_handle(0u, CL_OUT_OF_RESOURCES);
   CHECK(rig.root().link_program(run.context(), 0u, nullptr, nullptr, 1u, &program, ClProgramNotify(), &error) ==
         nullptr);
   CHECK_EQ(error, CL_LINK_PROGRAM_FAILURE);

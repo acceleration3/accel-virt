@@ -101,6 +101,22 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     return built;
 }
 
+uint64_t ClIcdRoot::failed_link_stand_in(ClientTransport &wire, uint64_t context)
+{
+    AV_SCOPE("ClIcdRoot::failed_link_stand_in");
+    static const char   text[] = "#error the link of the programs failed\n";
+    const char         *lines = text;
+    const size_t        bytes = sizeof text - 1u;
+    cl_int              host_error = CL_SUCCESS;
+    const uint64_t      made = av::clproto::av_clCreateProgramWithSource(wire, context, 1u, &lines, &bytes, &host_error);
+    if (made == 0u) return 0u;
+    if (av::clproto::av_clBuildProgram(wire, made, 0u, nullptr, "") == CL_SUCCESS) {
+        static_cast<void>(av::clproto::av_clReleaseProgram(wire, made));
+        return 0u;
+    }
+    return made;
+}
+
 void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options)
 {
     AV_SCOPE("ClIcdRoot::note_build_log");
@@ -301,16 +317,26 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
         return nullptr;
     }
     cl_int         host_error = CL_SUCCESS;
-    const uint64_t linked = av::clproto::av_clLinkProgram(*wire, held->wire(), 0u, nullptr, options, num_inputs,
+    uint64_t linked = av::clproto::av_clLinkProgram(*wire, held->wire(), 0u, nullptr, options, num_inputs,
                                                           host_inputs, &host_error);
-    if (linked == 0u) {
+    const bool refused_link =
+        linked == 0u && (host_error == CL_INVALID_BINARY || host_error == CL_SUCCESS || host_error == CL_LINK_PROGRAM_FAILURE);
+    uint64_t stand_in = 0u;
+    if (refused_link) stand_in = failed_link_stand_in(*wire, held->wire());
+    if (linked == 0u && stand_in == 0u) {
         report_program_error(error, host_error == CL_INVALID_BINARY ? CL_LINK_PROGRAM_FAILURE
                                     : host_error != CL_SUCCESS ? host_error : CL_LINK_PROGRAM_FAILURE);
         return nullptr;
     }
+    if (stand_in != 0u) {
+        linked = stand_in;
+        host_error = CL_LINK_PROGRAM_FAILURE;
+    }
     if (host_error == CL_LINK_PROGRAM_FAILURE) note_build_log(*wire, linked, host_device_of(*held), options);
     cl_int     kept = CL_SUCCESS;
     cl_program made = static_cast<cl_program>(wrap(*wire, ClObject::Kind::program, linked, held->context(), held, &kept));
+    if (made != nullptr && stand_in != 0u)
+        static_cast<ClObject *>(static_cast<void *>(made))->keep_traits(ClObject::program_failed);
     if (made != nullptr) {
         uint32_t carried = ClObject::program_typed_arguments | ClObject::program_arguments_asked | ClObject::program_from_source;
         uint32_t non_uniform = 0u;
@@ -319,7 +345,7 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
             carried &= input != nullptr ? input->traits() : 0u;
             non_uniform |= input != nullptr ? input->traits() & ClObject::program_non_uniform : 0u;
         }
-        static_cast<ClObject *>(static_cast<void *>(made))->keep_traits(carried | non_uniform);
+        if (stand_in == 0u) static_cast<ClObject *>(static_cast<void *>(made))->keep_traits(carried | non_uniform);
     }
     report_program_error(error, kept != CL_SUCCESS ? kept : host_error == CL_INVALID_BINARY ? CL_LINK_PROGRAM_FAILURE : host_error);
     notify.tell(made);
