@@ -9,6 +9,7 @@
 #include "icd/d3d/kernel_surface.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "icd/d3d/passthrough_geometry_shader.hpp"
+#include "icd/d3d/query_kind.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/d3d/resource_misc.hpp"
 #include "proto/resources/shared_object_kind.hpp"
@@ -898,11 +899,10 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
     AV_SCOPE("D3d11Device::create_query");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(QueryRecord))) return;
     QueryRecord &query = *static_cast<QueryRecord *>(handle.pDrvPrivate);
-    constexpr uint32_t sizes[] = {4u, 8u, 8u, 16u, 88u, 4u, 16u, 4u, 16u, 16u, 16u, 16u, 4u, 4u, 4u, 4u};
-    const uint32_t type = static_cast<uint32_t>(args->Query);
-    query = QueryRecord{d3d::RecordStamp(QueryRecord::tag, next_id()), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u,
-                        0u, 0u, 0u, 0u};
-    if (query.data_bytes == 0u) {
+    const d3d::QueryKind kind(static_cast<uint32_t>(args->Query));
+    const uint32_t type = kind.api_type();
+    query = QueryRecord{d3d::RecordStamp(QueryRecord::tag, next_id()), type, kind.data_bytes(), 0u, 0u, 0u, 0u};
+    if (!kind.known()) {
         set_error(E_INVALIDARG);
         return;
     }
