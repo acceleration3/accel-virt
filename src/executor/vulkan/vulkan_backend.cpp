@@ -995,11 +995,8 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
         VkMemoryAllocateInfo clean = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, pAllocateInfo->allocationSize, allocate.memoryTypeIndex};
         VkDeviceMemory       retried = VK_NULL_HANDLE;
         const VkResult       again = RealVulkanDispatch::on_vkAllocateMemory(device, &clean, nullptr, &retried);
-        clean.allocationSize = (pAllocateInfo->allocationSize + 65535u) & ~VkDeviceSize{65535u};
-        VkDeviceMemory       rounded = VK_NULL_HANDLE;
-        const VkResult       larger = RealVulkanDispatch::on_vkAllocateMemory(device, &clean, nullptr, &rounded);
-        LogLine(lines_).text("retry without the chain ").number(static_cast<uint64_t>(static_cast<int64_t>(again))).text(", rounded to 64 KiB ").number(static_cast<uint64_t>(static_cast<int64_t>(larger))).write();
-        if (rounded != VK_NULL_HANDLE) RealVulkanDispatch::on_vkFreeMemory(device, rounded, nullptr);
+        if (retried != VK_NULL_HANDLE) RealVulkanDispatch::on_vkFreeMemory(device, retried, nullptr);
+        LogLine(lines_).text("the same allocation without the guest's chain is answered ").number(static_cast<uint64_t>(static_cast<int64_t>(again))).write();
         LogLine every(lines_);
         every.text("a clean 4096 byte allocation by type:");
         for (uint32_t type = 0u; type < asked.memoryProperties.memoryTypeCount; type++) {
@@ -1010,12 +1007,6 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
             if (probed != VK_NULL_HANDLE) RealVulkanDispatch::on_vkFreeMemory(device, probed, nullptr);
         }
         every.write();
-        if (again == VK_SUCCESS) {
-            *pMemory = retried;
-            if (vram_.commit(heap, reinterpret_cast<uint64_t>(*pMemory), pAllocateInfo->allocationSize) == Status::ok) return VK_SUCCESS;
-            RealVulkanDispatch::on_vkFreeMemory(device, retried, nullptr);
-            *pMemory = VK_NULL_HANDLE;
-        }
         vram_.refund(heap, pAllocateInfo->allocationSize);
         return made;
     }

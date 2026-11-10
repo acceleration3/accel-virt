@@ -27,6 +27,7 @@ constexpr std::uint64_t gib = 1ull << 30;
 
 struct MemoryDriver {
     VkResult      allocate_result = VK_SUCCESS;
+    std::uint32_t refuse_next = 0u;
     std::uint32_t allocations = 0u;
     std::uint32_t frees = 0u;
     std::uint64_t next = 0x4000u;
@@ -60,6 +61,7 @@ public:
 
     av::VulkanBackend &backend() { return backend_; }
     av::FailingBlocks &blocks() { return blocks_; }
+    av::RecordingLog  &lines() { return sink_; }
     VramLedger        &ledger() { return ledger_; }
 
     VkPhysicalDevice physical() const { return reinterpret_cast<VkPhysicalDevice>(std::uintptr_t{0x200}); }
@@ -111,11 +113,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice, const VkMemoryAllocate
                                                 VkDeviceMemory *memory)
 {
     driver.allocations++;
+    if (driver.refuse_next != 0u) {
+        driver.refuse_next--;
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
     if (driver.allocate_result != VK_SUCCESS) return driver.allocate_result;
     driver.next += 0x10u;
     *memory = reinterpret_cast<VkDeviceMemory>(driver.next);
     return VK_SUCCESS;
 }
+
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties(VkPhysicalDevice, VkPhysicalDeviceProperties *host)
+{ *host = VkPhysicalDeviceProperties{};
+  std::strcpy(host->deviceName, "stub gpu"); }
 
 VKAPI_ATTR void VKAPI_CALL vkFreeMemory(VkDevice, VkDeviceMemory, const VkAllocationCallbacks *)
 { driver.frees++; }
@@ -282,6 +292,20 @@ TEST(vulkan_vram_cap, an_allocation_the_driver_refuses_is_given_back_to_the_ledg
   VkDeviceMemory made = VK_NULL_HANDLE;
   CHECK_EQ(static_cast<int>(rig.allocate(rig.device_local_type(), gib, made)), static_cast<int>(VK_ERROR_OUT_OF_DEVICE_MEMORY));
   CHECK_EQ(rig.ledger().used(), std::uint64_t{0}); }
+
+TEST(vulkan_vram_cap, a_refusal_is_logged_with_clean_probes_and_a_clean_retry_that_succeeds_is_never_used)
+{ Rig rig;
+  static_cast<void>(rig.properties());
+  driver.refuse_next = 1u;
+  VkDeviceMemory made = reinterpret_cast<VkDeviceMemory>(std::uintptr_t{1});
+  CHECK_EQ(static_cast<int>(rig.allocate(rig.device_local_type(), gib, made)), static_cast<int>(VK_ERROR_OUT_OF_DEVICE_MEMORY));
+  CHECK_EQ(rig.ledger().used(), std::uint64_t{0});
+  CHECK_EQ(driver.allocations, 4u);
+  CHECK_EQ(driver.frees, 3u);
+  CHECK_EQ(rig.lines().holding("the host driver refused an allocation"), 1u);
+  CHECK_EQ(rig.lines().holding("on stub gpu"), 1u);
+  CHECK_EQ(rig.lines().holding("without the guest's chain is answered 0"), 1u);
+  CHECK_EQ(rig.lines().holding("a clean 4096 byte allocation by type: 0=0 1=0"), 1u); }
 
 TEST(vulkan_vram_cap, an_allocation_the_host_cannot_record_is_given_back_to_the_ledger)
 { Rig rig;
