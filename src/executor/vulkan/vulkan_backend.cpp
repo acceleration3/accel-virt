@@ -696,8 +696,18 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
     AV_SCOPE("VulkanBackend::on_vkCreateImage");
     VkImageCreateInfo               create = *pCreateInfo;
     VkExternalMemoryImageCreateInfo external;
-    const bool                      bindable = for_source(device, create, external);
-    const VkResult result = RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
+    bool                            bindable = for_source(device, create, external);
+    VkResult result = RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
+    if (result == VK_SUCCESS && bindable) {
+        VkMemoryRequirements needs = {};
+        RealVulkanDispatch::on_vkGetImageMemoryRequirements(device, *pImage, &needs);
+        if (needs.memoryTypeBits == 0u) {
+            RealVulkanDispatch::on_vkDestroyImage(device, *pImage, nullptr);
+            create = *pCreateInfo;
+            result = RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
+            bindable = false;
+        }
+    }
     if (result == VK_SUCCESS && !copies_.record(reinterpret_cast<uint64_t>(*pImage), reinterpret_cast<uint64_t>(device), create)) {
         RealVulkanDispatch::on_vkDestroyImage(device, *pImage, nullptr);
         *pImage = VK_NULL_HANDLE;
@@ -714,7 +724,9 @@ uint32_t VulkanBackend::image_bits(uint32_t host_bits, bool external) const
 {
     AV_SCOPE("VulkanBackend::image_bits");
     const uint32_t bits = types_.guest_bits(host_bits);
-    return external ? bits : types_.unmapped(bits);
+    const uint32_t shown = external ? bits : types_.unmapped(bits);
+    if (shown == 0u) LogLine(lines_).text("an image's host memory types ").number(host_bits).text(" are none of the guest's").write();
+    return shown;
 }
 
 void VulkanBackend::on_vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer,
@@ -965,7 +977,17 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
     }
     const VkResult made = RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory);
     if (made != VK_SUCCESS) {
-        LogLine(lines_).text("the host driver refused an allocation of ").number(pAllocateInfo->allocationSize).text(" bytes in host type ").number(allocate.memoryTypeIndex).text(": ").number(static_cast<uint64_t>(static_cast<int64_t>(made))).write();
+        LogLine refusal(lines_);
+        refusal.text("the host driver refused an allocation of ").number(pAllocateInfo->allocationSize).text(" bytes in host type ").number(allocate.memoryTypeIndex).text(" for guest type ").number(pAllocateInfo->memoryTypeIndex).text(": ").number(static_cast<uint64_t>(static_cast<int64_t>(made))).text(", chain");
+        for (auto *node = static_cast<const VkBaseInStructure *>(pAllocateInfo->pNext); node != nullptr; node = node->pNext) refusal.text(" ").number(static_cast<uint64_t>(node->sType));
+        refusal.write();
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
+        budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+        VkPhysicalDeviceMemoryProperties2 asked = {};
+        asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+        asked.pNext = &budget;
+        RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2(physical_, &asked);
+        LogLine(lines_).text("host heap 0 budget ").number(budget.heapBudget[0]).text(" usage ").number(budget.heapUsage[0]).text(", heap 1 budget ").number(budget.heapBudget[1]).text(" usage ").number(budget.heapUsage[1]).write();
         vram_.refund(heap, pAllocateInfo->allocationSize);
         return made;
     }
@@ -1020,7 +1042,10 @@ bool VulkanBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &
             imported = adopting_->memory().import_dmabuf(descriptor, memory.size(), type, made);
         }
     }
-    if (!imported) return false;
+    if (!imported) {
+        LogLine(lines_).text("a guest memory blob of ").number(memory.size()).text(" bytes could not be imported by the host driver: dma-buf types ").number(listed).text(", preferred ").number(preferred).text(", host pointer ").number(reinterpret_cast<uint64_t>(memory.pointer()) & 0xFFFu).write();
+        return false;
+    }
     if (!kept_on(*adopting_, made)) {
         adopting_->memory().release(made);
         return false;
