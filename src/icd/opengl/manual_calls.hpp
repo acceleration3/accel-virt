@@ -147,6 +147,7 @@ public:
     void vertex_attrib_pointer(uint32_t index, int32_t size, uint32_t type, uint8_t normalized, int32_t stride,
                                const void *pointer);
     void enable_vertex_attrib_array(uint32_t index, bool enable);
+    void program_string(uint32_t target, uint32_t pname, void *string);
     void array_pointer(uint32_t slot, int32_t size, uint32_t type, int32_t stride, const void *pointer);
     void client_state(uint32_t capability, bool enable);
     void client_active_texture(uint32_t texture);

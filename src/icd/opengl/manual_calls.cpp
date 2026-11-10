@@ -766,6 +766,18 @@ void ManualCalls::enable_vertex_attrib_array(uint32_t index, bool enable)
     glproto::av_glDisableVertexAttribArray(*context->wire(), index);
 }
 
+void ManualCalls::program_string(uint32_t target, uint32_t pname, void *string)
+{
+    AV_SCOPE("ManualCalls::program_string");
+    static constexpr uint32_t gl_program_length = 0x8627u;
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    int32_t length = 0;
+    glproto::av_glGetProgramivARB(*context->wire(), target, gl_program_length, &length);
+    context->vertex().set_program_length(length);
+    glproto::av_glGetProgramStringARB(*context->wire(), target, pname, string);
+}
+
 void ManualCalls::array_pointer(uint32_t slot, int32_t size, uint32_t type, int32_t stride, const void *pointer)
 {
     AV_SCOPE("ManualCalls::array_pointer");

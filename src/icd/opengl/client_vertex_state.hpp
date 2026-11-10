@@ -83,6 +83,8 @@ public:
     void     set_scratch(uint32_t buffer);
     void     forget_scratch();
 
+    uint32_t program_length() const;
+    void     set_program_length(int32_t length);
     bool     indexed() const;
     void     set_indexed(bool indexed);
     uint32_t validate(uint32_t slot, int32_t size, uint32_t type, int32_t stride) const;
@@ -117,6 +119,7 @@ private:
     uint64_t                     saved_bits_;
     uint32_t                     depth_;
     bool                         indexed_;
+    uint32_t                     program_length_;
 
     friend struct ClientVertexStateProbe;
 };

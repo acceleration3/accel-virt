@@ -464,6 +464,12 @@ size_t bitmap_bytes(ClientTransport &, GLsizei width, GLsizei height) noexcept
     const glicd::ClientArrayState *const state = glicd::arrays();
     return state != nullptr ? state->bitmap_bytes(width, height, false) : 0u;
 }
+size_t program_string_bytes(ClientTransport &) noexcept
+{
+    AV_SCOPE("program_string_bytes");
+    glicd::GuestGlContext *const context = glicd::current_context();
+    return context != nullptr ? context->vertex().program_length() : 0u;
+}
 size_t named_program_string_bytes(ClientTransport &, GLuint, GLenum) noexcept
 {
     AV_SCOPE("named_program_string_bytes");

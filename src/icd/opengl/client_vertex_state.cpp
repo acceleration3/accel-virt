@@ -16,7 +16,7 @@ enum : uint32_t {
 
 ClientVertexState::ClientVertexState(BlockSource &memory)
     : arrays_(memory, Pool::paged), default_{}, current_(&default_), bound_(0u), unit_(0u), host_unit_(0u),
-      scratch_(0u), saved_(memory, Pool::paged), staging_(memory, Pool::paged), offsets_(memory, Pool::paged), saved_bits_(0u), depth_(0u), indexed_(false)
+      scratch_(0u), saved_(memory, Pool::paged), staging_(memory, Pool::paged), offsets_(memory, Pool::paged), saved_bits_(0u), depth_(0u), indexed_(false), program_length_(0u)
 {
     AV_SCOPE("ClientVertexState::ClientVertexState");
 }
@@ -211,6 +211,18 @@ void ClientVertexState::forget_scratch()
 {
     AV_SCOPE("ClientVertexState::forget_scratch");
     scratch_ = 0u;
+}
+
+uint32_t ClientVertexState::program_length() const
+{
+    AV_SCOPE("ClientVertexState::program_length");
+    return program_length_;
+}
+
+void ClientVertexState::set_program_length(int32_t length)
+{
+    AV_SCOPE("ClientVertexState::set_program_length");
+    program_length_ = length > 0 ? static_cast<uint32_t>(length) : 0u;
 }
 
 bool ClientVertexState::indexed() const

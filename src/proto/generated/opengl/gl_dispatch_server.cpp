@@ -35458,6 +35458,2115 @@ static bool decode_glWindowPos3sv(const RealGl& av_gl, ::av::WireReader& av_r, :
     return true;
 }
 
+static bool decode_glVertexAttrib1dARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib1dARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble x{};
+    if (!av_r.read_pod(x)) return false;
+    if (av_gl.glVertexAttrib1dARB == nullptr) return false;
+    av_gl.glVertexAttrib1dARB(index, x);
+    return true;
+}
+
+static bool decode_glVertexAttrib1dvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib1dvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLdouble* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLdouble*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLdouble) + 1;
+            auto* av_run = av_arena.allocate<GLdouble>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLdouble*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 1;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLdouble)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib1dvARB == nullptr) return false;
+    av_gl.glVertexAttrib1dvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib1fARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib1fARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat x{};
+    if (!av_r.read_pod(x)) return false;
+    if (av_gl.glVertexAttrib1fARB == nullptr) return false;
+    av_gl.glVertexAttrib1fARB(index, x);
+    return true;
+}
+
+static bool decode_glVertexAttrib1fvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib1fvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLfloat* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLfloat*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLfloat) + 1;
+            auto* av_run = av_arena.allocate<GLfloat>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLfloat*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 1;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib1fvARB == nullptr) return false;
+    av_gl.glVertexAttrib1fvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib1sARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib1sARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLshort x{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      x = static_cast<GLshort>(av_v); }
+    if (av_gl.glVertexAttrib1sARB == nullptr) return false;
+    av_gl.glVertexAttrib1sARB(index, x);
+    return true;
+}
+
+static bool decode_glVertexAttrib1svARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib1svARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLshort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLshort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLshort) + 1;
+            auto* av_run = av_arena.allocate<GLshort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLshort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 1;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLshort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib1svARB == nullptr) return false;
+    av_gl.glVertexAttrib1svARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib2dARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib2dARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble x{};
+    if (!av_r.read_pod(x)) return false;
+    GLdouble y{};
+    if (!av_r.read_pod(y)) return false;
+    if (av_gl.glVertexAttrib2dARB == nullptr) return false;
+    av_gl.glVertexAttrib2dARB(index, x, y);
+    return true;
+}
+
+static bool decode_glVertexAttrib2dvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib2dvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLdouble* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLdouble*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLdouble) + 1;
+            auto* av_run = av_arena.allocate<GLdouble>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLdouble*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 2;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLdouble)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib2dvARB == nullptr) return false;
+    av_gl.glVertexAttrib2dvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib2fARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib2fARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat x{};
+    if (!av_r.read_pod(x)) return false;
+    GLfloat y{};
+    if (!av_r.read_pod(y)) return false;
+    if (av_gl.glVertexAttrib2fARB == nullptr) return false;
+    av_gl.glVertexAttrib2fARB(index, x, y);
+    return true;
+}
+
+static bool decode_glVertexAttrib2fvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib2fvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLfloat* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLfloat*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLfloat) + 1;
+            auto* av_run = av_arena.allocate<GLfloat>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLfloat*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 2;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib2fvARB == nullptr) return false;
+    av_gl.glVertexAttrib2fvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib2sARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib2sARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLshort x{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      x = static_cast<GLshort>(av_v); }
+    GLshort y{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      y = static_cast<GLshort>(av_v); }
+    if (av_gl.glVertexAttrib2sARB == nullptr) return false;
+    av_gl.glVertexAttrib2sARB(index, x, y);
+    return true;
+}
+
+static bool decode_glVertexAttrib2svARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib2svARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLshort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLshort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLshort) + 1;
+            auto* av_run = av_arena.allocate<GLshort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLshort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 2;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLshort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib2svARB == nullptr) return false;
+    av_gl.glVertexAttrib2svARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib3dARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib3dARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble x{};
+    if (!av_r.read_pod(x)) return false;
+    GLdouble y{};
+    if (!av_r.read_pod(y)) return false;
+    GLdouble z{};
+    if (!av_r.read_pod(z)) return false;
+    if (av_gl.glVertexAttrib3dARB == nullptr) return false;
+    av_gl.glVertexAttrib3dARB(index, x, y, z);
+    return true;
+}
+
+static bool decode_glVertexAttrib3dvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib3dvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLdouble* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLdouble*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLdouble) + 1;
+            auto* av_run = av_arena.allocate<GLdouble>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLdouble*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 3;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLdouble)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib3dvARB == nullptr) return false;
+    av_gl.glVertexAttrib3dvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib3fARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib3fARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat x{};
+    if (!av_r.read_pod(x)) return false;
+    GLfloat y{};
+    if (!av_r.read_pod(y)) return false;
+    GLfloat z{};
+    if (!av_r.read_pod(z)) return false;
+    if (av_gl.glVertexAttrib3fARB == nullptr) return false;
+    av_gl.glVertexAttrib3fARB(index, x, y, z);
+    return true;
+}
+
+static bool decode_glVertexAttrib3fvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib3fvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLfloat* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLfloat*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLfloat) + 1;
+            auto* av_run = av_arena.allocate<GLfloat>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLfloat*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 3;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib3fvARB == nullptr) return false;
+    av_gl.glVertexAttrib3fvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib3sARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib3sARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLshort x{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      x = static_cast<GLshort>(av_v); }
+    GLshort y{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      y = static_cast<GLshort>(av_v); }
+    GLshort z{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      z = static_cast<GLshort>(av_v); }
+    if (av_gl.glVertexAttrib3sARB == nullptr) return false;
+    av_gl.glVertexAttrib3sARB(index, x, y, z);
+    return true;
+}
+
+static bool decode_glVertexAttrib3svARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib3svARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLshort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLshort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLshort) + 1;
+            auto* av_run = av_arena.allocate<GLshort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLshort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 3;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLshort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib3svARB == nullptr) return false;
+    av_gl.glVertexAttrib3svARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NbvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NbvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLbyte* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLbyte*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLbyte) + 1;
+            auto* av_run = av_arena.allocate<GLbyte>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLbyte*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLbyte)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4NbvARB == nullptr) return false;
+    av_gl.glVertexAttrib4NbvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NivARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NivARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLint* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLint*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLint) + 1;
+            auto* av_run = av_arena.allocate<GLint>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLint*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLint)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4NivARB == nullptr) return false;
+    av_gl.glVertexAttrib4NivARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NsvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NsvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLshort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLshort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLshort) + 1;
+            auto* av_run = av_arena.allocate<GLshort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLshort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLshort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4NsvARB == nullptr) return false;
+    av_gl.glVertexAttrib4NsvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NubARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NubARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLubyte x{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      x = static_cast<GLubyte>(av_v); }
+    GLubyte y{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      y = static_cast<GLubyte>(av_v); }
+    GLubyte z{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      z = static_cast<GLubyte>(av_v); }
+    GLubyte w{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      w = static_cast<GLubyte>(av_v); }
+    if (av_gl.glVertexAttrib4NubARB == nullptr) return false;
+    av_gl.glVertexAttrib4NubARB(index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NubvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NubvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLubyte* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLubyte*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLubyte) + 1;
+            auto* av_run = av_arena.allocate<GLubyte>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLubyte*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLubyte)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4NubvARB == nullptr) return false;
+    av_gl.glVertexAttrib4NubvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NuivARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NuivARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLuint* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLuint*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLuint) + 1;
+            auto* av_run = av_arena.allocate<GLuint>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLuint*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLuint)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4NuivARB == nullptr) return false;
+    av_gl.glVertexAttrib4NuivARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4NusvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4NusvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLushort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLushort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLushort) + 1;
+            auto* av_run = av_arena.allocate<GLushort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLushort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLushort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4NusvARB == nullptr) return false;
+    av_gl.glVertexAttrib4NusvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4bvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4bvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLbyte* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLbyte*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLbyte) + 1;
+            auto* av_run = av_arena.allocate<GLbyte>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLbyte*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLbyte)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4bvARB == nullptr) return false;
+    av_gl.glVertexAttrib4bvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4dARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4dARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble x{};
+    if (!av_r.read_pod(x)) return false;
+    GLdouble y{};
+    if (!av_r.read_pod(y)) return false;
+    GLdouble z{};
+    if (!av_r.read_pod(z)) return false;
+    GLdouble w{};
+    if (!av_r.read_pod(w)) return false;
+    if (av_gl.glVertexAttrib4dARB == nullptr) return false;
+    av_gl.glVertexAttrib4dARB(index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glVertexAttrib4dvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4dvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLdouble* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLdouble*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLdouble) + 1;
+            auto* av_run = av_arena.allocate<GLdouble>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLdouble*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLdouble)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4dvARB == nullptr) return false;
+    av_gl.glVertexAttrib4dvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4fARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4fARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat x{};
+    if (!av_r.read_pod(x)) return false;
+    GLfloat y{};
+    if (!av_r.read_pod(y)) return false;
+    GLfloat z{};
+    if (!av_r.read_pod(z)) return false;
+    GLfloat w{};
+    if (!av_r.read_pod(w)) return false;
+    if (av_gl.glVertexAttrib4fARB == nullptr) return false;
+    av_gl.glVertexAttrib4fARB(index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glVertexAttrib4fvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4fvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLfloat* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLfloat*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLfloat) + 1;
+            auto* av_run = av_arena.allocate<GLfloat>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLfloat*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLfloat)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4fvARB == nullptr) return false;
+    av_gl.glVertexAttrib4fvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4ivARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4ivARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLint* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLint*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLint) + 1;
+            auto* av_run = av_arena.allocate<GLint>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLint*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLint)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4ivARB == nullptr) return false;
+    av_gl.glVertexAttrib4ivARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4sARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4sARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLshort x{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      x = static_cast<GLshort>(av_v); }
+    GLshort y{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      y = static_cast<GLshort>(av_v); }
+    GLshort z{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      z = static_cast<GLshort>(av_v); }
+    GLshort w{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      w = static_cast<GLshort>(av_v); }
+    if (av_gl.glVertexAttrib4sARB == nullptr) return false;
+    av_gl.glVertexAttrib4sARB(index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glVertexAttrib4svARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4svARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLshort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLshort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLshort) + 1;
+            auto* av_run = av_arena.allocate<GLshort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLshort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLshort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4svARB == nullptr) return false;
+    av_gl.glVertexAttrib4svARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4ubvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4ubvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLubyte* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLubyte*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLubyte) + 1;
+            auto* av_run = av_arena.allocate<GLubyte>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLubyte*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLubyte)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4ubvARB == nullptr) return false;
+    av_gl.glVertexAttrib4ubvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4uivARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4uivARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLuint* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLuint*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLuint) + 1;
+            auto* av_run = av_arena.allocate<GLuint>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLuint*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLuint)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4uivARB == nullptr) return false;
+    av_gl.glVertexAttrib4uivARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttrib4usvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttrib4usvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLushort* v = nullptr;
+    uint64_t v_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            v = reinterpret_cast<const GLushort*>(av_from);
+            v_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            v_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLushort) + 1;
+            auto* av_run = av_arena.allocate<GLushort>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            v = reinterpret_cast<const GLushort*>(av_run);
+        }
+    }
+    const uint64_t v_elements = 4;
+    uint64_t v_needed = 0;
+    if (__builtin_mul_overflow(v_elements, static_cast<uint64_t>(sizeof(GLushort)), &v_needed)) return false;
+    if (v == nullptr ? (v_needed != 0 && !(false)) : v_room < v_needed) return false;
+    if (av_gl.glVertexAttrib4usvARB == nullptr) return false;
+    av_gl.glVertexAttrib4usvARB(index, v);
+    return true;
+}
+
+static bool decode_glVertexAttribPointerARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glVertexAttribPointerARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLint size{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      size = static_cast<GLint>(av_v); }
+    GLenum type{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      type = static_cast<GLenum>(av_v); }
+    GLboolean normalized{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      normalized = static_cast<GLboolean>(av_v); }
+    GLsizei stride{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      stride = static_cast<GLsizei>(av_v); }
+    const void* pointer = nullptr;
+    { uint64_t av_v = 0; if (!av_r.read_pod(av_v)) return false;
+      pointer = reinterpret_cast<const void*>(static_cast<uintptr_t>(av_v)); }
+    if (pointer != nullptr && !buffer_bound(av_gl, 0x8894)) return false;
+    if (av_gl.glVertexAttribPointerARB == nullptr) return false;
+    av_gl.glVertexAttribPointerARB(index, size, type, normalized, stride, pointer);
+    return true;
+}
+
+static bool decode_glEnableVertexAttribArrayARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glEnableVertexAttribArrayARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    if (av_gl.glEnableVertexAttribArrayARB == nullptr) return false;
+    av_gl.glEnableVertexAttribArrayARB(index);
+    return true;
+}
+
+static bool decode_glDisableVertexAttribArrayARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glDisableVertexAttribArrayARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    if (av_gl.glDisableVertexAttribArrayARB == nullptr) return false;
+    av_gl.glDisableVertexAttribArrayARB(index);
+    return true;
+}
+
+static bool decode_glProgramStringARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramStringARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLenum format{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      format = static_cast<GLenum>(av_v); }
+    GLsizei len{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      len = static_cast<GLsizei>(av_v); }
+    const void* string = nullptr;
+    uint64_t string_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            string = reinterpret_cast<const void*>(av_from);
+            string_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            string_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(uint8_t) + 1;
+            auto* av_run = av_arena.allocate<uint8_t>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            string = reinterpret_cast<const void*>(av_run);
+        }
+    }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (len < 0) return av_refuse(0x0501);
+    const uint64_t string_elements = static_cast<uint64_t>(len);
+    uint64_t string_needed = 0;
+    if (__builtin_mul_overflow(string_elements, static_cast<uint64_t>(sizeof(uint8_t)), &string_needed)) return false;
+    if (string == nullptr ? (string_needed != 0 && !(false)) : string_room < string_needed) return false;
+    if (av_gl.glProgramStringARB == nullptr) return false;
+    av_gl.glProgramStringARB(target, format, len, string);
+    return true;
+}
+
+static bool decode_glBindProgramARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glBindProgramARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint program{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      program = static_cast<GLuint>(av_v); }
+    if (av_gl.glBindProgramARB == nullptr) return false;
+    av_gl.glBindProgramARB(target, program);
+    return true;
+}
+
+static bool decode_glDeleteProgramsARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glDeleteProgramsARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLsizei n{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      n = static_cast<GLsizei>(av_v); }
+    const GLuint* programs = nullptr;
+    uint64_t programs_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            programs = reinterpret_cast<const GLuint*>(av_from);
+            programs_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            programs_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLuint) + 1;
+            auto* av_run = av_arena.allocate<GLuint>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            programs = reinterpret_cast<const GLuint*>(av_run);
+        }
+    }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
+    const uint64_t programs_elements = static_cast<uint64_t>(n);
+    uint64_t programs_needed = 0;
+    if (__builtin_mul_overflow(programs_elements, static_cast<uint64_t>(sizeof(GLuint)), &programs_needed)) return false;
+    if (programs == nullptr ? (programs_needed != 0 && !(false)) : programs_room < programs_needed) return false;
+    if (av_gl.glDeleteProgramsARB == nullptr) return false;
+    av_gl.glDeleteProgramsARB(n, programs);
+    return true;
+}
+
+static bool decode_glGenProgramsARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGenProgramsARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLsizei n{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      n = static_cast<GLsizei>(av_v); }
+    GLuint* programs_storage = nullptr;
+    size_t programs_storage_count = 0;
+    GLuint* programs = nullptr;
+    size_t programs_bytes = 0;
+    bool programs_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            programs_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            programs_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    auto av_refuse = [&](uint32_t av_code) -> bool {
+        if (av_gl.av_record_error != nullptr) av_gl.av_record_error(av_gl.av_error_user, av_code);
+        if (programs_answered) av_reply.write_varint(0);
+        return true;
+    };
+    if (n < 0) return av_refuse(0x0501);
+    const uint64_t programs_elements = static_cast<uint64_t>(n);
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(programs_bytes / sizeof(GLuint));
+        if (av_room < programs_elements) av_room = programs_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLuint)) return false;
+        programs_storage_count = static_cast<size_t>(av_room) + 1;
+        programs_storage = av_arena.allocate<GLuint>(programs_storage_count);
+        if (programs_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < programs_storage_count; ++av_z) { programs_storage[av_z] = {}; }
+        programs = programs_storage;
+    }
+    if (av_gl.glGenProgramsARB == nullptr) return false;
+    av_gl.glGenProgramsARB(n, programs);
+    if (programs_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(programs_bytes));
+        if (programs_bytes != 0) av_reply.write(programs, programs_bytes);
+    }
+    return true;
+}
+
+static bool decode_glProgramEnvParameter4dARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramEnvParameter4dARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble x{};
+    if (!av_r.read_pod(x)) return false;
+    GLdouble y{};
+    if (!av_r.read_pod(y)) return false;
+    GLdouble z{};
+    if (!av_r.read_pod(z)) return false;
+    GLdouble w{};
+    if (!av_r.read_pod(w)) return false;
+    if (av_gl.glProgramEnvParameter4dARB == nullptr) return false;
+    av_gl.glProgramEnvParameter4dARB(target, index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glProgramEnvParameter4dvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramEnvParameter4dvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLdouble* params = nullptr;
+    uint64_t params_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            params = reinterpret_cast<const GLdouble*>(av_from);
+            params_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            params_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLdouble) + 1;
+            auto* av_run = av_arena.allocate<GLdouble>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            params = reinterpret_cast<const GLdouble*>(av_run);
+        }
+    }
+    const uint64_t params_elements = 4;
+    uint64_t params_needed = 0;
+    if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLdouble)), &params_needed)) return false;
+    if (params == nullptr ? (params_needed != 0 && !(false)) : params_room < params_needed) return false;
+    if (av_gl.glProgramEnvParameter4dvARB == nullptr) return false;
+    av_gl.glProgramEnvParameter4dvARB(target, index, params);
+    return true;
+}
+
+static bool decode_glProgramEnvParameter4fARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramEnvParameter4fARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat x{};
+    if (!av_r.read_pod(x)) return false;
+    GLfloat y{};
+    if (!av_r.read_pod(y)) return false;
+    GLfloat z{};
+    if (!av_r.read_pod(z)) return false;
+    GLfloat w{};
+    if (!av_r.read_pod(w)) return false;
+    if (av_gl.glProgramEnvParameter4fARB == nullptr) return false;
+    av_gl.glProgramEnvParameter4fARB(target, index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glProgramEnvParameter4fvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramEnvParameter4fvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLfloat* params = nullptr;
+    uint64_t params_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            params = reinterpret_cast<const GLfloat*>(av_from);
+            params_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            params_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLfloat) + 1;
+            auto* av_run = av_arena.allocate<GLfloat>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            params = reinterpret_cast<const GLfloat*>(av_run);
+        }
+    }
+    const uint64_t params_elements = 4;
+    uint64_t params_needed = 0;
+    if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLfloat)), &params_needed)) return false;
+    if (params == nullptr ? (params_needed != 0 && !(false)) : params_room < params_needed) return false;
+    if (av_gl.glProgramEnvParameter4fvARB == nullptr) return false;
+    av_gl.glProgramEnvParameter4fvARB(target, index, params);
+    return true;
+}
+
+static bool decode_glProgramLocalParameter4dARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramLocalParameter4dARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble x{};
+    if (!av_r.read_pod(x)) return false;
+    GLdouble y{};
+    if (!av_r.read_pod(y)) return false;
+    GLdouble z{};
+    if (!av_r.read_pod(z)) return false;
+    GLdouble w{};
+    if (!av_r.read_pod(w)) return false;
+    if (av_gl.glProgramLocalParameter4dARB == nullptr) return false;
+    av_gl.glProgramLocalParameter4dARB(target, index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glProgramLocalParameter4dvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramLocalParameter4dvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLdouble* params = nullptr;
+    uint64_t params_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            params = reinterpret_cast<const GLdouble*>(av_from);
+            params_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            params_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLdouble) + 1;
+            auto* av_run = av_arena.allocate<GLdouble>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            params = reinterpret_cast<const GLdouble*>(av_run);
+        }
+    }
+    const uint64_t params_elements = 4;
+    uint64_t params_needed = 0;
+    if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLdouble)), &params_needed)) return false;
+    if (params == nullptr ? (params_needed != 0 && !(false)) : params_room < params_needed) return false;
+    if (av_gl.glProgramLocalParameter4dvARB == nullptr) return false;
+    av_gl.glProgramLocalParameter4dvARB(target, index, params);
+    return true;
+}
+
+static bool decode_glProgramLocalParameter4fARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramLocalParameter4fARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat x{};
+    if (!av_r.read_pod(x)) return false;
+    GLfloat y{};
+    if (!av_r.read_pod(y)) return false;
+    GLfloat z{};
+    if (!av_r.read_pod(z)) return false;
+    GLfloat w{};
+    if (!av_r.read_pod(w)) return false;
+    if (av_gl.glProgramLocalParameter4fARB == nullptr) return false;
+    av_gl.glProgramLocalParameter4fARB(target, index, x, y, z, w);
+    return true;
+}
+
+static bool decode_glProgramLocalParameter4fvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glProgramLocalParameter4fvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    const GLfloat* params = nullptr;
+    uint64_t params_room = 0;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present == 3) {
+            uint64_t av_bytes = 0;
+            uint64_t av_at = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (!av_r.read_varint(av_at)) return false;
+            if (av_gl.av_guest == nullptr) return false;
+            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);
+            if (av_from == nullptr) return false;
+            params = reinterpret_cast<const GLfloat*>(av_from);
+            params_room = av_bytes;
+        } else if (av_present != 0) {
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            if (av_bytes > av_r.remaining()) return false;
+            params_room = av_bytes;
+            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof(GLfloat) + 1;
+            auto* av_run = av_arena.allocate<GLfloat>(av_elements);
+            if (av_run == nullptr) return false;
+            if (av_bytes != 0 &&
+                !av_r.read(av_run, static_cast<size_t>(av_bytes))) return false;
+            params = reinterpret_cast<const GLfloat*>(av_run);
+        }
+    }
+    const uint64_t params_elements = 4;
+    uint64_t params_needed = 0;
+    if (__builtin_mul_overflow(params_elements, static_cast<uint64_t>(sizeof(GLfloat)), &params_needed)) return false;
+    if (params == nullptr ? (params_needed != 0 && !(false)) : params_room < params_needed) return false;
+    if (av_gl.glProgramLocalParameter4fvARB == nullptr) return false;
+    av_gl.glProgramLocalParameter4fvARB(target, index, params);
+    return true;
+}
+
+static bool decode_glGetProgramEnvParameterdvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetProgramEnvParameterdvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLdouble* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLdouble));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLdouble)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLdouble>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetProgramEnvParameterdvARB == nullptr) return false;
+    av_gl.glGetProgramEnvParameterdvARB(target, index, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetProgramEnvParameterfvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetProgramEnvParameterfvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLfloat* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLfloat));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLfloat)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLfloat>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetProgramEnvParameterfvARB == nullptr) return false;
+    av_gl.glGetProgramEnvParameterfvARB(target, index, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetProgramLocalParameterdvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetProgramLocalParameterdvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLdouble* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLdouble* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLdouble));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLdouble)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLdouble>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetProgramLocalParameterdvARB == nullptr) return false;
+    av_gl.glGetProgramLocalParameterdvARB(target, index, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetProgramLocalParameterfvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetProgramLocalParameterfvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLfloat* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLfloat* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLfloat));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLfloat)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLfloat>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetProgramLocalParameterfvARB == nullptr) return false;
+    av_gl.glGetProgramLocalParameterfvARB(target, index, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetProgramivARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetProgramivARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLenum pname{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      pname = static_cast<GLenum>(av_v); }
+    GLint* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLint* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 1;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLint)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLint>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetProgramivARB == nullptr) return false;
+    av_gl.glGetProgramivARB(target, pname, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetProgramStringARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetProgramStringARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLenum target{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      target = static_cast<GLenum>(av_v); }
+    GLenum pname{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      pname = static_cast<GLenum>(av_v); }
+    uint8_t* string_storage = nullptr;
+    size_t string_storage_count = 0;
+    void* string = nullptr;
+    size_t string_bytes = 0;
+    bool string_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            string_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            string_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    if (av_gl.glGetProgramivARB == nullptr) return false;
+    GLint av_program_length = 0;
+    av_gl.glGetProgramivARB(target, 0x8627, &av_program_length);
+    const uint64_t string_elements = av_program_length > 0 ? static_cast<uint64_t>(av_program_length) : 0;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(string_bytes / sizeof(uint8_t));
+        if (av_room < string_elements) av_room = string_elements;
+        if (av_room >= SIZE_MAX / sizeof(uint8_t)) return false;
+        string_storage_count = static_cast<size_t>(av_room) + 1;
+        string_storage = av_arena.allocate<uint8_t>(string_storage_count);
+        if (string_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < string_storage_count; ++av_z) { string_storage[av_z] = {}; }
+        string = reinterpret_cast<void*>(string_storage);
+    }
+    if (av_gl.glGetProgramStringARB == nullptr) return false;
+    av_gl.glGetProgramStringARB(target, pname, string);
+    if (string_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(string_bytes));
+        if (string_bytes != 0) av_reply.write(string, string_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetVertexAttribdvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetVertexAttribdvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLenum pname{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      pname = static_cast<GLenum>(av_v); }
+    GLdouble* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLdouble* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLdouble));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLdouble)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLdouble>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetVertexAttribdvARB == nullptr) return false;
+    av_gl.glGetVertexAttribdvARB(index, pname, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetVertexAttribfvARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetVertexAttribfvARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLenum pname{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      pname = static_cast<GLenum>(av_v); }
+    GLfloat* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLfloat* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLfloat));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLfloat)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLfloat>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetVertexAttribfvARB == nullptr) return false;
+    av_gl.glGetVertexAttribfvARB(index, pname, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetVertexAttribivARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glGetVertexAttribivARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint index{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      index = static_cast<GLuint>(av_v); }
+    GLenum pname{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      pname = static_cast<GLenum>(av_v); }
+    GLint* params_storage = nullptr;
+    size_t params_storage_count = 0;
+    GLint* params = nullptr;
+    size_t params_bytes = 0;
+    bool params_answered = false;
+    {
+        uint8_t av_present = 0;
+        if (!av_r.read_pod(av_present)) return false;
+        if (av_present != 0) {
+            params_answered = true;
+            uint64_t av_bytes = 0;
+            if (!av_r.read_varint(av_bytes)) return false;
+            params_bytes = static_cast<size_t>(av_bytes);
+        }
+    }
+    const uint64_t params_elements = 4;
+    if (true) {
+        uint64_t av_room = static_cast<uint64_t>(params_bytes / sizeof(GLint));
+        if (av_room < params_elements) av_room = params_elements;
+        if (av_room >= SIZE_MAX / sizeof(GLint)) return false;
+        params_storage_count = static_cast<size_t>(av_room) + 1;
+        params_storage = av_arena.allocate<GLint>(params_storage_count);
+        if (params_storage == nullptr) return false;
+        for (size_t av_z = 0; av_z < params_storage_count; ++av_z) { params_storage[av_z] = {}; }
+        params = params_storage;
+    }
+    if (av_gl.glGetVertexAttribivARB == nullptr) return false;
+    av_gl.glGetVertexAttribivARB(index, pname, params);
+    if (params_answered) {
+        av_reply.write_varint(static_cast<uint64_t>(params_bytes));
+        if (params_bytes != 0) av_reply.write(params, params_bytes);
+    }
+    return true;
+}
+
+static bool decode_glIsProgramARB(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
+    AV_SCOPE("server:glIsProgramARB");
+    (void)av_arena; (void)av_reply; (void)av_r;
+    GLuint program{};
+    { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
+      program = static_cast<GLuint>(av_v); }
+    if (av_gl.glIsProgramARB == nullptr) return false;
+    const auto av_ret = av_gl.glIsProgramARB(program);
+    av_reply.write_varint(static_cast<uint64_t>(av_ret));
+    return true;
+}
+
 static bool decode_glBlendBarrierKHR(const RealGl& av_gl, ::av::WireReader& av_r, ::av::WireWriter& av_reply, ::av::WireArena& av_arena) {
     AV_SCOPE("server:glBlendBarrierKHR");
     (void)av_arena; (void)av_reply; (void)av_r;
@@ -50503,6 +52612,67 @@ bool dispatch_command(const RealGl& av_gl, uint32_t cmd_id,
         case kCmd_glWindowPos3iv: return decode_glWindowPos3iv(av_gl, av_r, av_reply, av_arena);
         case kCmd_glWindowPos3s: return decode_glWindowPos3s(av_gl, av_r, av_reply, av_arena);
         case kCmd_glWindowPos3sv: return decode_glWindowPos3sv(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib1dARB: return decode_glVertexAttrib1dARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib1dvARB: return decode_glVertexAttrib1dvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib1fARB: return decode_glVertexAttrib1fARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib1fvARB: return decode_glVertexAttrib1fvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib1sARB: return decode_glVertexAttrib1sARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib1svARB: return decode_glVertexAttrib1svARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib2dARB: return decode_glVertexAttrib2dARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib2dvARB: return decode_glVertexAttrib2dvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib2fARB: return decode_glVertexAttrib2fARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib2fvARB: return decode_glVertexAttrib2fvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib2sARB: return decode_glVertexAttrib2sARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib2svARB: return decode_glVertexAttrib2svARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib3dARB: return decode_glVertexAttrib3dARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib3dvARB: return decode_glVertexAttrib3dvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib3fARB: return decode_glVertexAttrib3fARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib3fvARB: return decode_glVertexAttrib3fvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib3sARB: return decode_glVertexAttrib3sARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib3svARB: return decode_glVertexAttrib3svARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NbvARB: return decode_glVertexAttrib4NbvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NivARB: return decode_glVertexAttrib4NivARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NsvARB: return decode_glVertexAttrib4NsvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NubARB: return decode_glVertexAttrib4NubARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NubvARB: return decode_glVertexAttrib4NubvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NuivARB: return decode_glVertexAttrib4NuivARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4NusvARB: return decode_glVertexAttrib4NusvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4bvARB: return decode_glVertexAttrib4bvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4dARB: return decode_glVertexAttrib4dARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4dvARB: return decode_glVertexAttrib4dvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4fARB: return decode_glVertexAttrib4fARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4fvARB: return decode_glVertexAttrib4fvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4ivARB: return decode_glVertexAttrib4ivARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4sARB: return decode_glVertexAttrib4sARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4svARB: return decode_glVertexAttrib4svARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4ubvARB: return decode_glVertexAttrib4ubvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4uivARB: return decode_glVertexAttrib4uivARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttrib4usvARB: return decode_glVertexAttrib4usvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glVertexAttribPointerARB: return decode_glVertexAttribPointerARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glEnableVertexAttribArrayARB: return decode_glEnableVertexAttribArrayARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glDisableVertexAttribArrayARB: return decode_glDisableVertexAttribArrayARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramStringARB: return decode_glProgramStringARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glBindProgramARB: return decode_glBindProgramARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glDeleteProgramsARB: return decode_glDeleteProgramsARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGenProgramsARB: return decode_glGenProgramsARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramEnvParameter4dARB: return decode_glProgramEnvParameter4dARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramEnvParameter4dvARB: return decode_glProgramEnvParameter4dvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramEnvParameter4fARB: return decode_glProgramEnvParameter4fARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramEnvParameter4fvARB: return decode_glProgramEnvParameter4fvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramLocalParameter4dARB: return decode_glProgramLocalParameter4dARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramLocalParameter4dvARB: return decode_glProgramLocalParameter4dvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramLocalParameter4fARB: return decode_glProgramLocalParameter4fARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glProgramLocalParameter4fvARB: return decode_glProgramLocalParameter4fvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetProgramEnvParameterdvARB: return decode_glGetProgramEnvParameterdvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetProgramEnvParameterfvARB: return decode_glGetProgramEnvParameterfvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetProgramLocalParameterdvARB: return decode_glGetProgramLocalParameterdvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetProgramLocalParameterfvARB: return decode_glGetProgramLocalParameterfvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetProgramivARB: return decode_glGetProgramivARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetProgramStringARB: return decode_glGetProgramStringARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetVertexAttribdvARB: return decode_glGetVertexAttribdvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetVertexAttribfvARB: return decode_glGetVertexAttribfvARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glGetVertexAttribivARB: return decode_glGetVertexAttribivARB(av_gl, av_r, av_reply, av_arena);
+        case kCmd_glIsProgramARB: return decode_glIsProgramARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glBlendBarrierKHR: return decode_glBlendBarrierKHR(av_gl, av_r, av_reply, av_arena);
         case kCmd_glDeleteObjectARB: return decode_glDeleteObjectARB(av_gl, av_r, av_reply, av_arena);
         case kCmd_glGetHandleARB: return decode_glGetHandleARB(av_gl, av_r, av_reply, av_arena);

@@ -1034,6 +1034,67 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_glWindowPos3iv: return "glWindowPos3iv";
         case kCmd_glWindowPos3s: return "glWindowPos3s";
         case kCmd_glWindowPos3sv: return "glWindowPos3sv";
+        case kCmd_glVertexAttrib1dARB: return "glVertexAttrib1dARB";
+        case kCmd_glVertexAttrib1dvARB: return "glVertexAttrib1dvARB";
+        case kCmd_glVertexAttrib1fARB: return "glVertexAttrib1fARB";
+        case kCmd_glVertexAttrib1fvARB: return "glVertexAttrib1fvARB";
+        case kCmd_glVertexAttrib1sARB: return "glVertexAttrib1sARB";
+        case kCmd_glVertexAttrib1svARB: return "glVertexAttrib1svARB";
+        case kCmd_glVertexAttrib2dARB: return "glVertexAttrib2dARB";
+        case kCmd_glVertexAttrib2dvARB: return "glVertexAttrib2dvARB";
+        case kCmd_glVertexAttrib2fARB: return "glVertexAttrib2fARB";
+        case kCmd_glVertexAttrib2fvARB: return "glVertexAttrib2fvARB";
+        case kCmd_glVertexAttrib2sARB: return "glVertexAttrib2sARB";
+        case kCmd_glVertexAttrib2svARB: return "glVertexAttrib2svARB";
+        case kCmd_glVertexAttrib3dARB: return "glVertexAttrib3dARB";
+        case kCmd_glVertexAttrib3dvARB: return "glVertexAttrib3dvARB";
+        case kCmd_glVertexAttrib3fARB: return "glVertexAttrib3fARB";
+        case kCmd_glVertexAttrib3fvARB: return "glVertexAttrib3fvARB";
+        case kCmd_glVertexAttrib3sARB: return "glVertexAttrib3sARB";
+        case kCmd_glVertexAttrib3svARB: return "glVertexAttrib3svARB";
+        case kCmd_glVertexAttrib4NbvARB: return "glVertexAttrib4NbvARB";
+        case kCmd_glVertexAttrib4NivARB: return "glVertexAttrib4NivARB";
+        case kCmd_glVertexAttrib4NsvARB: return "glVertexAttrib4NsvARB";
+        case kCmd_glVertexAttrib4NubARB: return "glVertexAttrib4NubARB";
+        case kCmd_glVertexAttrib4NubvARB: return "glVertexAttrib4NubvARB";
+        case kCmd_glVertexAttrib4NuivARB: return "glVertexAttrib4NuivARB";
+        case kCmd_glVertexAttrib4NusvARB: return "glVertexAttrib4NusvARB";
+        case kCmd_glVertexAttrib4bvARB: return "glVertexAttrib4bvARB";
+        case kCmd_glVertexAttrib4dARB: return "glVertexAttrib4dARB";
+        case kCmd_glVertexAttrib4dvARB: return "glVertexAttrib4dvARB";
+        case kCmd_glVertexAttrib4fARB: return "glVertexAttrib4fARB";
+        case kCmd_glVertexAttrib4fvARB: return "glVertexAttrib4fvARB";
+        case kCmd_glVertexAttrib4ivARB: return "glVertexAttrib4ivARB";
+        case kCmd_glVertexAttrib4sARB: return "glVertexAttrib4sARB";
+        case kCmd_glVertexAttrib4svARB: return "glVertexAttrib4svARB";
+        case kCmd_glVertexAttrib4ubvARB: return "glVertexAttrib4ubvARB";
+        case kCmd_glVertexAttrib4uivARB: return "glVertexAttrib4uivARB";
+        case kCmd_glVertexAttrib4usvARB: return "glVertexAttrib4usvARB";
+        case kCmd_glVertexAttribPointerARB: return "glVertexAttribPointerARB";
+        case kCmd_glEnableVertexAttribArrayARB: return "glEnableVertexAttribArrayARB";
+        case kCmd_glDisableVertexAttribArrayARB: return "glDisableVertexAttribArrayARB";
+        case kCmd_glProgramStringARB: return "glProgramStringARB";
+        case kCmd_glBindProgramARB: return "glBindProgramARB";
+        case kCmd_glDeleteProgramsARB: return "glDeleteProgramsARB";
+        case kCmd_glGenProgramsARB: return "glGenProgramsARB";
+        case kCmd_glProgramEnvParameter4dARB: return "glProgramEnvParameter4dARB";
+        case kCmd_glProgramEnvParameter4dvARB: return "glProgramEnvParameter4dvARB";
+        case kCmd_glProgramEnvParameter4fARB: return "glProgramEnvParameter4fARB";
+        case kCmd_glProgramEnvParameter4fvARB: return "glProgramEnvParameter4fvARB";
+        case kCmd_glProgramLocalParameter4dARB: return "glProgramLocalParameter4dARB";
+        case kCmd_glProgramLocalParameter4dvARB: return "glProgramLocalParameter4dvARB";
+        case kCmd_glProgramLocalParameter4fARB: return "glProgramLocalParameter4fARB";
+        case kCmd_glProgramLocalParameter4fvARB: return "glProgramLocalParameter4fvARB";
+        case kCmd_glGetProgramEnvParameterdvARB: return "glGetProgramEnvParameterdvARB";
+        case kCmd_glGetProgramEnvParameterfvARB: return "glGetProgramEnvParameterfvARB";
+        case kCmd_glGetProgramLocalParameterdvARB: return "glGetProgramLocalParameterdvARB";
+        case kCmd_glGetProgramLocalParameterfvARB: return "glGetProgramLocalParameterfvARB";
+        case kCmd_glGetProgramivARB: return "glGetProgramivARB";
+        case kCmd_glGetProgramStringARB: return "glGetProgramStringARB";
+        case kCmd_glGetVertexAttribdvARB: return "glGetVertexAttribdvARB";
+        case kCmd_glGetVertexAttribfvARB: return "glGetVertexAttribfvARB";
+        case kCmd_glGetVertexAttribivARB: return "glGetVertexAttribivARB";
+        case kCmd_glIsProgramARB: return "glIsProgramARB";
         case kCmd_glBlendBarrierKHR: return "glBlendBarrierKHR";
         case kCmd_glDeleteObjectARB: return "glDeleteObjectARB";
         case kCmd_glGetHandleARB: return "glGetHandleARB";
@@ -2434,6 +2495,67 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case kCmd_glWindowPos3iv:
         case kCmd_glWindowPos3s:
         case kCmd_glWindowPos3sv:
+        case kCmd_glVertexAttrib1dARB:
+        case kCmd_glVertexAttrib1dvARB:
+        case kCmd_glVertexAttrib1fARB:
+        case kCmd_glVertexAttrib1fvARB:
+        case kCmd_glVertexAttrib1sARB:
+        case kCmd_glVertexAttrib1svARB:
+        case kCmd_glVertexAttrib2dARB:
+        case kCmd_glVertexAttrib2dvARB:
+        case kCmd_glVertexAttrib2fARB:
+        case kCmd_glVertexAttrib2fvARB:
+        case kCmd_glVertexAttrib2sARB:
+        case kCmd_glVertexAttrib2svARB:
+        case kCmd_glVertexAttrib3dARB:
+        case kCmd_glVertexAttrib3dvARB:
+        case kCmd_glVertexAttrib3fARB:
+        case kCmd_glVertexAttrib3fvARB:
+        case kCmd_glVertexAttrib3sARB:
+        case kCmd_glVertexAttrib3svARB:
+        case kCmd_glVertexAttrib4NbvARB:
+        case kCmd_glVertexAttrib4NivARB:
+        case kCmd_glVertexAttrib4NsvARB:
+        case kCmd_glVertexAttrib4NubARB:
+        case kCmd_glVertexAttrib4NubvARB:
+        case kCmd_glVertexAttrib4NuivARB:
+        case kCmd_glVertexAttrib4NusvARB:
+        case kCmd_glVertexAttrib4bvARB:
+        case kCmd_glVertexAttrib4dARB:
+        case kCmd_glVertexAttrib4dvARB:
+        case kCmd_glVertexAttrib4fARB:
+        case kCmd_glVertexAttrib4fvARB:
+        case kCmd_glVertexAttrib4ivARB:
+        case kCmd_glVertexAttrib4sARB:
+        case kCmd_glVertexAttrib4svARB:
+        case kCmd_glVertexAttrib4ubvARB:
+        case kCmd_glVertexAttrib4uivARB:
+        case kCmd_glVertexAttrib4usvARB:
+        case kCmd_glVertexAttribPointerARB:
+        case kCmd_glEnableVertexAttribArrayARB:
+        case kCmd_glDisableVertexAttribArrayARB:
+        case kCmd_glProgramStringARB:
+        case kCmd_glBindProgramARB:
+        case kCmd_glDeleteProgramsARB:
+        case kCmd_glGenProgramsARB:
+        case kCmd_glProgramEnvParameter4dARB:
+        case kCmd_glProgramEnvParameter4dvARB:
+        case kCmd_glProgramEnvParameter4fARB:
+        case kCmd_glProgramEnvParameter4fvARB:
+        case kCmd_glProgramLocalParameter4dARB:
+        case kCmd_glProgramLocalParameter4dvARB:
+        case kCmd_glProgramLocalParameter4fARB:
+        case kCmd_glProgramLocalParameter4fvARB:
+        case kCmd_glGetProgramEnvParameterdvARB:
+        case kCmd_glGetProgramEnvParameterfvARB:
+        case kCmd_glGetProgramLocalParameterdvARB:
+        case kCmd_glGetProgramLocalParameterfvARB:
+        case kCmd_glGetProgramivARB:
+        case kCmd_glGetProgramStringARB:
+        case kCmd_glGetVertexAttribdvARB:
+        case kCmd_glGetVertexAttribfvARB:
+        case kCmd_glGetVertexAttribivARB:
+        case kCmd_glIsProgramARB:
         case kCmd_glBlendBarrierKHR:
         case kCmd_glDeleteObjectARB:
         case kCmd_glGetHandleARB:

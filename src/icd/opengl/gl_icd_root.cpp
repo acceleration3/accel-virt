@@ -100,6 +100,8 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_KHR_blend_equation_advanced", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_KHR_blend_equation_advanced_coherent", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_gl_spirv", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_vertex_program", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_fragment_program", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {
@@ -603,7 +605,10 @@ uint32_t GlIcdRoot::get_error()
     if (local != 0u) return local;
     uint32_t published = 0u;
     if (context->take_host_error(published)) return published;
-    return transport != nullptr ? glproto::av_glGetError(*transport) : 0u;
+    if (transport == nullptr) return 0u;
+    const uint32_t asked = glproto::av_glGetError(*transport);
+    if (asked != 0u) return asked;
+    return context->take_host_error(published) ? published : 0u;
 }
 
 uint32_t GlIcdRoot::reset_status()

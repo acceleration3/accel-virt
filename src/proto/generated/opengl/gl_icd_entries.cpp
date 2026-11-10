@@ -8532,6 +8532,405 @@ void APIENTRY Wrap_glWindowPos3sv(const GLshort* v) {
     ::av::glproto::av_glWindowPos3sv(*av_t, v);
 }
 
+void APIENTRY Wrap_glVertexAttrib1dARB(GLuint index, GLdouble x) {
+    AV_SCOPE("glVertexAttrib1dARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib1dARB(*av_t, index, x);
+}
+
+void APIENTRY Wrap_glVertexAttrib1dvARB(GLuint index, const GLdouble* v) {
+    AV_SCOPE("glVertexAttrib1dvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib1dvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib1fARB(GLuint index, GLfloat x) {
+    AV_SCOPE("glVertexAttrib1fARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib1fARB(*av_t, index, x);
+}
+
+void APIENTRY Wrap_glVertexAttrib1fvARB(GLuint index, const GLfloat* v) {
+    AV_SCOPE("glVertexAttrib1fvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib1fvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib1sARB(GLuint index, GLshort x) {
+    AV_SCOPE("glVertexAttrib1sARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib1sARB(*av_t, index, x);
+}
+
+void APIENTRY Wrap_glVertexAttrib1svARB(GLuint index, const GLshort* v) {
+    AV_SCOPE("glVertexAttrib1svARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib1svARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib2dARB(GLuint index, GLdouble x, GLdouble y) {
+    AV_SCOPE("glVertexAttrib2dARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib2dARB(*av_t, index, x, y);
+}
+
+void APIENTRY Wrap_glVertexAttrib2dvARB(GLuint index, const GLdouble* v) {
+    AV_SCOPE("glVertexAttrib2dvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib2dvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib2fARB(GLuint index, GLfloat x, GLfloat y) {
+    AV_SCOPE("glVertexAttrib2fARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib2fARB(*av_t, index, x, y);
+}
+
+void APIENTRY Wrap_glVertexAttrib2fvARB(GLuint index, const GLfloat* v) {
+    AV_SCOPE("glVertexAttrib2fvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib2fvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib2sARB(GLuint index, GLshort x, GLshort y) {
+    AV_SCOPE("glVertexAttrib2sARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib2sARB(*av_t, index, x, y);
+}
+
+void APIENTRY Wrap_glVertexAttrib2svARB(GLuint index, const GLshort* v) {
+    AV_SCOPE("glVertexAttrib2svARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib2svARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib3dARB(GLuint index, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("glVertexAttrib3dARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib3dARB(*av_t, index, x, y, z);
+}
+
+void APIENTRY Wrap_glVertexAttrib3dvARB(GLuint index, const GLdouble* v) {
+    AV_SCOPE("glVertexAttrib3dvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib3dvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib3fARB(GLuint index, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("glVertexAttrib3fARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib3fARB(*av_t, index, x, y, z);
+}
+
+void APIENTRY Wrap_glVertexAttrib3fvARB(GLuint index, const GLfloat* v) {
+    AV_SCOPE("glVertexAttrib3fvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib3fvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib3sARB(GLuint index, GLshort x, GLshort y, GLshort z) {
+    AV_SCOPE("glVertexAttrib3sARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib3sARB(*av_t, index, x, y, z);
+}
+
+void APIENTRY Wrap_glVertexAttrib3svARB(GLuint index, const GLshort* v) {
+    AV_SCOPE("glVertexAttrib3svARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib3svARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NbvARB(GLuint index, const GLbyte* v) {
+    AV_SCOPE("glVertexAttrib4NbvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NbvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NivARB(GLuint index, const GLint* v) {
+    AV_SCOPE("glVertexAttrib4NivARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NivARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NsvARB(GLuint index, const GLshort* v) {
+    AV_SCOPE("glVertexAttrib4NsvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NsvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NubARB(GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w) {
+    AV_SCOPE("glVertexAttrib4NubARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NubARB(*av_t, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NubvARB(GLuint index, const GLubyte* v) {
+    AV_SCOPE("glVertexAttrib4NubvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NubvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NuivARB(GLuint index, const GLuint* v) {
+    AV_SCOPE("glVertexAttrib4NuivARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NuivARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4NusvARB(GLuint index, const GLushort* v) {
+    AV_SCOPE("glVertexAttrib4NusvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4NusvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4bvARB(GLuint index, const GLbyte* v) {
+    AV_SCOPE("glVertexAttrib4bvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4bvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4dARB(GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("glVertexAttrib4dARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4dARB(*av_t, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glVertexAttrib4dvARB(GLuint index, const GLdouble* v) {
+    AV_SCOPE("glVertexAttrib4dvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4dvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4fARB(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("glVertexAttrib4fARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4fARB(*av_t, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glVertexAttrib4fvARB(GLuint index, const GLfloat* v) {
+    AV_SCOPE("glVertexAttrib4fvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4fvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4ivARB(GLuint index, const GLint* v) {
+    AV_SCOPE("glVertexAttrib4ivARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4ivARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4sARB(GLuint index, GLshort x, GLshort y, GLshort z, GLshort w) {
+    AV_SCOPE("glVertexAttrib4sARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4sARB(*av_t, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glVertexAttrib4svARB(GLuint index, const GLshort* v) {
+    AV_SCOPE("glVertexAttrib4svARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4svARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4ubvARB(GLuint index, const GLubyte* v) {
+    AV_SCOPE("glVertexAttrib4ubvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4ubvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4uivARB(GLuint index, const GLuint* v) {
+    AV_SCOPE("glVertexAttrib4uivARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4uivARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glVertexAttrib4usvARB(GLuint index, const GLushort* v) {
+    AV_SCOPE("glVertexAttrib4usvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glVertexAttrib4usvARB(*av_t, index, v);
+}
+
+void APIENTRY Wrap_glProgramStringARB(GLenum target, GLenum format, GLsizei len, const void* string) {
+    AV_SCOPE("glProgramStringARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramStringARB(*av_t, target, format, len, string);
+}
+
+void APIENTRY Wrap_glBindProgramARB(GLenum target, GLuint program) {
+    AV_SCOPE("glBindProgramARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glBindProgramARB(*av_t, target, program);
+}
+
+void APIENTRY Wrap_glDeleteProgramsARB(GLsizei n, const GLuint* programs) {
+    AV_SCOPE("glDeleteProgramsARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glDeleteProgramsARB(*av_t, n, programs);
+}
+
+void APIENTRY Wrap_glGenProgramsARB(GLsizei n, GLuint* programs) {
+    AV_SCOPE("glGenProgramsARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGenProgramsARB(*av_t, n, programs);
+}
+
+void APIENTRY Wrap_glProgramEnvParameter4dARB(GLenum target, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("glProgramEnvParameter4dARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramEnvParameter4dARB(*av_t, target, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glProgramEnvParameter4dvARB(GLenum target, GLuint index, const GLdouble* params) {
+    AV_SCOPE("glProgramEnvParameter4dvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramEnvParameter4dvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glProgramEnvParameter4fARB(GLenum target, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("glProgramEnvParameter4fARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramEnvParameter4fARB(*av_t, target, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glProgramEnvParameter4fvARB(GLenum target, GLuint index, const GLfloat* params) {
+    AV_SCOPE("glProgramEnvParameter4fvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramEnvParameter4fvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glProgramLocalParameter4dARB(GLenum target, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("glProgramLocalParameter4dARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramLocalParameter4dARB(*av_t, target, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glProgramLocalParameter4dvARB(GLenum target, GLuint index, const GLdouble* params) {
+    AV_SCOPE("glProgramLocalParameter4dvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramLocalParameter4dvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glProgramLocalParameter4fARB(GLenum target, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("glProgramLocalParameter4fARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramLocalParameter4fARB(*av_t, target, index, x, y, z, w);
+}
+
+void APIENTRY Wrap_glProgramLocalParameter4fvARB(GLenum target, GLuint index, const GLfloat* params) {
+    AV_SCOPE("glProgramLocalParameter4fvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glProgramLocalParameter4fvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glGetProgramEnvParameterdvARB(GLenum target, GLuint index, GLdouble* params) {
+    AV_SCOPE("glGetProgramEnvParameterdvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetProgramEnvParameterdvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glGetProgramEnvParameterfvARB(GLenum target, GLuint index, GLfloat* params) {
+    AV_SCOPE("glGetProgramEnvParameterfvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetProgramEnvParameterfvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glGetProgramLocalParameterdvARB(GLenum target, GLuint index, GLdouble* params) {
+    AV_SCOPE("glGetProgramLocalParameterdvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetProgramLocalParameterdvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glGetProgramLocalParameterfvARB(GLenum target, GLuint index, GLfloat* params) {
+    AV_SCOPE("glGetProgramLocalParameterfvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetProgramLocalParameterfvARB(*av_t, target, index, params);
+}
+
+void APIENTRY Wrap_glGetProgramivARB(GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("glGetProgramivARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetProgramivARB(*av_t, target, pname, params);
+}
+
+void APIENTRY Wrap_glGetVertexAttribdvARB(GLuint index, GLenum pname, GLdouble* params) {
+    AV_SCOPE("glGetVertexAttribdvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetVertexAttribdvARB(*av_t, index, pname, params);
+}
+
+void APIENTRY Wrap_glGetVertexAttribfvARB(GLuint index, GLenum pname, GLfloat* params) {
+    AV_SCOPE("glGetVertexAttribfvARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetVertexAttribfvARB(*av_t, index, pname, params);
+}
+
+void APIENTRY Wrap_glGetVertexAttribivARB(GLuint index, GLenum pname, GLint* params) {
+    AV_SCOPE("glGetVertexAttribivARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return;
+    ::av::glproto::av_glGetVertexAttribivARB(*av_t, index, pname, params);
+}
+
+GLboolean APIENTRY Wrap_glIsProgramARB(GLuint program) {
+    AV_SCOPE("glIsProgramARB");
+    auto* av_t = ::av::glicd::wire();
+    if (av_t == nullptr) return 0;
+    return ::av::glproto::av_glIsProgramARB(*av_t, program);
+}
+
 void APIENTRY Wrap_glBlendBarrierKHR(void) {
     AV_SCOPE("glBlendBarrierKHR");
     auto* av_t = ::av::glicd::wire();

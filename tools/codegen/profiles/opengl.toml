@@ -1,4 +1,21 @@
 extra = [
+    "glVertexAttrib1dARB", "glVertexAttrib1dvARB", "glVertexAttrib1fARB", "glVertexAttrib1fvARB",
+    "glVertexAttrib1sARB", "glVertexAttrib1svARB", "glVertexAttrib2dARB", "glVertexAttrib2dvARB",
+    "glVertexAttrib2fARB", "glVertexAttrib2fvARB", "glVertexAttrib2sARB", "glVertexAttrib2svARB",
+    "glVertexAttrib3dARB", "glVertexAttrib3dvARB", "glVertexAttrib3fARB", "glVertexAttrib3fvARB",
+    "glVertexAttrib3sARB", "glVertexAttrib3svARB", "glVertexAttrib4NbvARB", "glVertexAttrib4NivARB",
+    "glVertexAttrib4NsvARB", "glVertexAttrib4NubARB", "glVertexAttrib4NubvARB", "glVertexAttrib4NuivARB",
+    "glVertexAttrib4NusvARB", "glVertexAttrib4bvARB", "glVertexAttrib4dARB", "glVertexAttrib4dvARB",
+    "glVertexAttrib4fARB", "glVertexAttrib4fvARB", "glVertexAttrib4ivARB", "glVertexAttrib4sARB",
+    "glVertexAttrib4svARB", "glVertexAttrib4ubvARB", "glVertexAttrib4uivARB", "glVertexAttrib4usvARB",
+    "glVertexAttribPointerARB", "glEnableVertexAttribArrayARB", "glDisableVertexAttribArrayARB",
+    "glProgramStringARB", "glBindProgramARB", "glDeleteProgramsARB", "glGenProgramsARB",
+    "glProgramEnvParameter4dARB", "glProgramEnvParameter4dvARB", "glProgramEnvParameter4fARB",
+    "glProgramEnvParameter4fvARB", "glProgramLocalParameter4dARB", "glProgramLocalParameter4dvARB",
+    "glProgramLocalParameter4fARB", "glProgramLocalParameter4fvARB", "glGetProgramEnvParameterdvARB",
+    "glGetProgramEnvParameterfvARB", "glGetProgramLocalParameterdvARB", "glGetProgramLocalParameterfvARB",
+    "glGetProgramivARB", "glGetProgramStringARB", "glGetVertexAttribdvARB", "glGetVertexAttribfvARB",
+    "glGetVertexAttribivARB", "glGetVertexAttribPointervARB", "glIsProgramARB",
     "glGetString", "glGetStringi", "glGetError",
     "glGetIntegerv", "glGetFloatv", "glGetBooleanv",
 
@@ -237,6 +254,7 @@ synchronous = ["glFinish"]
 read_into_blob = ["glGetTextureSubImage"]
 
 excluded = [
+    "glGetVertexAttribPointervARB",
     "glGetBufferPointerv",
     "glGetVertexAttribPointerv",
     "glGetPointerv",
@@ -504,6 +522,9 @@ len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
 [params."glGetNamedBufferSubDataEXT.data"]
 len = "(size < 0 ? 0 : static_cast<size_t>(size))"
+
+[params."glGetProgramStringARB.string"]
+len = "::av::glproto::program_string_bytes(av_t)"
 
 [params."glGetNamedProgramStringEXT.string"]
 len = "::av::glproto::named_program_string_bytes(av_t, program, target)"

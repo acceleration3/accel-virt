@@ -20,6 +20,7 @@ size_t   map_point_values(GLenum target) noexcept;
 size_t   pixel_map_size(ClientTransport &transport, GLenum map) noexcept;
 size_t   stipple_bytes(ClientTransport &transport, bool packing) noexcept;
 size_t   bitmap_bytes(ClientTransport &transport, GLsizei width, GLsizei height) noexcept;
+size_t   program_string_bytes(ClientTransport &transport) noexcept;
 size_t   named_program_string_bytes(ClientTransport &transport, GLuint program, GLenum target) noexcept;
 uint64_t mint_sync_token() noexcept;
 

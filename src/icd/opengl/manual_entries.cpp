@@ -327,6 +327,30 @@ void APIENTRY Wrap_glGetVertexAttribPointerv(GLuint index, GLenum pname, void **
     ::av::glicd::gl_icd_binding.root().manual().attribute_pointer(index, pname, pointer);
 }
 
+void APIENTRY Wrap_glVertexAttribPointerARB(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer)
+{
+    AV_SCOPE("Wrap_glVertexAttribPointerARB");
+    ::av::glicd::gl_icd_binding.root().manual().vertex_attrib_pointer(index, size, type, normalized, stride, pointer);
+}
+
+void APIENTRY Wrap_glEnableVertexAttribArrayARB(GLuint index)
+{
+    AV_SCOPE("Wrap_glEnableVertexAttribArrayARB");
+    ::av::glicd::gl_icd_binding.root().manual().enable_vertex_attrib_array(index, true);
+}
+
+void APIENTRY Wrap_glDisableVertexAttribArrayARB(GLuint index)
+{
+    AV_SCOPE("Wrap_glDisableVertexAttribArrayARB");
+    ::av::glicd::gl_icd_binding.root().manual().enable_vertex_attrib_array(index, false);
+}
+
+void APIENTRY Wrap_glGetProgramStringARB(GLenum target, GLenum pname, void* string)
+{
+    AV_SCOPE("Wrap_glGetProgramStringARB");
+    ::av::glicd::gl_icd_binding.root().manual().program_string(target, pname, string);
+}
+
 void APIENTRY Wrap_glIndexPointer(GLenum type, GLsizei stride, const void* pointer)
 {
     AV_SCOPE("Wrap_glIndexPointer");

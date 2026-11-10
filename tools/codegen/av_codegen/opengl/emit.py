@@ -1405,6 +1405,11 @@ def _helper_elements(cmd: Command, p: Param, text: str) -> list[str]:
                 "    GLint av_program_length = 0;",
                 "    av_gl.glGetNamedProgramivEXT(program, target, 0x8627, &av_program_length);",
                 f"    const uint64_t {n}_elements = av_program_length > 0 ? static_cast<uint64_t>(av_program_length) : 0;"]
+    if "program_string_bytes(" in text:
+        return ["    if (av_gl.glGetProgramivARB == nullptr) return false;",
+                "    GLint av_program_length = 0;",
+                "    av_gl.glGetProgramivARB(target, 0x8627, &av_program_length);",
+                f"    const uint64_t {n}_elements = av_program_length > 0 ? static_cast<uint64_t>(av_program_length) : 0;"]
     if "map_point_values(" in text and cmd.name.startswith("glMap1"):
         return [f"    uint64_t {n}_elements = 0;",
                 f"    if (!map_points(target, order, stride, 1, 0, {n}_elements)) return false;"]
@@ -1880,7 +1885,7 @@ HANDWRITTEN = {
     "glFinish",
     "glBufferStorage",
     "glGetBufferPointerv", "glGetNamedBufferPointerv",
-    "glGetVertexAttribPointerv",
+    "glGetVertexAttribPointerv", "glGetVertexAttribPointervARB", "glGetProgramStringARB",
     "glDebugMessageCallback",
     "glPixelStorei", "glPixelStoref",
     "glBindBuffer", "glDeleteBuffers",
@@ -1892,7 +1897,8 @@ HANDWRITTEN = {
 
     "glVertexPointer", "glNormalPointer", "glColorPointer",
     "glSecondaryColorPointer", "glIndexPointer", "glEdgeFlagPointer",
-    "glFogCoordPointer", "glTexCoordPointer", "glVertexAttribPointer",
+    "glFogCoordPointer", "glTexCoordPointer", "glVertexAttribPointer", "glVertexAttribPointerARB",
+    "glEnableVertexAttribArrayARB", "glDisableVertexAttribArrayARB",
     "glInterleavedArrays",
     "glEnableClientState", "glDisableClientState",
     "glEnableVertexAttribArray", "glDisableVertexAttribArray",

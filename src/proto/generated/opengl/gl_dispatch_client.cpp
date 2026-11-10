@@ -29394,6 +29394,1893 @@ void av_glWindowPos3sv(::av::ClientTransport& av_t, const GLshort* v) {
     (void)av_t.send_async(kCmd_glWindowPos3sv, av_b);
 }
 
+void av_glVertexAttrib1dARB(::av::ClientTransport& av_t, GLuint index, GLdouble x) {
+    AV_SCOPE("av_glVertexAttrib1dARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLdouble>(x);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib1dARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib1dARB, av_b);
+}
+
+void av_glVertexAttrib1dvARB(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("av_glVertexAttrib1dvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (1 * sizeof(GLdouble));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib1dvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib1dvARB, av_b);
+}
+
+void av_glVertexAttrib1fARB(::av::ClientTransport& av_t, GLuint index, GLfloat x) {
+    AV_SCOPE("av_glVertexAttrib1fARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLfloat>(x);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib1fARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib1fARB, av_b);
+}
+
+void av_glVertexAttrib1fvARB(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("av_glVertexAttrib1fvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (1 * sizeof(GLfloat));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib1fvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib1fvARB, av_b);
+}
+
+void av_glVertexAttrib1sARB(::av::ClientTransport& av_t, GLuint index, GLshort x) {
+    AV_SCOPE("av_glVertexAttrib1sARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(x));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib1sARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib1sARB, av_b);
+}
+
+void av_glVertexAttrib1svARB(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("av_glVertexAttrib1svARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (1 * sizeof(GLshort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib1svARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib1svARB, av_b);
+}
+
+void av_glVertexAttrib2dARB(::av::ClientTransport& av_t, GLuint index, GLdouble x, GLdouble y) {
+    AV_SCOPE("av_glVertexAttrib2dARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLdouble>(x);
+    av_b.write_pod<GLdouble>(y);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib2dARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib2dARB, av_b);
+}
+
+void av_glVertexAttrib2dvARB(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("av_glVertexAttrib2dvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (2 * sizeof(GLdouble));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib2dvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib2dvARB, av_b);
+}
+
+void av_glVertexAttrib2fARB(::av::ClientTransport& av_t, GLuint index, GLfloat x, GLfloat y) {
+    AV_SCOPE("av_glVertexAttrib2fARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLfloat>(x);
+    av_b.write_pod<GLfloat>(y);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib2fARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib2fARB, av_b);
+}
+
+void av_glVertexAttrib2fvARB(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("av_glVertexAttrib2fvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (2 * sizeof(GLfloat));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib2fvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib2fvARB, av_b);
+}
+
+void av_glVertexAttrib2sARB(::av::ClientTransport& av_t, GLuint index, GLshort x, GLshort y) {
+    AV_SCOPE("av_glVertexAttrib2sARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(x));
+    av_b.write_varint(static_cast<uint64_t>(y));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib2sARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib2sARB, av_b);
+}
+
+void av_glVertexAttrib2svARB(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("av_glVertexAttrib2svARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (2 * sizeof(GLshort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib2svARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib2svARB, av_b);
+}
+
+void av_glVertexAttrib3dARB(::av::ClientTransport& av_t, GLuint index, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("av_glVertexAttrib3dARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLdouble>(x);
+    av_b.write_pod<GLdouble>(y);
+    av_b.write_pod<GLdouble>(z);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib3dARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib3dARB, av_b);
+}
+
+void av_glVertexAttrib3dvARB(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("av_glVertexAttrib3dvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (3 * sizeof(GLdouble));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib3dvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib3dvARB, av_b);
+}
+
+void av_glVertexAttrib3fARB(::av::ClientTransport& av_t, GLuint index, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("av_glVertexAttrib3fARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLfloat>(x);
+    av_b.write_pod<GLfloat>(y);
+    av_b.write_pod<GLfloat>(z);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib3fARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib3fARB, av_b);
+}
+
+void av_glVertexAttrib3fvARB(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("av_glVertexAttrib3fvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (3 * sizeof(GLfloat));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib3fvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib3fvARB, av_b);
+}
+
+void av_glVertexAttrib3sARB(::av::ClientTransport& av_t, GLuint index, GLshort x, GLshort y, GLshort z) {
+    AV_SCOPE("av_glVertexAttrib3sARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(x));
+    av_b.write_varint(static_cast<uint64_t>(y));
+    av_b.write_varint(static_cast<uint64_t>(z));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib3sARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib3sARB, av_b);
+}
+
+void av_glVertexAttrib3svARB(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("av_glVertexAttrib3svARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (3 * sizeof(GLshort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib3svARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib3svARB, av_b);
+}
+
+void av_glVertexAttrib4NbvARB(::av::ClientTransport& av_t, GLuint index, const GLbyte* v) {
+    AV_SCOPE("av_glVertexAttrib4NbvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLbyte));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NbvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NbvARB, av_b);
+}
+
+void av_glVertexAttrib4NivARB(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
+    AV_SCOPE("av_glVertexAttrib4NivARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLint));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NivARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NivARB, av_b);
+}
+
+void av_glVertexAttrib4NsvARB(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("av_glVertexAttrib4NsvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLshort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NsvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NsvARB, av_b);
+}
+
+void av_glVertexAttrib4NubARB(::av::ClientTransport& av_t, GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w) {
+    AV_SCOPE("av_glVertexAttrib4NubARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(x));
+    av_b.write_varint(static_cast<uint64_t>(y));
+    av_b.write_varint(static_cast<uint64_t>(z));
+    av_b.write_varint(static_cast<uint64_t>(w));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NubARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NubARB, av_b);
+}
+
+void av_glVertexAttrib4NubvARB(::av::ClientTransport& av_t, GLuint index, const GLubyte* v) {
+    AV_SCOPE("av_glVertexAttrib4NubvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLubyte));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NubvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NubvARB, av_b);
+}
+
+void av_glVertexAttrib4NuivARB(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("av_glVertexAttrib4NuivARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLuint));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NuivARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NuivARB, av_b);
+}
+
+void av_glVertexAttrib4NusvARB(::av::ClientTransport& av_t, GLuint index, const GLushort* v) {
+    AV_SCOPE("av_glVertexAttrib4NusvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLushort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4NusvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4NusvARB, av_b);
+}
+
+void av_glVertexAttrib4bvARB(::av::ClientTransport& av_t, GLuint index, const GLbyte* v) {
+    AV_SCOPE("av_glVertexAttrib4bvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLbyte));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4bvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4bvARB, av_b);
+}
+
+void av_glVertexAttrib4dARB(::av::ClientTransport& av_t, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("av_glVertexAttrib4dARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLdouble>(x);
+    av_b.write_pod<GLdouble>(y);
+    av_b.write_pod<GLdouble>(z);
+    av_b.write_pod<GLdouble>(w);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4dARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4dARB, av_b);
+}
+
+void av_glVertexAttrib4dvARB(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("av_glVertexAttrib4dvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLdouble));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4dvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4dvARB, av_b);
+}
+
+void av_glVertexAttrib4fARB(::av::ClientTransport& av_t, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("av_glVertexAttrib4fARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLfloat>(x);
+    av_b.write_pod<GLfloat>(y);
+    av_b.write_pod<GLfloat>(z);
+    av_b.write_pod<GLfloat>(w);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4fARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4fARB, av_b);
+}
+
+void av_glVertexAttrib4fvARB(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("av_glVertexAttrib4fvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLfloat));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4fvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4fvARB, av_b);
+}
+
+void av_glVertexAttrib4ivARB(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
+    AV_SCOPE("av_glVertexAttrib4ivARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLint));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4ivARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4ivARB, av_b);
+}
+
+void av_glVertexAttrib4sARB(::av::ClientTransport& av_t, GLuint index, GLshort x, GLshort y, GLshort z, GLshort w) {
+    AV_SCOPE("av_glVertexAttrib4sARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(x));
+    av_b.write_varint(static_cast<uint64_t>(y));
+    av_b.write_varint(static_cast<uint64_t>(z));
+    av_b.write_varint(static_cast<uint64_t>(w));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4sARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4sARB, av_b);
+}
+
+void av_glVertexAttrib4svARB(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("av_glVertexAttrib4svARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLshort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4svARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4svARB, av_b);
+}
+
+void av_glVertexAttrib4ubvARB(::av::ClientTransport& av_t, GLuint index, const GLubyte* v) {
+    AV_SCOPE("av_glVertexAttrib4ubvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLubyte));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4ubvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4ubvARB, av_b);
+}
+
+void av_glVertexAttrib4uivARB(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("av_glVertexAttrib4uivARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLuint));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4uivARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4uivARB, av_b);
+}
+
+void av_glVertexAttrib4usvARB(::av::ClientTransport& av_t, GLuint index, const GLushort* v) {
+    AV_SCOPE("av_glVertexAttrib4usvARB");
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t v_want = 0;
+    if (v != nullptr) v_want = (4 * sizeof(GLushort));
+    ::av::ClientBlobLease v_lease{};
+    bool v_via_blob = false;
+    if (v != nullptr &&
+        v_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            v_lease = av_blobs.take(v_want);
+            if (v_lease.taken()) {
+                __builtin_memcpy(v_lease.data(), v, v_want);
+                v_via_blob = true;
+            }
+        }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
+    if (v_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        av_b.write_varint(static_cast<uint64_t>(v_lease.offset()));
+    } else if (v != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(v_want));
+        if (v_want != 0) av_b.write(v, v_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttrib4usvARB",
+                                       av_b.offset());
+        if (v_via_blob) {
+            av_t.blobs()
+                .give_back(v_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttrib4usvARB, av_b);
+}
+
+void av_glVertexAttribPointerARB(::av::ClientTransport& av_t, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("av_glVertexAttribPointerARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(size));
+    av_b.write_varint(static_cast<uint64_t>(type));
+    av_b.write_varint(static_cast<uint64_t>(normalized));
+    av_b.write_varint(static_cast<uint64_t>(stride));
+    av_b.write_pod<uint64_t>(pointer);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glVertexAttribPointerARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glVertexAttribPointerARB, av_b);
+}
+
+void av_glEnableVertexAttribArrayARB(::av::ClientTransport& av_t, GLuint index) {
+    AV_SCOPE("av_glEnableVertexAttribArrayARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glEnableVertexAttribArrayARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glEnableVertexAttribArrayARB, av_b);
+}
+
+void av_glDisableVertexAttribArrayARB(::av::ClientTransport& av_t, GLuint index) {
+    AV_SCOPE("av_glDisableVertexAttribArrayARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(index));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glDisableVertexAttribArrayARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glDisableVertexAttribArrayARB, av_b);
+}
+
+void av_glProgramStringARB(::av::ClientTransport& av_t, GLenum target, GLenum format, GLsizei len, const void* string) {
+    AV_SCOPE("av_glProgramStringARB");
+    const uint64_t av_blob_sizes[] = {string != nullptr && static_cast<size_t>((static_cast<size_t>(len) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(len) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(format));
+    av_b.write_varint(static_cast<uint64_t>(len));
+    size_t string_want = 0;
+    if (string != nullptr) string_want = (static_cast<size_t>(len) * sizeof(uint8_t));
+    ::av::ClientBlobLease string_lease{};
+    bool string_via_blob = false;
+    if (string != nullptr &&
+        string_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            string_lease = av_blobs.take(string_want);
+            if (string_lease.taken()) {
+                __builtin_memcpy(string_lease.data(), string, string_want);
+                string_via_blob = true;
+            }
+        }
+        if (!string_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(string == nullptr ? 0 : (string_via_blob ? 3 : 1));
+    if (string_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(string_want));
+        av_b.write_varint(static_cast<uint64_t>(string_lease.offset()));
+    } else if (string != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(string_want));
+        if (string_want != 0) av_b.write(string, string_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramStringARB",
+                                       av_b.offset());
+        if (string_via_blob) {
+            av_t.blobs()
+                .give_back(string_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramStringARB, av_b);
+}
+
+void av_glBindProgramARB(::av::ClientTransport& av_t, GLenum target, GLuint program) {
+    AV_SCOPE("av_glBindProgramARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(program));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glBindProgramARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glBindProgramARB, av_b);
+}
+
+void av_glDeleteProgramsARB(::av::ClientTransport& av_t, GLsizei n, const GLuint* programs) {
+    AV_SCOPE("av_glDeleteProgramsARB");
+    const uint64_t av_blob_sizes[] = {programs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(n));
+    size_t programs_want = 0;
+    if (programs != nullptr) programs_want = (static_cast<size_t>(n) * sizeof(GLuint));
+    ::av::ClientBlobLease programs_lease{};
+    bool programs_via_blob = false;
+    if (programs != nullptr &&
+        programs_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            programs_lease = av_blobs.take(programs_want);
+            if (programs_lease.taken()) {
+                __builtin_memcpy(programs_lease.data(), programs, programs_want);
+                programs_via_blob = true;
+            }
+        }
+        if (!programs_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(programs == nullptr ? 0 : (programs_via_blob ? 3 : 1));
+    if (programs_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(programs_want));
+        av_b.write_varint(static_cast<uint64_t>(programs_lease.offset()));
+    } else if (programs != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(programs_want));
+        if (programs_want != 0) av_b.write(programs, programs_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glDeleteProgramsARB",
+                                       av_b.offset());
+        if (programs_via_blob) {
+            av_t.blobs()
+                .give_back(programs_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glDeleteProgramsARB, av_b);
+}
+
+void av_glGenProgramsARB(::av::ClientTransport& av_t, GLsizei n, GLuint* programs) {
+    AV_SCOPE("av_glGenProgramsARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(n));
+    const size_t programs_want = programs != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
+    av_b.write_pod<uint8_t>(programs != nullptr ? 1 : 0);
+    if (programs != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(programs_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGenProgramsARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGenProgramsARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (programs != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(programs_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(programs, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glProgramEnvParameter4dARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("av_glProgramEnvParameter4dARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLdouble>(x);
+    av_b.write_pod<GLdouble>(y);
+    av_b.write_pod<GLdouble>(z);
+    av_b.write_pod<GLdouble>(w);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramEnvParameter4dARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramEnvParameter4dARB, av_b);
+}
+
+void av_glProgramEnvParameter4dvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, const GLdouble* params) {
+    AV_SCOPE("av_glProgramEnvParameter4dvARB");
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t params_want = 0;
+    if (params != nullptr) params_want = (4 * sizeof(GLdouble));
+    ::av::ClientBlobLease params_lease{};
+    bool params_via_blob = false;
+    if (params != nullptr &&
+        params_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            params_lease = av_blobs.take(params_want);
+            if (params_lease.taken()) {
+                __builtin_memcpy(params_lease.data(), params, params_want);
+                params_via_blob = true;
+            }
+        }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
+    if (params_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        av_b.write_varint(static_cast<uint64_t>(params_lease.offset()));
+    } else if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        if (params_want != 0) av_b.write(params, params_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramEnvParameter4dvARB",
+                                       av_b.offset());
+        if (params_via_blob) {
+            av_t.blobs()
+                .give_back(params_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramEnvParameter4dvARB, av_b);
+}
+
+void av_glProgramEnvParameter4fARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("av_glProgramEnvParameter4fARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLfloat>(x);
+    av_b.write_pod<GLfloat>(y);
+    av_b.write_pod<GLfloat>(z);
+    av_b.write_pod<GLfloat>(w);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramEnvParameter4fARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramEnvParameter4fARB, av_b);
+}
+
+void av_glProgramEnvParameter4fvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, const GLfloat* params) {
+    AV_SCOPE("av_glProgramEnvParameter4fvARB");
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t params_want = 0;
+    if (params != nullptr) params_want = (4 * sizeof(GLfloat));
+    ::av::ClientBlobLease params_lease{};
+    bool params_via_blob = false;
+    if (params != nullptr &&
+        params_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            params_lease = av_blobs.take(params_want);
+            if (params_lease.taken()) {
+                __builtin_memcpy(params_lease.data(), params, params_want);
+                params_via_blob = true;
+            }
+        }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
+    if (params_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        av_b.write_varint(static_cast<uint64_t>(params_lease.offset()));
+    } else if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        if (params_want != 0) av_b.write(params, params_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramEnvParameter4fvARB",
+                                       av_b.offset());
+        if (params_via_blob) {
+            av_t.blobs()
+                .give_back(params_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramEnvParameter4fvARB, av_b);
+}
+
+void av_glProgramLocalParameter4dARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("av_glProgramLocalParameter4dARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLdouble>(x);
+    av_b.write_pod<GLdouble>(y);
+    av_b.write_pod<GLdouble>(z);
+    av_b.write_pod<GLdouble>(w);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramLocalParameter4dARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramLocalParameter4dARB, av_b);
+}
+
+void av_glProgramLocalParameter4dvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, const GLdouble* params) {
+    AV_SCOPE("av_glProgramLocalParameter4dvARB");
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t params_want = 0;
+    if (params != nullptr) params_want = (4 * sizeof(GLdouble));
+    ::av::ClientBlobLease params_lease{};
+    bool params_via_blob = false;
+    if (params != nullptr &&
+        params_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            params_lease = av_blobs.take(params_want);
+            if (params_lease.taken()) {
+                __builtin_memcpy(params_lease.data(), params, params_want);
+                params_via_blob = true;
+            }
+        }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
+    if (params_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        av_b.write_varint(static_cast<uint64_t>(params_lease.offset()));
+    } else if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        if (params_want != 0) av_b.write(params, params_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramLocalParameter4dvARB",
+                                       av_b.offset());
+        if (params_via_blob) {
+            av_t.blobs()
+                .give_back(params_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramLocalParameter4dvARB, av_b);
+}
+
+void av_glProgramLocalParameter4fARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("av_glProgramLocalParameter4fARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_pod<GLfloat>(x);
+    av_b.write_pod<GLfloat>(y);
+    av_b.write_pod<GLfloat>(z);
+    av_b.write_pod<GLfloat>(w);
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramLocalParameter4fARB",
+                                       av_b.offset());
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramLocalParameter4fARB, av_b);
+}
+
+void av_glProgramLocalParameter4fvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, const GLfloat* params) {
+    AV_SCOPE("av_glProgramLocalParameter4fvARB");
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    size_t params_want = 0;
+    if (params != nullptr) params_want = (4 * sizeof(GLfloat));
+    ::av::ClientBlobLease params_lease{};
+    bool params_via_blob = false;
+    if (params != nullptr &&
+        params_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& av_blobs = av_t.blobs();
+        if (av_blobs.ready()) {
+            params_lease = av_blobs.take(params_want);
+            if (params_lease.taken()) {
+                __builtin_memcpy(params_lease.data(), params, params_want);
+                params_via_blob = true;
+            }
+        }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
+    }
+    av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
+    if (params_via_blob) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        av_b.write_varint(static_cast<uint64_t>(params_lease.offset()));
+    } else if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+        if (params_want != 0) av_b.write(params, params_want);
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glProgramLocalParameter4fvARB",
+                                       av_b.offset());
+        if (params_via_blob) {
+            av_t.blobs()
+                .give_back(params_lease);
+        }
+        av_t.end_call();
+        return;
+    }
+    (void)av_t.send_async(kCmd_glProgramLocalParameter4fvARB, av_b);
+}
+
+void av_glGetProgramEnvParameterdvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLdouble* params) {
+    AV_SCOPE("av_glGetProgramEnvParameterdvARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLdouble)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetProgramEnvParameterdvARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetProgramEnvParameterdvARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetProgramEnvParameterfvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLfloat* params) {
+    AV_SCOPE("av_glGetProgramEnvParameterfvARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLfloat)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetProgramEnvParameterfvARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetProgramEnvParameterfvARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetProgramLocalParameterdvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLdouble* params) {
+    AV_SCOPE("av_glGetProgramLocalParameterdvARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLdouble)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetProgramLocalParameterdvARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetProgramLocalParameterdvARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetProgramLocalParameterfvARB(::av::ClientTransport& av_t, GLenum target, GLuint index, GLfloat* params) {
+    AV_SCOPE("av_glGetProgramLocalParameterfvARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(index));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLfloat)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetProgramLocalParameterfvARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetProgramLocalParameterfvARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetProgramivARB(::av::ClientTransport& av_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("av_glGetProgramivARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(pname));
+    const size_t params_want = params != nullptr ? (1 * sizeof(GLint)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetProgramivARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetProgramivARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetProgramStringARB(::av::ClientTransport& av_t, GLenum target, GLenum pname, void* string) {
+    AV_SCOPE("av_glGetProgramStringARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(target));
+    av_b.write_varint(static_cast<uint64_t>(pname));
+    const size_t string_want = string != nullptr ? (static_cast<size_t>(::av::glproto::program_string_bytes(av_t)) * sizeof(uint8_t)) : 0u;
+    av_b.write_pod<uint8_t>(string != nullptr ? 1 : 0);
+    if (string != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(string_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetProgramStringARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetProgramStringARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (string != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(string_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(string, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetVertexAttribdvARB(::av::ClientTransport& av_t, GLuint index, GLenum pname, GLdouble* params) {
+    AV_SCOPE("av_glGetVertexAttribdvARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(pname));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLdouble)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetVertexAttribdvARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetVertexAttribdvARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetVertexAttribfvARB(::av::ClientTransport& av_t, GLuint index, GLenum pname, GLfloat* params) {
+    AV_SCOPE("av_glGetVertexAttribfvARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(pname));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLfloat)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetVertexAttribfvARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetVertexAttribfvARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+void av_glGetVertexAttribivARB(::av::ClientTransport& av_t, GLuint index, GLenum pname, GLint* params) {
+    AV_SCOPE("av_glGetVertexAttribivARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(index));
+    av_b.write_varint(static_cast<uint64_t>(pname));
+    const size_t params_want = params != nullptr ? (4 * sizeof(GLint)) : 0u;
+    av_b.write_pod<uint8_t>(params != nullptr ? 1 : 0);
+    if (params != nullptr) {
+        av_b.write_varint(static_cast<uint64_t>(params_want));
+    }
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetVertexAttribivARB",
+                                       av_b.offset());
+        return;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glGetVertexAttribivARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return;
+    }
+    if (params != nullptr) {
+        uint64_t av_bytes = 0;
+        if (!av_r.read_varint(av_bytes)) return;
+        if (av_bytes > static_cast<uint64_t>(params_want)) return;
+        if (av_bytes != 0 &&
+            !av_r.read(params, static_cast<size_t>(av_bytes))) return;
+    }
+}
+
+GLboolean av_glIsProgramARB(::av::ClientTransport& av_t, GLuint program) {
+    AV_SCOPE("av_glIsProgramARB");
+    ::av::WireWriter av_b = av_t.request_writer();
+    const ::av::SyncCallScope av_call{av_t};
+    av_b.write_varint(static_cast<uint64_t>(program));
+    if (av_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glIsProgramARB",
+                                       av_b.offset());
+        return 0;
+    }
+    ::av::WireReader av_r{nullptr, 0u};
+    const bool av_sent = av_t.send_sync(kCmd_glIsProgramARB, av_b, av_r) ==
+        ::av::TransportResult::ok;
+    if (!av_sent) {
+        return 0;
+    }
+    uint64_t av_ret = 0;
+    if (!av_r.read_varint(av_ret)) return 0;
+    return static_cast<GLboolean>(av_ret);
+}
+
 void av_glBlendBarrierKHR(::av::ClientTransport& av_t) {
     AV_SCOPE("av_glBlendBarrierKHR");
     ::av::WireWriter av_b = av_t.request_writer();
