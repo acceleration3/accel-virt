@@ -1144,6 +1144,67 @@ void judge_healthy(av::D3dLoopback &wire)
 
 }
 
+TEST(d3d12_session_device, a_committed_resource_takes_every_heap_flag_combination_the_api_allows_it)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    std::uint32_t hresult = 1u;
+    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult));
+    CHECK_EQ(hresult, 0u);
+    constexpr std::uint32_t deny_buffers = 0x4u;
+    constexpr std::uint32_t deny_rt_ds = 0x40u;
+    constexpr std::uint32_t deny_non_rt_ds = 0x80u;
+    ResourceDesc texture = {};
+    texture.width = size;
+    texture.dimension = dimension_texture2d;
+    texture.height = size;
+    texture.depth_or_array = 1u;
+    texture.mip_levels = 1u;
+    texture.format = format_b8g8r8a8;
+    texture.sample_count = 1u;
+    ResourceDesc target = texture;
+    target.flags = flag_render_target;
+    struct Case {
+        const char *name;
+        ResourceDesc desc;
+        std::uint32_t flags;
+    };
+    const Case cases[] = {{"buffer only buffers", buffer_of(4096u), deny_rt_ds | deny_non_rt_ds},
+                          {"buffer deny rt ds", buffer_of(4096u), deny_rt_ds},
+                          {"buffer deny non rt ds", buffer_of(4096u), deny_non_rt_ds},
+                          {"texture only non rt ds", texture, deny_buffers | deny_rt_ds},
+                          {"texture deny buffers", texture, deny_buffers},
+                          {"texture deny rt ds", texture, deny_rt_ds},
+                          {"render target only rt ds", target, deny_buffers | deny_non_rt_ds}};
+    std::uint32_t id = 900u;
+    for (const Case &one : cases) {
+        hresult = 1u;
+        CHECK(av_d3d12_CreateCommittedResource12(wire, id, heap_of(heap_default), one.flags, one.desc, 0u,
+                                                  ClearValue{}, one.desc.dimension == dimension_buffer ? 0x500000000ull + id * 0x10000ull : 0u, &hresult));
+        if (hresult != 0u) std::fprintf(stderr, "committed %s: %08x\n", one.name, hresult);
+        CHECK_EQ(hresult, 0u);
+        id++;
+        hresult = 1u;
+        CHECK(av_d3d12_CreateHeap12(wire, id, heap_of(heap_default), one.flags, 1u << 20u, 65536u, 0u, 0u, &hresult));
+        if (hresult != 0u) std::fprintf(stderr, "heap %s: %08x\n", one.name, hresult);
+        CHECK_EQ(hresult, 0u);
+        CHECK(av_d3d12_CreatePlacedResource12(wire, id + 1u, id, 0u, one.desc, 0u, ClearValue{},
+                                               one.desc.dimension == dimension_buffer ? 0x600000000ull + id * 0x10000ull : 0u));
+        id += 2u;
+    }
+    judge_healthy(wire);
+    backend.shut_down();
+}
+
 TEST(d3d12_session_device, a_list_runs_its_copy_after_the_guest_destroyed_the_buffers_it_names)
 {
     av::ExecutorLogRig rig;
