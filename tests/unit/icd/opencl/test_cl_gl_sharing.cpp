@@ -541,3 +541,21 @@ TEST(cl_gl_sharing, a_context_the_root_has_no_room_for_is_out_of_host_memory_and
   CHECK(rig.root().create_context(nullptr, &named, 1u, &error, av::clicd::ClContextNotify()) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_gl_sharing, a_memory_object_not_made_from_gl_is_no_gl_object_to_acquire_and_a_non_texture_target_is_refused)
+{ ClIcdRig rig;
+  Sharing  sharing(rig);
+  CHECK(sharing.made());
+  if (!sharing.made()) return;
+  rig.host().cl_handle(host_buffer + 1u, CL_SUCCESS);
+  cl_int       error = CL_INVALID_VALUE;
+  const cl_mem plain = rig.root().create_buffer(sharing.context(), CL_MEM_READ_WRITE, 64u, nullptr, nullptr, &error);
+  CHECK(plain != nullptr);
+  const cl_mem objects[1] = {plain};
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_acquire_gl(sharing.queue(), 1u, objects, 0u, nullptr, nullptr), CL_INVALID_GL_OBJECT);
+  CHECK_EQ(rig.root().enqueue_release_gl(sharing.queue(), 1u, objects, 0u, nullptr, nullptr), CL_INVALID_GL_OBJECT);
+  CHECK(rig.root().create_from_gl_texture(sharing.context(), CL_MEM_READ_WRITE, 0x8892u, 0, 5u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }

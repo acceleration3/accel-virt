@@ -60,6 +60,7 @@ public:
     static constexpr uint32_t program_from_source = 16u;
     static constexpr uint32_t program_failed = 32u;
     static constexpr uint32_t event_settled = 64u;
+    static constexpr uint32_t mem_from_gl = 128u;
 
     void            keep_source(ClProgramSource *source);
     ClProgramSource *source() const;

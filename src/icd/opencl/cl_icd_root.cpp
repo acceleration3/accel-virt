@@ -2814,7 +2814,9 @@ cl_mem ClIcdRoot::gl_object(ClientTransport &wire, ClObject &context, uint64_t m
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_INVALID_GL_OBJECT);
         return nullptr;
     }
-    return static_cast<cl_mem>(wrap(wire, ClObject::Kind::mem, made, context.context(), &context, error));
+    void *const object = wrap(wire, ClObject::Kind::mem, made, context.context(), &context, error);
+    if (object != nullptr) static_cast<ClObject *>(object)->keep_traits(ClObject::mem_from_gl);
+    return static_cast<cl_mem>(object);
 }
 
 cl_int ClIcdRoot::device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
@@ -2878,12 +2880,26 @@ cl_mem ClIcdRoot::create_from_gl_buffer(cl_context context, cl_mem_flags flags, 
     return gl_object(wire, *held, made, host_error, error);
 }
 
+bool ClIcdRoot::texture_target(cl_GLenum target)
+{
+    AV_SCOPE("ClIcdRoot::texture_target");
+    switch (target) {
+    case 0x0DE0u: case 0x0DE1u: case 0x806Fu: case 0x8C18u: case 0x8C1Au: case 0x8C2Au: case 0x84F5u:
+    case 0x8515u: case 0x8516u: case 0x8517u: case 0x8518u: case 0x8519u: case 0x851Au: return true;
+    default: return false;
+    }
+}
+
 cl_mem ClIcdRoot::create_from_gl_texture(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint level,
                                          cl_GLuint texture, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_from_gl_texture");
     ClObject *const held = gl_sharing(context, error);
     if (held == nullptr) return nullptr;
+    if (!texture_target(target)) {
+        report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
     ClientTransport &wire = *wire_of(*held);
     gl_share_.run_held_calls();
     cl_int           host_error = CL_SUCCESS;
@@ -2960,6 +2976,7 @@ cl_int ClIcdRoot::enqueue_gl_objects(GlObjectsCommand command, cl_command_queue 
         ClObject *const object = judged(objects[index], ClObject::Kind::mem);
         if (object == nullptr) return CL_INVALID_MEM_OBJECT;
         if (context_of(*object) != context) return CL_INVALID_CONTEXT;
+        if ((object->traits() & ClObject::mem_from_gl) == 0u) return CL_INVALID_GL_OBJECT;
         named[index] = object->wire();
     }
     ClHostNumbers handles_room(memory_);
