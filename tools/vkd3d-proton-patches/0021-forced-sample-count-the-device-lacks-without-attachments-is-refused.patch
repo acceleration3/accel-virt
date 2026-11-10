@@ -1,0 +1,29 @@
+From: accel-virt
+Subject: [PATCH] A forced sample count the device cannot rasterize without attachments is refused
+
+The pipeline rasterized at an unsupported count and the pixel shader saw a full
+coverage mask in every pixel. Pipeline creation now fails with E_INVALIDARG when
+framebufferNoAttachmentsSampleCounts lacks the forced count.
+---
+diff --git a/libs/vkd3d/state.c b/libs/vkd3d/state.c
+index d58b5fc..1e9f3df 100644
+--- a/libs/vkd3d/state.c
++++ b/libs/vkd3d/state.c
+@@ -4981,7 +4981,17 @@ static HRESULT d3d12_pipeline_state_init_graphics_create_info(struct d3d12_pipel
+         if (desc->rtv_formats.NumRenderTargets || desc->dsv_format != DXGI_FORMAT_UNKNOWN)
+             WARN("Ignoring ForcedSampleCount %u with bound targets.\n", forced.Count);
+         else
++        {
++            const VkSampleCountFlags supported =
++                    state->device->device_info.properties2.properties.limits.framebufferNoAttachmentsSampleCounts;
++
+             sample_count = vk_samples_from_dxgi_sample_desc(&forced);
++            if (!(supported & sample_count))
++            {
++                WARN("ForcedSampleCount %u is not supported by the device.\n", forced.Count);
++                return E_INVALIDARG;
++            }
++        }
+     }
+ 
+     rt_count = desc->rtv_formats.NumRenderTargets;
