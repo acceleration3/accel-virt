@@ -17,7 +17,7 @@ public:
 
     void     ran(const glproto::RealGl &gl, uint32_t command_id, WireReader payload);
     void     stop(const glproto::RealGl &gl);
-    uint64_t cost(uint32_t command_id, WireReader payload) const;
+    uint64_t cost(const glproto::RealGl &gl, uint32_t command_id, WireReader payload) const;
 
     bool invariants_hold() const;
 
