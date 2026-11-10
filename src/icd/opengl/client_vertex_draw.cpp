@@ -325,7 +325,8 @@ uint32_t ClientVertexDraw::element_bytes(uint32_t slot) const
 {
     AV_SCOPE("ClientVertexDraw::element_bytes");
     const ClientVertexState::Slot &entry = state_.slot(slot);
-    if (entry.type_ == gl_int_2_10_10_10_rev || entry.type_ == gl_unsigned_int_2_10_10_10_rev) return 4u;
+    if (entry.type_ == gl_int_2_10_10_10_rev || entry.type_ == gl_unsigned_int_2_10_10_10_rev || entry.type_ == 0x8C3Bu)
+        return 4u;
     const uint32_t count = entry.size_ == static_cast<int32_t>(gl_bgra) ? 4u : static_cast<uint32_t>(entry.size_);
     return count * type_bytes(entry.type_);
 }

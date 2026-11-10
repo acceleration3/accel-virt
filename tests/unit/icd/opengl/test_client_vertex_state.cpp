@@ -108,7 +108,13 @@ TEST(client_vertex_state, pointers_are_checked_against_what_each_array_accepts)
   CHECK_EQ(state.validate(ClientVertexState::vertex_slot, 0x80E1, gl_float, 0), 0x0501u);
   CHECK_EQ(state.validate(2u, 5, gl_float, 0), 0x0501u);
   CHECK_EQ(state.validate(2u, 4, 0x140Cu, 0), 0u);
-  CHECK_EQ(state.validate(2u, 4, 0x1234u, 0), 0x0500u); }
+  CHECK_EQ(state.validate(2u, 4, 0x1234u, 0), 0x0500u);
+  CHECK_EQ(state.validate(2u, 4, 0x8368u, 0), 0u);
+  CHECK_EQ(state.validate(2u, 0x80E1, 0x8D9Fu, 0), 0u);
+  CHECK_EQ(state.validate(2u, 3, 0x8C3Bu, 0), 0u);
+  CHECK_EQ(state.validate(ClientVertexState::vertex_slot, 4, 0x8368u, 0), 0u);
+  CHECK_EQ(state.validate(ClientVertexState::normal_slot, 3, 0x8D9Fu, 0), 0u);
+  CHECK_EQ(state.validate(ClientVertexState::color_slot, 4, 0x8368u, 0), 0u); }
 
 TEST(client_vertex_state, the_client_attribute_stack_restores_the_arrays_it_saved)
 { av::MockPlatform platform;

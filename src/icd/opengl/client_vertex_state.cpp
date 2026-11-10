@@ -230,21 +230,22 @@ uint32_t ClientVertexState::validate(uint32_t slot, int32_t size, uint32_t type,
     AV_SCOPE("ClientVertexState::validate");
     constexpr uint32_t bit_byte = 1u << 0u, bit_ubyte = 1u << 1u, bit_short = 1u << 2u, bit_ushort = 1u << 3u,
                        bit_int = 1u << 4u, bit_uint = 1u << 5u, bit_float = 1u << 6u, bit_double = 1u << 7u,
-                       bit_half = 1u << 8u, bit_fixed = 1u << 9u;
+                       bit_half = 1u << 8u, bit_fixed = 1u << 9u, bit_packed = 1u << 10u;
     if (stride < 0) return 0x0501u;
     uint32_t allowed = 0u;
     int32_t  least = 1, most = 4;
     if (slot < generic_slots) {
         allowed = bit_byte | bit_ubyte | bit_short | bit_ushort | bit_int | bit_uint | bit_float | bit_double | bit_half |
-                  bit_fixed;
+                  bit_fixed | bit_packed;
     } else if (slot >= texcoord_slot) {
-        allowed = bit_short | bit_int | bit_float | bit_double | bit_half;
+        allowed = bit_short | bit_int | bit_float | bit_double | bit_half | bit_packed;
     } else {
         switch (slot) {
-        case vertex_slot: allowed = bit_short | bit_int | bit_float | bit_double | bit_half; least = 2; break;
-        case normal_slot: allowed = bit_byte | bit_short | bit_int | bit_float | bit_double | bit_half; least = 3; most = 3; break;
+        case vertex_slot: allowed = bit_short | bit_int | bit_float | bit_double | bit_half | bit_packed; least = 2; break;
+        case normal_slot: allowed = bit_byte | bit_short | bit_int | bit_float | bit_double | bit_half | bit_packed; least = 3; most = 3; break;
         case color_slot:
-            allowed = bit_byte | bit_ubyte | bit_short | bit_ushort | bit_int | bit_uint | bit_float | bit_double | bit_half;
+            allowed = bit_byte | bit_ubyte | bit_short | bit_ushort | bit_int | bit_uint | bit_float | bit_double | bit_half |
+                      bit_packed;
             least = 3;
             break;
         case secondary_color_slot:
@@ -269,6 +270,9 @@ uint32_t ClientVertexState::validate(uint32_t slot, int32_t size, uint32_t type,
     case 0x140Au: have = bit_double; break;
     case 0x140Bu: have = bit_half; break;
     case 0x140Cu: have = bit_fixed; break;
+    case 0x8368u:
+    case 0x8D9Fu:
+    case 0x8C3Bu: have = bit_packed; break;
     default: break;
     }
     if ((allowed & have) == 0u) return 0x0500u;

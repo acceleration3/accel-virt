@@ -6,7 +6,7 @@
 
 namespace av {
 
-GlSharedFences::GlSharedFences() : lock_(), entries_{}, next_(0u), count_(0u), newest_(0u)
+GlSharedFences::GlSharedFences() : lock_(), entries_{}, next_(0u), count_(0u)
 {
     AV_SCOPE("GlSharedFences::GlSharedFences");
 }
@@ -19,7 +19,6 @@ void GlSharedFences::publish(uint64_t token, void *fence)
     entries_[next_] = Entry{token, fence};
     next_ = (next_ + 1u) % most_fences;
     if (count_ < most_fences) count_++;
-    if (token > newest_) newest_ = token;
     lock_.release();
 }
 
@@ -56,10 +55,6 @@ void *GlSharedFences::await(uint64_t token, uint64_t nanoseconds)
     for (;;) {
         void *const found = find(token);
         if (found != nullptr || waited >= nanoseconds) return found;
-        lock_.acquire();
-        const bool already_past = token <= newest_;
-        lock_.release();
-        if (already_past) return nullptr;
         const timespec pause{0, static_cast<long>(step)};
         nanosleep(&pause, nullptr);
         waited += step;
