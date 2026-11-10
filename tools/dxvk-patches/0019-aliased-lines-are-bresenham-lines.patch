@@ -1,0 +1,45 @@
+From: accel-virt
+Subject: [PATCH] aliased lines use the Bresenham line mode when the device has it
+
+D3D draws an aliased line with the diamond-exit rule that Bresenham lines follow. The default Vulkan mode is the rectangular one on some devices, which picked other pixels along the line; Bresenham is asked for explicitly and the line stays one pixel wide.
+---
+diff -ruN
+--- a/src/d3d11/d3d11_rasterizer.cpp	2026-11-10 21:47:33.910064800 +0000
++++ b/src/d3d11/d3d11_rasterizer.cpp	2026-11-10 21:47:33.934818133 +0000
+@@ -53,6 +53,8 @@
+     } else if (desc.AntialiasedLineEnable) {
+       if (features.extLineRasterization.smoothLines)
+         m_state.setLineMode(VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT);
++    } else if (features.extLineRasterization.bresenhamLines) {
++      m_state.setLineMode(VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
+     }
+ 
+     // Target-independent rasterization is emulated at one sample, the
+diff -ruN
+--- a/src/dxvk/dxvk_device_info.cpp	2026-11-10 21:47:33.918198986 +0000
++++ b/src/dxvk/dxvk_device_info.cpp	2026-11-10 21:47:33.934983094 +0000
+@@ -973,6 +973,7 @@
+       ENABLE_EXT(extHdrMetadata, false),
+ 
+       /* Line rasterization features for client APIs */
++      ENABLE_EXT_FEATURE(extLineRasterization, bresenhamLines, false),
+       ENABLE_EXT_FEATURE(extLineRasterization, rectangularLines,  false),
+       ENABLE_EXT_FEATURE(extLineRasterization, smoothLines, false),
+ 
+diff -ruN
+--- a/src/dxvk/dxvk_graphics.cpp	2026-11-10 21:47:33.919553404 +0000
++++ b/src/dxvk/dxvk_graphics.cpp	2026-11-10 21:47:33.934566287 +0000
+@@ -603,9 +603,11 @@
+       rsLineInfo.pNext = std::exchange(rsInfo.pNext, &rsLineInfo);
+       rsLineInfo.lineRasterizationMode = state.rs.lineMode();
+ 
+-      rsInfo.lineWidth = 1.4f;
++      if (rsLineInfo.lineRasterizationMode != VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT)
++        rsInfo.lineWidth = 1.4f;
+ 
+-      if (rsLineInfo.lineRasterizationMode != VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT) {
++      if (rsLineInfo.lineRasterizationMode != VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT
++       && rsLineInfo.lineRasterizationMode != VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT) {
+         bool needsOverride = state.ms.enableAlphaToCoverage()
+           || (shaders.fs && shaders.fs->metadata().flags.test(DxvkShaderFlag::HasSampleRateShading));
+ 

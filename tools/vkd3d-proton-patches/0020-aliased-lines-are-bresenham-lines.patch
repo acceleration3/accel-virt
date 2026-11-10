@@ -1,0 +1,29 @@
+From: accel-virt
+Subject: [PATCH] aliased lines use the Bresenham line mode when the device has it
+
+D3D draws an aliased line with the diamond-exit rule that Bresenham lines follow. The default Vulkan mode is the rectangular one on some devices, which picked other pixels along the line; the feature is no longer disabled and aliased lines ask for the mode.
+---
+diff -ruN
+--- a/libs/vkd3d/device.c	2026-11-10 21:47:45.349684455 +0000
++++ b/libs/vkd3d/device.c	2026-11-10 21:47:45.375993813 +0000
+@@ -3260,7 +3260,6 @@
+     physical_device_info->ray_tracing_pipeline_features.rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
+ 
+     line_rasterization = &physical_device_info->line_rasterization_features;
+-    line_rasterization->bresenhamLines = VK_FALSE;
+     line_rasterization->stippledRectangularLines = VK_FALSE;
+     line_rasterization->stippledBresenhamLines = VK_FALSE;
+     line_rasterization->stippledSmoothLines = VK_FALSE;
+diff -ruN
+--- a/libs/vkd3d/state.c	2026-11-10 21:47:45.347684432 +0000
++++ b/libs/vkd3d/state.c	2026-11-10 21:47:45.373684730 +0000
+@@ -3352,7 +3352,8 @@
+     switch (d3d12_desc->LineRasterizationMode)
+     {
+         case D3D12_LINE_RASTERIZATION_MODE_ALIASED:
+-            /* TODO: I think we're supposed to use bresenham here? That is likely the default anyway. */
++            if (device->device_info.line_rasterization_features.bresenhamLines)
++                vk_line_info->lineRasterizationMode = VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT;
+             break;
+ 
+         case D3D12_LINE_RASTERIZATION_MODE_ALPHA_ANTIALIASED:
