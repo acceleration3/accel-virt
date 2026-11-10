@@ -340,6 +340,16 @@ TEST(window_framebuffers, a_window_resized_while_another_context_was_current_is_
   CHECK_EQ(rig.argument(made + 10u, 1u), 300u);
   CHECK(rig.framebuffers.invariants_hold()); }
 
+TEST(window_framebuffers, a_single_buffered_window_reads_its_front_buffer_until_told_otherwise)
+{ Rig rig;
+  CHECK_STATUS(rig.current_on(0, 100u, single), Status::ok);
+  std::uint8_t pixels[64] = {};
+  rig.context_rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.swap(0));
+  CHECK(rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  rig.framebuffers.reading(0x0405u);
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels)); }
+
 TEST(window_framebuffers, a_read_of_the_windows_front_buffer_is_answered_without_the_host)
 { Rig rig;
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);

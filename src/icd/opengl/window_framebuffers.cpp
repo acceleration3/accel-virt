@@ -57,6 +57,7 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
         ever_current_ = true;
         draws_window_ = true;
         reads_window_ = true;
+        read_buffer_ = format.double_buffer() ? gl_back : gl_front;
         const auto width = static_cast<GLsizei>(presenter.width());
         const auto height = static_cast<GLsizei>(presenter.height());
         glproto::av_glBindFramebuffer(wire, gl_framebuffer, presenter.framebuffer());
