@@ -146,3 +146,15 @@ TEST_CASE("History/a counter's rate over a window") {
     one.Record("k", 1.0, 0.0);
     CHECK(!one.Find("k")->Rate(1.0).HasValue());
 }
+
+TEST_CASE("History/prune forgets series that stopped being recorded") {
+    History history;
+    history.Record("gone", 1.0, 0.0);
+    history.Record("live", 1.0, 0.0);
+    history.Record("live", 2.0, History::kWindowSeconds + 10.0);
+    CHECK(history.GetSize() == 2);
+    CHECK(history.Prune(History::kWindowSeconds + 10.0) == 1);
+    CHECK(history.GetSize() == 1);
+    CHECK(history.Find("live") != nullptr);
+    CHECK(history.Find("gone") == nullptr);
+}

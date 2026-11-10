@@ -23,6 +23,7 @@ struct Series {
 class History {
 public:
     static constexpr usize kCapacity = 2400;
+    static constexpr f64 kWindowSeconds = 600.0;
 
     static String SeriesKey(StringView process, StringView path, StringView field);
 
@@ -35,6 +36,7 @@ public:
         m_series.ForEach(fn);
     }
     usize GetSize() const noexcept { return m_series.GetSize(); }
+    usize Prune(f64 now);
     void Clear() noexcept { m_series.Clear(); }
 
 private:

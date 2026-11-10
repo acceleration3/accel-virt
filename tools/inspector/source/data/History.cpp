@@ -57,6 +57,12 @@ void History::Record(StringView process, const StateDump& dump, f64 time) {
     }
 }
 
+usize History::Prune(f64 now) {
+    return m_series.RemoveIf([now](const String&, Series& series) {
+        return series.times.IsEmpty() || now - series.times[series.times.GetSize() - 1] > kWindowSeconds;
+    });
+}
+
 const Series* History::Find(StringView key) const noexcept {
     return m_series.Find(key);
 }

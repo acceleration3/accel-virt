@@ -87,6 +87,7 @@ bool Model::Update() {
                 progress.entries = slot.entries;
                 progress.changed_at = time;
             }
+            progress.seen_round = latest->round;
             m_history.Record(Format("{} thread/{} entries", key, slot.thread), static_cast<f64>(slot.entries), time);
         }
     }
@@ -97,6 +98,10 @@ bool Model::Update() {
             }
         }
     }
+    const u64 round = latest->round;
+    m_previous_states.RemoveIf([&](const String& key, StateDump&) { return latest->Find(key) == nullptr; });
+    m_progress.RemoveIf([round](const String&, Progress& progress) { return progress.seen_round != round; });
+    m_history.Prune(time);
     m_current = RValueCast(latest);
     return true;
 }

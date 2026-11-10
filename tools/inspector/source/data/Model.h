@@ -95,6 +95,7 @@ private:
     struct Progress {
         u64 entries = 0;
         f64 changed_at = 0.0;
+        u64 seen_round = 0;
     };
     HashMap<String, Progress> m_progress;
     u64 m_started = 0;
