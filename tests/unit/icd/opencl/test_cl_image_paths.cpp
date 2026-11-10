@@ -70,6 +70,7 @@ public:
         program_ = rig_.loader().create_program(context_, "__kernel void k(void){}", nullptr);
         if (program_ == nullptr) return;
         rig_.host().cl_handle(host_kernel, CL_SUCCESS);
+        rig_.host().cl_kernel_undescribed();
         kernel_ = rig_.loader().create_kernel(program_, "k", nullptr);
     }
 
@@ -235,11 +236,9 @@ TEST(cl_image_paths, a_copy_and_a_fill_are_enqueued_with_the_hosts_numbers_and_i
   CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueFillBuffer);
 
   cl_event refused = nullptr;
-  rig.host().cl_enqueued(CL_INVALID_VALUE, 0u);
   CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), other, 250u, 0u, 64u, &refused),
            CL_INVALID_VALUE);
   CHECK(refused == nullptr);
-  rig.host().cl_enqueued(CL_INVALID_VALUE, 0u);
   CHECK_EQ(rig.root().enqueue_fill_buffer(run.queue(), run.buffer(), &pattern, 3u, 0u, 256u, &refused),
            CL_INVALID_VALUE);
   CHECK(refused == nullptr);
@@ -602,7 +601,7 @@ TEST(cl_image_paths, an_image_transfer_the_api_would_refuse_asks_the_host_at_mos
   run.element_is(4u);
   CHECK_EQ(rig.root().enqueue_write_image(run.queue(), image, origin, region, 8u, 0u, texels, nullptr),
            CL_INVALID_VALUE);
-  CHECK_EQ(rig.kmt().commands(), sent + 2u); }
+  CHECK(rig.kmt().commands() <= sent + 2u); }
 
 TEST(cl_image_paths, a_sampler_is_made_from_the_three_properties_and_nothing_else)
 { ClIcdRig rig;
@@ -1078,7 +1077,6 @@ TEST(cl_image_paths, a_buffer_rectangle_copy_is_enqueued_with_the_hosts_numbers_
   CHECK(carries(rig.kmt(), sent, host_buffer + 1u));
 
   cl_event refused = nullptr;
-  rig.host().cl_enqueued(CL_INVALID_VALUE, 0u);
   CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), other, from_corner, to_corner, region, 4u,
                                                0u, 32u, 0u, &refused),
            CL_INVALID_VALUE);

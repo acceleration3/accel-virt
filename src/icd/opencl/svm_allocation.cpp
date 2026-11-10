@@ -4,7 +4,7 @@
 
 namespace av::clicd {
 
-SvmAllocation::SvmAllocation() : host_base_(0u), mirror_(nullptr), raw_(nullptr), bytes_(0u), map_depth_(0u), regions_{}
+SvmAllocation::SvmAllocation() : host_base_(0u), mirror_(nullptr), raw_(nullptr), bytes_(0u), map_depth_(0u), device_wrote_(false), regions_{}
 {
     AV_SCOPE("SvmAllocation::SvmAllocation");
 }
@@ -112,6 +112,20 @@ bool SvmAllocation::take_region(uint64_t offset, uint64_t &bytes, bool &writes)
         return true;
     }
     return false;
+}
+
+void SvmAllocation::note_device_write()
+{
+    AV_SCOPE("SvmAllocation::note_device_write");
+    device_wrote_ = true;
+}
+
+bool SvmAllocation::take_device_write()
+{
+    AV_SCOPE("SvmAllocation::take_device_write");
+    const bool wrote = device_wrote_;
+    device_wrote_ = false;
+    return wrote;
 }
 
 uint32_t SvmAllocation::map_depth() const

@@ -61,7 +61,7 @@ TEST(cl_icd_root_programs, a_lost_context_refuses_every_program_and_kernel_entry
   if (!run.made()) return;
   cl_device_id          device = run.device();
   const cl_program      program = run.program();
-  const std::uint32_t   words[2] = {0x07230203u, 0u};
+  const std::uint32_t   words[5] = {0x07230203u, 0u, 0u, 0u, 0u};
   const unsigned char  *binary = binary_bytes;
   const std::size_t     length = sizeof binary_bytes;
   const char           *name = "h.h";
@@ -170,7 +170,7 @@ TEST(cl_icd_root_programs, a_program_from_binary_or_built_in_kernels_names_what_
   CHECK(rig.root().create_program_with_built_in_kernels(run.context(), 1u, &device, "k", &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
 
-  const std::uint32_t words[2] = {0x07230203u, 0u};
+  const std::uint32_t words[5] = {0x07230203u, 0u, 0u, 0u, 0u};
   rig.host().cl_handle(0u, CL_SUCCESS);
   CHECK(rig.root().create_program_with_il(run.context(), words, sizeof words, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);

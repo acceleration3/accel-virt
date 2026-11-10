@@ -21,8 +21,10 @@ public:
                               uint64_t bytes, void *into, bool ours, uint64_t scratch = 0u);
     ClPendingRead *waiting_on(uint64_t event);
     const ClPendingRead *at(uint32_t slot) const;
-    uint32_t       forget_queue(uint64_t queue, uint64_t *markers);
+    uint32_t       forget_queue(uint64_t queue, uint64_t *markers, uint64_t *scratches = nullptr,
+                                uint32_t *scratch_count = nullptr);
 
+    bool     has_room() const;
     uint32_t outstanding() const;
     uint64_t delivered() const;
     void     count_delivery();

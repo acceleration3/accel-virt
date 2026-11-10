@@ -40,6 +40,7 @@ namespace {
 
 constexpr std::size_t origin[3] = {0u, 0u, 0u};
 constexpr std::size_t region[3] = {4u, 2u, 1u};
+constexpr std::size_t apart[3] = {8u, 4u, 0u};
 
 cl_mem foreign_memory(ClIcdRig &rig)
 {
@@ -98,7 +99,7 @@ TEST(cl_icd_root_enqueue, image_and_buffer_copies_fills_and_migrations_without_a
            CL_SUCCESS);
   CHECK_EQ(rig.root().enqueue_fill_image(run.queue(), image, colour, origin, region, nullptr), CL_SUCCESS);
   CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 1u, moved, 0u, nullptr), CL_SUCCESS);
-  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, origin, region, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, apart, region, nullptr), CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(ClIcdRootProbe::context(rig.root(), run.context())->flush() == av::TransportResult::ok);
   CHECK(rig.kmt().commands() > sent);
@@ -111,7 +112,7 @@ TEST(cl_icd_root_enqueue, image_and_buffer_copies_fills_and_migrations_without_a
            CL_SUCCESS);
   CHECK_EQ(rig.root().enqueue_fill_image(run.queue(), image, colour, origin, region, nullptr, waits), CL_SUCCESS);
   CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 1u, moved, 0u, nullptr, waits), CL_SUCCESS);
-  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, origin, region, nullptr, waits),
+  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, apart, region, nullptr, waits),
            CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(ClIcdRootProbe::context(rig.root(), run.context())->flush() == av::TransportResult::ok);
@@ -201,7 +202,7 @@ TEST(cl_icd_root_enqueue, a_lost_context_refuses_every_copy_map_pipe_and_shared_
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().enqueue_fill_image(run.queue(), image, colour, origin, region, nullptr), CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 1u, moved, 0u, nullptr), CL_OUT_OF_RESOURCES);
-  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, origin, region, nullptr),
+  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, apart, region, nullptr),
            CL_OUT_OF_RESOURCES);
 
   cl_int error = CL_SUCCESS;
@@ -507,7 +508,7 @@ TEST(cl_icd_root_enqueue, a_host_that_refuses_an_enqueue_that_asks_for_an_event_
   rig.host().cl_enqueued(CL_INVALID_OPERATION, 0u);
   CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 1u, moved, 0u, &event), CL_INVALID_OPERATION);
   rig.host().cl_enqueued(CL_INVALID_OPERATION, 0u);
-  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, origin, region, &event),
+  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, apart, region, &event),
            CL_INVALID_OPERATION);
   CHECK(event == nullptr);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);

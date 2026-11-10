@@ -759,7 +759,7 @@ TEST(cl_buffer_paths, an_arena_backed_map_the_host_refuses_hands_back_nothing)
   CHECK_EQ(error, CL_MAP_FAILURE);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_buffer_paths, a_map_past_the_end_of_its_backing_is_staged_rather_than_shared)
+TEST(cl_buffer_paths, a_map_running_past_the_end_of_its_buffer_is_refused)
 { ClIcdRig rig;
   Opened   opened(rig, true);
   CHECK(opened.made());
@@ -768,18 +768,13 @@ TEST(cl_buffer_paths, a_map_past_the_end_of_its_backing_is_staged_rather_than_sh
   CHECK(buffer != nullptr);
   if (buffer == nullptr) return;
 
-  rig.host().cl_handle(host_mapped, CL_SUCCESS);
-  const unsigned char filled[buffer_bytes] = {};
-  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
   const std::uint32_t sent = rig.kmt().commands();
-  cl_int error = CL_INVALID_VALUE;
+  cl_int error = CL_SUCCESS;
   void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ,
                                              buffer_bytes - 8u, buffer_bytes, nullptr, &error);
-  CHECK_EQ(error, CL_SUCCESS);
-  CHECK(mapped != nullptr);
-  CHECK_EQ(rig.kmt().commands(), sent + 2u);
-  CHECK_EQ(rig.kmt().command_id(sent + 1u),
-           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueReadBuffer));
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  CHECK(mapped == nullptr);
+  CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_buffer_paths, a_shared_map_whose_row_cannot_grow_is_refused_and_given_back)
@@ -872,7 +867,7 @@ TEST(cl_buffer_paths, an_unmap_of_a_live_mapping_on_a_lost_context_refuses)
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_buffer_paths, a_map_beginning_past_its_backing_is_staged)
+TEST(cl_buffer_paths, a_map_beginning_past_the_end_of_its_buffer_is_refused)
 { ClIcdRig rig;
   Opened   opened(rig, true);
   CHECK(opened.made());
@@ -881,16 +876,14 @@ TEST(cl_buffer_paths, a_map_beginning_past_its_backing_is_staged)
   CHECK(buffer != nullptr);
   if (buffer == nullptr) return;
 
-  rig.host().cl_handle(host_mapped, CL_SUCCESS);
   const unsigned char filled[8] = {};
-  rig.host().cl_bytes(CL_SUCCESS, filled, sizeof filled);
   const std::uint32_t sent = rig.kmt().commands();
-  cl_int error = CL_INVALID_VALUE;
+  cl_int error = CL_SUCCESS;
   void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ,
                                              buffer_bytes + 8u, sizeof filled, nullptr, &error);
-  CHECK_EQ(error, CL_SUCCESS);
-  CHECK(mapped != nullptr);
-  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  CHECK(mapped == nullptr);
+  CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_buffer_paths, a_staged_map_whose_row_cannot_grow_gives_its_block_back)

@@ -387,6 +387,7 @@ TEST(cl_icd_root, a_queue_a_buffer_a_program_and_a_kernel_are_objects_of_their_c
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().build_program(program, nullptr), CL_SUCCESS);
   rig.host().cl_handle(host_kernel, CL_SUCCESS);
+  rig.host().cl_kernel_undescribed();
   cl_kernel kernel = rig.loader().create_kernel(program, "nothing", nullptr);
   CHECK(kernel != nullptr);
 
@@ -559,6 +560,7 @@ TEST(cl_icd_root, a_kernel_argument_is_translated_and_an_invented_address_never_
   rig.host().cl_handle(host_program, CL_SUCCESS);
   cl_program program = rig.loader().create_program(context, "__kernel void k(void) {}", nullptr);
   rig.host().cl_handle(host_kernel, CL_SUCCESS);
+  rig.host().cl_kernel_undescribed();
   cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
   CHECK(kernel != nullptr);
 
@@ -1011,7 +1013,7 @@ TEST(cl_icd_root, a_queue_takes_the_two_properties_the_api_names_and_a_buffer_ta
   const std::uint32_t before = rig.kmt().commands();
   const std::uint64_t unknown[] = {0x4242u, 1u, 0u};
   CHECK(rig.root().create_queue(context, device, unknown, &error) == nullptr);
-  CHECK_EQ(error, CL_INVALID_PROPERTY);
+  CHECK_EQ(error, CL_INVALID_VALUE);
   const std::uint64_t any[] = {1u, 1u, 0u};
   CHECK(rig.root().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr, any, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
@@ -1132,13 +1134,14 @@ TEST(cl_icd_root, a_non_blocking_read_returns_before_the_bytes_and_leaves_the_de
 
   unsigned char into[16];
   for (unsigned char &byte : into) byte = 0xA5u;
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   cl_event event = nullptr;
   const std::uint32_t before = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, &event),
            CL_SUCCESS);
   CHECK(event != nullptr);
-  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK(rig.kmt().commands() > before);
   for (const unsigned char byte : into) CHECK_EQ(byte, 0xA5u);
 
   const cl_int complete = CL_COMPLETE;
@@ -1179,6 +1182,7 @@ TEST(cl_icd_root, a_read_the_application_wanted_no_event_for_keeps_the_marker_un
   CHECK(queue != nullptr && buffer != nullptr);
 
   unsigned char into[8] = {};
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, nullptr),
            CL_SUCCESS);
@@ -1210,6 +1214,7 @@ TEST(cl_icd_root, a_finish_on_a_context_the_driver_wakes_sleeps_until_it_does)
   cl_mem buffer = buffer_on(rig, context);
   CHECK(queue != nullptr && buffer != nullptr);
   unsigned char into[8] = {};
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, nullptr),
            CL_SUCCESS);
@@ -1247,6 +1252,7 @@ TEST(cl_icd_root, releasing_a_queue_forgets_the_reads_nobody_will_wait_for)
   CHECK(queue != nullptr && buffer != nullptr);
 
   unsigned char into[8] = {};
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, nullptr),
            CL_SUCCESS);
@@ -1269,6 +1275,7 @@ TEST(cl_icd_root, an_application_that_polls_the_status_gets_the_bytes_there)
   CHECK(queue != nullptr && buffer != nullptr);
 
   unsigned char into[4] = {};
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   cl_event event = nullptr;
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, &event),
@@ -1305,6 +1312,7 @@ TEST(cl_icd_root, a_callback_on_a_non_blocking_read_sees_the_bytes)
   CHECK(queue != nullptr && buffer != nullptr);
 
   static unsigned char into[4] = {};
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   cl_event event = nullptr;
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, &event),

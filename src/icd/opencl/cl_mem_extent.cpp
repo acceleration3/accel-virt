@@ -66,6 +66,32 @@ bool ClMemExtent::same_format(const ClMemExtent &other) const
            format_.image_channel_data_type == other.format_.image_channel_data_type;
 }
 
+uint32_t ClMemExtent::element_bytes() const
+{
+    AV_SCOPE("ClMemExtent::element_bytes");
+    if (shape_ != Shape::image) return 0u;
+    uint32_t channels = 0u;
+    switch (format_.image_channel_order) {
+    case CL_R: case CL_A: case CL_INTENSITY: case CL_LUMINANCE: case CL_DEPTH: channels = 1u; break;
+    case CL_RG: case CL_RA: case CL_Rx: channels = 2u; break;
+    case CL_RGB: case CL_RGx: channels = 3u; break;
+    case CL_RGBA: case CL_BGRA: case CL_ARGB: case CL_ABGR: case CL_RGBx: case CL_sRGB: case CL_sRGBx: case CL_sRGBA:
+    case CL_sBGRA:
+        channels = 4u;
+        break;
+    default: return 0u;
+    }
+    switch (format_.image_channel_data_type) {
+    case CL_SNORM_INT8: case CL_UNORM_INT8: case CL_SIGNED_INT8: case CL_UNSIGNED_INT8: return channels;
+    case CL_SNORM_INT16: case CL_UNORM_INT16: case CL_SIGNED_INT16: case CL_UNSIGNED_INT16: case CL_HALF_FLOAT:
+        return channels * 2u;
+    case CL_SIGNED_INT32: case CL_UNSIGNED_INT32: case CL_FLOAT: return channels * 4u;
+    case CL_UNORM_SHORT_565: case CL_UNORM_SHORT_555: return 2u;
+    case CL_UNORM_INT_101010: return 4u;
+    default: return 0u;
+    }
+}
+
 bool ClMemExtent::same_geometry(const ClMemExtent &other) const
 {
     AV_SCOPE("ClMemExtent::same_geometry");

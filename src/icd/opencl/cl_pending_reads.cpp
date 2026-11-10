@@ -39,7 +39,8 @@ const ClPendingRead *ClPendingReads::at(uint32_t slot) const
     return slot < max_reads ? &rows_[slot] : &rows_[0];
 }
 
-uint32_t ClPendingReads::forget_queue(uint64_t queue, uint64_t *markers)
+uint32_t ClPendingReads::forget_queue(uint64_t queue, uint64_t *markers, uint64_t *scratches,
+                                      uint32_t *scratch_count)
 {
     AV_SCOPE("ClPendingReads::forget_queue");
     if (queue == 0u) return 0u;
@@ -47,10 +48,18 @@ uint32_t ClPendingReads::forget_queue(uint64_t queue, uint64_t *markers)
     for (uint32_t slot = 0u; slot < max_reads; ++slot) {
         if (!rows_[slot].held() || rows_[slot].queue() != queue) continue;
         if (rows_[slot].ours() && markers != nullptr) markers[taken++] = rows_[slot].event();
+        if (rows_[slot].scratch() != 0u && scratches != nullptr && scratch_count != nullptr)
+            scratches[(*scratch_count)++] = rows_[slot].scratch();
         rows_[slot].give_up();
         --held_;
     }
     return taken;
+}
+
+bool ClPendingReads::has_room() const
+{
+    AV_SCOPE("ClPendingReads::has_room");
+    return held_ < max_reads;
 }
 
 uint32_t ClPendingReads::outstanding() const

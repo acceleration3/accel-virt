@@ -205,6 +205,7 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
   CHECK(queue != nullptr && buffer != nullptr && program != nullptr);
   if (queue == nullptr || buffer == nullptr || program == nullptr) return;
   rig.host().cl_handle(0x6800u, CL_SUCCESS);
+  rig.host().cl_kernel_undescribed();
   cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
   rig.host().cl_handle(0x6901u, CL_SUCCESS);
   cl_event user = rig.loader().create_user_event(context, nullptr);

@@ -437,6 +437,11 @@ void ScriptedHost::cl_read(std::int32_t result, const float *values, std::uint32
     queue(writer);
 }
 
+void ScriptedHost::cl_kernel_undescribed()
+{
+    cl_info(-48, nullptr, 0u);
+}
+
 void ScriptedHost::cl_info(std::int32_t result, const char *value, std::uint32_t size)
 {
     WireWriter writer(answer_, sizeof answer_);

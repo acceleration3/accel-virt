@@ -80,6 +80,7 @@ public:
         program_ = rig_.loader().create_program(context_, "__kernel void k(void){}", nullptr);
         if (program_ == nullptr) return;
         rig_.host().cl_handle(host_kernel, CL_SUCCESS);
+        rig_.host().cl_kernel_undescribed();
         kernel_ = rig_.loader().create_kernel(program_, "k", nullptr);
         rig_.host().cl_handle(host_gate, CL_SUCCESS);
         gate_ = rig_.loader().create_user_event(context_, nullptr);
@@ -217,11 +218,11 @@ TEST(cl_enqueue_api, a_kernel_and_a_device_copy_carry_their_wait_list_to_the_hos
            CL_SUCCESS);
   CHECK(carries(rig.kmt(), sent, host_event + 1u));
   CHECK(carries(rig.kmt(), sent, host_event + 2u));
-  const size_t origin[3] = {0u, 0u, 0u}, region[3] = {16u, 2u, 1u};
+  const size_t origin[3] = {0u, 0u, 0u}, shifted[3] = {0u, 8u, 0u}, region[3] = {16u, 2u, 1u};
   sent = rig.kmt().commands();
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 4u);
   cl_event rect = nullptr;
-  CHECK_EQ(table_of(run.queue())->clEnqueueCopyBufferRect(run.queue(), run.buffer(), run.buffer(), origin, origin,
+  CHECK_EQ(table_of(run.queue())->clEnqueueCopyBufferRect(run.queue(), run.buffer(), run.buffer(), origin, shifted,
                                                           region, 0u, 0u, 0u, 0u, 1u, &filled, &rect),
            CL_SUCCESS);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueCopyBufferRect);
@@ -238,7 +239,7 @@ TEST(cl_enqueue_api, a_wait_list_the_api_refuses_is_refused_by_every_enqueue_and
   CHECK(foreign != nullptr);
   const std::size_t global = 64u;
   unsigned char     bytes[16] = {};
-  const size_t      origin[3] = {0u, 0u, 0u}, region[3] = {4u, 1u, 1u};
+  const size_t      origin[3] = {0u, 0u, 0u}, shifted[3] = {0u, 8u, 0u}, region[3] = {4u, 1u, 1u};
   const ClWaitList  counted_but_none(1u, nullptr);
   const ClWaitList  listed_but_not_counted(0u, run.gate());
   const ClWaitList  of_another_context(1u, &foreign);
@@ -256,7 +257,7 @@ TEST(cl_enqueue_api, a_wait_list_the_api_refuses_is_refused_by_every_enqueue_and
                CL_INVALID_EVENT_WAIT_LIST);
       CHECK_EQ(rig.root().enqueue_fill_buffer(run.queue(), run.buffer(), bytes, 4u, 0u, 16u, nullptr, *list),
                CL_INVALID_EVENT_WAIT_LIST);
-      CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), run.buffer(), origin, origin, region,
+      CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), run.buffer(), origin, shifted, region,
                                                    0u, 0u, 0u, 0u, nullptr, *list),
                CL_INVALID_EVENT_WAIT_LIST);
       cl_int error = CL_SUCCESS;
@@ -283,65 +284,32 @@ TEST(cl_enqueue_api, a_non_blocking_read_is_reached_behind_its_wait_list_and_ret
   if (!run.made()) return;
   unsigned char into[16] = {};
   const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_handle(0x7700u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   cl_event read = nullptr;
   CHECK_EQ(table_of(run.queue())->clEnqueueReadBuffer(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into, 1u,
                                                       run.gate(), &read),
            CL_SUCCESS);
   CHECK(read != nullptr);
-  CHECK_EQ(rig.kmt().commands(), sent + 1u);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
-  CHECK(carries(rig.kmt(), sent, host_gate));
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueCopyBuffer);
+  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_enqueue_api, a_transfer_the_host_blocks_on_waits_for_its_list_here_before_it_is_sent)
+TEST(cl_enqueue_api, a_non_blocking_write_carries_its_wait_list_to_the_host_in_one_command)
 { ClIcdRig rig;
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
   unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
 
-  run.answers(static_cast<cl_int>(CL_COMPLETE));
-  run.drains();
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof bytes, bytes,
                                                        1u, run.gate(), nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), sent + 5u);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clGetEventInfo);
-  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
-  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
-
-  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
-  sent = rig.kmt().commands();
-  unsigned char into[8] = {};
-  CHECK_EQ(table_of(run.queue())->clEnqueueReadBuffer(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into, 1u,
-                                                      run.gate(), nullptr),
-           CL_OUT_OF_RESOURCES);
-  CHECK_EQ(rig.kmt().commands(), sent + 2u);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueWriteBuffer);
-  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
-
-  run.drains();
-  rig.host().cl_mapped(0x1000u, 0u, CL_SUCCESS);
-  rig.host().cl_bytes(CL_SUCCESS, bytes, sizeof bytes);
-  sent = rig.kmt().commands();
-  cl_int      error = CL_INVALID_VALUE;
-  void *const mapped = table_of(run.queue())->clEnqueueMapBuffer(run.queue(), run.buffer(), CL_TRUE, CL_MAP_READ, 0u,
-                                                                 sizeof bytes, 1u, run.gate(), nullptr, &error);
-  CHECK_EQ(error, CL_SUCCESS);
-  CHECK(mapped != nullptr);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
   CHECK(carries(rig.kmt(), sent, host_gate));
-  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueMapBuffer);
-  run.answers(static_cast<cl_int>(CL_COMPLETE));
-  run.drains();
-  rig.host().cl_result(CL_SUCCESS);
-  sent = rig.kmt().commands();
-  CHECK_EQ(table_of(run.queue())->clEnqueueUnmapMemObject(run.queue(), run.buffer(), mapped, 1u, run.gate(), nullptr),
-           CL_SUCCESS);
-  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
-  CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clEnqueueUnmapMemObject);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
@@ -351,28 +319,17 @@ TEST(cl_enqueue_api, a_non_blocking_transfer_does_not_wait_for_a_user_event_not_
   CHECK(run.made());
   if (!run.made()) return;
   unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
-  run.answers(static_cast<cl_int>(CL_SUBMITTED));
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   std::uint32_t sent = rig.kmt().commands();
+  cl_event      event = nullptr;
   CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof bytes, bytes,
-                                                       1u, run.gate(), nullptr),
+                                                       1u, run.gate(), &event),
            CL_SUCCESS);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clGetEventInfo);
-  for (std::uint32_t index = sent + 1u; index < rig.kmt().commands(); ++index) {
-      CHECK(rig.kmt().command_id(index) != av::clproto::kCmd_clEnqueueMarkerWithWaitList ||
-            !carries(rig.kmt(), index, host_gate));
-  }
-  bool told = false;
-  for (std::uint32_t line = 0u; line < rig.log().lines(); ++line)
-      told = told || std::strstr(rig.log().line(line), "a user event not yet set") != nullptr;
-  CHECK(told);
-  run.drains();
-  sent = rig.kmt().commands();
-  CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof bytes, bytes,
-                                                       1u, run.gate(), nullptr),
-           CL_SUCCESS);
+  CHECK(event != nullptr);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueWriteBuffer);
-  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
-  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
+  CHECK(carries(rig.kmt(), sent, host_gate));
+  for (std::uint32_t index = sent; index < rig.kmt().commands(); ++index)
+      CHECK(rig.kmt().command_id(index) != av::clproto::kCmd_clGetEventInfo);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 

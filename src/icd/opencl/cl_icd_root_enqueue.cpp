@@ -100,23 +100,24 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     AV_SCOPE("ClIcdRoot::enqueue_copy_image_to_buffer");
     ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const source = judged(image, ClObject::Kind::mem);
     ClObject *const target = judged(buffer, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
-    ClientTransport *const early_wire = wire_of(*held);
-    if (early_wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (source->extent().shape() == ClMemExtent::Shape::buffer ||
         target->extent().shape() == ClMemExtent::Shape::image)
         return CL_INVALID_MEM_OBJECT;
     {
         const cl_int in_region = source->extent().judge_region(origin, region);
         if (in_region != CL_SUCCESS) return in_region;
-        const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] *
-                                element_bytes(*early_wire, source->wire());
-        const cl_int in_buffer = judge_buffer_range(*target, offset, volume);
-        if (in_buffer != CL_SUCCESS) return in_buffer;
+        const uint32_t element = source->extent().element_bytes();
+        if (element != 0u) {
+            const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] * element;
+            const cl_int in_buffer = judge_buffer_range(*target, offset, volume);
+            if (in_buffer != CL_SUCCESS) return in_buffer;
+        }
     }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -140,23 +141,24 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     AV_SCOPE("ClIcdRoot::enqueue_copy_buffer_to_image");
     ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const source = judged(buffer, ClObject::Kind::mem);
     ClObject *const target = judged(image, ClObject::Kind::mem);
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     if (source->context() != held->context() || target->context() != held->context()) return CL_INVALID_CONTEXT;
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
-    ClientTransport *const early_wire = wire_of(*held);
-    if (early_wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (source->extent().shape() == ClMemExtent::Shape::image ||
         target->extent().shape() == ClMemExtent::Shape::buffer)
         return CL_INVALID_MEM_OBJECT;
     {
         const cl_int in_region = target->extent().judge_region(origin, region);
         if (in_region != CL_SUCCESS) return in_region;
-        const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] *
-                                element_bytes(*early_wire, target->wire());
-        const cl_int in_buffer = judge_buffer_range(*source, offset, volume);
-        if (in_buffer != CL_SUCCESS) return in_buffer;
+        const uint32_t element = target->extent().element_bytes();
+        if (element != 0u) {
+            const uint64_t volume = static_cast<uint64_t>(region[0]) * region[1] * region[2] * element;
+            const cl_int in_buffer = judge_buffer_range(*source, offset, volume);
+            if (in_buffer != CL_SUCCESS) return in_buffer;
+        }
     }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -179,6 +181,7 @@ cl_int ClIcdRoot::enqueue_fill_image(cl_command_queue queue, cl_mem image, const
     AV_SCOPE("ClIcdRoot::enqueue_fill_image");
     ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    if (wire_of(*held) == nullptr) return CL_OUT_OF_RESOURCES;
     ClObject *const named = judged(image, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
     if (named->context() != held->context()) return CL_INVALID_CONTEXT;
@@ -301,6 +304,10 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
     ClObject *const held = judged(queue, ClObject::Kind::command_queue);
     if (held == nullptr) {
         report_error(error, CL_INVALID_COMMAND_QUEUE);
+        return nullptr;
+    }
+    if (wire_of(*held) == nullptr) {
+        report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
     ClObject *const named = judged(image, ClObject::Kind::mem);
@@ -529,6 +536,7 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
     if (from_shared != nullptr &&
         context->svm().covering(static_cast<const uint8_t *>(from) + bytes - 1u) != from_shared)
         return CL_INVALID_VALUE;
+    if (into_shared != nullptr) context->svm().covering(to)->note_device_write();
     if (into_shared != nullptr && from_shared != nullptr) {
         held->busy();
         uint64_t     produced = 0u;
@@ -580,6 +588,7 @@ cl_int ClIcdRoot::svm_mem_fill(cl_command_queue queue, void *pointer, const void
     uint64_t     *listed = nullptr;
     const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
+    context->svm().covering(pointer)->note_device_write();
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
     const cl_int             done = av::clproto::av_clEnqueueSVMMemFill(

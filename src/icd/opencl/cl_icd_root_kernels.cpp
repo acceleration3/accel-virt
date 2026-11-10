@@ -18,10 +18,13 @@ ClKernelShape *ClIcdRoot::kernel_shape(ClObject &kernel, ClientTransport &wire)
 {
     AV_SCOPE("ClIcdRoot::kernel_shape");
     if (kernel.shape() != nullptr) return kernel.shape();
+    if ((kernel.traits() & ClObject::kernel_unshaped) != 0u) return nullptr;
     cl_uint count = 0u;
     if (av::clproto::av_clGetKernelInfo(wire, kernel.wire(), CL_KERNEL_NUM_ARGS, sizeof count, &count, nullptr) !=
-        CL_SUCCESS)
+        CL_SUCCESS) {
+        kernel.keep_traits(kernel.traits() | ClObject::kernel_unshaped);
         return nullptr;
+    }
     ClKernelShape *made = nullptr;
     if (shapes_.create(made, memory_) != Status::ok) return nullptr;
     if (made->size_to(count) != Status::ok) {

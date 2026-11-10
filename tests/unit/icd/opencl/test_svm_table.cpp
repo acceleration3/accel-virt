@@ -42,10 +42,10 @@ struct SvmTableProbe {
     static void shift_base(SvmTable &table, std::uint64_t by) { table.bases_.at(0u) += by; }
     static void overlap_the_next(SvmTable &table)
     { SvmAllocation &first = *table.allocations_.find(table.bases_.at(0u));
-      first.take(first.host_base(), first.mirror(), std::size_t{1} << 30u); }
+      first.take(first.host_base(), first.mirror(), std::size_t{1} << 30u, first.raw()); }
     static void restore_length(SvmTable &table, std::size_t bytes)
     { SvmAllocation &first = *table.allocations_.find(table.bases_.at(0u));
-      first.take(first.host_base(), first.mirror(), bytes); }
+      first.take(first.host_base(), first.mirror(), bytes, first.raw()); }
     static void a_row_that_stands_for_nothing(SvmTable &table)
     { table.allocations_.find(table.bases_.at(0u))->give_up(); }
     static void a_row_that_is_half_there(SvmTable &table)
@@ -54,8 +54,9 @@ struct SvmTableProbe {
     { KeyedSlotsProbe::corrupt_free_count(table.allocations_, free_count); }
     static void resize_the_bases(SvmTable &table, std::uint32_t capacity)
     { GrowableArrayProbe::corrupt_capacity(table.bases_, capacity); }
-    static void hold_again(SvmTable &table, std::uint64_t host, std::uint8_t *mirror, std::size_t bytes)
-    { table.allocations_.find(table.bases_.at(0u))->take(host, mirror, bytes); }
+    static std::uint8_t *raw_of(SvmTable &table) { return table.allocations_.find(table.bases_.at(0u))->raw(); }
+    static void hold_again(SvmTable &table, std::uint64_t host, std::uint8_t *mirror, std::size_t bytes, std::uint8_t *raw)
+    { table.allocations_.find(table.bases_.at(0u))->take(host, mirror, bytes, raw); }
 };
 
 }
@@ -307,9 +308,10 @@ TEST(svm_table, the_invariant_catches_the_states_it_is_there_to_catch)
   SvmTable     rowless(rowless_platform);
   std::uint8_t *const mirror = static_cast<std::uint8_t *>(rowless.take(host_base, 64u));
   CHECK(mirror != nullptr);
+  std::uint8_t *const rowless_raw = SvmTableProbe::raw_of(rowless);
   SvmTableProbe::a_row_that_stands_for_nothing(rowless);
   CHECK(!rowless.invariants_hold());
-  SvmTableProbe::hold_again(rowless, host_base, mirror, 64u);
+  SvmTableProbe::hold_again(rowless, host_base, mirror, 64u, rowless_raw);
   CHECK(rowless.invariants_hold());
 
   MockPlatform half_platform;
@@ -325,9 +327,10 @@ TEST(svm_table, the_invariant_catches_the_states_it_is_there_to_catch)
   std::uint8_t *const own = static_cast<std::uint8_t *>(moved.take(host_base, 64u));
   CHECK(own != nullptr);
   static std::uint8_t elsewhere[64];
-  SvmTableProbe::hold_again(moved, host_base, elsewhere, 64u);
+  std::uint8_t *const moved_raw = SvmTableProbe::raw_of(moved);
+  SvmTableProbe::hold_again(moved, host_base, elsewhere, 64u, moved_raw);
   CHECK(!moved.invariants_hold());
-  SvmTableProbe::hold_again(moved, host_base, own, 64u);
+  SvmTableProbe::hold_again(moved, host_base, own, 64u, moved_raw);
   CHECK(moved.invariants_hold());
 
   MockPlatform slots_platform;

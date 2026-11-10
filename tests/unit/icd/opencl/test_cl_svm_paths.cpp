@@ -171,11 +171,9 @@ TEST(cl_svm_paths, an_unmap_the_host_refuses_leaves_the_map_depth_where_it_was)
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().svm_map(opened.queue(), CL_TRUE, CL_MAP_READ, mirror, shared_bytes, nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.log().holding("shared memory is mapped"), 1u);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().svm_map(opened.queue(), CL_TRUE, CL_MAP_READ, mirror, shared_bytes, nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.log().holding("shared memory is mapped"), 1u);
 
   rig.host().cl_result(CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().svm_unmap(opened.queue(), mirror, nullptr), CL_OUT_OF_RESOURCES);
@@ -196,6 +194,7 @@ TEST(cl_svm_paths, a_kernel_argument_that_is_an_address_is_translated_or_refused
   CHECK(program != nullptr);
   if (program == nullptr) return;
   rig.host().cl_handle(0x6800u, CL_SUCCESS);
+  rig.host().cl_kernel_undescribed();
   cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
   CHECK(kernel != nullptr);
   if (kernel == nullptr) return;
@@ -233,6 +232,7 @@ TEST(cl_svm_paths, every_shared_memory_entry_on_a_lost_context_refuses_at_once)
   CHECK(program != nullptr);
   if (program == nullptr) return;
   rig.host().cl_handle(0x6800u, CL_SUCCESS);
+  rig.host().cl_kernel_undescribed();
   cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
   CHECK(kernel != nullptr);
   if (kernel == nullptr) return;

@@ -24,6 +24,7 @@ public:
 
     bool holds_range(uint64_t offset, uint64_t bytes) const;
     bool same_format(const ClMemExtent &other) const;
+    uint32_t element_bytes() const;
     bool same_geometry(const ClMemExtent &other) const;
 
     [[nodiscard]] cl_int judge_region(const size_t *origin, const size_t *region) const;

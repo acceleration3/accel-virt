@@ -22,11 +22,12 @@ ClRunningRig::ClRunningRig(ClIcdRig &rig) : rig_(rig)
     rig_.host().cl_handle(host_queue, CL_SUCCESS);
     queue_ = rig_.loader().create_queue(context_, device_, nullptr);
     rig_.host().cl_handle(host_buffer, CL_SUCCESS);
-    buffer_ = rig_.loader().create_buffer(context_, CL_MEM_READ_WRITE, 256u, nullptr);
+    buffer_ = rig_.loader().create_buffer(context_, CL_MEM_READ_WRITE, 64u * 1024u, nullptr);
     rig_.host().cl_handle(host_program, CL_SUCCESS);
     program_ = rig_.loader().create_program(context_, "__kernel void k(void){}", nullptr);
     if (program_ == nullptr) return;
     rig_.host().cl_handle(host_kernel, CL_SUCCESS);
+    rig_.host().cl_kernel_undescribed();
     kernel_ = rig_.loader().create_kernel(program_, "k", nullptr);
     rig_.host().cl_handle(host_gate, CL_SUCCESS);
     gate_ = rig_.loader().create_user_event(context_, nullptr);

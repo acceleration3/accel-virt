@@ -188,7 +188,7 @@ TEST(cl_program_paths, il_and_built_in_kernels_are_the_host_s_to_take_or_refuse)
   CHECK(run.made());
   if (!run.made()) return;
   const cl_icd_dispatch &table = *table_of(run.context());
-  const std::uint32_t    words[2] = {0x07230203u, 0u};
+  const std::uint32_t    words[5] = {0x07230203u, 0u, 0u, 0u, 0u};
   cl_int                 error = CL_SUCCESS;
   CHECK(table.clCreateProgramWithIL(run.context(), nullptr, sizeof words, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);

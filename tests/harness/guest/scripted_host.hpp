@@ -80,6 +80,7 @@ public:
     void cl_read(std::int32_t result, const float *values, std::uint32_t count);
     void cl_bytes(std::int32_t result, const void *values, std::uint32_t count);
     void cl_enqueued(std::int32_t result, std::uint64_t event);
+    void cl_kernel_undescribed();
     void cl_formats(std::int32_t result, const void *formats, std::uint32_t sent, std::uint32_t total);
     void cl_info(std::int32_t result, const char *value, std::uint32_t size);
     void gl_string(const char *text);

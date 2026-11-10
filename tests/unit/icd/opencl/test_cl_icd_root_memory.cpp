@@ -385,15 +385,15 @@ TEST(cl_icd_root_memory, an_image_copy_names_its_wait_list_and_hands_back_the_ho
   CHECK(run.made());
   if (!run.made()) return;
   const cl_mem image = run.image();
-  const std::size_t origin[3] = {0u, 0u, 0u}, region[3] = {4u, 2u, 1u};
+  const std::size_t origin[3] = {0u, 0u, 0u}, apart[3] = {8u, 4u, 0u}, region[3] = {4u, 2u, 1u};
   int            not_an_event = 0;
   const cl_event stray = reinterpret_cast<cl_event>(&not_an_event);
-  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, origin, region, nullptr,
+  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, apart, region, nullptr,
                                          ClWaitList(1u, &stray)),
            CL_INVALID_EVENT_WAIT_LIST);
   cl_event event = nullptr;
   rig.host().cl_enqueued(CL_SUCCESS, ClRunningRig::host_event + 5u);
-  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, origin, region, &event), CL_SUCCESS);
+  CHECK_EQ(rig.root().enqueue_copy_image(run.queue(), image, image, origin, apart, region, &event), CL_SUCCESS);
   CHECK(event != nullptr);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }

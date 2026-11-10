@@ -55,6 +55,8 @@ public:
     static constexpr uint32_t program_typed_arguments = 1u;
     static constexpr uint32_t program_arguments_asked = 2u;
     static constexpr uint32_t program_non_uniform = 4u;
+    static constexpr uint32_t kernel_unshaped = 8u;
+    static constexpr uint32_t program_from_source = 16u;
 
     void            keep_shape(ClKernelShape *shape);
     ClKernelShape  *shape() const;

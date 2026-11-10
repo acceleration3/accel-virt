@@ -31,6 +31,8 @@ public:
     void     note_region(uint64_t offset, uint64_t bytes, bool writes);
     bool     take_region(uint64_t offset, uint64_t &bytes, bool &writes);
     uint32_t map_depth() const;
+    void     note_device_write();
+    bool     take_device_write();
 
     bool invariants_hold() const;
 
@@ -42,6 +44,7 @@ private:
     uint8_t *raw_;
     size_t   bytes_;
     uint32_t map_depth_;
+    bool     device_wrote_;
 
     struct Region {
         uint64_t offset_;
