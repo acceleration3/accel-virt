@@ -52,6 +52,7 @@ constexpr uint32_t usage_autogen_mipmap = 0x400u;
 constexpr uint32_t usage_dmap = 0x4000u;
 constexpr uint32_t write_discard = 0x2000u;
 constexpr uint32_t write_no_overwrite = 0x1000u;
+constexpr HRESULT out_of_video_memory = static_cast<HRESULT>(0x8876017cu);
 constexpr uint32_t filter_point = 1u;
 constexpr uint32_t filter_linear = 2u;
 
@@ -103,7 +104,7 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
         refused.text(" size ").number(made->subresources[0].width).text("x").number(made->subresources[0].height).write();
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
-        return host;
+        return host == E_OUTOFMEMORY && args->Pool != D3DDDIPOOL_SYSTEMMEM ? out_of_video_memory : host;
     }
     args->hResource = made;
     return S_OK;
