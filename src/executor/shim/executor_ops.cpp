@@ -6,6 +6,7 @@
 #include "executor/executor_root.hpp"
 #include "device/host/stdio_log.hpp"
 #include "device/shim/host_trace.hpp"
+#include "device/shim/implicit_layer_gate.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/reporter_state_source.hpp"
 #include "device/shim/state_socket.hpp"
@@ -35,6 +36,7 @@ public:
         AV_SCOPE("Library::root");
         if (!asked_) {
             asked_ = true;
+            av::ImplicitLayerGate().close_implicit_layers();
             (void)trace_.construct();
             (void)trace_.object().start("executor");
             (void)sink_.construct(stderr);

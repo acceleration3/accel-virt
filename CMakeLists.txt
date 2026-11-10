@@ -168,7 +168,7 @@ list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp src/core/platform
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp src/core/support/byte_range.cpp
   src/core/support/bgra_rows.cpp
-  src/core/support/setting_text.cpp src/core/support/fnv1a_digest.cpp
+  src/core/support/setting_text.cpp src/core/support/fnv1a_digest.cpp src/core/support/vulkan_layer_filter.cpp
   src/core/log/driver_log.cpp src/core/log/log_line.cpp)
 list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim/(posix_renderer|renderer_main)|renderer/)[^/]*\\.cpp$")
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})

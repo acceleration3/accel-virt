@@ -788,6 +788,7 @@ static void av_read_gpus(VirtIOGPUAv *r)
     VkInstance instance;
 
     r->gpu_count = 0;
+    av_device_close_implicit_layers();
     if (vkCreateInstance(&create, NULL, &instance) != VK_SUCCESS) {
         return;
     }

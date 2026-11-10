@@ -6,6 +6,7 @@
 #include "device/fence/device_pulse.hpp"
 #include "device/export/export_connection.hpp"
 #include "device/present/present_engine.hpp"
+#include "device/shim/implicit_layer_gate.hpp"
 #include "device/module/device_module.hpp"
 #include "device/module/virtio_gpu_av.hpp"
 #include "device/context/ring_consumer.hpp"
@@ -26,6 +27,10 @@ static void av_device_crashed(int signal, siginfo_t *info, void *context)
 __attribute__((visibility("default")))
 void av_device_trace_start(AvMainLoopScheduler schedule)
 { av::device_trace.start(av::device_module, schedule, &av_device_crashed); }
+
+__attribute__((visibility("default")))
+void av_device_close_implicit_layers(void)
+{ av::ImplicitLayerGate().close_implicit_layers(); }
 
 __attribute__((visibility("default")))
 AvDevice *av_device_create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,

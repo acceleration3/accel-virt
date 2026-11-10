@@ -147,6 +147,8 @@ typedef struct AvDevice AvDevice;
 
 void av_device_trace_start(AvMainLoopScheduler schedule);
 
+void av_device_close_implicit_layers(void);
+
 AvDevice *av_device_create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
                              int base_blobs, const AvRecordingOptions *recording, const char *renderer,
                              const char *executor_path, uint32_t vram_reserve_mib, uint32_t host_ram_reserve_mib,
