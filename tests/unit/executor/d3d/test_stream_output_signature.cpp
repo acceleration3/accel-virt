@@ -45,3 +45,15 @@ TEST(stream_output_signature, components_streamed_beyond_the_listed_mask_widen_i
   const Signature      signature(outputs, 1u, streamed, 2u);
   CHECK_EQ(signature.count(), 1u);
   CHECK_EQ(signature.entries()[0].mask, 0xFu); }
+
+TEST(stream_output_signature, a_register_another_stream_names_a_system_value_for_keeps_it_on_the_streams_added)
+{ const SignatureEntry outputs[2] = {{1u, 0u, 0xFu, float_type, 0u, 2u}, {0u, 1u, 0x7u, 2u, 0u, 2u}};
+  const StreamOutEntry streamed[4] = {{0u, 0u, 0u, 0xFu}, {0u, 0u, 1u, 0x7u}, {1u, 1u, 0u, 0xFu}, {1u, 1u, 1u, 0x7u}};
+  const Signature      signature(outputs, 2u, streamed, 4u);
+  CHECK_EQ(signature.count(), 6u);
+  CHECK_EQ(signature.entries()[2].stream, 0u);
+  CHECK_EQ(signature.entries()[2].system_value, 1u);
+  CHECK_EQ(signature.entries()[3].system_value, 0u);
+  CHECK_EQ(signature.entries()[3].component_type, 2u);
+  CHECK_EQ(signature.entries()[4].stream, 1u);
+  CHECK_EQ(signature.entries()[4].system_value, 1u); }

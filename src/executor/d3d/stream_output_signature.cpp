@@ -26,7 +26,15 @@ StreamOutputSignature::StreamOutputSignature(const d3dproto::SignatureEntry *out
             continue;
         }
         if (count_ == most_entries) continue;
-        entries_[count_++] = d3dproto::SignatureEntry{0u, entry.register_index, entry.mask, float_type, 0u, entry.stream};
+        d3dproto::SignatureEntry made = {0u, entry.register_index, entry.mask, float_type, 0u, entry.stream};
+        for (uint32_t at = 0u; at < count_; at++)
+            if (entries_[at].register_index == entry.register_index) {
+                made.system_value = entries_[at].system_value;
+                made.component_type = entries_[at].component_type;
+                made.min_precision = entries_[at].min_precision;
+                break;
+            }
+        entries_[count_++] = made;
     }
 }
 
