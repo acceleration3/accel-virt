@@ -1,0 +1,247 @@
+From: accel-virt
+Subject: [PATCH] A buffer copy under predication runs as a compute copy inside conditional rendering
+
+Vulkan conditional rendering does not discard transfer commands, so a predicated
+CopyBufferRegion or buffer CopyResource wrote its destination whatever the
+predicate said. They now run as a compute copy that conditional rendering skips.
+---
+diff --git a/libs/vkd3d/command.c b/libs/vkd3d/command.c
+index 3837593..dbce0af 100644
+--- a/libs/vkd3d/command.c
++++ b/libs/vkd3d/command.c
+@@ -9330,6 +9330,76 @@ static void STDMETHODCALLTYPE d3d12_command_list_Dispatch(d3d12_command_list_ifa
+     d3d12_command_list_check_compute_barrier(list);
+ }
+ 
++static bool d3d12_command_list_copy_buffer_predicated(struct d3d12_command_list *list,
++        struct d3d12_resource *dst_resource, VkDeviceSize dst_offset,
++        struct d3d12_resource *src_resource, VkDeviceSize src_offset, VkDeviceSize byte_count)
++{
++    const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
++    const struct vkd3d_predicate_ops *predicate_ops = &list->device->meta_ops.predicate;
++    const VkDeviceSize max_chunk = 1u << 28;
++    struct vkd3d_predicate_copy_buffer_args args;
++    VkDeviceAddress src_va, dst_va;
++    VkDeviceSize chunk, dwords;
++    VkMemoryBarrier2 vk_barrier;
++    VkDependencyInfo dep_info;
++
++    if (!list->predication.enabled_on_command_buffer || list->predication.fallback_enabled)
++        return false;
++
++    if (!byte_count)
++        return true;
++
++    src_va = src_resource->res.va + src_offset;
++    dst_va = dst_resource->res.va + dst_offset;
++
++    d3d12_command_list_invalidate_current_pipeline(list, true);
++    d3d12_command_list_invalidate_root_parameters(list, &list->compute_bindings, true, &list->graphics_bindings);
++
++    memset(&vk_barrier, 0, sizeof(vk_barrier));
++    vk_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
++    vk_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
++    vk_barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
++    vk_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
++    vk_barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
++
++    memset(&dep_info, 0, sizeof(dep_info));
++    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
++    dep_info.memoryBarrierCount = 1;
++    dep_info.pMemoryBarriers = &vk_barrier;
++    VK_CALL(vkCmdPipelineBarrier2(list->cmd.vk_command_buffer, &dep_info));
++
++    VK_CALL(vkCmdBindPipeline(list->cmd.vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
++            predicate_ops->vk_copy_buffer_pipeline));
++    d3d12_command_list_update_conditional_rendering_state(list, false);
++
++    while (byte_count)
++    {
++        chunk = min(byte_count, max_chunk);
++        args.src_va = src_va & ~(VkDeviceAddress)3;
++        args.dst_va = dst_va & ~(VkDeviceAddress)3;
++        args.src_skew = (uint32_t)(src_va & 3);
++        args.dst_skew = (uint32_t)(dst_va & 3);
++        args.size = (uint32_t)chunk;
++
++        dwords = (chunk + 3) / 4;
++        VK_CALL(vkCmdPushConstants(list->cmd.vk_command_buffer, predicate_ops->vk_copy_buffer_pipeline_layout,
++                VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(args), &args));
++        VK_CALL(vkCmdDispatch(list->cmd.vk_command_buffer, (uint32_t)min((dwords + 63) / 64, 4096), 1, 1));
++
++        src_va += chunk;
++        dst_va += chunk;
++        byte_count -= chunk;
++    }
++
++    vk_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
++    vk_barrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
++    vk_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
++    vk_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
++    VK_CALL(vkCmdPipelineBarrier2(list->cmd.vk_command_buffer, &dep_info));
++
++    return true;
++}
++
+ static void STDMETHODCALLTYPE d3d12_command_list_CopyBufferRegion(d3d12_command_list_iface *iface,
+         ID3D12Resource *dst, UINT64 dst_offset, ID3D12Resource *src, UINT64 src_offset, UINT64 byte_count)
+ {
+@@ -9361,6 +9431,10 @@ static void STDMETHODCALLTYPE d3d12_command_list_CopyBufferRegion(d3d12_command_
+     d3d12_command_list_end_current_render_pass(list, true);
+     d3d12_command_list_end_transfer_batch(list);
+ 
++    if (d3d12_command_list_copy_buffer_predicated(list, dst_resource, dst_offset,
++            src_resource, src_offset, byte_count))
++        return;
++
+     buffer_copy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+     buffer_copy.pNext = NULL;
+     buffer_copy.srcOffset = src_offset + src_resource->mem.offset;
+@@ -10740,6 +10814,9 @@ static void STDMETHODCALLTYPE d3d12_command_list_CopyResource(d3d12_command_list
+         assert(d3d12_resource_is_buffer(src_resource));
+         assert(src_resource->desc.Width == dst_resource->desc.Width);
+ 
++        if (d3d12_command_list_copy_buffer_predicated(list, dst_resource, 0, src_resource, 0, dst_resource->desc.Width))
++            return;
++
+         vk_buffer_copy.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+         vk_buffer_copy.pNext = NULL;
+         vk_buffer_copy.srcOffset = src_resource->mem.offset;
+diff --git a/libs/vkd3d/meson.build b/libs/vkd3d/meson.build
+index 477b366..a86651a 100644
+--- a/libs/vkd3d/meson.build
++++ b/libs/vkd3d/meson.build
+@@ -15,6 +15,7 @@ vkd3d_shaders =[
+   'shaders/cs_clear_uav_image_3d_float.comp',
+   'shaders/cs_clear_uav_image_3d_uint.comp',
+   'shaders/cs_emit_nv_memory_decompression_regions.comp',
++  'shaders/cs_copy_buffer_predicated.comp',
+   'shaders/cs_emit_nv_memory_decompression_workgroups.comp',
+   'shaders/cs_predicate_command.comp',
+   'shaders/cs_resolve_binary_queries.comp',
+diff --git a/libs/vkd3d/meta.c b/libs/vkd3d/meta.c
+index 770efda..e641361 100644
+--- a/libs/vkd3d/meta.c
++++ b/libs/vkd3d/meta.c
+@@ -1572,9 +1572,11 @@ static void vkd3d_predicate_ops_cleanup(struct vkd3d_predicate_ops *meta_predica
+     for (i = 0; i < VKD3D_PREDICATE_COMMAND_COUNT; i++)
+         VK_CALL(vkDestroyPipeline(device->vk_device, meta_predicate_ops->vk_command_pipelines[i], NULL));
+     VK_CALL(vkDestroyPipeline(device->vk_device, meta_predicate_ops->vk_resolve_pipeline, NULL));
++    VK_CALL(vkDestroyPipeline(device->vk_device, meta_predicate_ops->vk_copy_buffer_pipeline, NULL));
+ 
+     VK_CALL(vkDestroyPipelineLayout(device->vk_device, meta_predicate_ops->vk_command_pipeline_layout, NULL));
+     VK_CALL(vkDestroyPipelineLayout(device->vk_device, meta_predicate_ops->vk_resolve_pipeline_layout, NULL));
++    VK_CALL(vkDestroyPipelineLayout(device->vk_device, meta_predicate_ops->vk_copy_buffer_pipeline_layout, NULL));
+ }
+ 
+ static HRESULT vkd3d_predicate_ops_init(struct vkd3d_predicate_ops *meta_predicate_ops,
+@@ -1620,6 +1622,11 @@ static HRESULT vkd3d_predicate_ops_init(struct vkd3d_predicate_ops *meta_predica
+             &push_constant_range, &meta_predicate_ops->vk_resolve_pipeline_layout)) < 0)
+         return hresult_from_vk_result(vr);
+ 
++    push_constant_range.size = sizeof(struct vkd3d_predicate_copy_buffer_args);
++    if ((vr = vkd3d_meta_create_pipeline_layout(device, 0, NULL, 1,
++            &push_constant_range, &meta_predicate_ops->vk_copy_buffer_pipeline_layout)) < 0)
++        goto fail;
++
+     spec_info.mapEntryCount = ARRAY_SIZE(spec_map);
+     spec_info.pMapEntries = spec_map;
+     spec_info.dataSize = sizeof(struct spec_data);
+@@ -1641,6 +1648,11 @@ static HRESULT vkd3d_predicate_ops_init(struct vkd3d_predicate_ops *meta_predica
+             &meta_predicate_ops->vk_resolve_pipeline)) < 0)
+         goto fail;
+ 
++    if ((vr = vkd3d_meta_create_compute_pipeline(device, sizeof(cs_copy_buffer_predicated), cs_copy_buffer_predicated,
++            meta_predicate_ops->vk_copy_buffer_pipeline_layout, NULL, true, NULL,
++            &meta_predicate_ops->vk_copy_buffer_pipeline)) < 0)
++        goto fail;
++
+     return S_OK;
+ 
+ fail:
+diff --git a/libs/vkd3d/shaders/cs_copy_buffer_predicated.comp b/libs/vkd3d/shaders/cs_copy_buffer_predicated.comp
+new file mode 100644
+index 0000000..f2ef979
+--- /dev/null
++++ b/libs/vkd3d/shaders/cs_copy_buffer_predicated.comp
+@@ -0,0 +1,42 @@
++#version 450
++
++#extension GL_EXT_buffer_reference : require
++
++layout(local_size_x = 64) in;
++
++layout(std430, buffer_reference, buffer_reference_align = 4)
++readonly buffer src_data_t {
++  uint data[];
++};
++
++layout(std430, buffer_reference, buffer_reference_align = 4)
++buffer dst_data_t {
++  uint data[];
++};
++
++layout(push_constant)
++uniform u_info_t {
++  src_data_t src;
++  dst_data_t dst;
++  uint src_skew;
++  uint dst_skew;
++  uint size;
++};
++
++void main() {
++  uint stride = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
++
++  if (((src_skew | dst_skew | size) & 3u) == 0u) {
++    for (uint i = gl_GlobalInvocationID.x; i < size / 4u; i += stride)
++      dst.data[i] = src.data[i];
++  } else {
++    for (uint i = gl_GlobalInvocationID.x; i < size; i += stride) {
++      uint s = src_skew + i;
++      uint d = dst_skew + i;
++      uint value = (src.data[s >> 2u] >> ((s & 3u) * 8u)) & 0xffu;
++      uint shift = (d & 3u) * 8u;
++      atomicAnd(dst.data[d >> 2u], ~(0xffu << shift));
++      atomicOr(dst.data[d >> 2u], value << shift);
++    }
++  }
++}
+diff --git a/libs/vkd3d/vkd3d_private.h b/libs/vkd3d/vkd3d_private.h
+index 945705f..3b7bcbb 100644
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -4756,10 +4756,21 @@ struct vkd3d_predicate_resolve_args
+     VkBool32 invert;
+ };
+ 
++struct vkd3d_predicate_copy_buffer_args
++{
++    VkDeviceAddress src_va;
++    VkDeviceAddress dst_va;
++    uint32_t src_skew;
++    uint32_t dst_skew;
++    uint32_t size;
++};
++
+ struct vkd3d_predicate_ops
+ {
+     VkPipelineLayout vk_command_pipeline_layout;
+     VkPipelineLayout vk_resolve_pipeline_layout;
++    VkPipelineLayout vk_copy_buffer_pipeline_layout;
++    VkPipeline vk_copy_buffer_pipeline;
+     VkPipeline vk_command_pipelines[VKD3D_PREDICATE_COMMAND_COUNT];
+     VkPipeline vk_resolve_pipeline;
+     uint32_t data_sizes[VKD3D_PREDICATE_COMMAND_COUNT];
+diff --git a/libs/vkd3d/vkd3d_shaders.h b/libs/vkd3d/vkd3d_shaders.h
+index ded6b46..f6b430c 100644
+--- a/libs/vkd3d/vkd3d_shaders.h
++++ b/libs/vkd3d/vkd3d_shaders.h
+@@ -41,6 +41,7 @@ enum vkd3d_meta_copy_mode
+ #include <cs_clear_uav_image_2d_uint.h>
+ #include <cs_clear_uav_image_3d_float.h>
+ #include <cs_clear_uav_image_3d_uint.h>
++#include <cs_copy_buffer_predicated.h>
+ #include <cs_predicate_command.h>
+ #include <cs_resolve_binary_queries.h>
+ #include <cs_resolve_predicate.h>
