@@ -227,6 +227,56 @@ bool av_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint6
     return t.send_async(kCmd_ShareResource12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_ShareObject12(::av::ClientTransport& t, uint32_t object, uint64_t key) {
+    AV_SCOPE("av_d3d12_ShareObject12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(object);
+    b.write_pod<uint64_t>(key);
+    return t.send_async(kCmd_ShareObject12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_OpenObject12(::av::ClientTransport& t, uint32_t object, uint64_t key, uint64_t address, uint32_t* kind, uint32_t* dimension, uint32_t* height, uint32_t* depth_or_array, uint32_t* mip_levels, uint32_t* format, uint32_t* sample_count, uint32_t* flags, uint64_t* width, uint64_t* size) {
+    AV_SCOPE("av_d3d12_OpenObject12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(object);
+    b.write_pod<uint64_t>(key);
+    b.write_pod<uint64_t>(address);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_OpenObject12, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (kind != nullptr) *kind = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (dimension != nullptr) *dimension = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (height != nullptr) *height = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (depth_or_array != nullptr) *depth_or_array = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (mip_levels != nullptr) *mip_levels = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (format != nullptr) *format = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (sample_count != nullptr) *sample_count = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (flags != nullptr) *flags = value; }
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (width != nullptr) *width = value; }
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (size != nullptr) *size = value; }
+    return r.remaining() == 0u;
+}
+
 bool av_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
     AV_SCOPE("av_d3d12_CreatePlacedResource12");
     ::av::WireWriter b = t.request_writer();

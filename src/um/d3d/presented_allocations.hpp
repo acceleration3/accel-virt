@@ -13,6 +13,7 @@ class PollClock;
 namespace av::d3d {
 
 class KernelDevice;
+class KernelHeap;
 class KernelSurface;
 
 class PresentedAllocations {
@@ -25,6 +26,7 @@ public:
     PresentedAllocations &operator=(PresentedAllocations &&) = delete;
 
     [[nodiscard]] HRESULT make(KernelSurface &surface, HANDLE resource, D3DKMT_HANDLE &allocation);
+    [[nodiscard]] HRESULT make_heap(KernelHeap &heap, HANDLE resource, D3DKMT_HANDLE &allocation);
     void give_back(D3DKMT_HANDLE allocation, HANDLE resource);
     [[nodiscard]] HRESULT keep_resident(D3DKMT_HANDLE allocation);
     [[nodiscard]] HRESULT make_context(HANDLE &context);

@@ -135,6 +135,7 @@ private:
     void upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
                 uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
     void publish_shared(const ResourceRecord &resource);
+    void account(ResourceRecord &resource, D3D10DDI_HRTRESOURCE runtime);
     size_t piece_bytes() const;
     [[nodiscard]] bool upload_piece_of(uint32_t resource, uint32_t subresource, const d3dproto::Box &box,
                                        const void *data, size_t bytes, uint32_t row_pitch, uint32_t depth_pitch,

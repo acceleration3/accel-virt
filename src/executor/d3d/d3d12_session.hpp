@@ -95,6 +95,10 @@ public:
     bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) override;
     bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
     bool on_ShareResource12(uint32_t resource, uint64_t key) override;
+    bool on_ShareObject12(uint32_t object, uint64_t key) override;
+    bool on_OpenObject12(uint32_t object, uint64_t key, uint64_t address, uint32_t &kind, uint32_t &dimension,
+                         uint32_t &height, uint32_t &depth_or_array, uint32_t &mip_levels, uint32_t &format,
+                         uint32_t &sample_count, uint32_t &flags, uint64_t &width, uint64_t &size) override;
     bool on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point) override;
     bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) override;

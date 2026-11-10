@@ -2,6 +2,7 @@
 
 #include "executor/teardown_budget.hpp"
 
+#include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/source_memory.hpp"
@@ -47,6 +48,9 @@ constexpr uint32_t page_not_available = 1u;
 constexpr uint32_t most_heap_type = 4u;
 constexpr uint32_t most_dimension = 4u;
 constexpr uint32_t buffer_dimension = 1u;
+constexpr uint32_t no_object = 0u;
+constexpr uint32_t shared_resource = 1u;
+constexpr uint32_t shared_heap = 2u;
 constexpr uint32_t max_texture_dimension = 16384u;
 constexpr uint64_t max_heap_bytes = uint64_t{1} << 34u;
 constexpr uint64_t hung_after = 5000000000u;
@@ -776,6 +780,57 @@ bool D3d12Session::on_ShareResource12(uint32_t resource, uint64_t key)
     AV_SCOPE("D3d12Session::on_ShareResource12");
     ID3D12Resource *const shown = objects_.find_as<ID3D12Resource>(resource, D3dObjectKind::resource12);
     return shown != nullptr && presentation_.share(shown, key);
+}
+
+bool D3d12Session::on_ShareObject12(uint32_t object, uint64_t key)
+{
+    AV_SCOPE("D3d12Session::on_ShareObject12");
+    D3dObjectKind kind = D3dObjectKind::none;
+    IUnknown *const shared = objects_.find_any(object, kind);
+    if (key == 0u) return false;
+    if (shared == nullptr || (kind != D3dObjectKind::resource12 && kind != D3dObjectKind::heap12) || shares_ == nullptr)
+        return true;
+    return shares_->publish_resource(key, shared, ShareOrigin::d3d12) == Status::ok;
+}
+
+bool D3d12Session::on_OpenObject12(uint32_t object, uint64_t key, uint64_t address, uint32_t &kind,
+                                   uint32_t &dimension, uint32_t &height, uint32_t &depth_or_array,
+                                   uint32_t &mip_levels, uint32_t &format, uint32_t &sample_count, uint32_t &flags,
+                                   uint64_t &width, uint64_t &size)
+{
+    AV_SCOPE("D3d12Session::on_OpenObject12");
+    kind = no_object;
+    if (shares_ == nullptr || shares_->shares() == nullptr || device_ == nullptr) return true;
+    IUnknown *const opened = D3dShares(*shares_->shares()).resource(shares_->domain(), key);
+    if (opened == nullptr) return true;
+    ID3D12Resource *resource = nullptr;
+    ID3D12Heap     *heap = nullptr;
+    if (SUCCEEDED(opened->QueryInterface(__uuidof(ID3D12Resource), reinterpret_cast<void **>(&resource)))) {
+        opened->Release();
+        const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+        dimension = static_cast<uint32_t>(desc.Dimension);
+        height = desc.Height;
+        depth_or_array = desc.DepthOrArraySize;
+        mip_levels = desc.MipLevels;
+        format = static_cast<uint32_t>(desc.Format);
+        sample_count = desc.SampleDesc.Count;
+        flags = static_cast<uint32_t>(desc.Flags);
+        width = desc.Width;
+        size = desc.Width;
+        if (!place(object, resource, desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ? address : 0u, desc.Width))
+            return false;
+        kind = shared_resource;
+        return true;
+    }
+    if (FAILED(opened->QueryInterface(__uuidof(ID3D12Heap), reinterpret_cast<void **>(&heap)))) {
+        opened->Release();
+        return true;
+    }
+    opened->Release();
+    size = heap->GetDesc().SizeInBytes;
+    if (!kept(object, D3dObjectKind::heap12, heap)) return false;
+    kind = shared_heap;
+    return true;
 }
 
 bool D3d12Session::on_ResourceAllocation12(const d3d12proto::ResourceDesc &desc, uint64_t &size,

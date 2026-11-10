@@ -265,6 +265,56 @@ static bool decode_ShareResource12(ServerDispatch& s, ::av::WireReader& r, ::av:
     return true;
 }
 
+static bool decode_ShareObject12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ShareObject12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    uint64_t key{};
+    if (!r.read_pod(key)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ShareObject12(object, key)) return false;
+    return true;
+}
+
+static bool decode_OpenObject12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:OpenObject12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    uint64_t key{};
+    if (!r.read_pod(key)) return false;
+    uint64_t address{};
+    if (!r.read_pod(address)) return false;
+    uint32_t kind{};
+    uint32_t dimension{};
+    uint32_t height{};
+    uint32_t depth_or_array{};
+    uint32_t mip_levels{};
+    uint32_t format{};
+    uint32_t sample_count{};
+    uint32_t flags{};
+    uint64_t width{};
+    uint64_t size{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_OpenObject12(object, key, address, kind, dimension, height, depth_or_array, mip_levels, format, sample_count, flags, width, size)) return false;
+    reply.write_pod(kind);
+    reply.write_pod(dimension);
+    reply.write_pod(height);
+    reply.write_pod(depth_or_array);
+    reply.write_pod(mip_levels);
+    reply.write_pod(format);
+    reply.write_pod(sample_count);
+    reply.write_pod(flags);
+    reply.write_pod(width);
+    reply.write_pod(size);
+    return true;
+}
+
 static bool decode_CreatePlacedResource12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CreatePlacedResource12");
     (void)s;
@@ -2075,6 +2125,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CreateHeapAsync12:
         case kCmd_CreateCommittedResourceAsync12:
         case kCmd_ShareResource12:
+        case kCmd_ShareObject12:
+        case kCmd_OpenObject12:
         case kCmd_CreatePlacedResource12:
         case kCmd_CreateReservedResource12:
         case kCmd_ResourceTiling12:
@@ -2179,6 +2231,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CreateHeapAsync12: return decode_CreateHeapAsync12(s, r, reply, arena);
         case kCmd_CreateCommittedResourceAsync12: return decode_CreateCommittedResourceAsync12(s, r, reply, arena);
         case kCmd_ShareResource12: return decode_ShareResource12(s, r, reply, arena);
+        case kCmd_ShareObject12: return decode_ShareObject12(s, r, reply, arena);
+        case kCmd_OpenObject12: return decode_OpenObject12(s, r, reply, arena);
         case kCmd_CreatePlacedResource12: return decode_CreatePlacedResource12(s, r, reply, arena);
         case kCmd_CreateReservedResource12: return decode_CreateReservedResource12(s, r, reply, arena);
         case kCmd_ResourceTiling12: return decode_ResourceTiling12(s, r, reply, arena);

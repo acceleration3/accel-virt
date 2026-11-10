@@ -1,6 +1,7 @@
 #include "um/d3d/kernel_device.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/kernel_heap.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 
 namespace av::d3d {
@@ -81,6 +82,23 @@ HRESULT KernelDevice::allocate(KernelSurface &surface, HANDLE resource, D3DKMT_H
         allocate.PrivateDriverDataSize = KernelSurface::resource_bytes;
         allocate.hResource = resource;
     }
+    allocate.NumAllocations = 1u;
+    allocate.pAllocationInfo2 = &info;
+    const HRESULT made = callbacks_->pfnAllocateCb(runtime_, &allocate);
+    if (SUCCEEDED(made)) allocation = info.hAllocation;
+    return made;
+}
+
+HRESULT KernelDevice::allocate(KernelHeap &heap, HANDLE resource, D3DKMT_HANDLE &allocation)
+{
+    AV_SCOPE("KernelDevice::allocate");
+    D3DDDI_ALLOCATIONINFO2 info = {};
+    info.pPrivateDriverData = heap.allocation_data();
+    info.PrivateDriverDataSize = KernelHeap::allocation_bytes;
+    D3DDDICB_ALLOCATE allocate = {};
+    allocate.pPrivateDriverData = heap.resource_data();
+    allocate.PrivateDriverDataSize = KernelHeap::resource_bytes;
+    allocate.hResource = resource;
     allocate.NumAllocations = 1u;
     allocate.pAllocationInfo2 = &info;
     const HRESULT made = callbacks_->pfnAllocateCb(runtime_, &allocate);

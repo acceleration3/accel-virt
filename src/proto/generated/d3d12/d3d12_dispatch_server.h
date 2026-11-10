@@ -40,6 +40,8 @@ public:
     virtual bool on_CreateHeapAsync12(uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) = 0;
     virtual bool on_CreateCommittedResourceAsync12(uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
     virtual bool on_ShareResource12(uint32_t resource, uint64_t key) = 0;
+    virtual bool on_ShareObject12(uint32_t object, uint64_t key) = 0;
+    virtual bool on_OpenObject12(uint32_t object, uint64_t key, uint64_t address, uint32_t& kind, uint32_t& dimension, uint32_t& height, uint32_t& depth_or_array, uint32_t& mip_levels, uint32_t& format, uint32_t& sample_count, uint32_t& flags, uint64_t& width, uint64_t& size) = 0;
     virtual bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
     virtual bool on_CreateReservedResource12(uint32_t resource, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
     virtual bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) = 0;

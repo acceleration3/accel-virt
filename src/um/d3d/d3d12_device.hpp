@@ -29,6 +29,7 @@ class KeyedLog;
 
 namespace av::d3d {
 class D3dSession;
+class KernelHeap;
 }
 
 namespace av::d3d12 {
@@ -85,6 +86,8 @@ private:
     void                     uncharge_heap(HeapRecord &heap);
     void                     release_heap_memory(HeapRecord &heap);
     void                     trim_memory();
+    HRESULT                  open_host_object(const D3D12DDIARG_OPENHEAP_0003 &args, d3d::KernelHeap &opened,
+                                              HeapRecord &heap, ResourceRecord *resource, D3D12DDI_HRTRESOURCE runtime);
     HRESULT                  open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap,
                                            ResourceRecord &resource);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,

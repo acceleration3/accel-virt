@@ -3,6 +3,7 @@
 #include "core/log/keyed_log.hpp"
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/kernel_heap.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "um/d3d/kernel_device.hpp"
 
@@ -35,6 +36,27 @@ HRESULT PresentedAllocations::make(KernelSurface &surface, HANDLE resource, D3DK
     if (surface.key() == 0u) lines_.once("the miniport minted no identity for a presented surface; nothing can open it");
     static_cast<void>(keep_resident(allocation));
     return S_OK;
+}
+
+HRESULT PresentedAllocations::make_heap(KernelHeap &heap, HANDLE resource, D3DKMT_HANDLE &allocation)
+{
+    AV_SCOPE("PresentedAllocations::make_heap");
+    const HRESULT made = kernel_.allocate(heap, resource, allocation);
+    if (FAILED(made)) {
+        if (lines_.first("the kernel refused a resource's allocation", made))
+            LogLine(lines_)
+                .text("the kernel refused a resource's allocation ")
+                .hex(static_cast<uint32_t>(made), 8u)
+                .write();
+        return made;
+    }
+    if (!paging_.constructed()) static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime(), clock_));
+    const HRESULT resident = paging_.object().queue_resident(allocation);
+    if (FAILED(resident)) {
+        give_back(allocation, resource);
+        allocation = 0u;
+    }
+    return resident;
 }
 
 void PresentedAllocations::give_back(D3DKMT_HANDLE allocation, HANDLE resource)

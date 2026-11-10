@@ -5,6 +5,7 @@
 
 namespace av::d3d {
 
+class KernelHeap;
 class KernelSurface;
 
 class KernelDevice {
@@ -21,6 +22,7 @@ public:
     HRESULT make_context(HANDLE &context);
     void    destroy_context(HANDLE context);
     HRESULT allocate(KernelSurface &surface, HANDLE resource, D3DKMT_HANDLE &allocation);
+    HRESULT allocate(KernelHeap &heap, HANDLE resource, D3DKMT_HANDLE &allocation);
     [[nodiscard]] HRESULT deallocate(D3DKMT_HANDLE allocation, HANDLE resource);
     void   *lock_to_write(D3DKMT_HANDLE allocation);
     void   *lock_to_read(D3DKMT_HANDLE allocation);

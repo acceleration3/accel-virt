@@ -229,6 +229,12 @@ TEST(d3d12_session, every_queue_and_list_command_naming_nothing_is_refused)
   CHECK(!session.on_CloseCommandList12(nobody));
   CHECK(!session.on_ExecuteCommandLists12(nobody, 1u, lists));
   CHECK(!session.on_ShareResource12(nobody, 0x5eedu));
+  CHECK(session.on_ShareObject12(nobody, 0x5eedu));
+  CHECK(!session.on_ShareObject12(nobody, 0u));
+  { std::uint32_t kind = 9u, dimension = 0u, height = 0u, depth = 0u, mips = 0u, format = 0u, samples = 0u, flags = 0u;
+    std::uint64_t width = 0u, size = 0u;
+    CHECK(session.on_OpenObject12(nobody, 0x5eedu, 0u, kind, dimension, height, depth, mips, format, samples, flags, width, size));
+    CHECK_EQ(kind, 0u); }
   CHECK(!session.on_PresentResource12(nobody, nobody, 1u));
   const TileRegion region = {TileCoordinate{}, TileSize{1u, 0u, 0u, 0u, 0u}};
   const TileRange range = {0u, 0u, 1u};

@@ -61,6 +61,14 @@ namespace av::d3d12proto {
 // the host GPU's Direct3D 11 device under `key`, the identity the miniport minted over its kernel allocation,
 // which the compositor opens it by. The same memory on both devices: nothing is copied.
 [[nodiscard]] bool av_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key);
+// `object`, a heap or a committed resource that is not a swap chain texture, is shown to the Direct3D 12
+// sessions of the host adapter under `key`, the identity the miniport minted over its kernel allocation, which
+// another process opens it by. The same host object in every session: nothing is copied.
+[[nodiscard]] bool av_d3d12_ShareObject12(::av::ClientTransport& t, uint32_t object, uint64_t key);
+// The heap or resource another session shared under `key` becomes `object` in this one. `kind` is 1 for a
+// resource, 2 for a heap and 0 when no session shared `key`; a resource answers its description and is placed at
+// `address` in the guest's space, a heap its size.
+[[nodiscard]] bool av_d3d12_OpenObject12(::av::ClientTransport& t, uint32_t object, uint64_t key, uint64_t address, uint32_t* kind, uint32_t* dimension, uint32_t* height, uint32_t* depth_or_array, uint32_t* mip_levels, uint32_t* format, uint32_t* sample_count, uint32_t* flags, uint64_t* width, uint64_t* size);
 // A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on.
 [[nodiscard]] bool av_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
 // A resource with no memory of its own: its 64 KiB tiles are mapped to heaps' by UpdateTileMappings12 on a

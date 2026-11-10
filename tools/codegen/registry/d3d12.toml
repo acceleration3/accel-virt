@@ -272,6 +272,24 @@ which the compositor opens it by. The same memory on both devices: nothing is co
 params = ["u32 resource", "u64 key"]
 
 [[command]]
+name = "ShareObject12"
+id = 0x1109
+doc = """`object`, a heap or a committed resource that is not a swap chain texture, is shown to the Direct3D 12
+sessions of the host adapter under `key`, the identity the miniport minted over its kernel allocation, which
+another process opens it by. The same host object in every session: nothing is copied."""
+params = ["u32 object", "u64 key"]
+
+[[command]]
+name = "OpenObject12"
+id = 0x110a
+doc = """The heap or resource another session shared under `key` becomes `object` in this one. `kind` is 1 for a
+resource, 2 for a heap and 0 when no session shared `key`; a resource answers its description and is placed at
+`address` in the guest's space, a heap its size."""
+params = ["u32 object", "u64 key", "u64 address"]
+reply = ["u32 kind", "u32 dimension", "u32 height", "u32 depth_or_array", "u32 mip_levels", "u32 format",
+         "u32 sample_count", "u32 flags", "u64 width", "u64 size"]
+
+[[command]]
 name = "CreatePlacedResource12"
 id = 0x1102
 doc = """A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on."""

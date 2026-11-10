@@ -6,6 +6,7 @@
 #include "guest/transport/shared_object_call.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
+#include "icd/d3d/kernel_heap.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "icd/d3d/passthrough_geometry_shader.hpp"
@@ -27,6 +28,7 @@ constexpr uint32_t api_texture_cube = 0x4u;
 constexpr uint32_t misc_same_bits = 0xF0u;
 constexpr uint32_t api_bind_uav = 0x80u;
 constexpr uint32_t api_bind_pipeline = 0x7Fu;
+constexpr uint64_t accounted_bytes_least = uint64_t{1} << 20u;
 
 constexpr uint32_t view_buffer = 1u;
 constexpr uint32_t view_1d = 2u;
@@ -151,6 +153,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);
     }
+    if (!kernel_visible) account(resource, runtime);
     const uint64_t lent_name = resource.lent != nullptr ? resource.lent->handle() : 0u;
     const uint32_t lent_pitch = resource.lent != nullptr ? resource.allocation_pitch : 0u;
     if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, resource.shared_key, lent_name,
@@ -195,6 +198,26 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (resource.on_slice != 0u && !bind_slice(resource)) lost(__func__);
 
     if (kernel_visible && wire().run_held() != Status::ok) lost(__func__);
+}
+
+void D3d11Device::account(ResourceRecord &resource, D3D10DDI_HRTRESOURCE runtime)
+{
+    AV_SCOPE("D3d11Device::account");
+    if (resource.dimension == D3D10DDIRESOURCE_BUFFER && resource.width < accounted_bytes_least) return;
+    if ((resource.misc & (D3DWDDM1_3DDI_RESOURCE_MISC_TILED | D3DWDDM1_3DDI_RESOURCE_MISC_TILE_POOL)) != 0u) return;
+    uint64_t bytes = 0u;
+    for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) bytes += subresource_bytes(resource, sub);
+    if (bytes < accounted_bytes_least) return;
+    d3d::KernelHeap heap(bytes, resource.usage == D3D10_DDI_USAGE_DYNAMIC || resource.usage == D3D10_DDI_USAGE_STAGING,
+                         resource.stamp.id());
+    if (heap.make() != Status::ok) return;
+    D3DKMT_HANDLE allocation = 0u;
+    const HRESULT made = allocations_.make_heap(heap, runtime.handle, allocation);
+    if (FAILED(made)) {
+        set_error(made);
+        return;
+    }
+    resource.accounted = allocation;
 }
 
 void D3d11Device::publish_shared(const ResourceRecord &resource)
@@ -289,6 +312,8 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     if (resource.allocation_owned != 0u)
         allocations_.give_back(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
+    else if (resource.accounted != 0u)
+        allocations_.give_back(resource.accounted, static_cast<HANDLE>(resource.runtime_resource));
     resource = ResourceRecord{};
 }
 

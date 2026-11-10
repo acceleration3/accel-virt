@@ -44,6 +44,23 @@ HRESULT PagingQueue::make_resident(D3DKMT_HANDLE allocation)
     return wait_for(resident.PagingFenceValue);
 }
 
+HRESULT PagingQueue::queue_resident(D3DKMT_HANDLE allocation)
+{
+    AV_SCOPE("PagingQueue::queue_resident");
+    if (queue_ == 0u) {
+        const HRESULT opened = open();
+        if (FAILED(opened)) return opened;
+    }
+    const UINT          priority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+    D3DDDI_MAKERESIDENT resident = {};
+    resident.hPagingQueue = queue_;
+    resident.NumAllocations = 1u;
+    resident.AllocationList = &allocation;
+    resident.PriorityList = &priority;
+    const HRESULT made = kernel_.pfnMakeResidentCb(device_, &resident);
+    return made == E_PENDING ? S_OK : made;
+}
+
 HRESULT PagingQueue::open()
 {
     AV_SCOPE("PagingQueue::open");

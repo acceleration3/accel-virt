@@ -35,6 +35,7 @@ struct ResourceRecord {
     d3d::SwapChainBuffer::Model present_model;
     uint32_t vidpn_source;
     uint32_t allocation;
+    uint32_t accounted;
     uint32_t allocation_pitch;
     uint32_t allocation_owned;
     uint32_t refreshed;
