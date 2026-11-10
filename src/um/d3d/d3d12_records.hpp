@@ -34,6 +34,8 @@ struct HeapRecord {
     uint32_t                 asked;
     uint64_t                 charged;
     D3DKMT_HANDLE            allocation;
+    HANDLE                   runtime_object;
+    uint64_t                 key;
 };
 
 struct ResourceRecord {

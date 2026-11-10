@@ -97,6 +97,9 @@ private:
     const ResourceRecord    &tiling(ResourceRecord &resource);
 
     void give_back(const ResourceRecord &resource);
+    HRESULT                  allocate_heap(HeapRecord &heap, D3D12DDI_HRTRESOURCE runtime, ResourceRecord *resource);
+    void                     give_back_heap(HeapRecord &heap);
+    HRESULT                  kernel_heap(HeapRecord &heap, D3D12DDI_HRTRESOURCE runtime, ResourceRecord *resource);
     HRESULT                  show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime,
                                   const D3D12DDIARG_CREATERESOURCE_0109 &args);
 
