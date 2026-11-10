@@ -339,7 +339,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
 
 namespace {
 
-void stream_vertices_as(av::d3d::PassthroughPrimitive primitive, std::uint32_t topology)
+void stream_vertices_as(av::d3d::PassthroughPrimitive primitive, std::uint32_t topology, bool append = false, bool draw_auto = false)
 {
     av::ExecutorLogRig rig;
     av::LoaderHostApis apis(rig.log);
@@ -366,8 +366,9 @@ void stream_vertices_as(av::d3d::PassthroughPrimitive primitive, std::uint32_t t
                               no_rasterized_stream, tokens, shader.bytes()));
     ResourceDesc buffer = {};
     buffer.dimension = 1u;
-    buffer.width = 3u * stride;
-    buffer.bind_flags = 0x10u;
+    const std::uint32_t passes = append ? 2u : 1u;
+    buffer.width = passes * 3u * stride;
+    buffer.bind_flags = draw_auto ? 0x11u : 0x10u;
     CHECK(av_d3d_CreateResource(wire, out, buffer, 0u, 0u, 0u));
     bind_triangle(wire);
     CHECK(av_d3d_SetTopology(wire, topology));
@@ -375,7 +376,22 @@ void stream_vertices_as(av::d3d::PassthroughPrimitive primitive, std::uint32_t t
     const StreamOutTarget target = {out, 0u};
     CHECK(av_d3d_SetStreamOutTargets(wire, 1u, &target));
     CHECK(av_d3d_Draw(wire, 3u, 0u));
-    static float streamed_out[3u * 8u];
+    if (append) {
+        const StreamOutTarget appended = {out, 0xFFFFFFFFu};
+        CHECK(av_d3d_SetStreamOutTargets(wire, 1u, &appended));
+        CHECK(av_d3d_Draw(wire, 3u, 0u));
+    }
+    if (draw_auto) {
+        CHECK(av_d3d_SetStreamOutTargets(wire, 0u, nullptr));
+        CHECK(av_d3d_SetShader(wire, stage_geometry, 0u));
+        const VertexBufferBinding from_stream = {out, stride, 0u};
+        CHECK(av_d3d_SetVertexBuffers(wire, 0u, 1u, &from_stream));
+        CHECK(av_d3d_DrawAuto(wire));
+        std::uint32_t removed_by_draw_auto = 1u;
+        CHECK(av_d3d_Finish11(wire, &removed_by_draw_auto));
+        CHECK_EQ(removed_by_draw_auto, 0u);
+    }
+    static float streamed_out[2u * 3u * 8u];
     std::uint32_t row_pitch = 0u, depth_pitch = 0u;
     std::uint64_t read = 0u;
     CHECK(av_d3d_ReadSubresource(wire, out, 0u, &hresult, &row_pitch, &depth_pitch, streamed_out, sizeof streamed_out,
@@ -385,9 +401,9 @@ void stream_vertices_as(av::d3d::PassthroughPrimitive primitive, std::uint32_t t
                                      -1.0f, 1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
                                      0.0f,  1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f};
     std::uint32_t wrong = 0u;
-    for (std::uint32_t index = 0u; index < 3u * 8u; index++) {
-        if (streamed_out[index] != expected[index]) {
-            if (wrong < 8u) std::fprintf(stderr, "float %u: %f, not %f\n", index, streamed_out[index], expected[index]);
+    for (std::uint32_t index = 0u; index < passes * 3u * 8u; index++) {
+        if (streamed_out[index] != expected[index % (3u * 8u)]) {
+            if (wrong < 8u) std::fprintf(stderr, "float %u: %f, not %f\n", index, streamed_out[index], expected[index % (3u * 8u)]);
             wrong++;
         }
     }
@@ -402,6 +418,12 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
 
 TEST(d3d_backend_device, a_stream_output_of_a_triangle_list_streams_every_vertex_through_the_triangle_variant)
 { stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 4u); }
+
+TEST(d3d_backend_device, a_second_draw_with_the_append_offset_streams_after_the_first)
+{ stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 4u, true); }
+
+TEST(d3d_backend_device, a_draw_auto_over_what_the_stream_output_wrote_keeps_the_device)
+{ stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 4u, false, true); }
 
 TEST(d3d_backend_device, a_stream_output_of_a_triangle_strip_streams_every_vertex_through_the_triangle_variant)
 { stream_vertices_as(av::d3d::PassthroughPrimitive::triangle, 5u); }
