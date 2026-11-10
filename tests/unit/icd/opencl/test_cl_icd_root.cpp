@@ -1948,25 +1948,30 @@ TEST(cl_icd_root, an_amd_adapter_answers_its_free_memory_from_windows)
   if (device == nullptr) return;
   std::size_t free_kib[2] = {};
   std::size_t answered = 0u;
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
   CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, &answered),
            CL_SUCCESS);
   CHECK_EQ(answered, sizeof free_kib);
   CHECK_EQ(free_kib[0], 384u * 1024u);
   CHECK_EQ(free_kib[1], 384u * 1024u);
   std::size_t total_kib = 0u;
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
   CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof total_kib, &total_kib,
                                     &answered),
            CL_SUCCESS);
   CHECK_EQ(answered, sizeof total_kib);
   CHECK_EQ(total_kib, 384u * 1024u);
   answered = 0u;
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
   CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, 0u, nullptr, &answered),
            CL_SUCCESS);
   CHECK_EQ(answered, sizeof total_kib);
   std::uint32_t narrow = 0u;
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
   CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof narrow, &narrow, nullptr),
            CL_INVALID_VALUE);
   rig.kmt().set_video_memory(av::MemorySegmentGroup::local, 128ull << 20u, 512ull << 20u);
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
   CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, nullptr),
            CL_SUCCESS);
   CHECK_EQ(free_kib[0], 0u);

@@ -163,9 +163,14 @@ cl_int OpenClBackend::capped_device_info(cl_device_id device, cl_device_info par
     if (param_name == CL_DEVICE_GLOBAL_FREE_MEMORY_AMD) {
         const cl_int asked = RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size, param_value,
                                                               param_value_size_ret);
-        if (asked != CL_SUCCESS || param_value == nullptr || param_value_size < sizeof(size_t)) return asked;
+        if (param_value == nullptr || param_value_size < sizeof(size_t)) return asked;
         size_t *const kilobytes = static_cast<size_t *>(param_value);
         const uint64_t free_kib = device_memory_.free_bytes() / 1024u;
+        if (asked != CL_SUCCESS) {
+            kilobytes[0] = static_cast<size_t>(free_kib);
+            if (param_value_size_ret != nullptr) *param_value_size_ret = sizeof(size_t);
+            return CL_SUCCESS;
+        }
         if (free_kib < kilobytes[0]) kilobytes[0] = static_cast<size_t>(free_kib);
         return CL_SUCCESS;
     }

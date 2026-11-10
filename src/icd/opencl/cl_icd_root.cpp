@@ -333,7 +333,14 @@ cl_int ClIcdRoot::free_memory(ClDevice &device, size_t value_bytes, void *value,
     AV_SCOPE("ClIcdRoot::free_memory");
     icd::AdapterMemory memory(kmt_, device.connection().adapter());
     if (memory.read() != Status::ok) return CL_OUT_OF_RESOURCES;
-    const size_t free_kib = static_cast<size_t>(memory.available(MemorySegmentGroup::local) / kib);
+    size_t free_kib = static_cast<size_t>(memory.available(MemorySegmentGroup::local) / kib);
+    ClientTransport *const wire = wire_of(*device.object());
+    size_t                 host_kib[2] = {};
+    if (wire != nullptr &&
+        av::clproto::av_clGetDeviceInfo(*wire, device.object()->wire(), free_memory_amd, sizeof host_kib, host_kib,
+                                         nullptr) == CL_SUCCESS &&
+        host_kib[0] < free_kib)
+        free_kib = host_kib[0];
     const size_t answer[2] = {free_kib, free_kib};
     const ClInfoRequest asked(value_bytes, value, size_ret);
     if (value_bytes < sizeof answer) return asked.give(answer, sizeof answer[0]);
