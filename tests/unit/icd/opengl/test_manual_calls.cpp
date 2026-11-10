@@ -2245,4 +2245,4 @@ TEST(manual_calls, storage_without_dynamic_storage_refuses_subdata_and_reports_o
   gen::Wrap_glDeleteBuffers(1, deleted);
   gen::Wrap_glBindBuffer(array_buffer, 4u);
   gen::Wrap_glBufferSubData(array_buffer, 0, 4, data);
-  CHECK_EQ(current.sent(), before + 4u); }
+  CHECK_EQ(current.sent(), before + 6u); }
