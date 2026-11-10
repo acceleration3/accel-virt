@@ -53,7 +53,8 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     if (slices_.holds(buffer)) return slices_.map(buffer, offset, length, access, pointer);
     const uint32_t refused = access_error(access);
     if (refused != gl_no_error) return refused;
-    if (offset < 0 || length == 0 || (length < 0 && length != whole_buffer)) return gl_invalid_value;
+    if (offset < 0 || (length < 0 && length != whole_buffer)) return gl_invalid_value;
+    if (length == 0) return gl_invalid_operation;
     if (buffer == 0u || find(buffer) != nullptr) return gl_invalid_operation;
     uint64_t known = 0u;
     int64_t  size = -1;
@@ -128,7 +129,9 @@ bool MappedBuffers::refuses_subdata(uint32_t buffer) const
     AV_SCOPE("MappedBuffers::refuses_subdata");
     constexpr uint32_t dynamic_storage = 0x0100u;
     const uint32_t *const kept = kept_flags_.find(buffer);
-    return kept != nullptr && (*kept & dynamic_storage) == 0u;
+    if (kept != nullptr && (*kept & dynamic_storage) == 0u) return true;
+    const BufferMapping *const mapping = find(buffer);
+    return mapping != nullptr && (mapping->access() & BufferMapping::map_persistent) == 0u;
 }
 
 bool MappedBuffers::map_state(uint32_t buffer, uint32_t pname, int64_t &value) const
