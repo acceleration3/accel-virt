@@ -84,6 +84,12 @@ void ContextSession::vacate()
     __atomic_store_n(&backend_, nullptr, __ATOMIC_RELEASE);
 }
 
+void ContextSession::leave_device()
+{
+    AV_SCOPE("ContextSession::leave_device");
+    if (backend_ != nullptr) backend_->leave_device();
+}
+
 void ContextSession::let_go_of_thread()
 {
     AV_SCOPE("ContextSession::let_go_of_thread");

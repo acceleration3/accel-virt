@@ -277,6 +277,11 @@ void OpenGlBackend::shut_down()
     ran_ = 0u;
 }
 
+void OpenGlBackend::leave_device()
+{
+    AV_SCOPE("OpenGlBackend::leave_device");
+}
+
 void OpenGlBackend::let_go_of_thread()
 {
     AV_SCOPE("OpenGlBackend::let_go_of_thread");

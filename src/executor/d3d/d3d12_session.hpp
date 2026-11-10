@@ -61,6 +61,7 @@ public:
                                   D3d11HostDevice *shown_by = nullptr,
                                   SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr);
     void               shut_down();
+    void               leave_device();
     [[nodiscard]] bool drain_within(TeardownBudget &budget);
 
     bool               knows(uint32_t command_id) const;

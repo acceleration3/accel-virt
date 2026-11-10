@@ -230,6 +230,7 @@ public:
 
     void     shut_down() override;
     void     let_go_of_thread() override;
+    void     leave_device() override;
     uint64_t ran() const;
 
 private:

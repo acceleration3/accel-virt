@@ -197,6 +197,13 @@ void D3d12Session::shut_down()
     imports_ = nullptr;
 }
 
+void D3d12Session::leave_device()
+{
+    AV_SCOPE("D3d12Session::leave_device");
+    if (joined_ && device_ != nullptr) device_->dismiss(tenant_);
+    joined_ = false;
+}
+
 bool D3d12Session::lost() const
 {
     AV_SCOPE("D3d12Session::lost");

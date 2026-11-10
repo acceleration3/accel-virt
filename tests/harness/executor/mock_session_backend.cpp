@@ -180,6 +180,10 @@ void MockSessionBackend::shut_down()
 
 void MockSessionBackend::let_go_of_thread() { __atomic_fetch_add(&let_goes_, 1u, __ATOMIC_RELAXED); }
 
+void MockSessionBackend::leave_device() { __atomic_fetch_add(&left_devices_, 1u, __ATOMIC_RELAXED); }
+
+std::uint32_t MockSessionBackend::left_devices() const { return __atomic_load_n(&left_devices_, __ATOMIC_RELAXED); }
+
 std::uint32_t MockSessionBackend::let_goes() const { return __atomic_load_n(&let_goes_, __ATOMIC_RELAXED); }
 
 std::uint32_t MockSessionBackend::shut_downs() const { return __atomic_load_n(&shut_downs_, __ATOMIC_RELAXED); }

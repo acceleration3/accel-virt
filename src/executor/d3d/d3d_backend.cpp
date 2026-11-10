@@ -151,6 +151,14 @@ void D3dBackend::let_go_of_thread()
     AV_SCOPE("D3dBackend::let_go_of_thread");
 }
 
+void D3dBackend::leave_device()
+{
+    AV_SCOPE("D3dBackend::leave_device");
+    d3d12_.leave_device();
+    if (admitted_ && device11_ != nullptr) device11_->dismiss(wake_);
+    admitted_ = false;
+}
+
 void D3dBackend::use_host_ram(ByteLedger *ledger, uint64_t limit)
 {
     AV_SCOPE("D3dBackend::use_host_ram");

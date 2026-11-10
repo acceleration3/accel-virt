@@ -1301,6 +1301,7 @@ TEST(executor_root_concurrency, a_session_whose_device_is_lost_and_never_drains_
   CHECK_EQ(root.live(), 0u);
   CHECK_EQ(backend.shut_downs(), 0u);
   CHECK_EQ(backend.finished_drains(), 0u);
+  CHECK_EQ(backend.left_devices(), 1u);
   CHECK(root.invariants_hold()); }
 
 TEST(executor_root_concurrency, a_lost_session_is_not_let_go_before_the_grace_is_over)

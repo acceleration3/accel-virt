@@ -39,6 +39,7 @@ public:
     uint64_t             host_limit() const;
     void                 vacate();
     void                 let_go_of_thread();
+    void                 leave_device();
     bool                 live() const;
     bool                 lost() const;
     bool                 faulted() const;

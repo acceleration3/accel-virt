@@ -569,6 +569,7 @@ void ExecutorRoot::leak_slot(uint32_t slot)
 {
     AV_SCOPE("ExecutorRoot::leak_slot");
     log_.sessions().write("a session whose host device is lost never drained; its host objects are leaked and its slot reused");
+    sessions_[slot].object().leave_device();
     shares_[slot].leak();
     vulkan_[slot].forget();
     opencl_[slot].forget();

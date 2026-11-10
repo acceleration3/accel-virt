@@ -1263,6 +1263,11 @@ void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
     if (!devices_leaked_) ::vkDestroyInstance(reinterpret_cast<VkInstance>(raw), nullptr);
 }
 
+void VulkanBackend::leave_device()
+{
+    AV_SCOPE("VulkanBackend::leave_device");
+}
+
 void VulkanBackend::let_go_of_thread()
 {
     AV_SCOPE("VulkanBackend::let_go_of_thread");
