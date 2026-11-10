@@ -537,11 +537,6 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, judged_list);
         return nullptr;
     }
-    uint64_t d3d10_device = 0u;
-    if (list.names(static_cast<uint64_t>(d3d10_context_device), d3d10_device) && d3d10_device != 0u) {
-        report_error(error, invalid_d3d10_device);
-        return nullptr;
-    }
     uint32_t     gl_share = 0u;
     const cl_int shared = gl_share_for(list, gl_share);
     if (shared != CL_SUCCESS) {
@@ -565,7 +560,8 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         return nullptr;
     }
     void        *d3d11_device = nullptr;
-    const cl_int d3d11_shared = d3d11_device_for(list, *device, d3d11_device);
+    bool         d3d10_device = false;
+    const cl_int d3d11_shared = d3d11_device_for(list, *device, d3d11_device, d3d10_device);
     if (d3d11_shared != CL_SUCCESS) {
         report_error(error, d3d11_shared);
         return nullptr;
@@ -610,7 +606,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     void *const wrapped = wrap(*wire, ClObject::Kind::context, host_context, context, nullptr, error);
     if (wrapped == nullptr) static_cast<void>(contexts_.destroy(context));
     if (wrapped != nullptr && d3d11_device != nullptr) {
-        context->d3d11().share_with(d3d11_device);
+        context->d3d11().share_with(d3d11_device, d3d10_device);
         d3d11_.hold(d3d11_device);
     }
     return static_cast<cl_context>(wrapped);
@@ -1845,8 +1841,14 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
         const void *const own = held->application_memory();
         return asked.give(&own, sizeof own);
     }
+    case d3d10_resource_info: {
+        const D3d11Object *const made = held->context()->d3d11().d3d10() ? d3d11_object_of(*held) : nullptr;
+        if (made == nullptr) return invalid_d3d10_resource;
+        void *const resource = made->resource();
+        return asked.give(&resource, sizeof resource);
+    }
     case d3d11_resource_info: {
-        const D3d11Object *const made = d3d11_object_of(*held);
+        const D3d11Object *const made = held->context()->d3d11().d3d10() ? nullptr : d3d11_object_of(*held);
         if (made == nullptr) return invalid_d3d11_resource;
         void *const resource = made->resource();
         return asked.give(&resource, sizeof resource);
@@ -1908,8 +1910,14 @@ cl_int ClIcdRoot::image_info(cl_mem image, cl_image_info name, size_t value_byte
         const size_t pitch = name == CL_IMAGE_ROW_PITCH ? held->extent().row_pitch() : held->extent().slice_pitch();
         return ClInfoRequest(value_bytes, value, size_ret).give(&pitch, sizeof pitch);
     }
+    if (name == d3d10_subresource_info) {
+        const D3d11Object *const made = held->context()->d3d11().d3d10() ? d3d11_object_of(*held) : nullptr;
+        if (made == nullptr) return invalid_d3d10_resource;
+        const cl_uint subresource = made->subresource();
+        return ClInfoRequest(value_bytes, value, size_ret).give(&subresource, sizeof subresource);
+    }
     if (name == d3d11_subresource_info) {
-        const D3d11Object *const made = d3d11_object_of(*held);
+        const D3d11Object *const made = held->context()->d3d11().d3d10() ? nullptr : d3d11_object_of(*held);
         if (made == nullptr) return invalid_d3d11_resource;
         const cl_uint subresource = made->subresource();
         return ClInfoRequest(value_bytes, value, size_ret).give(&subresource, sizeof subresource);
@@ -2881,20 +2889,6 @@ cl_int ClIcdRoot::device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_u
     if (devices != nullptr) devices[0] = reinterpret_cast<cl_device_id>(device->object());
     if (num_devices != nullptr) *num_devices = 1u;
     return CL_SUCCESS;
-}
-
-cl_mem ClIcdRoot::create_from_d3d10(cl_context context, cl_int *error)
-{
-    AV_SCOPE("ClIcdRoot::create_from_d3d10");
-    report_error(error, CL_INVALID_CONTEXT);
-    static_cast<void>(context);
-    return nullptr;
-}
-
-cl_int ClIcdRoot::enqueue_d3d10_objects(cl_command_queue queue)
-{
-    AV_SCOPE("ClIcdRoot::enqueue_d3d10_objects");
-    return busied(queue) != nullptr ? CL_INVALID_CONTEXT : CL_INVALID_COMMAND_QUEUE;
 }
 
 cl_mem ClIcdRoot::create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)

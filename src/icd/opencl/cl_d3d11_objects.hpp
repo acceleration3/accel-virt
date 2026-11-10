@@ -22,12 +22,15 @@ class ClD3d11Objects {
 public:
     static constexpr cl_int already_acquired = -1008;
     static constexpr cl_int not_acquired = -1009;
+    static constexpr cl_int already_acquired_d3d10 = -1004;
+    static constexpr cl_int not_acquired_d3d10 = -1005;
 
     explicit ClD3d11Objects(BlockSource &memory);
     ClD3d11Objects(const ClD3d11Objects &) = delete;
     ClD3d11Objects &operator=(const ClD3d11Objects &) = delete;
 
-    void                 share_with(void *device);
+    void                 share_with(void *device, bool d3d10 = false);
+    bool                 d3d10() const;
     void                *device() const;
     [[nodiscard]] Status keep(const void *mem, void *resource, uint32_t subresource, const D3d11Resource &described,
                               cl_mem_flags flags);
@@ -47,6 +50,7 @@ private:
     cl_int judge(const cl_mem *objects, cl_uint count, bool acquired, cl_int wrong_turn);
 
     void                   *device_;
+    bool                    d3d10_;
     ObjectPool<D3d11Object> objects_;
 };
 

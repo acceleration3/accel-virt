@@ -25,9 +25,16 @@ bool WindowsD3d11Bridge::device(void *object)
     return true;
 }
 
+bool WindowsD3d11Bridge::d3d10_device(void *object)
+{
+    AV_SCOPE("WindowsD3d11Bridge::d3d10_device");
+    return ten_.device(object);
+}
+
 bool WindowsD3d11Bridge::describe(void *object, void *device, D3d11Resource &described)
 {
     AV_SCOPE("WindowsD3d11Bridge::describe");
+    if (ten_.device(device)) return ten_.describe(object, device, described);
     described = D3d11Resource();
     ID3D11Resource *const resource = as_resource(object);
     if (resource == nullptr) return false;
@@ -54,6 +61,7 @@ void WindowsD3d11Bridge::let_go(void *object)
 cl_int WindowsD3d11Bridge::read(void *device, void *resource, uint32_t subresource, clicd::D3d11Rows &rows)
 {
     AV_SCOPE("WindowsD3d11Bridge::read");
+    if (ten_.device(device)) return ten_.read(device, resource, subresource, rows);
     ID3D11Device *const   owner = as_device(device);
     ID3D11Resource *const source = as_resource(resource);
     ID3D11Resource *const staging =
@@ -80,6 +88,7 @@ cl_int WindowsD3d11Bridge::read(void *device, void *resource, uint32_t subresour
 cl_int WindowsD3d11Bridge::write(void *device, void *resource, uint32_t subresource, clicd::D3d11Rows &rows)
 {
     AV_SCOPE("WindowsD3d11Bridge::write");
+    if (ten_.device(device)) return ten_.write(device, resource, subresource, rows);
     ID3D11Device *const   owner = as_device(device);
     ID3D11Resource *const target = as_resource(resource);
     ID3D11Resource *const staging =
@@ -152,6 +161,7 @@ void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresourc
     AV_SCOPE("WindowsD3d11Bridge::twin");
     handle = 0u;
     bytes = 0u;
+    if (ten_.device(device)) return nullptr;
     ID3D11Device *const   owner = as_device(device);
     ID3D11Resource *const source = as_resource(resource);
     ID3D11Texture2D      *made = nullptr;

@@ -17,6 +17,7 @@ public:
     ScriptedD3d11Bridge();
 
     void name_device(void *device);
+    void name_d3d10_device(void *device);
     void name_resource(void *resource, void *device, const clicd::D3d11Resource &described, std::uint8_t *bytes,
                        std::size_t size, std::size_t row_pitch, std::size_t slice_pitch);
     void refuse_next();
@@ -25,6 +26,7 @@ public:
     std::uint32_t twin_device() const;
 
     bool   device(void *object) override;
+    bool   d3d10_device(void *object) override;
     bool   describe(void *object, void *device, clicd::D3d11Resource &described) override;
     void   hold(void *object) override;
     void   let_go(void *object) override;
@@ -59,6 +61,7 @@ private:
     bool         refused();
 
     void         *device_;
+    void         *d3d10_device_;
     Resource      resources_[max_resources];
     std::uint32_t count_;
     const void   *held_[max_resources + 1u];

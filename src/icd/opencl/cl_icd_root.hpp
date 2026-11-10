@@ -221,12 +221,22 @@ public:
     static constexpr cl_uint d3d10_preferred_devices = 0x4012u;
     static constexpr cl_uint d3d10_all_devices = 0x4013u;
     static constexpr cl_uint d3d10_context_device = 0x4014u;
+    static constexpr cl_uint d3d10_resource_info = 0x4015u;
+    static constexpr cl_uint d3d10_subresource_info = 0x4016u;
     static constexpr cl_int  invalid_d3d10_device = -1002;
+    static constexpr cl_int  invalid_d3d10_resource = -1003;
+    static constexpr cl_command_type acquire_d3d10_command = 0x4017u;
+    static constexpr cl_command_type release_d3d10_command = 0x4018u;
 
     cl_int device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
                                  cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices);
-    cl_mem create_from_d3d10(cl_context context, cl_int *error);
-    cl_int enqueue_d3d10_objects(cl_command_queue queue);
+    cl_mem create_from_d3d10_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error);
+    cl_mem create_from_d3d10_texture(cl_context context, cl_mem_flags flags, void *resource, cl_uint subresource,
+                                     D3d11Resource::Kind kind, cl_int *error);
+    cl_int enqueue_acquire_d3d10(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                 const cl_event *events, cl_event *event);
+    cl_int enqueue_release_d3d10(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                 const cl_event *events, cl_event *event);
 
     static constexpr cl_uint d3d11_device_source = 0x4019u;
     static constexpr cl_uint d3d11_adapter_source = 0x401Au;
@@ -367,16 +377,24 @@ private:
     void             learn_devices();
     uint64_t         host_device_of(ClObject &object);
     cl_int           device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_uint *num_devices);
-    cl_int           d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device);
+    cl_int           d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device, bool &d3d10);
+    cl_mem           create_from_d3d_buffer(cl_context context, cl_mem_flags flags, void *resource, bool d3d10,
+                                            cl_int *error);
+    cl_mem           create_from_d3d_texture(cl_context context, cl_mem_flags flags, void *resource, cl_uint subresource,
+                                             D3d11Resource::Kind kind, bool d3d10, cl_int *error);
+    cl_int           enqueue_acquire_d3d(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                         const cl_event *events, cl_event *event, bool d3d10);
+    cl_int           enqueue_release_d3d(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                         const cl_event *events, cl_event *event, bool d3d10);
     cl_int           d3d11_resource(cl_context context, cl_mem_flags flags, void *resource, uint32_t subresource,
                                     D3d11Resource::Kind kind, ClObject *&held, GuestClContext *&owner,
-                                    D3d11Resource &described);
+                                    D3d11Resource &described, bool d3d10);
     cl_mem           d3d11_object(cl_mem made, GuestClContext &owner, void *resource, uint32_t subresource,
                                   const D3d11Resource &described, cl_mem_flags flags, cl_int *error);
     cl_mem           d3d11_twin(ClObject &held, GuestClContext &owner, void *resource, uint32_t subresource,
                                 void *&twin);
     cl_int           d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_event *events, ClObject *&held,
-                                 GuestClContext *&context, ClientTransport *&wire);
+                                 GuestClContext *&context, ClientTransport *&wire, bool d3d10);
     cl_int           d3d11_copy_in(cl_command_queue queue, GuestClContext &context, const cl_mem *objects,
                                    cl_uint count);
     cl_int           d3d11_copy_out(cl_command_queue queue, GuestClContext &context, const cl_mem *objects,

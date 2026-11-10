@@ -7,7 +7,7 @@
 namespace av {
 
 ScriptedD3d11Bridge::ScriptedD3d11Bridge()
-    : device_(nullptr), resources_{}, count_(0u), held_{}, references_{}, staging_{}, reads_(0u), writes_(0u),
+    : device_(nullptr), d3d10_device_(nullptr), resources_{}, count_(0u), held_{}, references_{}, staging_{}, reads_(0u), writes_(0u),
       subresource_(0u), refuse_(false), twin_(nullptr), twin_handle_(0u), twin_bytes_(0u), twin_device_(0u), closed_(0u), to_twins_(0u),
       from_twins_(0u), twin_hook_(nullptr), twin_hook_context_(nullptr)
 {
@@ -26,6 +26,10 @@ void ScriptedD3d11Bridge::name_resource(void *resource, void *device, const clic
 void ScriptedD3d11Bridge::refuse_next() { refuse_ = true; }
 
 bool ScriptedD3d11Bridge::device(void *object) { return object != nullptr && object == device_; }
+
+bool ScriptedD3d11Bridge::d3d10_device(void *object) { return object != nullptr && object == d3d10_device_; }
+
+void ScriptedD3d11Bridge::name_d3d10_device(void *device) { d3d10_device_ = device; }
 
 bool ScriptedD3d11Bridge::describe(void *object, void *device, clicd::D3d11Resource &described)
 {
@@ -62,7 +66,7 @@ cl_int ScriptedD3d11Bridge::read(void *device, void *resource, std::uint32_t sub
     ++reads_;
     subresource_ = subresource;
     Resource *const named_resource = named(resource);
-    if (refused() || named_resource == nullptr || device != device_ || named_resource->size > staging_bytes)
+    if (refused() || named_resource == nullptr || (device != device_ && device != d3d10_device_) || named_resource->size > staging_bytes)
         return CL_OUT_OF_RESOURCES;
     std::memcpy(staging_, named_resource->bytes, named_resource->size);
     return rows.visit(staging_, named_resource->row_pitch, named_resource->slice_pitch);
@@ -73,7 +77,7 @@ cl_int ScriptedD3d11Bridge::write(void *device, void *resource, std::uint32_t su
     ++writes_;
     subresource_ = subresource;
     Resource *const named_resource = named(resource);
-    if (refused() || named_resource == nullptr || device != device_ || named_resource->size > staging_bytes)
+    if (refused() || named_resource == nullptr || (device != device_ && device != d3d10_device_) || named_resource->size > staging_bytes)
         return CL_OUT_OF_RESOURCES;
     std::memset(staging_, 0, sizeof staging_);
     const cl_int visited = rows.visit(staging_, named_resource->row_pitch, named_resource->slice_pitch);

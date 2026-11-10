@@ -674,7 +674,7 @@ cl_int CL_API_CALL get_device_ids_from_d3d10(cl_platform_id platform, cl_uint so
                       root.device_ids_from_d3d10(platform, source, object, set, num_entries, devices, num_devices));
 }
 
-cl_mem CL_API_CALL create_from_d3d10_buffer(cl_context context, cl_mem_flags, void *, cl_int *error)
+cl_mem CL_API_CALL create_from_d3d10_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error)
 {
     AV_SCOPE("create_from_d3d10_buffer");
     if (!cl_icd_binding.bound()) {
@@ -682,34 +682,51 @@ cl_mem CL_API_CALL create_from_d3d10_buffer(cl_context context, cl_mem_flags, vo
         return nullptr;
     }
     ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D10BufferKHR", error);
-    return cl_icd_binding.root().create_from_d3d10(context, noted.pointer());
+    return cl_icd_binding.root().create_from_d3d10_buffer(context, flags, resource, noted.pointer());
 }
 
-cl_mem CL_API_CALL create_from_d3d10_texture(cl_context context, cl_mem_flags, void *, cl_uint, cl_int *error)
+cl_mem CL_API_CALL create_from_d3d10_texture2d(cl_context context, cl_mem_flags flags, void *resource,
+                                               cl_uint subresource, cl_int *error)
 {
-    AV_SCOPE("create_from_d3d10_texture");
+    AV_SCOPE("create_from_d3d10_texture2d");
     if (!cl_icd_binding.bound()) {
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D10TextureKHR", error);
-    return cl_icd_binding.root().create_from_d3d10(context, noted.pointer());
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D10Texture2DKHR", error);
+    return cl_icd_binding.root().create_from_d3d10_texture(context, flags, resource, subresource,
+                                                           D3d11Resource::Kind::texture2d, noted.pointer());
 }
 
-cl_int CL_API_CALL enqueue_acquire_d3d10(cl_command_queue queue, cl_uint, const cl_mem *, cl_uint, const cl_event *,
-                                         cl_event *)
+cl_mem CL_API_CALL create_from_d3d10_texture3d(cl_context context, cl_mem_flags flags, void *resource,
+                                               cl_uint subresource, cl_int *error)
+{
+    AV_SCOPE("create_from_d3d10_texture3d");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D10Texture3DKHR", error);
+    return cl_icd_binding.root().create_from_d3d10_texture(context, flags, resource, subresource,
+                                                           D3d11Resource::Kind::texture3d, noted.pointer());
+}
+
+cl_int CL_API_CALL enqueue_acquire_d3d10(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                         const cl_event *events, cl_event *event)
 {
     AV_SCOPE("enqueue_acquire_d3d10");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.noted("clEnqueueAcquireD3D10ObjectsKHR", root.enqueue_d3d10_objects(queue));
+    return root.noted("clEnqueueAcquireD3D10ObjectsKHR",
+                      root.enqueue_acquire_d3d10(queue, count, objects, waits, events, event));
 }
 
-cl_int CL_API_CALL enqueue_release_d3d10(cl_command_queue queue, cl_uint, const cl_mem *, cl_uint, const cl_event *,
-                                         cl_event *)
+cl_int CL_API_CALL enqueue_release_d3d10(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                         const cl_event *events, cl_event *event)
 {
     AV_SCOPE("enqueue_release_d3d10");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.noted("clEnqueueReleaseD3D10ObjectsKHR", root.enqueue_d3d10_objects(queue));
+    return root.noted("clEnqueueReleaseD3D10ObjectsKHR",
+                      root.enqueue_release_d3d10(queue, count, objects, waits, events, event));
 }
 
 cl_int CL_API_CALL get_device_ids_from_d3d11(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
@@ -1362,9 +1379,9 @@ void ClDispatchTable::fill()
     table_.clCreateFromD3D10BufferKHR =
         reinterpret_cast<decltype(table_.clCreateFromD3D10BufferKHR)>(&create_from_d3d10_buffer);
     table_.clCreateFromD3D10Texture2DKHR =
-        reinterpret_cast<decltype(table_.clCreateFromD3D10Texture2DKHR)>(&create_from_d3d10_texture);
+        reinterpret_cast<decltype(table_.clCreateFromD3D10Texture2DKHR)>(&create_from_d3d10_texture2d);
     table_.clCreateFromD3D10Texture3DKHR =
-        reinterpret_cast<decltype(table_.clCreateFromD3D10Texture3DKHR)>(&create_from_d3d10_texture);
+        reinterpret_cast<decltype(table_.clCreateFromD3D10Texture3DKHR)>(&create_from_d3d10_texture3d);
     table_.clEnqueueAcquireD3D10ObjectsKHR =
         reinterpret_cast<decltype(table_.clEnqueueAcquireD3D10ObjectsKHR)>(&enqueue_acquire_d3d10);
     table_.clEnqueueReleaseD3D10ObjectsKHR =

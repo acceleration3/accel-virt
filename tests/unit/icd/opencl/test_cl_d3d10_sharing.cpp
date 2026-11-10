@@ -176,7 +176,7 @@ TEST(cl_d3d10_sharing, a_d3d10_device_to_share_with_is_one_this_device_cannot_an
   CHECK(context != nullptr);
   CHECK_EQ(error, CL_SUCCESS); }
 
-TEST(cl_d3d10_sharing, no_context_here_shares_with_direct3d_10_so_its_objects_are_refused)
+TEST(cl_d3d10_sharing, a_context_made_without_a_direct3d_10_device_refuses_its_objects)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
   CHECK(device != nullptr);
@@ -210,7 +210,8 @@ TEST(cl_d3d10_sharing, no_context_here_shares_with_direct3d_10_so_its_objects_ar
            CL_INVALID_CONTEXT);
   CHECK_EQ(reinterpret_cast<Objects>(table.clEnqueueReleaseD3D10ObjectsKHR)(queue, 1u, &none, 0u, nullptr, nullptr),
            CL_INVALID_CONTEXT);
-  CHECK_EQ(rig.root().enqueue_d3d10_objects(reinterpret_cast<cl_command_queue>(context)), CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().enqueue_acquire_d3d10(reinterpret_cast<cl_command_queue>(context), 1u, &none, 0u, nullptr, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
   CHECK_EQ(rig.kmt().commands(), sent); }
 
 TEST(cl_d3d10_sharing, its_entries_reached_before_a_root_exists_refuse)
@@ -245,16 +246,22 @@ TEST(cl_d3d10_sharing, its_numbers_are_the_specifications)
   CHECK_EQ(ClIcdRoot::d3d10_preferred_devices, 0x4012u);
   CHECK_EQ(ClIcdRoot::d3d10_all_devices, 0x4013u);
   CHECK_EQ(ClIcdRoot::d3d10_context_device, 0x4014u);
-  CHECK_EQ(ClIcdRoot::invalid_d3d10_device, -1002); }
+  CHECK_EQ(ClIcdRoot::d3d10_resource_info, 0x4015u);
+  CHECK_EQ(ClIcdRoot::d3d10_subresource_info, 0x4016u);
+  CHECK_EQ(ClIcdRoot::acquire_d3d10_command, 0x4017u);
+  CHECK_EQ(ClIcdRoot::release_d3d10_command, 0x4018u);
+  CHECK_EQ(ClIcdRoot::invalid_d3d10_device, -1002);
+  CHECK_EQ(ClIcdRoot::invalid_d3d10_resource, -1003); }
 
-TEST(cl_d3d10_sharing, a_d3d10_object_made_without_a_resource_is_an_invalid_context_whatever_the_context)
+TEST(cl_d3d10_sharing, a_d3d10_object_made_on_no_context_or_a_stranger_is_an_invalid_context)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_int error = CL_SUCCESS;
-  CHECK(rig.root().create_from_d3d10(nullptr, &error) == nullptr);
+  CHECK(rig.root().create_from_d3d10_buffer(nullptr, CL_MEM_READ_WRITE, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
   error = CL_SUCCESS;
-  CHECK(rig.root().create_from_d3d10(reinterpret_cast<cl_context>(std::uintptr_t{0x1234}), &error) == nullptr);
+  CHECK(rig.root().create_from_d3d10_buffer(reinterpret_cast<cl_context>(std::uintptr_t{0x1234}), CL_MEM_READ_WRITE,
+                                            nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
-  CHECK(rig.root().create_from_d3d10(nullptr, nullptr) == nullptr);
+  CHECK(rig.root().create_from_d3d10_buffer(nullptr, CL_MEM_READ_WRITE, nullptr, nullptr) == nullptr);
   CHECK(rig.root().invariants_hold()); }

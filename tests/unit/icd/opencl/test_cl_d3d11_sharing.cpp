@@ -49,14 +49,15 @@ const D3d11Resource     small_buffer(D3d11Resource::Kind::buffer, 0u, 64u, 0u, 0
 
 class Shared {
 public:
-    explicit Shared(ClIcdRig &rig) : rig_(rig), buffer_bytes_{}, texture_bytes_{}
+    explicit Shared(ClIcdRig &rig, bool d3d10 = false) : rig_(rig), ten_(d3d10), buffer_bytes_{}, texture_bytes_{}
     {
         for (std::size_t index = 0u; index < sizeof buffer_bytes_; ++index)
             buffer_bytes_[index] = static_cast<std::uint8_t>(0x40u + index);
         for (std::size_t index = 0u; index < sizeof texture_bytes_; ++index)
             texture_bytes_[index] = static_cast<std::uint8_t>(0x80u + index);
         rig_.d3d_adapters().name_device(&device_, ClIcdRig::adapter_luid);
-        rig_.d3d11().name_device(&device_);
+        if (ten_) rig_.d3d11().name_d3d10_device(&device_);
+        else rig_.d3d11().name_device(&device_);
         rig_.d3d11().name_resource(&buffer_, &device_, small_buffer, buffer_bytes_, sizeof buffer_bytes_, 64u, 64u);
         rig_.d3d11().name_resource(&texture_, &device_, small_texture, texture_bytes_, sizeof texture_bytes_, 16u,
                                    32u);
@@ -95,7 +96,7 @@ public:
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_handle(host_context, CL_SUCCESS);
         const cl_context_properties properties[] = {
-            static_cast<cl_context_properties>(ClIcdRoot::d3d11_context_device),
+            static_cast<cl_context_properties>(ten_ ? ClIcdRoot::d3d10_context_device : ClIcdRoot::d3d11_context_device),
             reinterpret_cast<cl_context_properties>(d3d11_device), 0};
         return rig_.loader().dispatch_of(cl_device_)->clCreateContext(properties, 1u, &cl_device_, nullptr, nullptr,
                                                                       &error);
@@ -103,29 +104,38 @@ public:
 
     cl_mem from_buffer(cl_mem_flags flags, void *resource, cl_int &error)
     {
-        return reinterpret_cast<FromBuffer>(rig_.loader().dispatch_of(context_)->clCreateFromD3D11BufferKHR)(
+        const cl_icd_dispatch &table = *rig_.loader().dispatch_of(context_);
+        return reinterpret_cast<FromBuffer>(ten_ ? table.clCreateFromD3D10BufferKHR : table.clCreateFromD3D11BufferKHR)(
             context_, flags, resource, &error);
     }
     cl_mem from_texture2d(cl_mem_flags flags, void *resource, cl_uint subresource, cl_int &error)
     {
-        return reinterpret_cast<FromTexture>(rig_.loader().dispatch_of(context_)->clCreateFromD3D11Texture2DKHR)(
+        const cl_icd_dispatch &table = *rig_.loader().dispatch_of(context_);
+        return reinterpret_cast<FromTexture>(ten_ ? table.clCreateFromD3D10Texture2DKHR
+                                                  : table.clCreateFromD3D11Texture2DKHR)(
             context_, flags, resource, subresource, &error);
     }
     cl_mem from_texture3d(cl_mem_flags flags, void *resource, cl_uint subresource, cl_int &error)
     {
-        return reinterpret_cast<FromTexture>(rig_.loader().dispatch_of(context_)->clCreateFromD3D11Texture3DKHR)(
+        const cl_icd_dispatch &table = *rig_.loader().dispatch_of(context_);
+        return reinterpret_cast<FromTexture>(ten_ ? table.clCreateFromD3D10Texture3DKHR
+                                                  : table.clCreateFromD3D11Texture3DKHR)(
             context_, flags, resource, subresource, &error);
     }
     cl_int acquire(cl_uint count, const cl_mem *objects, cl_uint waits = 0u, const cl_event *events = nullptr,
                    cl_event *event = nullptr)
     {
-        return reinterpret_cast<Objects>(rig_.loader().dispatch_of(queue_)->clEnqueueAcquireD3D11ObjectsKHR)(
+        const cl_icd_dispatch &table = *rig_.loader().dispatch_of(queue_);
+        return reinterpret_cast<Objects>(ten_ ? table.clEnqueueAcquireD3D10ObjectsKHR
+                                              : table.clEnqueueAcquireD3D11ObjectsKHR)(
             queue_, count, objects, waits, events, event);
     }
     cl_int release(cl_uint count, const cl_mem *objects, cl_uint waits = 0u, const cl_event *events = nullptr,
                    cl_event *event = nullptr)
     {
-        return reinterpret_cast<Objects>(rig_.loader().dispatch_of(queue_)->clEnqueueReleaseD3D11ObjectsKHR)(
+        const cl_icd_dispatch &table = *rig_.loader().dispatch_of(queue_);
+        return reinterpret_cast<Objects>(ten_ ? table.clEnqueueReleaseD3D10ObjectsKHR
+                                              : table.clEnqueueReleaseD3D11ObjectsKHR)(
             queue_, count, objects, waits, events, event);
     }
 
@@ -136,6 +146,7 @@ public:
 
 private:
     ClIcdRig        &rig_;
+    bool             ten_;
     int              device_ = 0, stranger_device_ = 0;
     int              buffer_ = 0, texture_ = 0, strangers_ = 0;
     std::uint8_t     buffer_bytes_[64];
@@ -896,3 +907,96 @@ TEST(cl_d3d11_sharing, a_twin_that_cannot_be_kept_is_given_back_whenever_memory_
   }
   CHECK(refused);
   CHECK(made); }
+
+TEST(cl_d3d10_sharing, an_acquire_copies_each_resource_in_and_a_release_copies_it_back_through_the_same_path)
+{ ClIcdRig rig;
+  Shared   shared(rig, true);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  cl_int error = CL_INVALID_VALUE;
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  const cl_mem buffer = shared.from_buffer(CL_MEM_READ_WRITE, shared.buffer(), error);
+  CHECK_EQ(error, CL_SUCCESS);
+  rig.host().cl_handle(host_image, CL_SUCCESS);
+  const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(buffer != nullptr && image != nullptr);
+  if (buffer == nullptr || image == nullptr) return;
+  const cl_mem both[2] = {buffer, image};
+
+  shared.element_is(4u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event acquired = nullptr;
+  CHECK_EQ(shared.acquire(2u, both, 0u, nullptr, &acquired), CL_SUCCESS);
+  CHECK(acquired != nullptr);
+  cl_command_type type = 0u;
+  CHECK_EQ(rig.loader().dispatch_of(acquired)->clGetEventInfo(acquired, CL_EVENT_COMMAND_TYPE, sizeof type, &type,
+                                                              nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(type, ClIcdRoot::acquire_d3d10_command);
+  CHECK_EQ(rig.d3d11().reads(), 2u);
+  CHECK_EQ(shared.acquire(1u, &buffer), -1004);
+
+  std::uint8_t written[64] = {};
+  for (std::size_t index = 0u; index < sizeof written; ++index) written[index] = static_cast<std::uint8_t>(index);
+  rig.host().cl_bytes(CL_SUCCESS, written, 64u);
+  shared.element_is(4u);
+  rig.host().cl_bytes(CL_SUCCESS, written, 32u);
+  CHECK_EQ(shared.release(2u, both), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().writes(), 2u);
+  CHECK_EQ(std::memcmp(shared.buffer_bytes(), written, 64u), 0);
+  CHECK_EQ(shared.release(1u, &buffer), -1005);
+
+  CHECK_EQ(rig.loader().dispatch_of(buffer)->clGetMemObjectInfo(buffer, ClIcdRoot::d3d10_resource_info, 0u, nullptr,
+                                                                nullptr),
+           CL_SUCCESS);
+  void *resource = nullptr;
+  CHECK_EQ(rig.loader().dispatch_of(buffer)->clGetMemObjectInfo(buffer, ClIcdRoot::d3d10_resource_info,
+                                                                sizeof resource, &resource, nullptr),
+           CL_SUCCESS);
+  CHECK(resource == shared.buffer());
+  CHECK_EQ(rig.loader().dispatch_of(buffer)->clGetMemObjectInfo(buffer, ClIcdRoot::d3d11_resource_info,
+                                                                sizeof resource, &resource, nullptr),
+           ClIcdRoot::invalid_d3d11_resource);
+  cl_uint subresource = 9u;
+  CHECK_EQ(rig.loader().dispatch_of(image)->clGetImageInfo(image, ClIcdRoot::d3d10_subresource_info,
+                                                           sizeof subresource, &subresource, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(subresource, 0u);
+  CHECK_EQ(rig.loader().release_mem(buffer), CL_SUCCESS);
+  CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().references(shared.buffer()), 0);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_d3d10_sharing, a_context_shares_with_one_direct3d_device_kind_and_objects_of_the_other_are_refused)
+{ ClIcdRig rig;
+  Shared   shared(rig, true);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  cl_int error = CL_SUCCESS;
+  CHECK_EQ(rig.d3d11().references(shared.d3d_device()), 1);
+  int not_a_device = 0;
+  CHECK(shared.create(&not_a_device, error) == nullptr);
+  CHECK_EQ(error, ClIcdRoot::invalid_d3d10_device);
+  const cl_icd_dispatch &table = *rig.loader().dispatch_of(shared.context());
+  CHECK(reinterpret_cast<FromBuffer>(table.clCreateFromD3D11BufferKHR)(shared.context(), CL_MEM_READ_WRITE,
+                                                                       shared.buffer(), &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  CHECK_EQ(reinterpret_cast<Objects>(table.clEnqueueAcquireD3D11ObjectsKHR)(shared.queue(), 1u, nullptr, 0u, nullptr,
+                                                                            nullptr),
+           CL_INVALID_CONTEXT);
+  int stranger = 0;
+  CHECK(shared.from_buffer(CL_MEM_READ_WRITE, &stranger, error) == nullptr);
+  CHECK_EQ(error, ClIcdRoot::invalid_d3d10_resource);
+  CHECK(shared.from_texture2d(CL_MEM_READ_WRITE, shared.buffer(), 0u, error) == nullptr);
+  CHECK_EQ(error, ClIcdRoot::invalid_d3d10_resource);
+  const cl_context_properties both[] = {
+      static_cast<cl_context_properties>(ClIcdRoot::d3d10_context_device),
+      reinterpret_cast<cl_context_properties>(shared.d3d_device()),
+      static_cast<cl_context_properties>(ClIcdRoot::d3d11_context_device),
+      reinterpret_cast<cl_context_properties>(shared.d3d_device()), 0};
+  const cl_device_id device = shared.device();
+  CHECK(rig.loader().dispatch_of(device)->clCreateContext(both, 1u, &device, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  CHECK(rig.root().invariants_hold()); }

@@ -16,6 +16,7 @@ public:
     D3d11Bridge &operator=(const D3d11Bridge &) = delete;
 
     virtual bool   device(void *object) = 0;
+    virtual bool   d3d10_device(void *object) = 0;
     virtual bool   describe(void *object, void *device, D3d11Resource &described) = 0;
     virtual void   hold(void *object) = 0;
     virtual void   let_go(void *object) = 0;

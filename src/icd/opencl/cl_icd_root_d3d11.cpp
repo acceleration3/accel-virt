@@ -45,27 +45,47 @@ cl_int ClIcdRoot::device_ids_from_d3d11(cl_platform_id platform, cl_uint source,
     return device_ids_for_luid(luid, devices, num_devices);
 }
 
-cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device)
+cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device, bool &d3d10)
 {
     AV_SCOPE("ClIcdRoot::d3d11_device_for");
     device = nullptr;
-    uint64_t named = 0u;
-    if (!list.names(static_cast<uint64_t>(d3d11_context_device), named) || named == 0u) return CL_SUCCESS;
-    void *const candidate = reinterpret_cast<void *>(static_cast<uintptr_t>(named));
-    if (!d3d11_.device(candidate)) return invalid_d3d11_device;
-    if (d3d_adapters_.device_luid(candidate) != on.luid()) return invalid_d3d11_device;
+    d3d10 = false;
+    uint64_t named_11 = 0u;
+    uint64_t named_10 = 0u;
+    const bool has_11 = list.names(static_cast<uint64_t>(d3d11_context_device), named_11) && named_11 != 0u;
+    const bool has_10 = list.names(static_cast<uint64_t>(d3d10_context_device), named_10) && named_10 != 0u;
+    if (!has_11 && !has_10) return CL_SUCCESS;
+    if (has_11 && has_10) return CL_INVALID_VALUE;
+    void *const candidate = reinterpret_cast<void *>(static_cast<uintptr_t>(has_10 ? named_10 : named_11));
+    const cl_int refused = has_10 ? invalid_d3d10_device : invalid_d3d11_device;
+    if (!(has_10 ? d3d11_.d3d10_device(candidate) : d3d11_.device(candidate))) return refused;
+    if (d3d_adapters_.device_luid(candidate) != on.luid()) return refused;
     device = candidate;
+    d3d10 = has_10;
     return CL_SUCCESS;
 }
 
 cl_mem ClIcdRoot::create_from_d3d11_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_from_d3d11_buffer");
+    return create_from_d3d_buffer(context, flags, resource, false, error);
+}
+
+cl_mem ClIcdRoot::create_from_d3d10_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_d3d10_buffer");
+    return create_from_d3d_buffer(context, flags, resource, true, error);
+}
+
+cl_mem ClIcdRoot::create_from_d3d_buffer(cl_context context, cl_mem_flags flags, void *resource, bool d3d10,
+                                         cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_d3d_buffer");
     ClObject       *held = nullptr;
     GuestClContext *owner = nullptr;
     D3d11Resource   described;
     const cl_int    judged_resource =
-        d3d11_resource(context, flags, resource, 0u, D3d11Resource::Kind::buffer, held, owner, described);
+        d3d11_resource(context, flags, resource, 0u, D3d11Resource::Kind::buffer, held, owner, described, d3d10);
     if (judged_resource != CL_SUCCESS) {
         report_d3d11_error(error, judged_resource);
         return nullptr;
@@ -84,11 +104,25 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
                                             cl_uint subresource, D3d11Resource::Kind kind, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_from_d3d11_texture");
+    return create_from_d3d_texture(context, flags, resource, subresource, kind, false, error);
+}
+
+cl_mem ClIcdRoot::create_from_d3d10_texture(cl_context context, cl_mem_flags flags, void *resource,
+                                            cl_uint subresource, D3d11Resource::Kind kind, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_d3d10_texture");
+    return create_from_d3d_texture(context, flags, resource, subresource, kind, true, error);
+}
+
+cl_mem ClIcdRoot::create_from_d3d_texture(cl_context context, cl_mem_flags flags, void *resource, cl_uint subresource,
+                                          D3d11Resource::Kind kind, bool d3d10, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_d3d_texture");
     ClObject       *held = nullptr;
     GuestClContext *owner = nullptr;
     D3d11Resource   described;
     const cl_int    judged_resource =
-        d3d11_resource(context, flags, resource, subresource, kind, held, owner, described);
+        d3d11_resource(context, flags, resource, subresource, kind, held, owner, described, d3d10);
     if (judged_resource != CL_SUCCESS) {
         report_d3d11_error(error, judged_resource);
         return nullptr;
@@ -99,7 +133,7 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
         return nullptr;
     }
     void        *twin = nullptr;
-    const cl_mem twinned = kind == D3d11Resource::Kind::texture2d && mapped.cl_image_on_host()
+    const cl_mem twinned = !d3d10 && kind == D3d11Resource::Kind::texture2d && mapped.cl_image_on_host()
                                ? d3d11_twin(*held, *owner, resource, subresource, twin)
                                : nullptr;
     if (twinned != nullptr) {
@@ -168,20 +202,21 @@ cl_mem ClIcdRoot::d3d11_twin(ClObject &held, GuestClContext &owner, void *resour
 
 cl_int ClIcdRoot::d3d11_resource(cl_context context, cl_mem_flags flags, void *resource, uint32_t subresource,
                                  D3d11Resource::Kind kind, ClObject *&held, GuestClContext *&owner,
-                                 D3d11Resource &described)
+                                 D3d11Resource &described, bool d3d10)
 {
     AV_SCOPE("ClIcdRoot::d3d11_resource");
     held = judged(context, ClObject::Kind::context);
     if (held == nullptr) return CL_INVALID_CONTEXT;
     owner = context_of(*held);
-    if (owner->d3d11().device() == nullptr) return CL_INVALID_CONTEXT;
+    if (owner->d3d11().device() == nullptr || owner->d3d11().d3d10() != d3d10) return CL_INVALID_CONTEXT;
     if ((flags & ~access_flags) != 0u) return CL_INVALID_VALUE;
+    const cl_int invalid_resource = d3d10 ? invalid_d3d10_resource : invalid_d3d11_resource;
     if (!d3d11_.describe(resource, owner->d3d11().device(), described) || described.kind() != kind ||
         described.multisampled())
-        return invalid_d3d11_resource;
+        return invalid_resource;
     if (!described.holds(subresource)) return CL_INVALID_VALUE;
     const ThreadLockHold locked(lock_);
-    return owner->d3d11().made_over(resource, subresource) ? invalid_d3d11_resource : CL_SUCCESS;
+    return owner->d3d11().made_over(resource, subresource) ? invalid_resource : CL_SUCCESS;
 }
 
 cl_mem ClIcdRoot::d3d11_object(cl_mem made, GuestClContext &owner, void *resource, uint32_t subresource,
@@ -207,10 +242,24 @@ cl_int ClIcdRoot::enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, c
                                         const cl_event *events, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_acquire_d3d11");
+    return enqueue_acquire_d3d(queue, count, objects, waits, events, event, false);
+}
+
+cl_int ClIcdRoot::enqueue_acquire_d3d10(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                        const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_acquire_d3d10");
+    return enqueue_acquire_d3d(queue, count, objects, waits, events, event, true);
+}
+
+cl_int ClIcdRoot::enqueue_acquire_d3d(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                      const cl_event *events, cl_event *event, bool d3d10)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_acquire_d3d");
     ClObject        *held = nullptr;
     GuestClContext  *context = nullptr;
     ClientTransport *wire = nullptr;
-    const cl_int     ready = d3d11_queue(queue, waits, events, held, context, wire);
+    const cl_int     ready = d3d11_queue(queue, waits, events, held, context, wire, d3d10);
     if (ready != CL_SUCCESS) return ready;
     cl_int taken = CL_SUCCESS;
     {
@@ -219,7 +268,7 @@ cl_int ClIcdRoot::enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, c
     }
     if (taken != CL_SUCCESS) return taken;
     cl_int done = d3d11_copy_in(queue, *context, objects, count);
-    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, acquire_d3d11_command);
+    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, d3d10 ? acquire_d3d10_command : acquire_d3d11_command);
     if (done != CL_SUCCESS) {
         const ThreadLockHold locked(lock_);
         context->d3d11().untake(objects, count);
@@ -231,10 +280,24 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
                                         const cl_event *events, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_release_d3d11");
+    return enqueue_release_d3d(queue, count, objects, waits, events, event, false);
+}
+
+cl_int ClIcdRoot::enqueue_release_d3d10(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                        const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_release_d3d10");
+    return enqueue_release_d3d(queue, count, objects, waits, events, event, true);
+}
+
+cl_int ClIcdRoot::enqueue_release_d3d(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                      const cl_event *events, cl_event *event, bool d3d10)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_release_d3d");
     ClObject        *held = nullptr;
     GuestClContext  *context = nullptr;
     ClientTransport *wire = nullptr;
-    const cl_int     ready = d3d11_queue(queue, waits, events, held, context, wire);
+    const cl_int     ready = d3d11_queue(queue, waits, events, held, context, wire, d3d10);
     if (ready != CL_SUCCESS) return ready;
     cl_int given = CL_SUCCESS;
     {
@@ -244,7 +307,7 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
     if (given != CL_SUCCESS) return given;
     cl_int done = finish(queue);
     if (done == CL_SUCCESS) done = d3d11_copy_out(queue, *context, objects, count);
-    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, release_d3d11_command);
+    if (done == CL_SUCCESS) done = marker_event(*wire, *held, event, d3d10 ? release_d3d10_command : release_d3d11_command);
     if (done != CL_SUCCESS) {
         const ThreadLockHold locked(lock_);
         context->d3d11().ungive(objects, count);
@@ -253,13 +316,13 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
 }
 
 cl_int ClIcdRoot::d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_event *events, ClObject *&held,
-                              GuestClContext *&context, ClientTransport *&wire)
+                              GuestClContext *&context, ClientTransport *&wire, bool d3d10)
 {
     AV_SCOPE("ClIcdRoot::d3d11_queue");
     held = judged(queue, ClObject::Kind::command_queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     context = context_of(*held);
-    if (context->d3d11().device() == nullptr) return CL_INVALID_CONTEXT;
+    if (context->d3d11().device() == nullptr || context->d3d11().d3d10() != d3d10) return CL_INVALID_CONTEXT;
     ClHostNumbers handles_room(memory_);
     uint64_t     *handles = nullptr;
     const cl_int listed = wait_list(*held, waits, events, handles_room, handles);

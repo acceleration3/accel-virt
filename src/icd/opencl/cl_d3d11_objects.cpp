@@ -6,15 +6,22 @@
 
 namespace av::clicd {
 
-ClD3d11Objects::ClD3d11Objects(BlockSource &memory) : device_(nullptr), objects_(memory)
+ClD3d11Objects::ClD3d11Objects(BlockSource &memory) : device_(nullptr), d3d10_(false), objects_(memory)
 {
     AV_SCOPE("ClD3d11Objects::ClD3d11Objects");
 }
 
-void ClD3d11Objects::share_with(void *device)
+void ClD3d11Objects::share_with(void *device, bool d3d10)
 {
     AV_SCOPE("ClD3d11Objects::share_with");
     device_ = device;
+    d3d10_ = d3d10;
+}
+
+bool ClD3d11Objects::d3d10() const
+{
+    AV_SCOPE("ClD3d11Objects::d3d10");
+    return d3d10_;
 }
 
 void *ClD3d11Objects::device() const
@@ -58,7 +65,7 @@ bool ClD3d11Objects::forget(const void *mem, void *&resource)
 cl_int ClD3d11Objects::take(const cl_mem *objects, cl_uint count)
 {
     AV_SCOPE("ClD3d11Objects::take");
-    const cl_int judged = judge(objects, count, false, already_acquired);
+    const cl_int judged = judge(objects, count, false, d3d10_ ? already_acquired_d3d10 : already_acquired);
     if (judged != CL_SUCCESS) return judged;
     for (cl_uint index = 0u; index < count; ++index) find(objects[index])->acquire();
     return CL_SUCCESS;
@@ -67,7 +74,7 @@ cl_int ClD3d11Objects::take(const cl_mem *objects, cl_uint count)
 cl_int ClD3d11Objects::give(const cl_mem *objects, cl_uint count)
 {
     AV_SCOPE("ClD3d11Objects::give");
-    const cl_int judged = judge(objects, count, true, not_acquired);
+    const cl_int judged = judge(objects, count, true, d3d10_ ? not_acquired_d3d10 : not_acquired);
     if (judged != CL_SUCCESS) return judged;
     for (cl_uint index = 0u; index < count; ++index) find(objects[index])->release();
     return CL_SUCCESS;
@@ -112,7 +119,7 @@ uint32_t ClD3d11Objects::live() const
 void ClD3d11Objects::report(StateWriter &writer) const
 {
     AV_SCOPE("ClD3d11Objects::report");
-    writer.open("d3d11", 0u);
+    writer.open(d3d10_ ? "d3d10" : "d3d11", 0u);
     writer.address("device", device_);
     writer.number("live", objects_.live());
     uint64_t index = 0u;
