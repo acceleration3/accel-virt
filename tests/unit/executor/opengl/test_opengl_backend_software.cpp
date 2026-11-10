@@ -326,6 +326,29 @@ TEST(opengl_backend_software, no_fence_is_made_while_an_occlusion_query_is_open_
   CHECK_EQ(marked, 2u);
   backend.shut_down(); }
 
+TEST(opengl_backend_software, no_fence_is_made_while_advanced_blending_is_enabled_until_something_needs_the_gpu)
+{ if (skipped()) return;
+  OpenGlBackend backend(executor_log.opengl());
+  CHECK(backend.initialize(software().display(), nullptr, nullptr));
+  CHECK(Command(av::glproto::kCmd_glBlendEquation).varint(0x9294u).run(backend));
+  CHECK(Command(av::glproto::kCmd_glEnable).varint(0x0BE2u).run(backend));
+  std::uint64_t marked = 0u, reached = 0u;
+  backend.end_batch();
+  backend.end_batch();
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 0u);
+  CHECK(Command(av::glproto::kCmd_glFlush).run(backend));
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 1u);
+  backend.end_batch();
+  CHECK(Command(av::glproto::kCmd_glDisable).varint(0x0BE2u).run(backend));
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 2u);
+  backend.end_batch();
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 3u);
+  backend.shut_down(); }
+
 namespace {
 
 GLenum (*real_wait)(GLsync, GLbitfield, GLuint64) = nullptr;

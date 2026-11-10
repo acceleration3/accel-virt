@@ -239,7 +239,7 @@ void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
     vram_guard_.clear();
-    occlusion_.clear();
+    deferral_.clear();
     fence_owed_ = false;
     if (context_.make_current()) {
         if (drain_fence_ != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
@@ -319,10 +319,11 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         return false;
     }
     pacer_.ran(gl_, command_id, peek);
-    occlusion_.ran(command_id, peek);
-    if (fence_owed_ && !occlusion_.open()) {
+    deferral_.ran(command_id, peek);
+    if (fence_owed_ && (!deferral_.defers() || deferral_.demands(command_id))) {
         progress_.fence();
         fence_owed_ = false;
+        deferral_.paid();
     }
     ran_++;
     return true;
@@ -345,7 +346,7 @@ bool OpenGlBackend::poll()
         wake_.retry_later();
         return true;
     }
-    if (occlusion_.open()) {
+    if (deferral_.defers()) {
         wake_.retry_later();
         return true;
     }
@@ -375,11 +376,13 @@ void OpenGlBackend::end_batch()
     AV_SCOPE("OpenGlBackend::end_batch");
     if (current_ && context_.make_current()) {
         publish_errors();
-        if (occlusion_.open()) {
+        if (deferral_.defers()) {
             fence_owed_ = true;
+            deferral_.owe();
         } else {
             progress_.fence();
             fence_owed_ = false;
+            deferral_.paid();
         }
         memories_.reclaim(import_);
         pack_.sweep();
