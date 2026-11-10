@@ -1,0 +1,25 @@
+From: accel-virt
+Subject: [PATCH] a dma-buf a driver imports only as memory the heap's properties do not name is imported as that memory
+
+accel-virt: NVIDIA lists the system memory types it can import a foreign dma-buf as, and imports into them one with no host-visible bit while refusing the host-visible types the heap names. The pages are mapped by the caller, so the memory type does not have to be host visible: after the types of the heap, every type the buffer lists is tried, which the swap chain heaps of a render-only adapter needed.
+---
+diff --git a/libs/vkd3d/memory.c b/libs/vkd3d/memory.c
+index 73d6b5a..2f4aa06 100644
+--- a/libs/vkd3d/memory.c
++++ b/libs/vkd3d/memory.c
+@@ -1284,6 +1284,15 @@ static HRESULT vkd3d_import_fd_memory(struct d3d12_device *device, int fd,
+             return hr;
+     }
+ 
++    untried = fd_properties.memoryTypeBits & ~type_mask & ((1u << device->memory_properties.memoryTypeCount) - 1u);
++    while (untried)
++    {
++        uint32_t type_index = vkd3d_bitmask_iter32(&untried);
++
++        if (SUCCEEDED(hr = vkd3d_import_fd_attempt(device, fd, size, 0, 1u << type_index, pNext, allocation)))
++            return hr;
++    }
++
+     WARN("Failed to import dma-buf memory, hr %#x, memory types %#x of %#x.\n",
+             hr, fd_properties.memoryTypeBits, type_mask);
+     return hr;
