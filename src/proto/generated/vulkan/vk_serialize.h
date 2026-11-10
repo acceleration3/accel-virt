@@ -898,8 +898,16 @@ inline void serialize_VkDepthBiasRepresentationInfoEXT(::av::WireWriter&, Handle
 [[nodiscard]] inline bool deserialize_VkDepthBiasRepresentationInfoEXT(::av::WireReader&, const HandleTranslation&, VkDepthBiasRepresentationInfoEXT*, ::av::WireArena&);
 inline void serialize_VkDepthClampRangeEXT(::av::WireWriter&, const VkDepthClampRangeEXT&);
 [[nodiscard]] inline bool deserialize_VkDepthClampRangeEXT(::av::WireReader&, VkDepthClampRangeEXT*, ::av::WireArena&);
+inline void serialize_VkDescriptorAddressInfoEXT(::av::WireWriter&, HandleTranslation&, const VkDescriptorAddressInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkDescriptorAddressInfoEXT(::av::WireReader&, const HandleTranslation&, VkDescriptorAddressInfoEXT*, ::av::WireArena&);
+inline void serialize_VkDescriptorBufferBindingInfoEXT(::av::WireWriter&, HandleTranslation&, const VkDescriptorBufferBindingInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkDescriptorBufferBindingInfoEXT(::av::WireReader&, const HandleTranslation&, VkDescriptorBufferBindingInfoEXT*, ::av::WireArena&);
+inline void serialize_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(::av::WireWriter&, HandleTranslation&, const VkDescriptorBufferBindingPushDescriptorBufferHandleEXT&);
+[[nodiscard]] inline bool deserialize_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(::av::WireReader&, const HandleTranslation&, VkDescriptorBufferBindingPushDescriptorBufferHandleEXT*, ::av::WireArena&);
 inline void serialize_VkDescriptorBufferInfo(::av::WireWriter&, HandleTranslation&, const VkDescriptorBufferInfo&);
 [[nodiscard]] inline bool deserialize_VkDescriptorBufferInfo(::av::WireReader&, const HandleTranslation&, VkDescriptorBufferInfo*, ::av::WireArena&);
+inline void serialize_VkDescriptorGetInfoEXT(::av::WireWriter&, HandleTranslation&, const VkDescriptorGetInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkDescriptorGetInfoEXT(::av::WireReader&, const HandleTranslation&, VkDescriptorGetInfoEXT*, ::av::WireArena&);
 inline void serialize_VkDescriptorImageInfo(::av::WireWriter&, HandleTranslation&, const VkDescriptorImageInfo&);
 [[nodiscard]] inline bool deserialize_VkDescriptorImageInfo(::av::WireReader&, const HandleTranslation&, VkDescriptorImageInfo*, ::av::WireArena&);
 inline void serialize_VkDescriptorPoolCreateInfo(::av::WireWriter&, HandleTranslation&, const VkDescriptorPoolCreateInfo&);
@@ -2228,6 +2236,23 @@ inline void serialize_optional_image_info(::av::WireWriter& buf, HandleTranslati
     auto* v = arena.allocate<VkDescriptorImageInfo>();
     if (v == nullptr) { return false; }
     if (!deserialize_VkDescriptorImageInfo(r, handles, v, arena)) { return false; }
+    *out = v;
+    return true;
+}
+
+inline void serialize_optional_addr_info(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorAddressInfoEXT* p) {
+    const uint8_t present = p != nullptr ? 1 : 0;
+    buf.write_pod(present);
+    if (present) { serialize_VkDescriptorAddressInfoEXT(buf, handles, *p); }
+}
+
+[[nodiscard]] inline bool deserialize_optional_addr_info(::av::WireReader& r, const HandleTranslation& handles, const VkDescriptorAddressInfoEXT** out, ::av::WireArena& arena) {
+    uint8_t present = 0;
+    if (!r.read_pod(present)) { return false; }
+    if (!present) { *out = nullptr; return true; }
+    auto* v = arena.allocate<VkDescriptorAddressInfoEXT>();
+    if (v == nullptr) { return false; }
+    if (!deserialize_VkDescriptorAddressInfoEXT(r, handles, v, arena)) { return false; }
     *out = v;
     return true;
 }
@@ -5140,6 +5165,55 @@ inline void serialize_VkDepthClampRangeEXT(::av::WireWriter& buf, const VkDepthC
     return true;
 }
 
+inline void serialize_VkDescriptorAddressInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorAddressInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.address);
+    buf.write_pod(v.range);
+    buf.write_pod(v.format);
+}
+
+[[nodiscard]] inline bool deserialize_VkDescriptorAddressInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkDescriptorAddressInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->address)) { return false; }
+    if (!r.read_pod(out->range)) { return false; }
+    if (!r.read_pod(out->format)) { return false; }
+    return true;
+}
+
+inline void serialize_VkDescriptorBufferBindingInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorBufferBindingInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.address);
+    buf.write_pod(v.usage);
+}
+
+[[nodiscard]] inline bool deserialize_VkDescriptorBufferBindingInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkDescriptorBufferBindingInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->address)) { return false; }
+    if (!r.read_pod(out->usage)) { return false; }
+    return true;
+}
+
+inline void serialize_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorBufferBindingPushDescriptorBufferHandleEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    serialize_VkBuffer(buf, handles, v.buffer);
+}
+
+[[nodiscard]] inline bool deserialize_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(::av::WireReader& r, const HandleTranslation& handles, VkDescriptorBufferBindingPushDescriptorBufferHandleEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!deserialize_VkBuffer(r, handles, out->buffer)) { return false; }
+    if (out->buffer == VK_NULL_HANDLE) { return false; }
+    return true;
+}
+
 inline void serialize_VkDescriptorBufferInfo(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorBufferInfo& v) {
     serialize_VkBuffer(buf, handles, v.buffer);
     buf.write_pod(v.offset);
@@ -5152,6 +5226,78 @@ inline void serialize_VkDescriptorBufferInfo(::av::WireWriter& buf, HandleTransl
     if (!r.read_pod(out->offset)) { return false; }
     if (!r.read_pod(out->range)) { return false; }
     return true;
+}
+
+inline void serialize_VkDescriptorGetInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorGetInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.type);
+    switch (v.type) {
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+        serialize_optional_sampler(buf, handles, v.data.pSampler);
+        break;
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+        serialize_optional_image_info(buf, handles, v.data.pCombinedImageSampler);
+        break;
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        serialize_optional_image_info(buf, handles, v.data.pSampledImage);
+        break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        serialize_optional_image_info(buf, handles, v.data.pStorageImage);
+        break;
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+        serialize_optional_image_info(buf, handles, v.data.pInputAttachmentImage);
+        break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+        serialize_optional_addr_info(buf, handles, v.data.pUniformTexelBuffer);
+        break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+        serialize_optional_addr_info(buf, handles, v.data.pStorageTexelBuffer);
+        break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        serialize_optional_addr_info(buf, handles, v.data.pUniformBuffer);
+        break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        serialize_optional_addr_info(buf, handles, v.data.pStorageBuffer);
+        break;
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+        buf.write_pod(v.data.accelerationStructure);
+        break;
+    default:
+        // No arm to encode; the descriptor type carries its
+        // own data elsewhere or is not one we support.
+        break;
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkDescriptorGetInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkDescriptorGetInfoEXT* out, ::av::WireArena& arena) {
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->type)) { return false; }
+    switch (out->type) {
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+        return deserialize_optional_sampler(r, handles, &out->data.pSampler, arena);
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+        return deserialize_optional_image_info(r, handles, &out->data.pCombinedImageSampler, arena);
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        return deserialize_optional_image_info(r, handles, &out->data.pSampledImage, arena);
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        return deserialize_optional_image_info(r, handles, &out->data.pStorageImage, arena);
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+        return deserialize_optional_image_info(r, handles, &out->data.pInputAttachmentImage, arena);
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+        return deserialize_optional_addr_info(r, handles, &out->data.pUniformTexelBuffer, arena);
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+        return deserialize_optional_addr_info(r, handles, &out->data.pStorageTexelBuffer, arena);
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        return deserialize_optional_addr_info(r, handles, &out->data.pUniformBuffer, arena);
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        return deserialize_optional_addr_info(r, handles, &out->data.pStorageBuffer, arena);
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+        return r.read_pod(out->data.accelerationStructure);
+    default:
+        return true;
+    }
 }
 
 inline void serialize_VkDescriptorImageInfo(::av::WireWriter& buf, HandleTranslation& handles, const VkDescriptorImageInfo& v) {
@@ -21353,7 +21499,7 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
 
 // ---- pNext chain codec ----------------------------------------------
 
-// 496 chain-extension structs are encodable in this build.
+// 497 chain-extension structs are encodable in this build.
 inline bool pnext_is_encodable(VkStructureType t) {
     switch (t) {
     case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV:
@@ -21385,6 +21531,7 @@ inline bool pnext_is_encodable(VkStructureType t) {
     case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV:
     case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV:
     case VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT:
+    case VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT:
     case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO:
     case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
     case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO:
@@ -21951,6 +22098,9 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, HandleTranslation& hand
         break;
     case VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT:
         serialize_VkDepthBiasRepresentationInfoEXT(buf, handles, *reinterpret_cast<const VkDepthBiasRepresentationInfoEXT*>(p));
+        break;
+    case VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT:
+        serialize_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(buf, handles, *reinterpret_cast<const VkDescriptorBufferBindingPushDescriptorBufferHandleEXT*>(p));
         break;
     case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO:
         serialize_VkDescriptorPoolInlineUniformBlockCreateInfo(buf, handles, *reinterpret_cast<const VkDescriptorPoolInlineUniformBlockCreateInfo*>(p));
@@ -23606,6 +23756,14 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, HandleTranslation& hand
                                        : arena.allocate<VkDepthBiasRepresentationInfoEXT>();
         if (typed == nullptr) { return false; }
         if (!deserialize_VkDepthBiasRepresentationInfoEXT(r, handles, typed, arena)) { return false; }
+        if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
+        break;
+    }
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT): {
+        auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorBufferBindingPushDescriptorBufferHandleEXT*>(dst)
+                                       : arena.allocate<VkDescriptorBufferBindingPushDescriptorBufferHandleEXT>();
+        if (typed == nullptr) { return false; }
+        if (!deserialize_VkDescriptorBufferBindingPushDescriptorBufferHandleEXT(r, handles, typed, arena)) { return false; }
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }

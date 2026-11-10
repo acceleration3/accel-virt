@@ -214,9 +214,17 @@ VkResult VulkanBackend::on_vkCreateAccelerationStructureKHR(VkDevice device,
         lines_.write("an acceleration structure asked to be placed at a captured address; refused");
         return VK_ERROR_FEATURE_NOT_PRESENT;
     }
+    uint64_t held = 0u;
+    uint64_t end = 0u;
+    if (!addresses_.buffer_bytes(number(device), number(pCreateInfo->buffer), held) ||
+        __builtin_add_overflow(pCreateInfo->offset, pCreateInfo->size, &end) || end > held) {
+        lines_.write("an acceleration structure does not fit inside the buffer it names; refused");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
     const VkResult made =
         RealVulkanDispatch::on_vkCreateAccelerationStructureKHR(device, pCreateInfo, nullptr, pAccelerationStructure);
-    if (made != VK_SUCCESS ||
+    if (made != VK_SUCCESS) return made;
+    if (addresses_.note_structure(number(device), number(*pAccelerationStructure), pCreateInfo->size) &&
         guard_.depends(number(*pAccelerationStructure), number(pCreateInfo->buffer), number(device)))
         return made;
     RealVulkanDispatch::on_vkDestroyAccelerationStructureKHR(device, *pAccelerationStructure, nullptr);

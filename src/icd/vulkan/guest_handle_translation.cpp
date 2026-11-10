@@ -52,7 +52,7 @@ bool GuestHandleTranslation::image_copy_bytes(VkImage image, const VkImageSubres
 {
     AV_SCOPE("GuestHandleTranslation::image_copy_bytes");
     const ThreadLockHold held(lock_);
-    return copies_.bytes(reinterpret_cast<uint64_t>(image), layers, extent, row_length, image_height, bytes);
+    return copies_.bytes(HandleBits(image).value(), layers, extent, row_length, image_height, bytes);
 }
 
 }

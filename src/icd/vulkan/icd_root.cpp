@@ -100,6 +100,11 @@ const Entry        local_rows[] = {
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateDescriptorUpdateTemplate), Level::device},
     {"vkCreateDescriptorUpdateTemplateKHR",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateDescriptorUpdateTemplateKHR), Level::device},
+    {"vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT), Level::device},
+    {"vkGetBufferOpaqueCaptureDescriptorDataEXT", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetBufferOpaqueCaptureDescriptorDataEXT), Level::device},
+    {"vkGetImageOpaqueCaptureDescriptorDataEXT", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetImageOpaqueCaptureDescriptorDataEXT), Level::device},
+    {"vkGetImageViewOpaqueCaptureDescriptorDataEXT", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetImageViewOpaqueCaptureDescriptorDataEXT), Level::device},
+    {"vkGetSamplerOpaqueCaptureDescriptorDataEXT", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetSamplerOpaqueCaptureDescriptorDataEXT), Level::device},
     {"vkCreateImage", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateImage), Level::device},
     {"vkDestroyImage", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyImage), Level::device},
     {"vkDestroyDescriptorUpdateTemplate",
@@ -233,6 +238,14 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_EXT_blend_operation_advanced", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_EXT_shader_object", 1u, "vulkan_binaries.a_shader_binary_the_host_did_not_hand_out_is_refused"},
     {"VK_KHR_pipeline_binary", 1u, "vulkan_binaries.a_pipeline_binary_the_host_did_not_hand_out_is_refused"},
+    {"VK_KHR_deferred_host_operations", 4u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_KHR_acceleration_structure", 13u, "vulkan_addresses.a_forged_vertex_index_or_instance_address_is_refused"},
+    {"VK_KHR_ray_tracing_pipeline", 1u, "vulkan_addresses.a_shader_binding_table_outside_every_buffer_or_a_trace_too_large_is_refused"},
+    {"VK_KHR_ray_query", 1u, "vulkan_addresses.a_giant_primitive_count_reads_past_its_buffer_and_is_refused"},
+    {"VK_KHR_ray_tracing_maintenance1", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_ray_tracing_position_fetch", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_pipeline_library_group_handles", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_descriptor_buffer", 1u, "vulkan_addresses.a_descriptor_naming_an_address_outside_every_buffer_is_refused_and_a_null_one_passes"},
     {"VK_EXT_host_image_copy", 1u, "generated_host_copy.a_memory_to_image_copy_sends_exactly_the_bytes_the_region_touches"},
     {"VK_EXT_multi_draw", 1u, "generated_multi_draw.a_strided_array_arrives_at_the_host_packed_with_the_host_s_own_stride"},
     {"VK_EXT_color_write_enable", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
@@ -729,7 +742,7 @@ VkResult IcdRoot::create_image(VkDevice device, const VkImageCreateInfo *create,
     bool recorded = false;
     {
         const ThreadLockHold held(lock_);
-        recorded = host_copies_.record(reinterpret_cast<uint64_t>(*made), reinterpret_cast<uint64_t>(device), *create);
+        recorded = host_copies_.record(HandleBits(*made).value(), HandleBits(device).value(), *create);
     }
     if (recorded) return VK_SUCCESS;
     vkicd::generated::Wrap_vkDestroyImage(device, *made, allocator);
@@ -742,7 +755,7 @@ void IcdRoot::destroy_image(VkDevice device, VkImage image, const VkAllocationCa
     AV_SCOPE("IcdRoot::destroy_image");
     {
         const ThreadLockHold held(lock_);
-        host_copies_.forget(reinterpret_cast<uint64_t>(image));
+        host_copies_.forget(HandleBits(image).value());
     }
     vkicd::generated::Wrap_vkDestroyImage(device, image, allocator);
 }
@@ -1091,7 +1104,7 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     templates_.forget_device(device);
     {
         const ThreadLockHold held(lock_);
-        host_copies_.forget_device(reinterpret_cast<uint64_t>(device));
+        host_copies_.forget_device(HandleBits(device).value());
     }
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;

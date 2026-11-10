@@ -93,6 +93,36 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplateKHR(
                                                                 pDescriptorUpdateTemplate);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(VkDevice, const VkAccelerationStructureCaptureDescriptorDataInfoEXT *, void *)
+{
+    AV_SCOPE("local_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT");
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetBufferOpaqueCaptureDescriptorDataEXT(VkDevice, const VkBufferCaptureDescriptorDataInfoEXT *, void *)
+{
+    AV_SCOPE("local_vkGetBufferOpaqueCaptureDescriptorDataEXT");
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetImageOpaqueCaptureDescriptorDataEXT(VkDevice, const VkImageCaptureDescriptorDataInfoEXT *, void *)
+{
+    AV_SCOPE("local_vkGetImageOpaqueCaptureDescriptorDataEXT");
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetImageViewOpaqueCaptureDescriptorDataEXT(VkDevice, const VkImageViewCaptureDescriptorDataInfoEXT *, void *)
+{
+    AV_SCOPE("local_vkGetImageViewOpaqueCaptureDescriptorDataEXT");
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSamplerOpaqueCaptureDescriptorDataEXT(VkDevice, const VkSamplerCaptureDescriptorDataInfoEXT *, void *)
+{
+    AV_SCOPE("local_vkGetSamplerOpaqueCaptureDescriptorDataEXT");
+    return VK_ERROR_FEATURE_NOT_PRESENT;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                                                    const VkAllocationCallbacks *pAllocator, VkImage *pImage)
 {

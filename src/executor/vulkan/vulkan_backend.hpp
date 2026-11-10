@@ -7,6 +7,7 @@
 #include "executor/vulkan/vulkan_destroyer.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/vulkan/issued_binaries.hpp"
+#include "executor/vulkan/vulkan_addresses.hpp"
 #include "proto/vulkan/host_copy_images.hpp"
 #include "executor/vulkan/spirv_validator.hpp"
 #include "executor/vulkan/vram_budget.hpp"
@@ -216,6 +217,32 @@ public:
                                                  VkAccelerationStructureKHR *pAccelerationStructure) override;
     void     on_vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure,
                                                   const VkAllocationCallbacks *pAllocator) override;
+    VkDeviceAddress on_vkGetBufferDeviceAddress(VkDevice device, const VkBufferDeviceAddressInfo *pInfo) override;
+    VkDeviceAddress on_vkGetBufferDeviceAddressKHR(VkDevice device, const VkBufferDeviceAddressInfo *pInfo) override;
+    void on_vkCmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t infoCount,
+                                                const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
+                                                const VkAccelerationStructureBuildRangeInfoKHR **ppBuildRangeInfos) override;
+    void on_vkCmdBuildAccelerationStructuresIndirectKHR(VkCommandBuffer commandBuffer, uint32_t infoCount,
+                                                        const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
+                                                        const VkDeviceAddress *pIndirectDeviceAddresses,
+                                                        const uint32_t *pIndirectStrides,
+                                                        const uint32_t **ppMaxPrimitiveCounts) override;
+    void on_vkCmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
+                              const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable,
+                              const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
+                              const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width,
+                              uint32_t height, uint32_t depth) override;
+    void on_vkCmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
+                                      const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
+                                      const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable,
+                                      const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
+                                      const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
+                                      VkDeviceAddress indirectDeviceAddress) override;
+    void on_vkCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) override;
+    void on_vkCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
+                                          const VkDescriptorBufferBindingInfoEXT *pBindingInfos) override;
+    void on_vkGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT *pDescriptorInfo, size_t dataSize,
+                               void *pDescriptor) override;
     VkResult on_vkCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
                                    const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders) override;
     VkResult on_vkGetShaderBinaryDataEXT(VkDevice device, VkShaderEXT shader, size_t *pDataSize, void *pData) override;
@@ -387,6 +414,11 @@ private:
     VkResult         shader_verdict(VkDevice device, const uint32_t *code, size_t bytes);
     VkResult         stage_verdicts(VkDevice device, const VkPipelineShaderStageCreateInfo *stages, uint32_t count);
     VkResult         pipeline_verdicts(VkDevice device, const VkPipelineCreateInfoKHR *info);
+    void             learn_ray_limits(VkPhysicalDevice physical);
+    bool             refuse_addresses(const char *what);
+    bool             builds_admitted(VkDevice device, uint32_t count, const VkAccelerationStructureBuildGeometryInfoKHR *infos,
+                                     const VkAccelerationStructureBuildRangeInfoKHR *const *ranges,
+                                     const uint32_t *const *maxima);
 
     static constexpr uint32_t lowest_api_version = 1u << 22;
 
@@ -428,6 +460,7 @@ private:
     VulkanFenceWatch     fence_watch_;
     SpirvValidator       spirv_;
     IssuedBinaries       issued_;
+    VulkanAddresses      addresses_;
     HostCopyImages       copies_;
     VramBudget           vram_;
     VulkanSubmitProgress progress_;

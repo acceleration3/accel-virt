@@ -1008,7 +1008,7 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
 }
 
 
-DISCRIMINATED_UNIONS = frozenset({"VkAccelerationStructureGeometryDataKHR"})
+DISCRIMINATED_UNIONS = frozenset({"VkAccelerationStructureGeometryDataKHR", "VkDescriptorDataEXT"})
 
 
 def _chain_bearing_union(reg: Registry, s: Struct) -> bool:

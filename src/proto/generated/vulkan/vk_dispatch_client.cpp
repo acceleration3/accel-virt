@@ -4762,6 +4762,31 @@ VkResult av_vkBuildAccelerationStructuresKHR(::av::ClientTransport& t, HandleTra
     return static_cast<VkResult>(result_code);
 }
 
+void av_vkCmdBindDescriptorBufferEmbeddedSamplersEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set) {
+    AV_SCOPE("av_vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkCommandBuffer(payload, handles, commandBuffer);
+    payload.write_pod(pipelineBindPoint);
+    serialize_VkPipelineLayout(payload, handles, layout);
+    payload.write_pod(set);
+    if (t.send_async(::av::vkproto::kCmd_vkCmdBindDescriptorBufferEmbeddedSamplersEXT, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
+void av_vkCmdBindDescriptorBuffersEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t bufferCount, const VkDescriptorBufferBindingInfoEXT* pBindingInfos) {
+    AV_SCOPE("av_vkCmdBindDescriptorBuffersEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkCommandBuffer(payload, handles, commandBuffer);
+    payload.write_pod(bufferCount);
+    for (uint32_t av_i = 0; av_i < static_cast<uint32_t>(bufferCount); ++av_i) {
+        serialize_VkDescriptorBufferBindingInfoEXT(payload, handles, pBindingInfos[av_i]);
+    }
+    if (t.send_async(::av::vkproto::kCmd_vkCmdBindDescriptorBuffersEXT, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
 void av_vkCmdBindShadersEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t stageCount, const VkShaderStageFlagBits* pStages, const VkShaderEXT* pShaders) {
     AV_SCOPE("av_vkCmdBindShadersEXT");
     ::av::WireWriter payload = t.request_writer();
@@ -5179,6 +5204,25 @@ void av_vkCmdSetDepthWriteEnableEXT(::av::ClientTransport& t, HandleTranslation&
     serialize_VkCommandBuffer(payload, handles, commandBuffer);
     payload.write_pod(depthWriteEnable);
     if (t.send_async(::av::vkproto::kCmd_vkCmdSetDepthWriteEnableEXT, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
+void av_vkCmdSetDescriptorBufferOffsetsEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount, const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets) {
+    AV_SCOPE("av_vkCmdSetDescriptorBufferOffsetsEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkCommandBuffer(payload, handles, commandBuffer);
+    payload.write_pod(pipelineBindPoint);
+    serialize_VkPipelineLayout(payload, handles, layout);
+    payload.write_pod(firstSet);
+    payload.write_pod(setCount);
+    for (uint32_t av_i = 0; av_i < static_cast<uint32_t>(setCount); ++av_i) {
+        payload.write_pod(pBufferIndices[av_i]);
+    }
+    for (uint32_t av_i = 0; av_i < static_cast<uint32_t>(setCount); ++av_i) {
+        payload.write_pod(pOffsets[av_i]);
+    }
+    if (t.send_async(::av::vkproto::kCmd_vkCmdSetDescriptorBufferOffsetsEXT, payload) != ::av::TransportResult::ok) {
         return;
     }
 }
@@ -5847,6 +5891,67 @@ VkResult av_vkGetDeferredOperationResultKHR(::av::ClientTransport& t, HandleTran
         return VK_ERROR_DEVICE_LOST;
     }
     return static_cast<VkResult>(result_code);
+}
+
+void av_vkGetDescriptorEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize, void* pDescriptor) {
+    AV_SCOPE("av_vkGetDescriptorEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, handles, device);
+    serialize_VkDescriptorGetInfoEXT(payload, handles, *pDescriptorInfo);
+    payload.write_pod<uint64_t>(dataSize);
+    const ::av::SyncCallScope av_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(::av::vkproto::kCmd_vkGetDescriptorEXT, payload, r) != ::av::TransportResult::ok) {
+        return;
+    }
+    int32_t result_code = 0;
+    if (!r.read_pod(result_code)) {
+        return;
+    }
+    if (pDescriptor != nullptr && dataSize > 0) {
+        if (!r.read(pDescriptor, static_cast<size_t>(dataSize))) {
+        return;
+        }
+    }
+}
+
+void av_vkGetDescriptorSetLayoutBindingOffsetEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDescriptorSetLayout layout, uint32_t binding, VkDeviceSize* pOffset) {
+    AV_SCOPE("av_vkGetDescriptorSetLayoutBindingOffsetEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, handles, device);
+    serialize_VkDescriptorSetLayout(payload, handles, layout);
+    payload.write_pod(binding);
+    const ::av::SyncCallScope av_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(::av::vkproto::kCmd_vkGetDescriptorSetLayoutBindingOffsetEXT, payload, r) != ::av::TransportResult::ok) {
+        return;
+    }
+    int32_t result_code = 0;
+    if (!r.read_pod(result_code)) {
+        return;
+    }
+    if (!r.read_pod(*pOffset)) {
+        return;
+    }
+}
+
+void av_vkGetDescriptorSetLayoutSizeEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDescriptorSetLayout layout, VkDeviceSize* pLayoutSizeInBytes) {
+    AV_SCOPE("av_vkGetDescriptorSetLayoutSizeEXT");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, handles, device);
+    serialize_VkDescriptorSetLayout(payload, handles, layout);
+    const ::av::SyncCallScope av_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(::av::vkproto::kCmd_vkGetDescriptorSetLayoutSizeEXT, payload, r) != ::av::TransportResult::ok) {
+        return;
+    }
+    int32_t result_code = 0;
+    if (!r.read_pod(result_code)) {
+        return;
+    }
+    if (!r.read_pod(*pLayoutSizeInBytes)) {
+        return;
+    }
 }
 
 void av_vkGetDeviceAccelerationStructureCompatibilityKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkAccelerationStructureVersionInfoKHR* pVersionInfo, VkAccelerationStructureCompatibilityKHR* pCompatibility) {

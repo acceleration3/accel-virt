@@ -55,9 +55,6 @@ uint64_t extension_mask(const char *const *names, uint32_t count, Slot slot_of)
 }
 
 constexpr const char *const withheld_extensions[] = {
-    "VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query",
-    "VK_KHR_ray_tracing_maintenance1", "VK_EXT_pipeline_library_group_handles", "VK_KHR_deferred_host_operations",
-    "VK_EXT_descriptor_buffer",
     "VK_EXT_device_generated_commands"};
 
 bool names_withheld(const char *const *names, uint32_t count)
@@ -93,7 +90,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
-      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), issued_(), copies_(blocks), vram_(blocks), progress_(blocks),
+      frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), fence_watch_(), spirv_(), issued_(), addresses_(blocks), copies_(blocks), vram_(blocks), progress_(blocks),
       timeline_submit_(blocks), fence_targets_(blocks), guard_(blocks, *this, progress_), robust_(), parent_(0u), created_extensions_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
@@ -212,6 +209,8 @@ void VulkanBackend::ended(uint64_t raw)
 {
     AV_SCOPE("VulkanBackend::ended");
     copies_.forget(raw);
+    addresses_.forget_buffer(raw);
+    addresses_.forget_structure(raw);
     templates_.forget(raw);
     layouts_.forget(raw);
     handles_.forget(raw);
@@ -443,7 +442,10 @@ bool VulkanBackend::command_refused(uint32_t command_id) const
     case vkproto::kCmd_vkGetBufferOpaqueCaptureAddress:
     case vkproto::kCmd_vkGetBufferOpaqueCaptureAddressKHR:
     case vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddress:
-    case vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddressKHR: return true;
+    case vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddressKHR:
+    case vkproto::kCmd_vkCmdCopyAccelerationStructureToMemoryKHR:
+    case vkproto::kCmd_vkCmdCopyMemoryToAccelerationStructureKHR:
+    case vkproto::kCmd_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR: return true;
     default: return false;
     }
 }
@@ -577,6 +579,7 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
         static_cast<void>(devices_.destroy(made));
     }
     learn_types(physicalDevice);
+    learn_ray_limits(physicalDevice);
     return result;
 }
 
@@ -679,7 +682,13 @@ VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateI
     VkBufferCreateInfo               create = *pCreateInfo;
     VkExternalMemoryBufferCreateInfo external;
     for_source(device, create, external);
-    return RealVulkanDispatch::on_vkCreateBuffer(device, &create, nullptr, pBuffer);
+    const VkResult made = RealVulkanDispatch::on_vkCreateBuffer(device, &create, nullptr, pBuffer);
+    if (made != VK_SUCCESS || (create.usage & (VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR)) == 0u) return made;
+    if (addresses_.note_buffer(reinterpret_cast<uint64_t>(device), reinterpret_cast<uint64_t>(*pBuffer), create.size))
+        return made;
+    RealVulkanDispatch::on_vkDestroyBuffer(device, *pBuffer, nullptr);
+    *pBuffer = VK_NULL_HANDLE;
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
@@ -860,6 +869,7 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
     const bool idle = guard_.release_all(reinterpret_cast<uint64_t>(device));
     templates_.forget_device(reinterpret_cast<uint64_t>(device));
     copies_.forget_device(reinterpret_cast<uint64_t>(device));
+    addresses_.forget_device(reinterpret_cast<uint64_t>(device));
     layouts_.forget_device(reinterpret_cast<uint64_t>(device));
     fence_watch_.forget(device);
     progress_.forget(device);

@@ -151,6 +151,13 @@ TEST(reported_extensions, every_feature_structure_an_application_chains_reaches_
       {"VK_EXT_shader_object", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT},
       {"VK_KHR_pipeline_binary", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR},
       {"VK_EXT_host_image_copy", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES},
+      {"VK_KHR_acceleration_structure", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR},
+      {"VK_KHR_ray_tracing_pipeline", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR},
+      {"VK_KHR_ray_query", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR},
+      {"VK_KHR_ray_tracing_maintenance1", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR},
+      {"VK_KHR_ray_tracing_position_fetch", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR},
+      {"VK_EXT_pipeline_library_group_handles", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT},
+      {"VK_EXT_descriptor_buffer", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT},
       {"VK_EXT_multi_draw", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT},
       {"VK_EXT_color_write_enable", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT},
       {"VK_EXT_vertex_input_dynamic_state", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT},
@@ -195,7 +202,8 @@ TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_o
                                 "VK_AMD_shader_core_properties2",
                                 "VK_EXT_depth_range_unrestricted",
                                 "VK_EXT_post_depth_coverage",
-                                "VK_KHR_shader_non_semantic_info"};
+                                "VK_KHR_shader_non_semantic_info",
+                                "VK_KHR_deferred_host_operations"};
   const auto create = rig.entry<VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *,
                                              const VkAllocationCallbacks *, VkDevice *)>("vkCreateDevice");
   const auto destroy = rig.entry<void (*)(VkDevice, const VkAllocationCallbacks *)>("vkDestroyDevice");
@@ -229,7 +237,7 @@ TEST(reported_extensions, a_structure_the_wire_does_not_carry_is_not_sent)
 { ExtensionsRig rig;
   const auto    features2 =
       rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
-  Node                      chained = node_of(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+  Node                      chained = node_of(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT,
                                               nullptr);
   VkPhysicalDeviceFeatures2 asked = {};
   asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;

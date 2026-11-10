@@ -509,6 +509,8 @@ public:
     VkResult on_vkBuildAccelerationStructuresKHR(VkDevice, VkDeferredOperationKHR, uint32_t, const VkAccelerationStructureBuildGeometryInfoKHR*, const VkAccelerationStructureBuildRangeInfoKHR**) override {
         return VK_SUCCESS;
     }
+    void on_vkCmdBindDescriptorBufferEmbeddedSamplersEXT(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLayout, uint32_t) override {}
+    void on_vkCmdBindDescriptorBuffersEXT(VkCommandBuffer, uint32_t, const VkDescriptorBufferBindingInfoEXT*) override {}
     void on_vkCmdBindShadersEXT(VkCommandBuffer, uint32_t, const VkShaderStageFlagBits*, const VkShaderEXT*) override {}
     void on_vkCmdBindVertexBuffers2EXT(VkCommandBuffer, uint32_t, uint32_t, const VkBuffer*, const VkDeviceSize*, const VkDeviceSize*, const VkDeviceSize*) override {}
     void on_vkCmdBuildAccelerationStructuresIndirectKHR(VkCommandBuffer, uint32_t, const VkAccelerationStructureBuildGeometryInfoKHR*, const VkDeviceAddress*, const uint32_t*, const uint32_t**) override {}
@@ -542,6 +544,7 @@ public:
     void on_vkCmdSetDepthCompareOpEXT(VkCommandBuffer, VkCompareOp) override {}
     void on_vkCmdSetDepthTestEnableEXT(VkCommandBuffer, VkBool32) override {}
     void on_vkCmdSetDepthWriteEnableEXT(VkCommandBuffer, VkBool32) override {}
+    void on_vkCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLayout, uint32_t, uint32_t, const uint32_t*, const VkDeviceSize*) override {}
     void on_vkCmdSetExtraPrimitiveOverestimationSizeEXT(VkCommandBuffer, float) override {}
     void on_vkCmdSetFragmentShadingRateKHR(VkCommandBuffer, const VkExtent2D*, const VkFragmentShadingRateCombinerOpKHR*) override {}
     void on_vkCmdSetFrontFaceEXT(VkCommandBuffer, VkFrontFace) override {}
@@ -615,6 +618,9 @@ public:
     VkResult on_vkGetDeferredOperationResultKHR(VkDevice, VkDeferredOperationKHR) override {
         return VK_SUCCESS;
     }
+    void on_vkGetDescriptorEXT(VkDevice, const VkDescriptorGetInfoEXT*, size_t, void*) override {}
+    void on_vkGetDescriptorSetLayoutBindingOffsetEXT(VkDevice, VkDescriptorSetLayout, uint32_t, VkDeviceSize*) override {}
+    void on_vkGetDescriptorSetLayoutSizeEXT(VkDevice, VkDescriptorSetLayout, VkDeviceSize*) override {}
     void on_vkGetDeviceAccelerationStructureCompatibilityKHR(VkDevice, const VkAccelerationStructureVersionInfoKHR*, VkAccelerationStructureCompatibilityKHR*) override {}
     void on_vkGetImageSubresourceLayout2EXT(VkDevice, VkImage, const VkImageSubresource2*, VkSubresourceLayout2*) override {}
     VkResult on_vkGetPhysicalDeviceFragmentShadingRatesKHR(VkPhysicalDevice, uint32_t* pFragmentShadingRateCount, VkPhysicalDeviceFragmentShadingRateKHR*) override {

@@ -97,6 +97,8 @@ include = [
     "VK_KHR_cooperative_matrix",
     "VK_AMD_anti_lag",
     "VK_KHR_ray_tracing_maintenance1",
+    "VK_EXT_descriptor_buffer",
+    "VK_KHR_ray_tracing_position_fetch",
     "VK_EXT_pipeline_library_group_handles",
     "VK_EXT_provoking_vertex",
     "VK_EXT_depth_range_unrestricted",
@@ -142,6 +144,11 @@ exclude = [
     "vkGetDeviceProcAddr",
 
     "vkGetMemoryHostPointerPropertiesEXT",
+    "vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT",
+    "vkGetBufferOpaqueCaptureDescriptorDataEXT",
+    "vkGetImageOpaqueCaptureDescriptorDataEXT",
+    "vkGetImageViewOpaqueCaptureDescriptorDataEXT",
+    "vkGetSamplerOpaqueCaptureDescriptorDataEXT",
 
     "vkCreateXlibSurfaceKHR",
     "vkGetPhysicalDeviceXlibPresentationSupportKHR",

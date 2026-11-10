@@ -1656,6 +1656,16 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkBuildAccelerationStructuresKHR(VkDevice de
     return ::av::vkproto::av_vkBuildAccelerationStructuresKHR(conn->transport(), ::av::icd::wire_handles(), device, deferredOperation, infoCount, pInfos, ppBuildRangeInfos);
 }
 
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindDescriptorBufferEmbeddedSamplersEXT(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set) {
+    AV_SCOPE("vkCmdBindDescriptorBufferEmbeddedSamplersEXT");
+    ::av::vkproto::av_vkCmdBindDescriptorBufferEmbeddedSamplersEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, pipelineBindPoint, layout, set);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount, const VkDescriptorBufferBindingInfoEXT* pBindingInfos) {
+    AV_SCOPE("vkCmdBindDescriptorBuffersEXT");
+    ::av::vkproto::av_vkCmdBindDescriptorBuffersEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, bufferCount, pBindingInfos);
+}
+
 VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindShadersEXT(VkCommandBuffer commandBuffer, uint32_t stageCount, const VkShaderStageFlagBits* pStages, const VkShaderEXT* pShaders) {
     AV_SCOPE("vkCmdBindShadersEXT");
     ::av::vkproto::av_vkCmdBindShadersEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, stageCount, pStages, pShaders);
@@ -1819,6 +1829,11 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDepthTestEnableEXT(VkCommandBuffer comma
 VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDepthWriteEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable) {
     AV_SCOPE("vkCmdSetDepthWriteEnableEXT");
     ::av::vkproto::av_vkCmdSetDepthWriteEnableEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, depthWriteEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount, const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets) {
+    AV_SCOPE("vkCmdSetDescriptorBufferOffsetsEXT");
+    ::av::vkproto::av_vkCmdSetDescriptorBufferOffsetsEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, pipelineBindPoint, layout, firstSet, setCount, pBufferIndices, pOffsets);
 }
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetExtraPrimitiveOverestimationSizeEXT(VkCommandBuffer commandBuffer, float extraPrimitiveOverestimationSize) {
@@ -2062,6 +2077,24 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetDeferredOperationResultKHR(VkDevice dev
     AV_SCOPE("vkGetDeferredOperationResultKHR");
     auto* conn = ::av::icd::connection_of(device);
     return ::av::vkproto::av_vkGetDeferredOperationResultKHR(conn->transport(), ::av::icd::wire_handles(), device, operation);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize, void* pDescriptor) {
+    AV_SCOPE("vkGetDescriptorEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkGetDescriptorEXT(conn->transport(), ::av::icd::wire_handles(), device, pDescriptorInfo, dataSize, pDescriptor);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetDescriptorSetLayoutBindingOffsetEXT(VkDevice device, VkDescriptorSetLayout layout, uint32_t binding, VkDeviceSize* pOffset) {
+    AV_SCOPE("vkGetDescriptorSetLayoutBindingOffsetEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkGetDescriptorSetLayoutBindingOffsetEXT(conn->transport(), ::av::icd::wire_handles(), device, layout, binding, pOffset);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout, VkDeviceSize* pLayoutSizeInBytes) {
+    AV_SCOPE("vkGetDescriptorSetLayoutSizeEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkGetDescriptorSetLayoutSizeEXT(conn->transport(), ::av::icd::wire_handles(), device, layout, pLayoutSizeInBytes);
 }
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkGetDeviceAccelerationStructureCompatibilityKHR(VkDevice device, const VkAccelerationStructureVersionInfoKHR* pVersionInfo, VkAccelerationStructureCompatibilityKHR* pCompatibility) {
@@ -2373,7 +2406,7 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleIdentifierEXT(VkDevice device, 
 }
 
 namespace {
-const Entry kWrapperTable[411] = {
+const Entry kWrapperTable[417] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance), DispatchLevel::instance },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice), DispatchLevel::device },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue), DispatchLevel::device },
@@ -2652,6 +2685,8 @@ const Entry kWrapperTable[411] = {
     Entry{ "vkCmdSetRasterizerDiscardEnableEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetRasterizerDiscardEnableEXT), DispatchLevel::device },
     Entry{ "vkCmdSetVertexInputEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetVertexInputEXT), DispatchLevel::device },
     Entry{ "vkBuildAccelerationStructuresKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkBuildAccelerationStructuresKHR), DispatchLevel::device },
+    Entry{ "vkCmdBindDescriptorBufferEmbeddedSamplersEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindDescriptorBufferEmbeddedSamplersEXT), DispatchLevel::device },
+    Entry{ "vkCmdBindDescriptorBuffersEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindDescriptorBuffersEXT), DispatchLevel::device },
     Entry{ "vkCmdBindShadersEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindShadersEXT), DispatchLevel::device },
     Entry{ "vkCmdBindVertexBuffers2EXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindVertexBuffers2EXT), DispatchLevel::device },
     Entry{ "vkCmdBuildAccelerationStructuresIndirectKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBuildAccelerationStructuresIndirectKHR), DispatchLevel::device },
@@ -2685,6 +2720,7 @@ const Entry kWrapperTable[411] = {
     Entry{ "vkCmdSetDepthCompareOpEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDepthCompareOpEXT), DispatchLevel::device },
     Entry{ "vkCmdSetDepthTestEnableEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDepthTestEnableEXT), DispatchLevel::device },
     Entry{ "vkCmdSetDepthWriteEnableEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDepthWriteEnableEXT), DispatchLevel::device },
+    Entry{ "vkCmdSetDescriptorBufferOffsetsEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDescriptorBufferOffsetsEXT), DispatchLevel::device },
     Entry{ "vkCmdSetExtraPrimitiveOverestimationSizeEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetExtraPrimitiveOverestimationSizeEXT), DispatchLevel::device },
     Entry{ "vkCmdSetFragmentShadingRateKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetFragmentShadingRateKHR), DispatchLevel::device },
     Entry{ "vkCmdSetFrontFaceEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetFrontFaceEXT), DispatchLevel::device },
@@ -2730,6 +2766,9 @@ const Entry kWrapperTable[411] = {
     Entry{ "vkGetAccelerationStructureDeviceAddressKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetAccelerationStructureDeviceAddressKHR), DispatchLevel::device },
     Entry{ "vkGetDeferredOperationMaxConcurrencyKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeferredOperationMaxConcurrencyKHR), DispatchLevel::device },
     Entry{ "vkGetDeferredOperationResultKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeferredOperationResultKHR), DispatchLevel::device },
+    Entry{ "vkGetDescriptorEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDescriptorEXT), DispatchLevel::device },
+    Entry{ "vkGetDescriptorSetLayoutBindingOffsetEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDescriptorSetLayoutBindingOffsetEXT), DispatchLevel::device },
+    Entry{ "vkGetDescriptorSetLayoutSizeEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDescriptorSetLayoutSizeEXT), DispatchLevel::device },
     Entry{ "vkGetDeviceAccelerationStructureCompatibilityKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceAccelerationStructureCompatibilityKHR), DispatchLevel::device },
     Entry{ "vkGetImageSubresourceLayout2EXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetImageSubresourceLayout2EXT), DispatchLevel::device },
     Entry{ "vkGetPhysicalDeviceFragmentShadingRatesKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceFragmentShadingRatesKHR), DispatchLevel::physical_device },
@@ -2795,6 +2834,6 @@ const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
 size_t EntryTable::size() const noexcept { return count_; }
 
-EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 411u}; }
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 417u}; }
 
 }  // namespace av::vkicd::generated

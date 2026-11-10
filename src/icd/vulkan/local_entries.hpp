@@ -37,6 +37,11 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplate(
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplateKHR(
     VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkAccelerationStructureCaptureDescriptorDataInfoEXT *pInfo, void *pData);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetBufferOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkBufferCaptureDescriptorDataInfoEXT *pInfo, void *pData);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetImageOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkImageCaptureDescriptorDataInfoEXT *pInfo, void *pData);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetImageViewOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkImageViewCaptureDescriptorDataInfoEXT *pInfo, void *pData);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSamplerOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkSamplerCaptureDescriptorDataInfoEXT *pInfo, void *pData);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                                                    const VkAllocationCallbacks *pAllocator, VkImage *pImage);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks *pAllocator);

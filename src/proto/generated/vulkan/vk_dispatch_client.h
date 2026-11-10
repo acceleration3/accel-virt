@@ -291,6 +291,8 @@ void av_vkCmdSetPrimitiveRestartEnableEXT(::av::ClientTransport& t, HandleTransl
 void av_vkCmdSetRasterizerDiscardEnableEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkBool32 rasterizerDiscardEnable);
 void av_vkCmdSetVertexInputEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions);
 VkResult av_vkBuildAccelerationStructuresKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDeferredOperationKHR deferredOperation, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkAccelerationStructureBuildRangeInfoKHR** ppBuildRangeInfos);
+void av_vkCmdBindDescriptorBufferEmbeddedSamplersEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set);
+void av_vkCmdBindDescriptorBuffersEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t bufferCount, const VkDescriptorBufferBindingInfoEXT* pBindingInfos);
 void av_vkCmdBindShadersEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t stageCount, const VkShaderStageFlagBits* pStages, const VkShaderEXT* pShaders);
 void av_vkCmdBindVertexBuffers2EXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, const VkDeviceSize* pSizes, const VkDeviceSize* pStrides);
 void av_vkCmdBuildAccelerationStructuresIndirectKHR(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkDeviceAddress* pIndirectDeviceAddresses, const uint32_t* pIndirectStrides, const uint32_t** ppMaxPrimitiveCounts);
@@ -324,6 +326,7 @@ void av_vkCmdSetDepthClipNegativeOneToOneEXT(::av::ClientTransport& t, HandleTra
 void av_vkCmdSetDepthCompareOpEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkCompareOp depthCompareOp);
 void av_vkCmdSetDepthTestEnableEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkBool32 depthTestEnable);
 void av_vkCmdSetDepthWriteEnableEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable);
+void av_vkCmdSetDescriptorBufferOffsetsEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount, const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets);
 void av_vkCmdSetExtraPrimitiveOverestimationSizeEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, float extraPrimitiveOverestimationSize);
 void av_vkCmdSetFragmentShadingRateKHR(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkExtent2D* pFragmentSize, const VkFragmentShadingRateCombinerOpKHR* combinerOps);
 void av_vkCmdSetFrontFaceEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkFrontFace frontFace);
@@ -369,6 +372,9 @@ void av_vkGetAccelerationStructureBuildSizesKHR(::av::ClientTransport& t, Handle
 VkDeviceAddress av_vkGetAccelerationStructureDeviceAddressKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkAccelerationStructureDeviceAddressInfoKHR* pInfo);
 uint32_t av_vkGetDeferredOperationMaxConcurrencyKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDeferredOperationKHR operation);
 VkResult av_vkGetDeferredOperationResultKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDeferredOperationKHR operation);
+void av_vkGetDescriptorEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize, void* pDescriptor);
+void av_vkGetDescriptorSetLayoutBindingOffsetEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDescriptorSetLayout layout, uint32_t binding, VkDeviceSize* pOffset);
+void av_vkGetDescriptorSetLayoutSizeEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkDescriptorSetLayout layout, VkDeviceSize* pLayoutSizeInBytes);
 void av_vkGetDeviceAccelerationStructureCompatibilityKHR(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkAccelerationStructureVersionInfoKHR* pVersionInfo, VkAccelerationStructureCompatibilityKHR* pCompatibility);
 void av_vkGetImageSubresourceLayout2EXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkImage image, const VkImageSubresource2* pSubresource, VkSubresourceLayout2* pLayout);
 VkResult av_vkGetPhysicalDeviceFragmentShadingRatesKHR(::av::ClientTransport& t, HandleTranslation& handles, VkPhysicalDevice physicalDevice, uint32_t* pFragmentShadingRateCount, VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates);

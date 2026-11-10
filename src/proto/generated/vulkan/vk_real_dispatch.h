@@ -923,6 +923,24 @@ public:
         }
         return pfn_vkBuildAccelerationStructuresKHR_(device, deferredOperation, infoCount, pInfos, ppBuildRangeInfos);
     }
+    void on_vkCmdBindDescriptorBufferEmbeddedSamplersEXT(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set) override {
+        if (pfn_vkCmdBindDescriptorBufferEmbeddedSamplersEXT_ == nullptr) {
+            pfn_vkCmdBindDescriptorBufferEmbeddedSamplersEXT_ = reinterpret_cast<PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdBindDescriptorBufferEmbeddedSamplersEXT"));
+        }
+        if (pfn_vkCmdBindDescriptorBufferEmbeddedSamplersEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdBindDescriptorBufferEmbeddedSamplersEXT_(commandBuffer, pipelineBindPoint, layout, set);
+    }
+    void on_vkCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount, const VkDescriptorBufferBindingInfoEXT* pBindingInfos) override {
+        if (pfn_vkCmdBindDescriptorBuffersEXT_ == nullptr) {
+            pfn_vkCmdBindDescriptorBuffersEXT_ = reinterpret_cast<PFN_vkCmdBindDescriptorBuffersEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdBindDescriptorBuffersEXT"));
+        }
+        if (pfn_vkCmdBindDescriptorBuffersEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdBindDescriptorBuffersEXT_(commandBuffer, bufferCount, pBindingInfos);
+    }
     void on_vkCmdBindShadersEXT(VkCommandBuffer commandBuffer, uint32_t stageCount, const VkShaderStageFlagBits* pStages, const VkShaderEXT* pShaders) override {
         if (pfn_vkCmdBindShadersEXT_ == nullptr) {
             pfn_vkCmdBindShadersEXT_ = reinterpret_cast<PFN_vkCmdBindShadersEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdBindShadersEXT"));
@@ -1183,6 +1201,15 @@ public:
     }
     void on_vkCmdSetDepthWriteEnableEXT(VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable) override {
         ::vkCmdSetDepthWriteEnable(commandBuffer, depthWriteEnable);
+    }
+    void on_vkCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount, const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets) override {
+        if (pfn_vkCmdSetDescriptorBufferOffsetsEXT_ == nullptr) {
+            pfn_vkCmdSetDescriptorBufferOffsetsEXT_ = reinterpret_cast<PFN_vkCmdSetDescriptorBufferOffsetsEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdSetDescriptorBufferOffsetsEXT"));
+        }
+        if (pfn_vkCmdSetDescriptorBufferOffsetsEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdSetDescriptorBufferOffsetsEXT_(commandBuffer, pipelineBindPoint, layout, firstSet, setCount, pBufferIndices, pOffsets);
     }
     void on_vkCmdSetExtraPrimitiveOverestimationSizeEXT(VkCommandBuffer commandBuffer, float extraPrimitiveOverestimationSize) override {
         if (pfn_vkCmdSetExtraPrimitiveOverestimationSizeEXT_ == nullptr) {
@@ -1552,6 +1579,33 @@ public:
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
         return pfn_vkGetDeferredOperationResultKHR_(device, operation);
+    }
+    void on_vkGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize, void* pDescriptor) override {
+        if (pfn_vkGetDescriptorEXT_ == nullptr) {
+            pfn_vkGetDescriptorEXT_ = reinterpret_cast<PFN_vkGetDescriptorEXT>(::vkGetInstanceProcAddr(instance_, "vkGetDescriptorEXT"));
+        }
+        if (pfn_vkGetDescriptorEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetDescriptorEXT_(device, pDescriptorInfo, dataSize, pDescriptor);
+    }
+    void on_vkGetDescriptorSetLayoutBindingOffsetEXT(VkDevice device, VkDescriptorSetLayout layout, uint32_t binding, VkDeviceSize* pOffset) override {
+        if (pfn_vkGetDescriptorSetLayoutBindingOffsetEXT_ == nullptr) {
+            pfn_vkGetDescriptorSetLayoutBindingOffsetEXT_ = reinterpret_cast<PFN_vkGetDescriptorSetLayoutBindingOffsetEXT>(::vkGetInstanceProcAddr(instance_, "vkGetDescriptorSetLayoutBindingOffsetEXT"));
+        }
+        if (pfn_vkGetDescriptorSetLayoutBindingOffsetEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetDescriptorSetLayoutBindingOffsetEXT_(device, layout, binding, pOffset);
+    }
+    void on_vkGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout, VkDeviceSize* pLayoutSizeInBytes) override {
+        if (pfn_vkGetDescriptorSetLayoutSizeEXT_ == nullptr) {
+            pfn_vkGetDescriptorSetLayoutSizeEXT_ = reinterpret_cast<PFN_vkGetDescriptorSetLayoutSizeEXT>(::vkGetInstanceProcAddr(instance_, "vkGetDescriptorSetLayoutSizeEXT"));
+        }
+        if (pfn_vkGetDescriptorSetLayoutSizeEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetDescriptorSetLayoutSizeEXT_(device, layout, pLayoutSizeInBytes);
     }
     void on_vkGetDeviceAccelerationStructureCompatibilityKHR(VkDevice device, const VkAccelerationStructureVersionInfoKHR* pVersionInfo, VkAccelerationStructureCompatibilityKHR* pCompatibility) override {
         if (pfn_vkGetDeviceAccelerationStructureCompatibilityKHR_ == nullptr) {
@@ -2063,6 +2117,8 @@ private:
     PFN_vkCmdSetPatchControlPointsEXT pfn_vkCmdSetPatchControlPointsEXT_ = nullptr;
     PFN_vkCmdSetVertexInputEXT pfn_vkCmdSetVertexInputEXT_ = nullptr;
     PFN_vkBuildAccelerationStructuresKHR pfn_vkBuildAccelerationStructuresKHR_ = nullptr;
+    PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT pfn_vkCmdBindDescriptorBufferEmbeddedSamplersEXT_ = nullptr;
+    PFN_vkCmdBindDescriptorBuffersEXT pfn_vkCmdBindDescriptorBuffersEXT_ = nullptr;
     PFN_vkCmdBindShadersEXT pfn_vkCmdBindShadersEXT_ = nullptr;
     PFN_vkCmdBuildAccelerationStructuresIndirectKHR pfn_vkCmdBuildAccelerationStructuresIndirectKHR_ = nullptr;
     PFN_vkCmdBuildAccelerationStructuresKHR pfn_vkCmdBuildAccelerationStructuresKHR_ = nullptr;
@@ -2090,6 +2146,7 @@ private:
     PFN_vkCmdSetDepthClampRangeEXT pfn_vkCmdSetDepthClampRangeEXT_ = nullptr;
     PFN_vkCmdSetDepthClipEnableEXT pfn_vkCmdSetDepthClipEnableEXT_ = nullptr;
     PFN_vkCmdSetDepthClipNegativeOneToOneEXT pfn_vkCmdSetDepthClipNegativeOneToOneEXT_ = nullptr;
+    PFN_vkCmdSetDescriptorBufferOffsetsEXT pfn_vkCmdSetDescriptorBufferOffsetsEXT_ = nullptr;
     PFN_vkCmdSetExtraPrimitiveOverestimationSizeEXT pfn_vkCmdSetExtraPrimitiveOverestimationSizeEXT_ = nullptr;
     PFN_vkCmdSetFragmentShadingRateKHR pfn_vkCmdSetFragmentShadingRateKHR_ = nullptr;
     PFN_vkCmdSetLineRasterizationModeEXT pfn_vkCmdSetLineRasterizationModeEXT_ = nullptr;
@@ -2129,6 +2186,9 @@ private:
     PFN_vkGetAccelerationStructureDeviceAddressKHR pfn_vkGetAccelerationStructureDeviceAddressKHR_ = nullptr;
     PFN_vkGetDeferredOperationMaxConcurrencyKHR pfn_vkGetDeferredOperationMaxConcurrencyKHR_ = nullptr;
     PFN_vkGetDeferredOperationResultKHR pfn_vkGetDeferredOperationResultKHR_ = nullptr;
+    PFN_vkGetDescriptorEXT pfn_vkGetDescriptorEXT_ = nullptr;
+    PFN_vkGetDescriptorSetLayoutBindingOffsetEXT pfn_vkGetDescriptorSetLayoutBindingOffsetEXT_ = nullptr;
+    PFN_vkGetDescriptorSetLayoutSizeEXT pfn_vkGetDescriptorSetLayoutSizeEXT_ = nullptr;
     PFN_vkGetDeviceAccelerationStructureCompatibilityKHR pfn_vkGetDeviceAccelerationStructureCompatibilityKHR_ = nullptr;
     PFN_vkGetImageSubresourceLayout2EXT pfn_vkGetImageSubresourceLayout2EXT_ = nullptr;
     PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR pfn_vkGetPhysicalDeviceFragmentShadingRatesKHR_ = nullptr;

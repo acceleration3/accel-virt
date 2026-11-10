@@ -265,8 +265,8 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
         entry_of(&av::icd::local_vkCreateSwapchainKHR));
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateXlibSurfaceKHR") == nullptr);
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateHeadlessSurfaceEXT") == nullptr);
-  CHECK_EQ(answered, 24u);
-  CHECK_EQ(through_an_instance, 22u);
+  CHECK_EQ(answered, 29u);
+  CHECK_EQ(through_an_instance, 27u);
   CHECK(rig.root().instance_proc_addr(instance, "vkGetMemoryWin32HandleKHR") ==
         entry_of(&av::icd::local_vkGetMemoryWin32HandleKHR));
   CHECK(rig.root().instance_proc_addr(instance, "vkImportSemaphoreWin32HandleKHR") ==
