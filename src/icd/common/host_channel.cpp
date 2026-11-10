@@ -70,12 +70,13 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
         line.text(faulted ? "the context faulted opening its blob arena, status "
                           : "no blob arena for the context; bulk data crosses inline, status ")
             .number(static_cast<uint32_t>(arena));
-        if (faulted)
+        if (arena_failed_step_ != nullptr)
             line.text(", failed step ")
                 .text(arena_failed_step_)
                 .text(" returned ")
-                .number(static_cast<uint32_t>(arena_failed_status_))
-                .text(", host faulted ")
+                .number(static_cast<uint32_t>(arena_failed_status_));
+        if (faulted)
+            line.text(", host faulted ")
                 .number(transport_.object().host_faulted() ? 1u : 0u)
                 .text(" with code ")
                 .number(transport_.object().host_fault_code());
