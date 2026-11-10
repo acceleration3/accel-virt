@@ -75,6 +75,8 @@ D3D12DDI_GPU_DESCRIPTOR_HANDLE D3d12Device::get_gpu_descriptor_handle_for_heap_s
 {
     AV_SCOPE("D3d12Device::get_gpu_descriptor_handle_for_heap_start");
     D3D12DDI_GPU_DESCRIPTOR_HANDLE start = {};
+    const auto *const heap = static_cast<const DescriptorHeapRecord *>(handle.pDrvPrivate);
+    if (heap == nullptr || (heap->flags & api_shader_visible) == 0u) return start;
     start.ptr = static_cast<UINT64>(id_of(handle.pDrvPrivate)) << gpu_heap_shift;
     return start;
 }
