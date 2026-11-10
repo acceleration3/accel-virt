@@ -436,6 +436,15 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000101B9u: return "vkGetPhysicalDeviceMultisamplePropertiesEXT";
         case 0x000101BAu: return "vkGetShaderModuleCreateInfoIdentifierEXT";
         case 0x000101BBu: return "vkGetShaderModuleIdentifierEXT";
+        case 0x000101BCu: return "vkCmdExecuteGeneratedCommandsEXT";
+        case 0x000101BDu: return "vkCmdPreprocessGeneratedCommandsEXT";
+        case 0x000101BEu: return "vkCreateIndirectCommandsLayoutEXT";
+        case 0x000101BFu: return "vkCreateIndirectExecutionSetEXT";
+        case 0x000101C0u: return "vkDestroyIndirectCommandsLayoutEXT";
+        case 0x000101C1u: return "vkDestroyIndirectExecutionSetEXT";
+        case 0x000101C2u: return "vkGetGeneratedCommandsMemoryRequirementsEXT";
+        case 0x000101C3u: return "vkUpdateIndirectExecutionSetPipelineEXT";
+        case 0x000101C4u: return "vkUpdateIndirectExecutionSetShaderEXT";
         default: return "unknown";
     }
 }
@@ -859,6 +868,15 @@ bool knows_command(uint32_t cmd_id) noexcept {
         case 0x000101B9u:
         case 0x000101BAu:
         case 0x000101BBu:
+        case 0x000101BCu:
+        case 0x000101BDu:
+        case 0x000101BEu:
+        case 0x000101BFu:
+        case 0x000101C0u:
+        case 0x000101C1u:
+        case 0x000101C2u:
+        case 0x000101C3u:
+        case 0x000101C4u:
             return true;
         default: return false;
     }
@@ -1061,6 +1079,8 @@ uint32_t command_queues(uint32_t cmd_id) noexcept {
         case 0x000101B2u: return 0x2u;
         case 0x000101B3u: return 0x7u;
         case 0x000101B4u: return 0x7u;
+        case 0x000101BCu: return 0x3u;
+        case 0x000101BDu: return 0x3u;
         default: return 0u;
     }
 }

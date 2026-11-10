@@ -220,6 +220,17 @@ bool VulkanAddresses::descriptor_admitted(uint64_t device, const VkDescriptorGet
     }
 }
 
+bool VulkanAddresses::generated_admitted(uint64_t device, const VkGeneratedCommandsInfoEXT &info) const
+{
+    AV_SCOPE("VulkanAddresses::generated_admitted");
+    if (info.maxSequenceCount == 0u) return false;
+    if (info.indirectAddressSize == 0u || !covers(device, info.indirectAddress, info.indirectAddressSize)) return false;
+    if (info.preprocessAddress != 0u && (info.preprocessSize == 0u || !covers(device, info.preprocessAddress, info.preprocessSize)))
+        return false;
+    if (info.sequenceCountAddress != 0u && !covers(device, info.sequenceCountAddress, sizeof(uint32_t))) return false;
+    return true;
+}
+
 uint32_t VulkanAddresses::buffers() const
 {
     AV_SCOPE("VulkanAddresses::buffers");

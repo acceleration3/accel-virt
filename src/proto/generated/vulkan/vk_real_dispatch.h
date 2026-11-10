@@ -2102,6 +2102,87 @@ public:
         }
         pfn_vkGetShaderModuleIdentifierEXT_(device, shaderModule, pIdentifier);
     }
+    void on_vkCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed, const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo) override {
+        if (pfn_vkCmdExecuteGeneratedCommandsEXT_ == nullptr) {
+            pfn_vkCmdExecuteGeneratedCommandsEXT_ = reinterpret_cast<PFN_vkCmdExecuteGeneratedCommandsEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdExecuteGeneratedCommandsEXT"));
+        }
+        if (pfn_vkCmdExecuteGeneratedCommandsEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdExecuteGeneratedCommandsEXT_(commandBuffer, isPreprocessed, pGeneratedCommandsInfo);
+    }
+    void on_vkCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer, const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo, VkCommandBuffer stateCommandBuffer) override {
+        if (pfn_vkCmdPreprocessGeneratedCommandsEXT_ == nullptr) {
+            pfn_vkCmdPreprocessGeneratedCommandsEXT_ = reinterpret_cast<PFN_vkCmdPreprocessGeneratedCommandsEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdPreprocessGeneratedCommandsEXT"));
+        }
+        if (pfn_vkCmdPreprocessGeneratedCommandsEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdPreprocessGeneratedCommandsEXT_(commandBuffer, pGeneratedCommandsInfo, stateCommandBuffer);
+    }
+    VkResult on_vkCreateIndirectCommandsLayoutEXT(VkDevice device, const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks*, VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout) override {
+        if (pfn_vkCreateIndirectCommandsLayoutEXT_ == nullptr) {
+            pfn_vkCreateIndirectCommandsLayoutEXT_ = reinterpret_cast<PFN_vkCreateIndirectCommandsLayoutEXT>(::vkGetInstanceProcAddr(instance_, "vkCreateIndirectCommandsLayoutEXT"));
+        }
+        if (pfn_vkCreateIndirectCommandsLayoutEXT_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkCreateIndirectCommandsLayoutEXT_(device, pCreateInfo, nullptr, pIndirectCommandsLayout);
+    }
+    VkResult on_vkCreateIndirectExecutionSetEXT(VkDevice device, const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks*, VkIndirectExecutionSetEXT* pIndirectExecutionSet) override {
+        if (pfn_vkCreateIndirectExecutionSetEXT_ == nullptr) {
+            pfn_vkCreateIndirectExecutionSetEXT_ = reinterpret_cast<PFN_vkCreateIndirectExecutionSetEXT>(::vkGetInstanceProcAddr(instance_, "vkCreateIndirectExecutionSetEXT"));
+        }
+        if (pfn_vkCreateIndirectExecutionSetEXT_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkCreateIndirectExecutionSetEXT_(device, pCreateInfo, nullptr, pIndirectExecutionSet);
+    }
+    void on_vkDestroyIndirectCommandsLayoutEXT(VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout, const VkAllocationCallbacks*) override {
+        if (pfn_vkDestroyIndirectCommandsLayoutEXT_ == nullptr) {
+            pfn_vkDestroyIndirectCommandsLayoutEXT_ = reinterpret_cast<PFN_vkDestroyIndirectCommandsLayoutEXT>(::vkGetInstanceProcAddr(instance_, "vkDestroyIndirectCommandsLayoutEXT"));
+        }
+        if (pfn_vkDestroyIndirectCommandsLayoutEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkDestroyIndirectCommandsLayoutEXT_(device, indirectCommandsLayout, nullptr);
+    }
+    void on_vkDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, const VkAllocationCallbacks*) override {
+        if (pfn_vkDestroyIndirectExecutionSetEXT_ == nullptr) {
+            pfn_vkDestroyIndirectExecutionSetEXT_ = reinterpret_cast<PFN_vkDestroyIndirectExecutionSetEXT>(::vkGetInstanceProcAddr(instance_, "vkDestroyIndirectExecutionSetEXT"));
+        }
+        if (pfn_vkDestroyIndirectExecutionSetEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkDestroyIndirectExecutionSetEXT_(device, indirectExecutionSet, nullptr);
+    }
+    void on_vkGetGeneratedCommandsMemoryRequirementsEXT(VkDevice device, const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo, VkMemoryRequirements2* pMemoryRequirements) override {
+        if (pfn_vkGetGeneratedCommandsMemoryRequirementsEXT_ == nullptr) {
+            pfn_vkGetGeneratedCommandsMemoryRequirementsEXT_ = reinterpret_cast<PFN_vkGetGeneratedCommandsMemoryRequirementsEXT>(::vkGetInstanceProcAddr(instance_, "vkGetGeneratedCommandsMemoryRequirementsEXT"));
+        }
+        if (pfn_vkGetGeneratedCommandsMemoryRequirementsEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetGeneratedCommandsMemoryRequirementsEXT_(device, pInfo, pMemoryRequirements);
+    }
+    void on_vkUpdateIndirectExecutionSetPipelineEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount, const VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites) override {
+        if (pfn_vkUpdateIndirectExecutionSetPipelineEXT_ == nullptr) {
+            pfn_vkUpdateIndirectExecutionSetPipelineEXT_ = reinterpret_cast<PFN_vkUpdateIndirectExecutionSetPipelineEXT>(::vkGetInstanceProcAddr(instance_, "vkUpdateIndirectExecutionSetPipelineEXT"));
+        }
+        if (pfn_vkUpdateIndirectExecutionSetPipelineEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkUpdateIndirectExecutionSetPipelineEXT_(device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites);
+    }
+    void on_vkUpdateIndirectExecutionSetShaderEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount, const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites) override {
+        if (pfn_vkUpdateIndirectExecutionSetShaderEXT_ == nullptr) {
+            pfn_vkUpdateIndirectExecutionSetShaderEXT_ = reinterpret_cast<PFN_vkUpdateIndirectExecutionSetShaderEXT>(::vkGetInstanceProcAddr(instance_, "vkUpdateIndirectExecutionSetShaderEXT"));
+        }
+        if (pfn_vkUpdateIndirectExecutionSetShaderEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkUpdateIndirectExecutionSetShaderEXT_(device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites);
+    }
 
 private:
     VkInstance instance_ = VK_NULL_HANDLE;
@@ -2244,6 +2325,15 @@ private:
     PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT pfn_vkGetPhysicalDeviceMultisamplePropertiesEXT_ = nullptr;
     PFN_vkGetShaderModuleCreateInfoIdentifierEXT pfn_vkGetShaderModuleCreateInfoIdentifierEXT_ = nullptr;
     PFN_vkGetShaderModuleIdentifierEXT pfn_vkGetShaderModuleIdentifierEXT_ = nullptr;
+    PFN_vkCmdExecuteGeneratedCommandsEXT pfn_vkCmdExecuteGeneratedCommandsEXT_ = nullptr;
+    PFN_vkCmdPreprocessGeneratedCommandsEXT pfn_vkCmdPreprocessGeneratedCommandsEXT_ = nullptr;
+    PFN_vkCreateIndirectCommandsLayoutEXT pfn_vkCreateIndirectCommandsLayoutEXT_ = nullptr;
+    PFN_vkCreateIndirectExecutionSetEXT pfn_vkCreateIndirectExecutionSetEXT_ = nullptr;
+    PFN_vkDestroyIndirectCommandsLayoutEXT pfn_vkDestroyIndirectCommandsLayoutEXT_ = nullptr;
+    PFN_vkDestroyIndirectExecutionSetEXT pfn_vkDestroyIndirectExecutionSetEXT_ = nullptr;
+    PFN_vkGetGeneratedCommandsMemoryRequirementsEXT pfn_vkGetGeneratedCommandsMemoryRequirementsEXT_ = nullptr;
+    PFN_vkUpdateIndirectExecutionSetPipelineEXT pfn_vkUpdateIndirectExecutionSetPipelineEXT_ = nullptr;
+    PFN_vkUpdateIndirectExecutionSetShaderEXT pfn_vkUpdateIndirectExecutionSetShaderEXT_ = nullptr;
 };
 
 }  // namespace av::vkproto

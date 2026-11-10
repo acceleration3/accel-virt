@@ -26,7 +26,9 @@ bool holdable(vkproto::HandleKind kind)
     case vkproto::HandleKind::query_pool:
     case vkproto::HandleKind::render_pass:
     case vkproto::HandleKind::sampler:
-    case vkproto::HandleKind::shader_ext: return true;
+    case vkproto::HandleKind::shader_ext:
+    case vkproto::HandleKind::indirect_commands_layout_ext:
+    case vkproto::HandleKind::indirect_execution_set_ext: return true;
     default: return false;
     }
 }

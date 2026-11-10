@@ -1,3 +1,8 @@
+# Stable command IDs for the AV wire protocol.
+# Auto-maintained by codegen — do not hand-edit unless you're
+# bumping the protocol major version. New commands get appended
+# at the next free ID; existing IDs never move.
+
 [commands]
 "vkDestroyInstance" = 65537
 "vkDestroyDevice" = 65538
@@ -442,3 +447,12 @@
 "vkGetPhysicalDeviceMultisamplePropertiesEXT" = 65977
 "vkGetShaderModuleCreateInfoIdentifierEXT" = 65978
 "vkGetShaderModuleIdentifierEXT" = 65979
+"vkCmdExecuteGeneratedCommandsEXT" = 65980
+"vkCmdPreprocessGeneratedCommandsEXT" = 65981
+"vkCreateIndirectCommandsLayoutEXT" = 65982
+"vkCreateIndirectExecutionSetEXT" = 65983
+"vkDestroyIndirectCommandsLayoutEXT" = 65984
+"vkDestroyIndirectExecutionSetEXT" = 65985
+"vkGetGeneratedCommandsMemoryRequirementsEXT" = 65986
+"vkUpdateIndirectExecutionSetPipelineEXT" = 65987
+"vkUpdateIndirectExecutionSetShaderEXT" = 65988

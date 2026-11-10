@@ -188,3 +188,38 @@ TEST(vulkan_addresses, destroying_a_buffer_takes_its_address_away_and_a_structur
   CHECK(!rig.addresses().structure_bytes(device, 0x77u, bytes));
   CHECK_EQ(rig.addresses().ranges(), 0u);
   CHECK(rig.addresses().invariants_hold()); }
+
+TEST(vulkan_addresses, generated_commands_are_admitted_only_with_every_address_inside_a_buffer_of_the_device)
+{ Rig rig;
+  VkGeneratedCommandsInfoEXT info = {};
+  info.indirectAddress = vertices_base;
+  info.indirectAddressSize = 64u;
+  info.maxSequenceCount = 4u;
+  CHECK(rig.addresses().generated_admitted(device, info));
+  CHECK(!rig.addresses().generated_admitted(device + 1u, info));
+  VkGeneratedCommandsInfoEXT none = info;
+  none.maxSequenceCount = 0u;
+  CHECK(!rig.addresses().generated_admitted(device, none));
+  VkGeneratedCommandsInfoEXT empty = info;
+  empty.indirectAddressSize = 0u;
+  CHECK(!rig.addresses().generated_admitted(device, empty));
+  VkGeneratedCommandsInfoEXT outside = info;
+  outside.indirectAddress = 0xDEAD0000u;
+  CHECK(!rig.addresses().generated_admitted(device, outside));
+  VkGeneratedCommandsInfoEXT long_read = info;
+  long_read.indirectAddressSize = 1u << 20u;
+  CHECK(!rig.addresses().generated_admitted(device, long_read));
+  VkGeneratedCommandsInfoEXT preprocessed = info;
+  preprocessed.preprocessAddress = vertices_base;
+  preprocessed.preprocessSize = 32u;
+  CHECK(rig.addresses().generated_admitted(device, preprocessed));
+  preprocessed.preprocessSize = 0u;
+  CHECK(!rig.addresses().generated_admitted(device, preprocessed));
+  preprocessed.preprocessAddress = 0xDEAD0000u;
+  preprocessed.preprocessSize = 32u;
+  CHECK(!rig.addresses().generated_admitted(device, preprocessed));
+  VkGeneratedCommandsInfoEXT counted = info;
+  counted.sequenceCountAddress = vertices_base;
+  CHECK(rig.addresses().generated_admitted(device, counted));
+  counted.sequenceCountAddress = 0xDEAD0000u;
+  CHECK(!rig.addresses().generated_admitted(device, counted)); }

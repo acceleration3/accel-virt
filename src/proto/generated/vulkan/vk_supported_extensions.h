@@ -35,6 +35,7 @@ inline constexpr const char* kImplementedDeviceExtensions[] = {
     "VK_EXT_depth_range_unrestricted",
     "VK_EXT_descriptor_buffer",
     "VK_EXT_descriptor_indexing",
+    "VK_EXT_device_generated_commands",
     "VK_EXT_dynamic_rendering_unused_attachments",
     "VK_EXT_extended_dynamic_state",
     "VK_EXT_extended_dynamic_state2",

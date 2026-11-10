@@ -430,5 +430,14 @@ VkResult av_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(::av::ClientTransp
 void av_vkGetPhysicalDeviceMultisamplePropertiesEXT(::av::ClientTransport& t, HandleTranslation& handles, VkPhysicalDevice physicalDevice, VkSampleCountFlagBits samples, VkMultisamplePropertiesEXT* pMultisampleProperties);
 void av_vkGetShaderModuleCreateInfoIdentifierEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, VkShaderModuleIdentifierEXT* pIdentifier);
 void av_vkGetShaderModuleIdentifierEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkShaderModule shaderModule, VkShaderModuleIdentifierEXT* pIdentifier);
+void av_vkCmdExecuteGeneratedCommandsEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, VkBool32 isPreprocessed, const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo);
+void av_vkCmdPreprocessGeneratedCommandsEXT(::av::ClientTransport& t, HandleTranslation& handles, VkCommandBuffer commandBuffer, const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo, VkCommandBuffer stateCommandBuffer);
+VkResult av_vkCreateIndirectCommandsLayoutEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout);
+VkResult av_vkCreateIndirectExecutionSetEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectExecutionSetEXT* pIndirectExecutionSet);
+void av_vkDestroyIndirectCommandsLayoutEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout, const VkAllocationCallbacks* pAllocator);
+void av_vkDestroyIndirectExecutionSetEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, const VkAllocationCallbacks* pAllocator);
+void av_vkGetGeneratedCommandsMemoryRequirementsEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo, VkMemoryRequirements2* pMemoryRequirements);
+void av_vkUpdateIndirectExecutionSetPipelineEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount, const VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites);
+void av_vkUpdateIndirectExecutionSetShaderEXT(::av::ClientTransport& t, HandleTranslation& handles, VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount, const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites);
 
 }  // namespace av::vkproto

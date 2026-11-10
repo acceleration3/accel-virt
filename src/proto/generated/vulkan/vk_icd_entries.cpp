@@ -2405,8 +2405,60 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleIdentifierEXT(VkDevice device, 
     ::av::vkproto::av_vkGetShaderModuleIdentifierEXT(conn->transport(), ::av::icd::wire_handles(), device, shaderModule, pIdentifier);
 }
 
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed, const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo) {
+    AV_SCOPE("vkCmdExecuteGeneratedCommandsEXT");
+    ::av::vkproto::av_vkCmdExecuteGeneratedCommandsEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, isPreprocessed, pGeneratedCommandsInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer, const VkGeneratedCommandsInfoEXT* pGeneratedCommandsInfo, VkCommandBuffer stateCommandBuffer) {
+    AV_SCOPE("vkCmdPreprocessGeneratedCommandsEXT");
+    ::av::vkproto::av_vkCmdPreprocessGeneratedCommandsEXT(::av::icd::record_target(commandBuffer), ::av::icd::wire_handles(), commandBuffer, pGeneratedCommandsInfo, stateCommandBuffer);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkCreateIndirectCommandsLayoutEXT(VkDevice device, const VkIndirectCommandsLayoutCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutEXT* pIndirectCommandsLayout) {
+    AV_SCOPE("vkCreateIndirectCommandsLayoutEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    return ::av::vkproto::av_vkCreateIndirectCommandsLayoutEXT(conn->transport(), ::av::icd::wire_handles(), device, pCreateInfo, pAllocator, pIndirectCommandsLayout);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkCreateIndirectExecutionSetEXT(VkDevice device, const VkIndirectExecutionSetCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkIndirectExecutionSetEXT* pIndirectExecutionSet) {
+    AV_SCOPE("vkCreateIndirectExecutionSetEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    return ::av::vkproto::av_vkCreateIndirectExecutionSetEXT(conn->transport(), ::av::icd::wire_handles(), device, pCreateInfo, pAllocator, pIndirectExecutionSet);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkDestroyIndirectCommandsLayoutEXT(VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("vkDestroyIndirectCommandsLayoutEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkDestroyIndirectCommandsLayoutEXT(conn->transport(), ::av::icd::wire_handles(), device, indirectCommandsLayout, pAllocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("vkDestroyIndirectExecutionSetEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkDestroyIndirectExecutionSetEXT(conn->transport(), ::av::icd::wire_handles(), device, indirectExecutionSet, pAllocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetGeneratedCommandsMemoryRequirementsEXT(VkDevice device, const VkGeneratedCommandsMemoryRequirementsInfoEXT* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("vkGetGeneratedCommandsMemoryRequirementsEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkGetGeneratedCommandsMemoryRequirementsEXT(conn->transport(), ::av::icd::wire_handles(), device, pInfo, pMemoryRequirements);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkUpdateIndirectExecutionSetPipelineEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount, const VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites) {
+    AV_SCOPE("vkUpdateIndirectExecutionSetPipelineEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkUpdateIndirectExecutionSetPipelineEXT(conn->transport(), ::av::icd::wire_handles(), device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkUpdateIndirectExecutionSetShaderEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet, uint32_t executionSetWriteCount, const VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites) {
+    AV_SCOPE("vkUpdateIndirectExecutionSetShaderEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::av_vkUpdateIndirectExecutionSetShaderEXT(conn->transport(), ::av::icd::wire_handles(), device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites);
+}
+
 namespace {
-const Entry kWrapperTable[417] = {
+const Entry kWrapperTable[426] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance), DispatchLevel::instance },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice), DispatchLevel::device },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue), DispatchLevel::device },
@@ -2824,6 +2876,15 @@ const Entry kWrapperTable[417] = {
     Entry{ "vkGetPhysicalDeviceMultisamplePropertiesEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceMultisamplePropertiesEXT), DispatchLevel::physical_device },
     Entry{ "vkGetShaderModuleCreateInfoIdentifierEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetShaderModuleCreateInfoIdentifierEXT), DispatchLevel::device },
     Entry{ "vkGetShaderModuleIdentifierEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetShaderModuleIdentifierEXT), DispatchLevel::device },
+    Entry{ "vkCmdExecuteGeneratedCommandsEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdExecuteGeneratedCommandsEXT), DispatchLevel::device },
+    Entry{ "vkCmdPreprocessGeneratedCommandsEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPreprocessGeneratedCommandsEXT), DispatchLevel::device },
+    Entry{ "vkCreateIndirectCommandsLayoutEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCreateIndirectCommandsLayoutEXT), DispatchLevel::device },
+    Entry{ "vkCreateIndirectExecutionSetEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCreateIndirectExecutionSetEXT), DispatchLevel::device },
+    Entry{ "vkDestroyIndirectCommandsLayoutEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyIndirectCommandsLayoutEXT), DispatchLevel::device },
+    Entry{ "vkDestroyIndirectExecutionSetEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyIndirectExecutionSetEXT), DispatchLevel::device },
+    Entry{ "vkGetGeneratedCommandsMemoryRequirementsEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetGeneratedCommandsMemoryRequirementsEXT), DispatchLevel::device },
+    Entry{ "vkUpdateIndirectExecutionSetPipelineEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkUpdateIndirectExecutionSetPipelineEXT), DispatchLevel::device },
+    Entry{ "vkUpdateIndirectExecutionSetShaderEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkUpdateIndirectExecutionSetShaderEXT), DispatchLevel::device },
 };
 }  // namespace
 
@@ -2834,6 +2895,6 @@ const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
 size_t EntryTable::size() const noexcept { return count_; }
 
-EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 417u}; }
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 426u}; }
 
 }  // namespace av::vkicd::generated

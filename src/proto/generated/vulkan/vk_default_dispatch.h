@@ -726,6 +726,19 @@ public:
     void on_vkGetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice, VkSampleCountFlagBits, VkMultisamplePropertiesEXT*) override {}
     void on_vkGetShaderModuleCreateInfoIdentifierEXT(VkDevice, const VkShaderModuleCreateInfo*, VkShaderModuleIdentifierEXT*) override {}
     void on_vkGetShaderModuleIdentifierEXT(VkDevice, VkShaderModule, VkShaderModuleIdentifierEXT*) override {}
+    void on_vkCmdExecuteGeneratedCommandsEXT(VkCommandBuffer, VkBool32, const VkGeneratedCommandsInfoEXT*) override {}
+    void on_vkCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer, const VkGeneratedCommandsInfoEXT*, VkCommandBuffer) override {}
+    VkResult on_vkCreateIndirectCommandsLayoutEXT(VkDevice, const VkIndirectCommandsLayoutCreateInfoEXT*, const VkAllocationCallbacks*, VkIndirectCommandsLayoutEXT*) override {
+        return VK_SUCCESS;
+    }
+    VkResult on_vkCreateIndirectExecutionSetEXT(VkDevice, const VkIndirectExecutionSetCreateInfoEXT*, const VkAllocationCallbacks*, VkIndirectExecutionSetEXT*) override {
+        return VK_SUCCESS;
+    }
+    void on_vkDestroyIndirectCommandsLayoutEXT(VkDevice, VkIndirectCommandsLayoutEXT, const VkAllocationCallbacks*) override {}
+    void on_vkDestroyIndirectExecutionSetEXT(VkDevice, VkIndirectExecutionSetEXT, const VkAllocationCallbacks*) override {}
+    void on_vkGetGeneratedCommandsMemoryRequirementsEXT(VkDevice, const VkGeneratedCommandsMemoryRequirementsInfoEXT*, VkMemoryRequirements2*) override {}
+    void on_vkUpdateIndirectExecutionSetPipelineEXT(VkDevice, VkIndirectExecutionSetEXT, uint32_t, const VkWriteIndirectExecutionSetPipelineEXT*) override {}
+    void on_vkUpdateIndirectExecutionSetShaderEXT(VkDevice, VkIndirectExecutionSetEXT, uint32_t, const VkWriteIndirectExecutionSetShaderEXT*) override {}
 };
 
 }  // namespace av::vkproto

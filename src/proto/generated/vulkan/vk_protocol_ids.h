@@ -424,6 +424,15 @@ enum CmdId : uint32_t {
     kCmd_vkGetPhysicalDeviceMultisamplePropertiesEXT = 0x000101B9u,
     kCmd_vkGetShaderModuleCreateInfoIdentifierEXT = 0x000101BAu,
     kCmd_vkGetShaderModuleIdentifierEXT = 0x000101BBu,
+    kCmd_vkCmdExecuteGeneratedCommandsEXT = 0x000101BCu,
+    kCmd_vkCmdPreprocessGeneratedCommandsEXT = 0x000101BDu,
+    kCmd_vkCreateIndirectCommandsLayoutEXT = 0x000101BEu,
+    kCmd_vkCreateIndirectExecutionSetEXT = 0x000101BFu,
+    kCmd_vkDestroyIndirectCommandsLayoutEXT = 0x000101C0u,
+    kCmd_vkDestroyIndirectExecutionSetEXT = 0x000101C1u,
+    kCmd_vkGetGeneratedCommandsMemoryRequirementsEXT = 0x000101C2u,
+    kCmd_vkUpdateIndirectExecutionSetPipelineEXT = 0x000101C3u,
+    kCmd_vkUpdateIndirectExecutionSetShaderEXT = 0x000101C4u,
 };
 
 }  // namespace av::vkproto

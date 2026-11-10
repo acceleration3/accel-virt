@@ -352,6 +352,40 @@ inline void serialize_VkImageView(::av::WireWriter& buf, HandleTranslation& hand
     return true;
 }
 
+inline void serialize_VkIndirectCommandsLayoutEXT(::av::WireWriter& buf, HandleTranslation& handles, VkIndirectCommandsLayoutEXT v) noexcept {
+    buf.write_pod(handles.wire_for(HandleKind::indirect_commands_layout_ext, as_number(v)));
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsLayoutEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectCommandsLayoutEXT& out) noexcept {
+    uint64_t raw = 0;
+    if (!r.read_pod(raw)) {
+        return false;
+    }
+    uint64_t named = 0;
+    if (!handles.handle_for(HandleKind::indirect_commands_layout_ext, raw, named)) {
+        return false;
+    }
+    out = as_handle<VkIndirectCommandsLayoutEXT>(named);
+    return true;
+}
+
+inline void serialize_VkIndirectExecutionSetEXT(::av::WireWriter& buf, HandleTranslation& handles, VkIndirectExecutionSetEXT v) noexcept {
+    buf.write_pod(handles.wire_for(HandleKind::indirect_execution_set_ext, as_number(v)));
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectExecutionSetEXT& out) noexcept {
+    uint64_t raw = 0;
+    if (!r.read_pod(raw)) {
+        return false;
+    }
+    uint64_t named = 0;
+    if (!handles.handle_for(HandleKind::indirect_execution_set_ext, raw, named)) {
+        return false;
+    }
+    out = as_handle<VkIndirectExecutionSetEXT>(named);
+    return true;
+}
+
 inline void serialize_VkInstance(::av::WireWriter& buf, HandleTranslation& handles, VkInstance v) noexcept {
     buf.write_pod(handles.wire_for(HandleKind::instance, as_number(v)));
 }
@@ -1038,6 +1072,14 @@ inline void serialize_VkFramebufferAttachmentsCreateInfo(::av::WireWriter&, Hand
 [[nodiscard]] inline bool deserialize_VkFramebufferAttachmentsCreateInfo(::av::WireReader&, const HandleTranslation&, VkFramebufferAttachmentsCreateInfo*, ::av::WireArena&);
 inline void serialize_VkFramebufferCreateInfo(::av::WireWriter&, HandleTranslation&, const VkFramebufferCreateInfo&);
 [[nodiscard]] inline bool deserialize_VkFramebufferCreateInfo(::av::WireReader&, const HandleTranslation&, VkFramebufferCreateInfo*, ::av::WireArena&);
+inline void serialize_VkGeneratedCommandsInfoEXT(::av::WireWriter&, HandleTranslation&, const VkGeneratedCommandsInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsInfoEXT(::av::WireReader&, const HandleTranslation&, VkGeneratedCommandsInfoEXT*, ::av::WireArena&);
+inline void serialize_VkGeneratedCommandsMemoryRequirementsInfoEXT(::av::WireWriter&, HandleTranslation&, const VkGeneratedCommandsMemoryRequirementsInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsMemoryRequirementsInfoEXT(::av::WireReader&, const HandleTranslation&, VkGeneratedCommandsMemoryRequirementsInfoEXT*, ::av::WireArena&);
+inline void serialize_VkGeneratedCommandsPipelineInfoEXT(::av::WireWriter&, HandleTranslation&, const VkGeneratedCommandsPipelineInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsPipelineInfoEXT(::av::WireReader&, const HandleTranslation&, VkGeneratedCommandsPipelineInfoEXT*, ::av::WireArena&);
+inline void serialize_VkGeneratedCommandsShaderInfoEXT(::av::WireWriter&, HandleTranslation&, const VkGeneratedCommandsShaderInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsShaderInfoEXT(::av::WireReader&, const HandleTranslation&, VkGeneratedCommandsShaderInfoEXT*, ::av::WireArena&);
 inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter&, HandleTranslation&, const VkGraphicsPipelineCreateInfo&);
 [[nodiscard]] inline bool deserialize_VkGraphicsPipelineCreateInfo(::av::WireReader&, const HandleTranslation&, VkGraphicsPipelineCreateInfo*, ::av::WireArena&);
 inline void serialize_VkGraphicsPipelineLibraryCreateInfoEXT(::av::WireWriter&, HandleTranslation&, const VkGraphicsPipelineLibraryCreateInfoEXT&);
@@ -1122,6 +1164,28 @@ inline void serialize_VkImportMemoryHostPointerInfoEXT(::av::WireWriter&, Handle
 [[nodiscard]] inline bool deserialize_VkImportMemoryHostPointerInfoEXT(::av::WireReader&, const HandleTranslation&, VkImportMemoryHostPointerInfoEXT*, ::av::WireArena&);
 inline void serialize_VkImportSemaphoreFdInfoKHR(::av::WireWriter&, HandleTranslation&, const VkImportSemaphoreFdInfoKHR&);
 [[nodiscard]] inline bool deserialize_VkImportSemaphoreFdInfoKHR(::av::WireReader&, const HandleTranslation&, VkImportSemaphoreFdInfoKHR*, ::av::WireArena&);
+inline void serialize_VkIndirectCommandsExecutionSetTokenEXT(::av::WireWriter&, const VkIndirectCommandsExecutionSetTokenEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsExecutionSetTokenEXT(::av::WireReader&, VkIndirectCommandsExecutionSetTokenEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectCommandsIndexBufferTokenEXT(::av::WireWriter&, const VkIndirectCommandsIndexBufferTokenEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsIndexBufferTokenEXT(::av::WireReader&, VkIndirectCommandsIndexBufferTokenEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectCommandsLayoutCreateInfoEXT(::av::WireWriter&, HandleTranslation&, const VkIndirectCommandsLayoutCreateInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsLayoutCreateInfoEXT(::av::WireReader&, const HandleTranslation&, VkIndirectCommandsLayoutCreateInfoEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectCommandsLayoutTokenEXT(::av::WireWriter&, HandleTranslation&, const VkIndirectCommandsLayoutTokenEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsLayoutTokenEXT(::av::WireReader&, const HandleTranslation&, VkIndirectCommandsLayoutTokenEXT*, ::av::WireArena&);
+inline void serialize_VkPushConstantRange(::av::WireWriter&, const VkPushConstantRange&);
+[[nodiscard]] inline bool deserialize_VkPushConstantRange(::av::WireReader&, VkPushConstantRange*, ::av::WireArena&);
+inline void serialize_VkIndirectCommandsPushConstantTokenEXT(::av::WireWriter&, const VkIndirectCommandsPushConstantTokenEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsPushConstantTokenEXT(::av::WireReader&, VkIndirectCommandsPushConstantTokenEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectCommandsVertexBufferTokenEXT(::av::WireWriter&, const VkIndirectCommandsVertexBufferTokenEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsVertexBufferTokenEXT(::av::WireReader&, VkIndirectCommandsVertexBufferTokenEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectExecutionSetCreateInfoEXT(::av::WireWriter&, HandleTranslation&, const VkIndirectExecutionSetCreateInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetCreateInfoEXT(::av::WireReader&, const HandleTranslation&, VkIndirectExecutionSetCreateInfoEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectExecutionSetPipelineInfoEXT(::av::WireWriter&, HandleTranslation&, const VkIndirectExecutionSetPipelineInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetPipelineInfoEXT(::av::WireReader&, const HandleTranslation&, VkIndirectExecutionSetPipelineInfoEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectExecutionSetShaderInfoEXT(::av::WireWriter&, HandleTranslation&, const VkIndirectExecutionSetShaderInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetShaderInfoEXT(::av::WireReader&, const HandleTranslation&, VkIndirectExecutionSetShaderInfoEXT*, ::av::WireArena&);
+inline void serialize_VkIndirectExecutionSetShaderLayoutInfoEXT(::av::WireWriter&, HandleTranslation&, const VkIndirectExecutionSetShaderLayoutInfoEXT&);
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetShaderLayoutInfoEXT(::av::WireReader&, const HandleTranslation&, VkIndirectExecutionSetShaderLayoutInfoEXT*, ::av::WireArena&);
 inline void serialize_VkInputAttachmentAspectReference(::av::WireWriter&, const VkInputAttachmentAspectReference&);
 [[nodiscard]] inline bool deserialize_VkInputAttachmentAspectReference(::av::WireReader&, VkInputAttachmentAspectReference*, ::av::WireArena&);
 inline void serialize_VkInstanceCreateInfo(::av::WireWriter&, HandleTranslation&, const VkInstanceCreateInfo&);
@@ -1956,8 +2020,6 @@ inline void serialize_VkPrivateDataSlotCreateInfo(::av::WireWriter&, HandleTrans
 [[nodiscard]] inline bool deserialize_VkPrivateDataSlotCreateInfo(::av::WireReader&, const HandleTranslation&, VkPrivateDataSlotCreateInfo*, ::av::WireArena&);
 inline void serialize_VkProtectedSubmitInfo(::av::WireWriter&, HandleTranslation&, const VkProtectedSubmitInfo&);
 [[nodiscard]] inline bool deserialize_VkProtectedSubmitInfo(::av::WireReader&, const HandleTranslation&, VkProtectedSubmitInfo*, ::av::WireArena&);
-inline void serialize_VkPushConstantRange(::av::WireWriter&, const VkPushConstantRange&);
-[[nodiscard]] inline bool deserialize_VkPushConstantRange(::av::WireReader&, VkPushConstantRange*, ::av::WireArena&);
 inline void serialize_VkPushConstantsInfo(::av::WireWriter&, HandleTranslation&, const VkPushConstantsInfo&);
 [[nodiscard]] inline bool deserialize_VkPushConstantsInfo(::av::WireReader&, const HandleTranslation&, VkPushConstantsInfo*, ::av::WireArena&);
 inline void serialize_VkPushDescriptorSetInfo(::av::WireWriter&, HandleTranslation&, const VkPushDescriptorSetInfo&);
@@ -2204,6 +2266,10 @@ inline void serialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireWriter&, 
 [[nodiscard]] inline bool deserialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireReader&, const HandleTranslation&, VkWriteDescriptorSetInlineUniformBlock*, ::av::WireArena&);
 inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::av::WireWriter&, HandleTranslation&, const VkWriteDescriptorSetPartitionedAccelerationStructureNV&);
 [[nodiscard]] inline bool deserialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::av::WireReader&, const HandleTranslation&, VkWriteDescriptorSetPartitionedAccelerationStructureNV*, ::av::WireArena&);
+inline void serialize_VkWriteIndirectExecutionSetPipelineEXT(::av::WireWriter&, HandleTranslation&, const VkWriteIndirectExecutionSetPipelineEXT&);
+[[nodiscard]] inline bool deserialize_VkWriteIndirectExecutionSetPipelineEXT(::av::WireReader&, const HandleTranslation&, VkWriteIndirectExecutionSetPipelineEXT*, ::av::WireArena&);
+inline void serialize_VkWriteIndirectExecutionSetShaderEXT(::av::WireWriter&, HandleTranslation&, const VkWriteIndirectExecutionSetShaderEXT&);
+[[nodiscard]] inline bool deserialize_VkWriteIndirectExecutionSetShaderEXT(::av::WireReader&, const HandleTranslation&, VkWriteIndirectExecutionSetShaderEXT*, ::av::WireArena&);
 
 // Optional pointer helpers (used by hand-written struct bodies).
 inline void serialize_optional_sampler(::av::WireWriter& buf, HandleTranslation& handles, const VkSampler* p) {
@@ -7116,6 +7182,113 @@ inline void serialize_VkFramebufferCreateInfo(::av::WireWriter& buf, HandleTrans
     return true;
 }
 
+inline void serialize_VkGeneratedCommandsInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkGeneratedCommandsInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.shaderStages);
+    serialize_VkIndirectExecutionSetEXT(buf, handles, v.indirectExecutionSet);
+    serialize_VkIndirectCommandsLayoutEXT(buf, handles, v.indirectCommandsLayout);
+    buf.write_pod(v.indirectAddress);
+    buf.write_pod(v.indirectAddressSize);
+    buf.write_pod(v.preprocessAddress);
+    buf.write_pod(v.preprocessSize);
+    buf.write_pod(v.maxSequenceCount);
+    buf.write_pod(v.sequenceCountAddress);
+    buf.write_pod(v.maxDrawCount);
+}
+
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkGeneratedCommandsInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->shaderStages)) { return false; }
+    if (!deserialize_VkIndirectExecutionSetEXT(r, handles, out->indirectExecutionSet)) { return false; }
+    if (!deserialize_VkIndirectCommandsLayoutEXT(r, handles, out->indirectCommandsLayout)) { return false; }
+    if (out->indirectCommandsLayout == VK_NULL_HANDLE) { return false; }
+    if (!r.read_pod(out->indirectAddress)) { return false; }
+    if (!r.read_pod(out->indirectAddressSize)) { return false; }
+    if (!r.read_pod(out->preprocessAddress)) { return false; }
+    if (!r.read_pod(out->preprocessSize)) { return false; }
+    if (!r.read_pod(out->maxSequenceCount)) { return false; }
+    if (!r.read_pod(out->sequenceCountAddress)) { return false; }
+    if (!r.read_pod(out->maxDrawCount)) { return false; }
+    return true;
+}
+
+inline void serialize_VkGeneratedCommandsMemoryRequirementsInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkGeneratedCommandsMemoryRequirementsInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    serialize_VkIndirectExecutionSetEXT(buf, handles, v.indirectExecutionSet);
+    serialize_VkIndirectCommandsLayoutEXT(buf, handles, v.indirectCommandsLayout);
+    buf.write_pod(v.maxSequenceCount);
+    buf.write_pod(v.maxDrawCount);
+}
+
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsMemoryRequirementsInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkGeneratedCommandsMemoryRequirementsInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!deserialize_VkIndirectExecutionSetEXT(r, handles, out->indirectExecutionSet)) { return false; }
+    if (!deserialize_VkIndirectCommandsLayoutEXT(r, handles, out->indirectCommandsLayout)) { return false; }
+    if (out->indirectCommandsLayout == VK_NULL_HANDLE) { return false; }
+    if (!r.read_pod(out->maxSequenceCount)) { return false; }
+    if (!r.read_pod(out->maxDrawCount)) { return false; }
+    return true;
+}
+
+inline void serialize_VkGeneratedCommandsPipelineInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkGeneratedCommandsPipelineInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    serialize_VkPipeline(buf, handles, v.pipeline);
+}
+
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsPipelineInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkGeneratedCommandsPipelineInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!deserialize_VkPipeline(r, handles, out->pipeline)) { return false; }
+    if (out->pipeline == VK_NULL_HANDLE) { return false; }
+    return true;
+}
+
+inline void serialize_VkGeneratedCommandsShaderInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkGeneratedCommandsShaderInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.shaderCount);
+    {
+        const uint8_t present = v.pShaders != nullptr ? 1 : 0;
+        buf.write_pod(present);
+        if (present) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.shaderCount)); ++i) {
+                serialize_VkShaderEXT(buf, handles, v.pShaders[i]);
+            }
+        }
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkGeneratedCommandsShaderInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkGeneratedCommandsShaderInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->shaderCount)) { return false; }
+    {
+        uint8_t present = 0;
+        if (!r.read_pod(present)) { return false; }
+        if (!present && as_number(out->shaderCount) != 0) { return false; }
+        if (!present || as_number(out->shaderCount) == 0) {
+            out->pShaders = nullptr;
+        } else {
+            auto* arr = arena.allocate<VkShaderEXT>(static_cast<size_t>(as_number(out->shaderCount)));
+            if (arr == nullptr) { return false; }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->shaderCount)); ++i) {
+                if (!deserialize_VkShaderEXT(r, handles, arr[i])) { return false; }
+            }
+            out->pShaders = arr;
+        }
+    }
+    return true;
+}
+
 inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, HandleTranslation& handles, const VkGraphicsPipelineCreateInfo& v) {
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, handles, v.pNext);
@@ -8333,6 +8506,352 @@ inline void serialize_VkImportSemaphoreFdInfoKHR(::av::WireWriter& buf, HandleTr
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->handleType)) { return false; }
     if (!r.read_pod(out->fd)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectCommandsExecutionSetTokenEXT(::av::WireWriter& buf, const VkIndirectCommandsExecutionSetTokenEXT& v) {
+    buf.write_pod(v.type);
+    buf.write_pod(v.shaderStages);
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsExecutionSetTokenEXT(::av::WireReader& r, VkIndirectCommandsExecutionSetTokenEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->type)) { return false; }
+    if (!r.read_pod(out->shaderStages)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectCommandsIndexBufferTokenEXT(::av::WireWriter& buf, const VkIndirectCommandsIndexBufferTokenEXT& v) {
+    buf.write_pod(v.mode);
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsIndexBufferTokenEXT(::av::WireReader& r, VkIndirectCommandsIndexBufferTokenEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->mode)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectCommandsLayoutCreateInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkIndirectCommandsLayoutCreateInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.flags);
+    buf.write_pod(v.shaderStages);
+    buf.write_pod(v.indirectStride);
+    serialize_VkPipelineLayout(buf, handles, v.pipelineLayout);
+    buf.write_pod(v.tokenCount);
+    {
+        const uint8_t present = v.pTokens != nullptr ? 1 : 0;
+        buf.write_pod(present);
+        if (present) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.tokenCount)); ++i) {
+                serialize_VkIndirectCommandsLayoutTokenEXT(buf, handles, v.pTokens[i]);
+            }
+        }
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsLayoutCreateInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectCommandsLayoutCreateInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->flags)) { return false; }
+    if (!r.read_pod(out->shaderStages)) { return false; }
+    if (!r.read_pod(out->indirectStride)) { return false; }
+    if (!deserialize_VkPipelineLayout(r, handles, out->pipelineLayout)) { return false; }
+    if (!r.read_pod(out->tokenCount)) { return false; }
+    {
+        uint8_t present = 0;
+        if (!r.read_pod(present)) { return false; }
+        if (!present && as_number(out->tokenCount) != 0) { return false; }
+        if (!present || as_number(out->tokenCount) == 0) {
+            out->pTokens = nullptr;
+        } else {
+            auto* arr = arena.allocate<VkIndirectCommandsLayoutTokenEXT>(static_cast<size_t>(as_number(out->tokenCount)));
+            if (arr == nullptr) { return false; }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->tokenCount)); ++i) {
+                if (!deserialize_VkIndirectCommandsLayoutTokenEXT(r, handles, &arr[i], arena)) { return false; }
+            }
+            out->pTokens = arr;
+        }
+    }
+    return true;
+}
+
+inline void serialize_VkIndirectCommandsLayoutTokenEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkIndirectCommandsLayoutTokenEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.type);
+    buf.write_pod(v.offset);
+    switch (v.type) {
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT:
+        buf.write_pod(*v.data.pPushConstant);
+        break;
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_EXT:
+        buf.write_pod(*v.data.pVertexBuffer);
+        break;
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_EXT:
+        buf.write_pod(*v.data.pIndexBuffer);
+        break;
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT:
+        buf.write_pod(*v.data.pExecutionSet);
+        break;
+    default:
+        break;
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsLayoutTokenEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectCommandsLayoutTokenEXT* out, ::av::WireArena& arena) {
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->type)) { return false; }
+    if (!r.read_pod(out->offset)) { return false; }
+    out->data = VkIndirectCommandsTokenDataEXT{};
+    switch (out->type) {
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT: {
+        auto* token = arena.allocate<VkIndirectCommandsPushConstantTokenEXT>(1);
+        if (token == nullptr || !r.read_pod(*token)) { return false; }
+        out->data.pPushConstant = token;
+        return true;
+    }
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_EXT: {
+        auto* token = arena.allocate<VkIndirectCommandsVertexBufferTokenEXT>(1);
+        if (token == nullptr || !r.read_pod(*token)) { return false; }
+        out->data.pVertexBuffer = token;
+        return true;
+    }
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_EXT: {
+        auto* token = arena.allocate<VkIndirectCommandsIndexBufferTokenEXT>(1);
+        if (token == nullptr || !r.read_pod(*token)) { return false; }
+        out->data.pIndexBuffer = token;
+        return true;
+    }
+    case VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT: {
+        auto* token = arena.allocate<VkIndirectCommandsExecutionSetTokenEXT>(1);
+        if (token == nullptr || !r.read_pod(*token)) { return false; }
+        out->data.pExecutionSet = token;
+        return true;
+    }
+    default:
+        return true;
+    }
+}
+
+inline void serialize_VkPushConstantRange(::av::WireWriter& buf, const VkPushConstantRange& v) {
+    buf.write_pod(v.stageFlags);
+    buf.write_pod(v.offset);
+    buf.write_pod(v.size);
+}
+
+[[nodiscard]] inline bool deserialize_VkPushConstantRange(::av::WireReader& r, VkPushConstantRange* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->stageFlags)) { return false; }
+    if (!r.read_pod(out->offset)) { return false; }
+    if (!r.read_pod(out->size)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectCommandsPushConstantTokenEXT(::av::WireWriter& buf, const VkIndirectCommandsPushConstantTokenEXT& v) {
+    serialize_VkPushConstantRange(buf, v.updateRange);
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsPushConstantTokenEXT(::av::WireReader& r, VkIndirectCommandsPushConstantTokenEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!deserialize_VkPushConstantRange(r, &out->updateRange, arena)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectCommandsVertexBufferTokenEXT(::av::WireWriter& buf, const VkIndirectCommandsVertexBufferTokenEXT& v) {
+    buf.write_pod(v.vertexBindingUnit);
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectCommandsVertexBufferTokenEXT(::av::WireReader& r, VkIndirectCommandsVertexBufferTokenEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->vertexBindingUnit)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectExecutionSetCreateInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkIndirectExecutionSetCreateInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.type);
+    switch (v.type) {
+    case VK_INDIRECT_EXECUTION_SET_INFO_TYPE_PIPELINES_EXT:
+        serialize_VkIndirectExecutionSetPipelineInfoEXT(buf, handles, *v.info.pPipelineInfo);
+        break;
+    case VK_INDIRECT_EXECUTION_SET_INFO_TYPE_SHADER_OBJECTS_EXT:
+        serialize_VkIndirectExecutionSetShaderInfoEXT(buf, handles, *v.info.pShaderInfo);
+        break;
+    default:
+        break;
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetCreateInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectExecutionSetCreateInfoEXT* out, ::av::WireArena& arena) {
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->type)) { return false; }
+    out->info = VkIndirectExecutionSetInfoEXT{};
+    switch (out->type) {
+    case VK_INDIRECT_EXECUTION_SET_INFO_TYPE_PIPELINES_EXT: {
+        auto* info = arena.allocate<VkIndirectExecutionSetPipelineInfoEXT>(1);
+        if (info == nullptr || !deserialize_VkIndirectExecutionSetPipelineInfoEXT(r, handles, info, arena)) { return false; }
+        out->info.pPipelineInfo = info;
+        return true;
+    }
+    case VK_INDIRECT_EXECUTION_SET_INFO_TYPE_SHADER_OBJECTS_EXT: {
+        auto* info = arena.allocate<VkIndirectExecutionSetShaderInfoEXT>(1);
+        if (info == nullptr || !deserialize_VkIndirectExecutionSetShaderInfoEXT(r, handles, info, arena)) { return false; }
+        out->info.pShaderInfo = info;
+        return true;
+    }
+    default:
+        return true;
+    }
+}
+
+inline void serialize_VkIndirectExecutionSetPipelineInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkIndirectExecutionSetPipelineInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    serialize_VkPipeline(buf, handles, v.initialPipeline);
+    buf.write_pod(v.maxPipelineCount);
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetPipelineInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectExecutionSetPipelineInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!deserialize_VkPipeline(r, handles, out->initialPipeline)) { return false; }
+    if (out->initialPipeline == VK_NULL_HANDLE) { return false; }
+    if (!r.read_pod(out->maxPipelineCount)) { return false; }
+    return true;
+}
+
+inline void serialize_VkIndirectExecutionSetShaderInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkIndirectExecutionSetShaderInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.shaderCount);
+    {
+        const uint8_t present = v.pInitialShaders != nullptr ? 1 : 0;
+        buf.write_pod(present);
+        if (present) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.shaderCount)); ++i) {
+                serialize_VkShaderEXT(buf, handles, v.pInitialShaders[i]);
+            }
+        }
+    }
+    {
+        const uint8_t present = v.pSetLayoutInfos != nullptr ? 1 : 0;
+        buf.write_pod(present);
+        if (present) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.shaderCount)); ++i) {
+                serialize_VkIndirectExecutionSetShaderLayoutInfoEXT(buf, handles, v.pSetLayoutInfos[i]);
+            }
+        }
+    }
+    buf.write_pod(v.maxShaderCount);
+    buf.write_pod(v.pushConstantRangeCount);
+    {
+        const uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
+        buf.write_pod(present);
+        if (present) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
+                serialize_VkPushConstantRange(buf, v.pPushConstantRanges[i]);
+            }
+        }
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetShaderInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectExecutionSetShaderInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->shaderCount)) { return false; }
+    {
+        uint8_t present = 0;
+        if (!r.read_pod(present)) { return false; }
+        if (!present && as_number(out->shaderCount) != 0) { return false; }
+        if (!present || as_number(out->shaderCount) == 0) {
+            out->pInitialShaders = nullptr;
+        } else {
+            auto* arr = arena.allocate<VkShaderEXT>(static_cast<size_t>(as_number(out->shaderCount)));
+            if (arr == nullptr) { return false; }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->shaderCount)); ++i) {
+                if (!deserialize_VkShaderEXT(r, handles, arr[i])) { return false; }
+            }
+            out->pInitialShaders = arr;
+        }
+    }
+    {
+        uint8_t present = 0;
+        if (!r.read_pod(present)) { return false; }
+        if (!present || as_number(out->shaderCount) == 0) {
+            out->pSetLayoutInfos = nullptr;
+        } else {
+            auto* arr = arena.allocate<VkIndirectExecutionSetShaderLayoutInfoEXT>(static_cast<size_t>(as_number(out->shaderCount)));
+            if (arr == nullptr) { return false; }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->shaderCount)); ++i) {
+                if (!deserialize_VkIndirectExecutionSetShaderLayoutInfoEXT(r, handles, &arr[i], arena)) { return false; }
+            }
+            out->pSetLayoutInfos = arr;
+        }
+    }
+    if (!r.read_pod(out->maxShaderCount)) { return false; }
+    if (!r.read_pod(out->pushConstantRangeCount)) { return false; }
+    {
+        uint8_t present = 0;
+        if (!r.read_pod(present)) { return false; }
+        if (!present && as_number(out->pushConstantRangeCount) != 0) { return false; }
+        if (!present || as_number(out->pushConstantRangeCount) == 0) {
+            out->pPushConstantRanges = nullptr;
+        } else {
+            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<size_t>(as_number(out->pushConstantRangeCount)));
+            if (arr == nullptr) { return false; }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
+                if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
+            }
+            out->pPushConstantRanges = arr;
+        }
+    }
+    return true;
+}
+
+inline void serialize_VkIndirectExecutionSetShaderLayoutInfoEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkIndirectExecutionSetShaderLayoutInfoEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.setLayoutCount);
+    {
+        const uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
+        buf.write_pod(present);
+        if (present) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.setLayoutCount)); ++i) {
+                serialize_VkDescriptorSetLayout(buf, handles, v.pSetLayouts[i]);
+            }
+        }
+    }
+}
+
+[[nodiscard]] inline bool deserialize_VkIndirectExecutionSetShaderLayoutInfoEXT(::av::WireReader& r, const HandleTranslation& handles, VkIndirectExecutionSetShaderLayoutInfoEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->setLayoutCount)) { return false; }
+    {
+        uint8_t present = 0;
+        if (!r.read_pod(present)) { return false; }
+        if (!present && as_number(out->setLayoutCount) != 0) { return false; }
+        if (!present || as_number(out->setLayoutCount) == 0) {
+            out->pSetLayouts = nullptr;
+        } else {
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<size_t>(as_number(out->setLayoutCount)));
+            if (arr == nullptr) { return false; }
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->setLayoutCount)); ++i) {
+                if (!deserialize_VkDescriptorSetLayout(r, handles, arr[i])) { return false; }
+            }
+            out->pSetLayouts = arr;
+        }
+    }
     return true;
 }
 
@@ -17448,20 +17967,6 @@ inline void serialize_VkProtectedSubmitInfo(::av::WireWriter& buf, HandleTransla
     return true;
 }
 
-inline void serialize_VkPushConstantRange(::av::WireWriter& buf, const VkPushConstantRange& v) {
-    buf.write_pod(v.stageFlags);
-    buf.write_pod(v.offset);
-    buf.write_pod(v.size);
-}
-
-[[nodiscard]] inline bool deserialize_VkPushConstantRange(::av::WireReader& r, VkPushConstantRange* out, ::av::WireArena& arena) {
-    (void)arena;
-    if (!r.read_pod(out->stageFlags)) { return false; }
-    if (!r.read_pod(out->offset)) { return false; }
-    if (!r.read_pod(out->size)) { return false; }
-    return true;
-}
-
 inline void serialize_VkPushConstantsInfo(::av::WireWriter& buf, HandleTranslation& handles, const VkPushConstantsInfo& v) {
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, handles, v.pNext);
@@ -21497,9 +22002,43 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
     return true;
 }
 
+inline void serialize_VkWriteIndirectExecutionSetPipelineEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkWriteIndirectExecutionSetPipelineEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.index);
+    serialize_VkPipeline(buf, handles, v.pipeline);
+}
+
+[[nodiscard]] inline bool deserialize_VkWriteIndirectExecutionSetPipelineEXT(::av::WireReader& r, const HandleTranslation& handles, VkWriteIndirectExecutionSetPipelineEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->index)) { return false; }
+    if (!deserialize_VkPipeline(r, handles, out->pipeline)) { return false; }
+    if (out->pipeline == VK_NULL_HANDLE) { return false; }
+    return true;
+}
+
+inline void serialize_VkWriteIndirectExecutionSetShaderEXT(::av::WireWriter& buf, HandleTranslation& handles, const VkWriteIndirectExecutionSetShaderEXT& v) {
+    buf.write_pod(v.sType);
+    serialize_pnext_chain(buf, handles, v.pNext);
+    buf.write_pod(v.index);
+    serialize_VkShaderEXT(buf, handles, v.shader);
+}
+
+[[nodiscard]] inline bool deserialize_VkWriteIndirectExecutionSetShaderEXT(::av::WireReader& r, const HandleTranslation& handles, VkWriteIndirectExecutionSetShaderEXT* out, ::av::WireArena& arena) {
+    (void)arena;
+    if (!r.read_pod(out->sType)) { return false; }
+    if (!deserialize_pnext_chain(r, handles, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
+    if (!r.read_pod(out->index)) { return false; }
+    if (!deserialize_VkShaderEXT(r, handles, out->shader)) { return false; }
+    if (out->shader == VK_NULL_HANDLE) { return false; }
+    return true;
+}
+
 // ---- pNext chain codec ----------------------------------------------
 
-// 497 chain-extension structs are encodable in this build.
+// 499 chain-extension structs are encodable in this build.
 inline bool pnext_is_encodable(VkStructureType t) {
     switch (t) {
     case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV:
@@ -21564,6 +22103,8 @@ inline bool pnext_is_encodable(VkStructureType t) {
     case VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR:
     case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT:
     case VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO:
+    case VK_STRUCTURE_TYPE_GENERATED_COMMANDS_PIPELINE_INFO_EXT:
+    case VK_STRUCTURE_TYPE_GENERATED_COMMANDS_SHADER_INFO_EXT:
     case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO:
     case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT:
     case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV:
@@ -22197,6 +22738,12 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, HandleTranslation& hand
         break;
     case VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO:
         serialize_VkFramebufferAttachmentsCreateInfo(buf, handles, *reinterpret_cast<const VkFramebufferAttachmentsCreateInfo*>(p));
+        break;
+    case VK_STRUCTURE_TYPE_GENERATED_COMMANDS_PIPELINE_INFO_EXT:
+        serialize_VkGeneratedCommandsPipelineInfoEXT(buf, handles, *reinterpret_cast<const VkGeneratedCommandsPipelineInfoEXT*>(p));
+        break;
+    case VK_STRUCTURE_TYPE_GENERATED_COMMANDS_SHADER_INFO_EXT:
+        serialize_VkGeneratedCommandsShaderInfoEXT(buf, handles, *reinterpret_cast<const VkGeneratedCommandsShaderInfoEXT*>(p));
         break;
     case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO:
         serialize_VkGraphicsPipelineCreateInfo(buf, handles, *reinterpret_cast<const VkGraphicsPipelineCreateInfo*>(p));
@@ -24020,6 +24567,22 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, HandleTranslation& hand
                                        : arena.allocate<VkFramebufferAttachmentsCreateInfo>();
         if (typed == nullptr) { return false; }
         if (!deserialize_VkFramebufferAttachmentsCreateInfo(r, handles, typed, arena)) { return false; }
+        if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
+        break;
+    }
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_GENERATED_COMMANDS_PIPELINE_INFO_EXT): {
+        auto* typed = (dst != nullptr) ? reinterpret_cast<VkGeneratedCommandsPipelineInfoEXT*>(dst)
+                                       : arena.allocate<VkGeneratedCommandsPipelineInfoEXT>();
+        if (typed == nullptr) { return false; }
+        if (!deserialize_VkGeneratedCommandsPipelineInfoEXT(r, handles, typed, arena)) { return false; }
+        if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
+        break;
+    }
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_GENERATED_COMMANDS_SHADER_INFO_EXT): {
+        auto* typed = (dst != nullptr) ? reinterpret_cast<VkGeneratedCommandsShaderInfoEXT*>(dst)
+                                       : arena.allocate<VkGeneratedCommandsShaderInfoEXT>();
+        if (typed == nullptr) { return false; }
+        if (!deserialize_VkGeneratedCommandsShaderInfoEXT(r, handles, typed, arena)) { return false; }
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }

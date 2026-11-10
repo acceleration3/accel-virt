@@ -16,7 +16,6 @@ bool advertised(const char *name)
 
 TEST(vulkan_unheld_extensions, no_extension_that_makes_a_handle_the_guard_cannot_hold_is_advertised)
 { CHECK(!advertised("VK_NV_ray_tracing"));
-  CHECK(!advertised("VK_EXT_device_generated_commands"));
   CHECK(!advertised("VK_NV_device_generated_commands"));
   CHECK(!advertised("VK_NV_device_generated_commands_compute")); }
 

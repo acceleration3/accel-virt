@@ -442,3 +442,76 @@ TEST(generated_vulkan, a_build_whose_geometry_types_do_not_fit_its_level_is_refu
   VkAccelerationStructureBuildGeometryInfoKHR odd = bottom_level(&triangles, 1u);
   odd.type = static_cast<VkAccelerationStructureTypeKHR>(0x7FFF);
   CHECK(!decoded_build(sent_build(odd), received)); }
+
+TEST(generated_vulkan, an_indirect_commands_layout_carries_the_arm_each_token_names)
+{ std::uint8_t block[arena_bytes];
+  const VkIndirectCommandsPushConstantTokenEXT push = {{VK_SHADER_STAGE_COMPUTE_BIT, 4u, 16u}};
+  const VkIndirectCommandsVertexBufferTokenEXT vertex = {3u};
+  const VkIndirectCommandsIndexBufferTokenEXT index = {VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT};
+  const VkIndirectCommandsExecutionSetTokenEXT set = {VK_INDIRECT_EXECUTION_SET_INFO_TYPE_PIPELINES_EXT,
+                                                       VK_SHADER_STAGE_COMPUTE_BIT};
+  VkIndirectCommandsLayoutTokenEXT tokens[5] = {};
+  for (VkIndirectCommandsLayoutTokenEXT &token : tokens) token.sType = VK_STRUCTURE_TYPE_INDIRECT_COMMANDS_LAYOUT_TOKEN_EXT;
+  tokens[0].type = VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT;
+  tokens[0].data.pExecutionSet = &set;
+  tokens[1].type = VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT;
+  tokens[1].data.pPushConstant = &push;
+  tokens[1].offset = 8u;
+  tokens[2].type = VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_EXT;
+  tokens[2].data.pVertexBuffer = &vertex;
+  tokens[3].type = VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_EXT;
+  tokens[3].data.pIndexBuffer = &index;
+  tokens[4].type = VK_INDIRECT_COMMANDS_TOKEN_TYPE_DISPATCH_EXT;
+  tokens[4].offset = 32u;
+  VkIndirectCommandsLayoutCreateInfoEXT sent = {};
+  sent.sType = VK_STRUCTURE_TYPE_INDIRECT_COMMANDS_LAYOUT_CREATE_INFO_EXT;
+  sent.shaderStages = VK_SHADER_STAGE_COMPUTE_BIT;
+  sent.indirectStride = 64u;
+  sent.tokenCount = 5u;
+  sent.pTokens = tokens;
+  VkIndirectCommandsLayoutCreateInfoEXT received = {};
+  CHECK(decoded(av::vkproto::serialize_VkIndirectCommandsLayoutCreateInfoEXT,
+                av::vkproto::deserialize_VkIndirectCommandsLayoutCreateInfoEXT, sent, received, block));
+  CHECK_EQ(received.tokenCount, 5u);
+  CHECK_EQ(received.indirectStride, 64u);
+  CHECK(received.pTokens != nullptr && received.pTokens != tokens);
+  CHECK_EQ(received.pTokens[0].data.pExecutionSet->shaderStages, static_cast<VkShaderStageFlags>(VK_SHADER_STAGE_COMPUTE_BIT));
+  CHECK_EQ(received.pTokens[1].data.pPushConstant->updateRange.size, 16u);
+  CHECK_EQ(received.pTokens[1].offset, 8u);
+  CHECK_EQ(received.pTokens[2].data.pVertexBuffer->vertexBindingUnit, 3u);
+  CHECK_EQ(received.pTokens[3].data.pIndexBuffer->mode, VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT);
+  CHECK(received.pTokens[4].data.pPushConstant == nullptr);
+  CHECK_EQ(received.pTokens[4].offset, 32u); }
+
+TEST(generated_vulkan, an_indirect_execution_set_carries_the_info_its_type_names)
+{ std::uint8_t block[arena_bytes];
+  VkIndirectExecutionSetPipelineInfoEXT pipelines = {};
+  pipelines.sType = VK_STRUCTURE_TYPE_INDIRECT_EXECUTION_SET_PIPELINE_INFO_EXT;
+  pipelines.initialPipeline = reinterpret_cast<VkPipeline>(std::uintptr_t{0x2000u});
+  pipelines.maxPipelineCount = 12u;
+  VkIndirectExecutionSetCreateInfoEXT sent = {};
+  sent.sType = VK_STRUCTURE_TYPE_INDIRECT_EXECUTION_SET_CREATE_INFO_EXT;
+  sent.type = VK_INDIRECT_EXECUTION_SET_INFO_TYPE_PIPELINES_EXT;
+  sent.info.pPipelineInfo = &pipelines;
+  VkIndirectExecutionSetCreateInfoEXT received = {};
+  CHECK(decoded(av::vkproto::serialize_VkIndirectExecutionSetCreateInfoEXT,
+                av::vkproto::deserialize_VkIndirectExecutionSetCreateInfoEXT, sent, received, block));
+  CHECK(received.info.pPipelineInfo != nullptr && received.info.pPipelineInfo != &pipelines);
+  CHECK_EQ(received.info.pPipelineInfo->maxPipelineCount, 12u);
+  CHECK(received.info.pPipelineInfo->initialPipeline == pipelines.initialPipeline);
+  const VkShaderEXT shaders[2] = {reinterpret_cast<VkShaderEXT>(std::uintptr_t{0x3000u}),
+                                  reinterpret_cast<VkShaderEXT>(std::uintptr_t{0x3008u})};
+  VkIndirectExecutionSetShaderInfoEXT shader_info = {};
+  shader_info.sType = VK_STRUCTURE_TYPE_INDIRECT_EXECUTION_SET_SHADER_INFO_EXT;
+  shader_info.shaderCount = 2u;
+  shader_info.pInitialShaders = shaders;
+  shader_info.maxShaderCount = 8u;
+  sent.type = VK_INDIRECT_EXECUTION_SET_INFO_TYPE_SHADER_OBJECTS_EXT;
+  sent.info.pShaderInfo = &shader_info;
+  VkIndirectExecutionSetCreateInfoEXT again = {};
+  CHECK(decoded(av::vkproto::serialize_VkIndirectExecutionSetCreateInfoEXT,
+                av::vkproto::deserialize_VkIndirectExecutionSetCreateInfoEXT, sent, again, block));
+  CHECK(again.info.pShaderInfo != nullptr);
+  CHECK_EQ(again.info.pShaderInfo->shaderCount, 2u);
+  CHECK_EQ(again.info.pShaderInfo->maxShaderCount, 8u);
+  CHECK(again.info.pShaderInfo->pInitialShaders[1] == shaders[1]); }

@@ -28,6 +28,8 @@ enum class HandleKind : uint8_t {
     framebuffer,
     image,
     image_view,
+    indirect_commands_layout_ext,
+    indirect_execution_set_ext,
     instance,
     micromap_ext,
     physical_device,

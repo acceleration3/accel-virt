@@ -98,6 +98,7 @@ include = [
     "VK_AMD_anti_lag",
     "VK_KHR_ray_tracing_maintenance1",
     "VK_EXT_descriptor_buffer",
+    "VK_EXT_device_generated_commands",
     "VK_KHR_ray_tracing_position_fetch",
     "VK_EXT_pipeline_library_group_handles",
     "VK_EXT_provoking_vertex",

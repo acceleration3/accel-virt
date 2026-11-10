@@ -44,6 +44,7 @@ public:
     bool geometry_admitted(uint64_t device, const VkAccelerationStructureGeometryKHR &geometry,
                            const VkAccelerationStructureBuildRangeInfoKHR &range, uint32_t primitives) const;
     bool descriptor_admitted(uint64_t device, const VkDescriptorGetInfoEXT &info) const;
+    bool generated_admitted(uint64_t device, const VkGeneratedCommandsInfoEXT &info) const;
     bool address_info_admitted(uint64_t device, const VkDescriptorAddressInfoEXT *info) const;
 
     uint32_t buffers() const;

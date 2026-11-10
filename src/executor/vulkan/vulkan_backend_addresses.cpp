@@ -220,3 +220,141 @@ VkDeviceAddress VulkanBackend::on_vkGetBufferDeviceAddressKHR(VkDevice device, c
 }
 
 }
+
+namespace av {
+
+namespace {
+
+constexpr uint32_t most_tokens = 64u;
+constexpr uint32_t most_set_entries = 4096u;
+
+}
+
+VkResult VulkanBackend::on_vkCreateIndirectCommandsLayoutEXT(VkDevice device,
+                                                             const VkIndirectCommandsLayoutCreateInfoEXT *pCreateInfo,
+                                                             const VkAllocationCallbacks *,
+                                                             VkIndirectCommandsLayoutEXT *pIndirectCommandsLayout)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateIndirectCommandsLayoutEXT");
+    if (pCreateInfo->tokenCount == 0u || pCreateInfo->tokenCount > most_tokens || pCreateInfo->pTokens == nullptr) {
+        lines_.write("an indirect commands layout names no tokens or more than the driver takes; refused");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult made = RealVulkanDispatch::on_vkCreateIndirectCommandsLayoutEXT(device, pCreateInfo, nullptr,
+                                                                                   pIndirectCommandsLayout);
+    if (made != VK_SUCCESS) return made;
+    if (guard_.depends(number(*pIndirectCommandsLayout), number(pCreateInfo->pipelineLayout), number(device))) return made;
+    RealVulkanDispatch::on_vkDestroyIndirectCommandsLayoutEXT(device, *pIndirectCommandsLayout, nullptr);
+    *pIndirectCommandsLayout = VK_NULL_HANDLE;
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+void VulkanBackend::on_vkDestroyIndirectCommandsLayoutEXT(VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout,
+                                                          const VkAllocationCallbacks *)
+{
+    AV_SCOPE("VulkanBackend::on_vkDestroyIndirectCommandsLayoutEXT");
+    guard_.destroy(VulkanDestroyKind::indirect_commands_layout, number(device), 0u, number(indirectCommandsLayout));
+}
+
+VkResult VulkanBackend::on_vkCreateIndirectExecutionSetEXT(VkDevice device,
+                                                           const VkIndirectExecutionSetCreateInfoEXT *pCreateInfo,
+                                                           const VkAllocationCallbacks *,
+                                                           VkIndirectExecutionSetEXT *pIndirectExecutionSet)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateIndirectExecutionSetEXT");
+    const bool pipelines = pCreateInfo->type == VK_INDIRECT_EXECUTION_SET_INFO_TYPE_PIPELINES_EXT;
+    const bool shaders = pCreateInfo->type == VK_INDIRECT_EXECUTION_SET_INFO_TYPE_SHADER_OBJECTS_EXT;
+    if ((!pipelines && !shaders) || (pipelines && pCreateInfo->info.pPipelineInfo == nullptr) ||
+        (shaders && pCreateInfo->info.pShaderInfo == nullptr) ||
+        (pipelines && pCreateInfo->info.pPipelineInfo->maxPipelineCount > most_set_entries) ||
+        (shaders && (pCreateInfo->info.pShaderInfo->maxShaderCount > most_set_entries ||
+                     pCreateInfo->info.pShaderInfo->shaderCount > pCreateInfo->info.pShaderInfo->maxShaderCount ||
+                     (pCreateInfo->info.pShaderInfo->shaderCount != 0u &&
+                      pCreateInfo->info.pShaderInfo->pInitialShaders == nullptr)))) {
+        lines_.write("an indirect execution set names an unknown kind or more entries than the driver takes; refused");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult made = RealVulkanDispatch::on_vkCreateIndirectExecutionSetEXT(device, pCreateInfo, nullptr,
+                                                                                  pIndirectExecutionSet);
+    if (made != VK_SUCCESS) return made;
+    const uint64_t set = number(*pIndirectExecutionSet);
+    bool           held = true;
+    if (pipelines) {
+        held = guard_.depends(set, number(pCreateInfo->info.pPipelineInfo->initialPipeline), number(device));
+    } else {
+        for (uint32_t at = 0u; held && at < pCreateInfo->info.pShaderInfo->shaderCount; at++)
+            held = guard_.depends(set, number(pCreateInfo->info.pShaderInfo->pInitialShaders[at]), number(device));
+    }
+    if (held) return made;
+    RealVulkanDispatch::on_vkDestroyIndirectExecutionSetEXT(device, *pIndirectExecutionSet, nullptr);
+    *pIndirectExecutionSet = VK_NULL_HANDLE;
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+void VulkanBackend::on_vkDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                        const VkAllocationCallbacks *)
+{
+    AV_SCOPE("VulkanBackend::on_vkDestroyIndirectExecutionSetEXT");
+    guard_.destroy(VulkanDestroyKind::indirect_execution_set, number(device), 0u, number(indirectExecutionSet));
+}
+
+void VulkanBackend::on_vkUpdateIndirectExecutionSetPipelineEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                               uint32_t executionSetWriteCount,
+                                                               const VkWriteIndirectExecutionSetPipelineEXT *pExecutionSetWrites)
+{
+    AV_SCOPE("VulkanBackend::on_vkUpdateIndirectExecutionSetPipelineEXT");
+    if (executionSetWriteCount > most_set_entries) {
+        refuse_addresses("an indirect execution set update names more entries than the driver takes");
+        return;
+    }
+    for (uint32_t at = 0u; at < executionSetWriteCount; at++)
+        if (!guard_.depends(number(indirectExecutionSet), number(pExecutionSetWrites[at].pipeline), number(device))) {
+            refuse_addresses("an indirect execution set update could not hold its pipeline");
+            return;
+        }
+    RealVulkanDispatch::on_vkUpdateIndirectExecutionSetPipelineEXT(device, indirectExecutionSet, executionSetWriteCount,
+                                                                   pExecutionSetWrites);
+}
+
+void VulkanBackend::on_vkUpdateIndirectExecutionSetShaderEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                             uint32_t executionSetWriteCount,
+                                                             const VkWriteIndirectExecutionSetShaderEXT *pExecutionSetWrites)
+{
+    AV_SCOPE("VulkanBackend::on_vkUpdateIndirectExecutionSetShaderEXT");
+    if (executionSetWriteCount > most_set_entries) {
+        refuse_addresses("an indirect execution set update names more entries than the driver takes");
+        return;
+    }
+    for (uint32_t at = 0u; at < executionSetWriteCount; at++)
+        if (!guard_.depends(number(indirectExecutionSet), number(pExecutionSetWrites[at].shader), number(device))) {
+            refuse_addresses("an indirect execution set update could not hold its shader");
+            return;
+        }
+    RealVulkanDispatch::on_vkUpdateIndirectExecutionSetShaderEXT(device, indirectExecutionSet, executionSetWriteCount,
+                                                                 pExecutionSetWrites);
+}
+
+void VulkanBackend::on_vkCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
+                                                           const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo,
+                                                           VkCommandBuffer stateCommandBuffer)
+{
+    AV_SCOPE("VulkanBackend::on_vkCmdPreprocessGeneratedCommandsEXT");
+    if (!addresses_.generated_admitted(owning_device(number(commandBuffer)), *pGeneratedCommandsInfo)) {
+        refuse_addresses("generated commands name an address outside every buffer of this device");
+        return;
+    }
+    RealVulkanDispatch::on_vkCmdPreprocessGeneratedCommandsEXT(commandBuffer, pGeneratedCommandsInfo, stateCommandBuffer);
+}
+
+void VulkanBackend::on_vkCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                        const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo)
+{
+    AV_SCOPE("VulkanBackend::on_vkCmdExecuteGeneratedCommandsEXT");
+    if (!addresses_.generated_admitted(owning_device(number(commandBuffer)), *pGeneratedCommandsInfo)) {
+        refuse_addresses("generated commands name an address outside every buffer of this device");
+        return;
+    }
+    RealVulkanDispatch::on_vkCmdExecuteGeneratedCommandsEXT(commandBuffer, isPreprocessed, pGeneratedCommandsInfo);
+}
+
+}

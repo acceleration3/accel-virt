@@ -7112,6 +7112,140 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         serialize_VkShaderModuleIdentifierEXT(reply, s, pIdentifier_out);
         return true;
     }
+    case ::av::vkproto::kCmd_vkCmdExecuteGeneratedCommandsEXT: {
+        AV_SCOPE("server:vkCmdExecuteGeneratedCommandsEXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkBool32 isPreprocessed{};
+        VkGeneratedCommandsInfoEXT pGeneratedCommandsInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, s, commandBuffer)) return false;
+        if (!r.read_pod(isPreprocessed)) return false;
+        if (!deserialize_VkGeneratedCommandsInfoEXT(r, s, &pGeneratedCommandsInfo_local, arena)) return false;
+        s.on_vkCmdExecuteGeneratedCommandsEXT(commandBuffer, isPreprocessed, &pGeneratedCommandsInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdPreprocessGeneratedCommandsEXT: {
+        AV_SCOPE("server:vkCmdPreprocessGeneratedCommandsEXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkGeneratedCommandsInfoEXT pGeneratedCommandsInfo_local{};
+        VkCommandBuffer stateCommandBuffer = VK_NULL_HANDLE;
+        if (!deserialize_VkCommandBuffer(r, s, commandBuffer)) return false;
+        if (!deserialize_VkGeneratedCommandsInfoEXT(r, s, &pGeneratedCommandsInfo_local, arena)) return false;
+        if (!deserialize_VkCommandBuffer(r, s, stateCommandBuffer)) return false;
+        s.on_vkCmdPreprocessGeneratedCommandsEXT(commandBuffer, &pGeneratedCommandsInfo_local, stateCommandBuffer);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCreateIndirectCommandsLayoutEXT: {
+        AV_SCOPE("server:vkCreateIndirectCommandsLayoutEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkIndirectCommandsLayoutCreateInfoEXT pCreateInfo_local{};
+        VkIndirectCommandsLayoutEXT pIndirectCommandsLayout_out = VK_NULL_HANDLE;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkIndirectCommandsLayoutCreateInfoEXT(r, s, &pCreateInfo_local, arena)) return false;
+        VkResult result = s.room_for(static_cast<uint64_t>(1u)) ? s.on_vkCreateIndirectCommandsLayoutEXT(device, &pCreateInfo_local, nullptr, &pIndirectCommandsLayout_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
+        s.made_through(as_number(device));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pIndirectCommandsLayout_out = VK_NULL_HANDLE;
+        }
+        serialize_VkIndirectCommandsLayoutEXT(reply, s, pIndirectCommandsLayout_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCreateIndirectExecutionSetEXT: {
+        AV_SCOPE("server:vkCreateIndirectExecutionSetEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkIndirectExecutionSetCreateInfoEXT pCreateInfo_local{};
+        VkIndirectExecutionSetEXT pIndirectExecutionSet_out = VK_NULL_HANDLE;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkIndirectExecutionSetCreateInfoEXT(r, s, &pCreateInfo_local, arena)) return false;
+        VkResult result = s.room_for(static_cast<uint64_t>(1u)) ? s.on_vkCreateIndirectExecutionSetEXT(device, &pCreateInfo_local, nullptr, &pIndirectExecutionSet_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
+        s.made_through(as_number(device));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pIndirectExecutionSet_out = VK_NULL_HANDLE;
+        }
+        serialize_VkIndirectExecutionSetEXT(reply, s, pIndirectExecutionSet_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkDestroyIndirectCommandsLayoutEXT: {
+        AV_SCOPE("server:vkDestroyIndirectCommandsLayoutEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkIndirectCommandsLayoutEXT indirectCommandsLayout = VK_NULL_HANDLE;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkIndirectCommandsLayoutEXT(r, s, indirectCommandsLayout)) return false;
+        s.on_vkDestroyIndirectCommandsLayoutEXT(device, indirectCommandsLayout, nullptr);
+        s.ended(as_number(indirectCommandsLayout));
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkDestroyIndirectExecutionSetEXT: {
+        AV_SCOPE("server:vkDestroyIndirectExecutionSetEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkIndirectExecutionSetEXT indirectExecutionSet = VK_NULL_HANDLE;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkIndirectExecutionSetEXT(r, s, indirectExecutionSet)) return false;
+        s.on_vkDestroyIndirectExecutionSetEXT(device, indirectExecutionSet, nullptr);
+        s.ended(as_number(indirectExecutionSet));
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetGeneratedCommandsMemoryRequirementsEXT: {
+        AV_SCOPE("server:vkGetGeneratedCommandsMemoryRequirementsEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkGeneratedCommandsMemoryRequirementsInfoEXT pInfo_local{};
+        VkMemoryRequirements2 pMemoryRequirements_out{};
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkGeneratedCommandsMemoryRequirementsInfoEXT(r, s, &pInfo_local, arena)) return false;
+        if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
+        if (!deserialize_pnext_chain(r, s, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
+        s.on_vkGetGeneratedCommandsMemoryRequirementsEXT(device, &pInfo_local, &pMemoryRequirements_out);
+        reply.write_pod<int32_t>(0);
+        serialize_VkMemoryRequirements2(reply, s, pMemoryRequirements_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkUpdateIndirectExecutionSetPipelineEXT: {
+        AV_SCOPE("server:vkUpdateIndirectExecutionSetPipelineEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkIndirectExecutionSetEXT indirectExecutionSet = VK_NULL_HANDLE;
+        uint32_t executionSetWriteCount{};
+        VkWriteIndirectExecutionSetPipelineEXT* pExecutionSetWrites_storage = nullptr;
+        size_t pExecutionSetWrites_storage_count = 0;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkIndirectExecutionSetEXT(r, s, indirectExecutionSet)) return false;
+        if (indirectExecutionSet == VK_NULL_HANDLE) return false;
+        if (!r.read_pod(executionSetWriteCount)) return false;
+        pExecutionSetWrites_storage_count = static_cast<size_t>(executionSetWriteCount);
+        if (pExecutionSetWrites_storage_count != 0) {
+            pExecutionSetWrites_storage = arena.allocate<VkWriteIndirectExecutionSetPipelineEXT>(pExecutionSetWrites_storage_count);
+            if (pExecutionSetWrites_storage == nullptr) return false;
+            for (size_t av_z = 0; av_z < pExecutionSetWrites_storage_count; ++av_z) { pExecutionSetWrites_storage[av_z] = {}; }
+        }
+        for (size_t av_i = 0; av_i < pExecutionSetWrites_storage_count; ++av_i) {
+            if (!deserialize_VkWriteIndirectExecutionSetPipelineEXT(r, s, &pExecutionSetWrites_storage[av_i], arena)) return false;
+        }
+        s.on_vkUpdateIndirectExecutionSetPipelineEXT(device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites_storage);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkUpdateIndirectExecutionSetShaderEXT: {
+        AV_SCOPE("server:vkUpdateIndirectExecutionSetShaderEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkIndirectExecutionSetEXT indirectExecutionSet = VK_NULL_HANDLE;
+        uint32_t executionSetWriteCount{};
+        VkWriteIndirectExecutionSetShaderEXT* pExecutionSetWrites_storage = nullptr;
+        size_t pExecutionSetWrites_storage_count = 0;
+        if (!deserialize_VkDevice(r, s, device)) return false;
+        if (!deserialize_VkIndirectExecutionSetEXT(r, s, indirectExecutionSet)) return false;
+        if (indirectExecutionSet == VK_NULL_HANDLE) return false;
+        if (!r.read_pod(executionSetWriteCount)) return false;
+        pExecutionSetWrites_storage_count = static_cast<size_t>(executionSetWriteCount);
+        if (pExecutionSetWrites_storage_count != 0) {
+            pExecutionSetWrites_storage = arena.allocate<VkWriteIndirectExecutionSetShaderEXT>(pExecutionSetWrites_storage_count);
+            if (pExecutionSetWrites_storage == nullptr) return false;
+            for (size_t av_z = 0; av_z < pExecutionSetWrites_storage_count; ++av_z) { pExecutionSetWrites_storage[av_z] = {}; }
+        }
+        for (size_t av_i = 0; av_i < pExecutionSetWrites_storage_count; ++av_i) {
+            if (!deserialize_VkWriteIndirectExecutionSetShaderEXT(r, s, &pExecutionSetWrites_storage[av_i], arena)) return false;
+        }
+        s.on_vkUpdateIndirectExecutionSetShaderEXT(device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites_storage);
+        return true;
+    }
     default:
         return false;
     }

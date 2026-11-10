@@ -230,7 +230,7 @@ def _withdraw_unbacked_extensions(
             print(f"  {ext_name}: needs {first}", file=sys.stderr)
 
 
-_BESPOKE_UNIONS = {"VkDescriptorDataEXT"}
+_BESPOKE_UNIONS = {"VkDescriptorDataEXT", "VkIndirectCommandsTokenDataEXT", "VkIndirectExecutionSetInfoEXT"}
 
 
 def _is_address_union(s) -> bool:

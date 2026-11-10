@@ -241,6 +241,27 @@ public:
     void on_vkCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) override;
     void on_vkCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
                                           const VkDescriptorBufferBindingInfoEXT *pBindingInfos) override;
+    VkResult on_vkCreateIndirectCommandsLayoutEXT(VkDevice device, const VkIndirectCommandsLayoutCreateInfoEXT *pCreateInfo,
+                                                  const VkAllocationCallbacks *pAllocator,
+                                                  VkIndirectCommandsLayoutEXT *pIndirectCommandsLayout) override;
+    void     on_vkDestroyIndirectCommandsLayoutEXT(VkDevice device, VkIndirectCommandsLayoutEXT indirectCommandsLayout,
+                                                   const VkAllocationCallbacks *pAllocator) override;
+    VkResult on_vkCreateIndirectExecutionSetEXT(VkDevice device, const VkIndirectExecutionSetCreateInfoEXT *pCreateInfo,
+                                                const VkAllocationCallbacks *pAllocator,
+                                                VkIndirectExecutionSetEXT *pIndirectExecutionSet) override;
+    void     on_vkDestroyIndirectExecutionSetEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                 const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkUpdateIndirectExecutionSetPipelineEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                        uint32_t executionSetWriteCount,
+                                                        const VkWriteIndirectExecutionSetPipelineEXT *pExecutionSetWrites) override;
+    void     on_vkUpdateIndirectExecutionSetShaderEXT(VkDevice device, VkIndirectExecutionSetEXT indirectExecutionSet,
+                                                      uint32_t executionSetWriteCount,
+                                                      const VkWriteIndirectExecutionSetShaderEXT *pExecutionSetWrites) override;
+    void     on_vkCmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
+                                                    const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo,
+                                                    VkCommandBuffer stateCommandBuffer) override;
+    void     on_vkCmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                                 const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo) override;
     void on_vkGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT *pDescriptorInfo, size_t dataSize,
                                void *pDescriptor) override;
     VkResult on_vkCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT *pCreateInfos,
