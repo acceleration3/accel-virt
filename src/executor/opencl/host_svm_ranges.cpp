@@ -30,13 +30,29 @@ Status HostSvmRanges::remember(void *base, uint64_t bytes, uint64_t owner)
     if (bytes > ~uint64_t{0} - address) return Status::invalid_parameter;
     const uint32_t after = above(address);
     if (after != 0u && ranges_.at(after - 1u).base_ == address) {
-        ranges_.at(after - 1u) = Range{address, bytes, owner};
+        ranges_.at(after - 1u) = Range{address, bytes, owner, 1u};
     } else {
-        const Status inserted = ranges_.insert_at(after, Range{address, bytes, owner});
+        const Status inserted = ranges_.insert_at(after, Range{address, bytes, owner, 1u});
         if (inserted != Status::ok) return inserted;
     }
     if (bytes > widest_) widest_ = bytes;
     return Status::ok;
+}
+
+Status HostSvmRanges::share(void *base, uint64_t bytes, uint64_t owner)
+{
+    AV_SCOPE("HostSvmRanges::share");
+    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base));
+    const uint32_t after = above(address);
+    if (address != 0u && bytes != 0u && after != 0u && ranges_.at(after - 1u).base_ == address &&
+        ranges_.at(after - 1u).owner_ == owner && ranges_.at(after - 1u).holds_ != ~uint32_t{0}) {
+        Range &held = ranges_.at(after - 1u);
+        ++held.holds_;
+        if (bytes > held.size_) held.size_ = bytes;
+        if (bytes > widest_) widest_ = bytes;
+        return Status::ok;
+    }
+    return remember(base, bytes, owner);
 }
 
 uint32_t HostSvmRanges::forget_owned(uint64_t owner)
@@ -59,6 +75,10 @@ bool HostSvmRanges::forget(void *base)
     if (address == 0u) return false;
     const uint32_t after = above(address);
     if (after == 0u || ranges_.at(after - 1u).base_ != address) return false;
+    if (ranges_.at(after - 1u).holds_ > 1u) {
+        --ranges_.at(after - 1u).holds_;
+        return true;
+    }
     ranges_.remove_at(after - 1u);
     if (ranges_.size() == 0u) widest_ = 0u;
     return true;
@@ -98,7 +118,7 @@ bool HostSvmRanges::invariants_hold() const
     if (!ranges_.invariants_hold()) return false;
     uint64_t below = 0u;
     for (const Range &range : ranges_) {
-        if (range.base_ <= below || range.size_ == 0u || range.size_ > widest_) return false;
+        if (range.base_ <= below || range.size_ == 0u || range.holds_ == 0u || range.size_ > widest_) return false;
         if (range.size_ > ~uint64_t{0} - range.base_) return false;
         below = range.base_;
     }

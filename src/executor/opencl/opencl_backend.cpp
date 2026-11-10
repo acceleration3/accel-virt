@@ -1001,7 +1001,7 @@ void *OpenClBackend::on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_me
         ::clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size,
                              num_events_in_wait_list, event_wait_list, event, errcode_ret);
     if (mapped == nullptr) return nullptr;
-    if (mapped_.remember(mapped, static_cast<uint64_t>(size),
+    if (mapped_.share(mapped, static_cast<uint64_t>(size),
                          static_cast<uint64_t>(reinterpret_cast<uintptr_t>(buffer))) != Status::ok) { AV_UNTESTABLE("room was made above, and no host maps no bytes or past the end of the address space");
         static_cast<void>(::clEnqueueUnmapMemObject(command_queue, buffer, mapped, 0u, nullptr,
                                                     nullptr));

@@ -140,6 +140,28 @@ TEST(host_svm_ranges, the_same_allocation_twice_is_held_once)
   CHECK_EQ(ranges.count(), 0u);
   CHECK(ranges.invariants_hold()); }
 
+TEST(host_svm_ranges, a_pointer_mapped_twice_resolves_until_its_last_unmap)
+{ MockPlatform platform;
+  HostSvmRanges ranges(platform);
+  CHECK_STATUS(ranges.share(at(base), bytes, 7u), Status::ok);
+  CHECK_STATUS(ranges.share(at(base), 16u, 7u), Status::ok);
+  CHECK_EQ(ranges.count(), 1u);
+  CHECK(ranges.forget(at(base)));
+  CHECK(ranges.resolve(base, bytes) == at(base));
+  CHECK(ranges.forget(at(base)));
+  CHECK(ranges.resolve(base, 1u) == nullptr);
+  CHECK(!ranges.forget(at(base)));
+  CHECK(ranges.invariants_hold()); }
+
+TEST(host_svm_ranges, a_pointer_shared_by_another_buffer_is_taken_over)
+{ MockPlatform platform;
+  HostSvmRanges ranges(platform);
+  CHECK_STATUS(ranges.share(at(base), bytes, 7u), Status::ok);
+  CHECK_STATUS(ranges.share(at(base), 16u, 8u), Status::ok);
+  CHECK(ranges.forget(at(base)));
+  CHECK(ranges.resolve(base, 1u) == nullptr);
+  CHECK(ranges.invariants_hold()); }
+
 TEST(host_svm_ranges, an_allocation_reused_at_the_same_address_takes_its_new_size)
 { MockPlatform platform;
   HostSvmRanges ranges(platform);

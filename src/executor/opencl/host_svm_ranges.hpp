@@ -19,6 +19,7 @@ public:
 
     [[nodiscard]] Status make_room();
     [[nodiscard]] Status remember(void *base, uint64_t bytes, uint64_t owner);
+    [[nodiscard]] Status share(void *base, uint64_t bytes, uint64_t owner);
     uint32_t             forget_owned(uint64_t owner);
     bool                 forget(void *base);
     void                 forget_all();
@@ -35,6 +36,7 @@ private:
         uint64_t base_;
         uint64_t size_;
         uint64_t owner_;
+        uint32_t holds_;
     };
 
     uint32_t above(uint64_t address) const;
