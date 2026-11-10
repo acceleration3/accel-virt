@@ -94,6 +94,21 @@ TEST(gl_fence_deferral, a_deferral_that_has_run_for_64_batches_stops_so_a_waitin
   state.clear();
   CHECK(!state.defers()); }
 
+TEST(gl_fence_deferral, a_shader_that_declares_advanced_blending_defers_until_the_deferral_has_run_its_course)
+{ GlFenceDeferral state;
+  const char source[] = "#version 460\nlayout(blend_support_all_equations) out;\n";
+  state.ran(av::glproto::kCmd_glShaderSource, av::WireReader(reinterpret_cast<const std::uint8_t *>(source), sizeof source - 1u));
+  CHECK(state.advanced_source());
+  CHECK(state.defers());
+  for (std::uint32_t batch = 0u; batch < GlFenceDeferral::most_owed; batch++) state.owe();
+  CHECK(!state.defers());
+  state.paid();
+  CHECK(!state.advanced_source());
+  CHECK(!state.defers());
+  const char plain[] = "#version 460\nvoid main() {}\n";
+  state.ran(av::glproto::kCmd_glShaderSource, av::WireReader(reinterpret_cast<const std::uint8_t *>(plain), sizeof plain - 1u));
+  CHECK(!state.defers()); }
+
 TEST(gl_fence_deferral, truncated_payloads_change_nothing)
 { GlFenceDeferral state;
   const std::uint8_t one = 1u;

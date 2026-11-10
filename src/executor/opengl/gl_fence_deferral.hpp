@@ -5,6 +5,7 @@
 #include "proto/wire/wire_reader.hpp"
 
 #include <stdint.h>
+#include <vector>
 
 namespace av {
 
@@ -19,6 +20,7 @@ public:
     bool demands(uint32_t command_id) const;
     bool occlusion_open() const;
     bool advanced_blending() const;
+    bool advanced_source() const;
 
     void     owe();
     void     paid();
@@ -36,6 +38,7 @@ private:
     GlOcclusionQueries occlusion_;
     bool               blending_[buffers];
     bool               advanced_[buffers];
+    bool               advanced_source_;
     uint32_t           owed_;
 };
 
