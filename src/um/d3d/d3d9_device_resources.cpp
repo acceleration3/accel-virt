@@ -96,6 +96,10 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
     if (SUCCEEDED(host) && args->Flags.Primary) host = allocate_primary(*made, *args);
     else if (SUCCEEDED(host) && shares_render_target(*made, *args)) host = allocate_shared(*made, *args);
     if (FAILED(host)) {
+        LogLine refused(lines_);
+        refused.text("d3d9 resource refused ").hex(static_cast<uint32_t>(host), 8u).text(" flags ").hex(args->Flags.Value, 8u);
+        refused.text(" format ").number(static_cast<uint32_t>(args->Format)).text(" pool ").number(static_cast<uint32_t>(args->Pool));
+        refused.text(" size ").number(made->subresources[0].width).text("x").number(made->subresources[0].height).write();
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
         return host;
