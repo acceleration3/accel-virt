@@ -203,6 +203,8 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     D3d9Resource *const source = resource(args->hSrcResource);
     if (source == nullptr || args->SrcSubResourceIndex >= source->count) return E_INVALIDARG;
     const D3d9Resource *const destination = resource(args->hDstResource);
+    trace("presentargs", args->Flags.Value, static_cast<uint32_t>(args->FlipInterval), args->SrcSubResourceIndex,
+          destination != nullptr ? 1u : 0u);
     const uint64_t began = clock_.microseconds();
     trace("present", static_cast<uint32_t>(busy_), calls_, 0u,
           static_cast<uint32_t>(began / 1000u));

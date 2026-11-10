@@ -56,6 +56,19 @@ constexpr HRESULT out_of_video_memory = static_cast<HRESULT>(0x8876017cu);
 constexpr uint32_t filter_point = 1u;
 constexpr uint32_t filter_linear = 2u;
 
+bool same_pixels(D3DDDIFORMAT source, D3DDDIFORMAT destination)
+{
+    AV_SCOPE("same_pixels");
+    const auto opaque_pair = [](D3DDDIFORMAT format) {
+        return format == D3DDDIFMT_A8R8G8B8 || format == D3DDDIFMT_X8R8G8B8;
+    };
+    const auto swapped_pair = [](D3DDDIFORMAT format) {
+        return format == D3DDDIFMT_A8B8G8R8 || format == D3DDDIFMT_X8B8G8R8;
+    };
+    return source == destination || (opaque_pair(source) && opaque_pair(destination)) ||
+           (swapped_pair(source) && swapped_pair(destination));
+}
+
 }
 
 
@@ -808,6 +821,7 @@ HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
     if (source == nullptr || destination == nullptr || args->SrcSubResourceIndex >= source->count ||
         args->DstSubResourceIndex >= destination->count)
         return E_INVALIDARG;
+    trace("bltargs", args->Flags.Value, source->format, destination->format, destination->opened ? 1u : 0u);
     if (destination->opened && destination->cross_adapter && !source->opened) return blt_to_cross_adapter(*source, *destination, *args);
     if (refuses_opened(*source, "a Direct3D 9 blt from an opened surface") ||
         refuses_opened(*destination, "a Direct3D 9 blt into an opened surface"))
@@ -866,7 +880,7 @@ HRESULT D3d9Device::blt_to_cross_adapter(const D3d9Resource &source, const D3d9R
                                          const D3DDDIARG_BLT &blt)
 {
     AV_SCOPE("D3d9Device::blt_to_cross_adapter");
-    if (source.format != destination.format || source.kind == D3d9Resource::Kind::system ||
+    if (!same_pixels(source.format, destination.format) || source.kind == D3d9Resource::Kind::system ||
         destination.lent == nullptr)
         return E_NOTIMPL;
     const LONG wide = blt.SrcRect.right - blt.SrcRect.left, high = blt.SrcRect.bottom - blt.SrcRect.top;
