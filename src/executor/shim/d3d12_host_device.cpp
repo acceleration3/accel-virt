@@ -37,6 +37,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
         return false;
     }
     capabilities_.measure(*device_);
+    if (!runtime.translates_indirect_addresses()) capabilities_.withhold_raytracing();
     dispatch_limit_.measure(*device_);
     return true;
 }

@@ -1,0 +1,353 @@
+From: accel-virt
+Subject: [PATCH] BuildRaytracingAccelerationStructure of a top level structure translates the instance acceleration structure references through the table the caller sets
+
+accel-virt: the acceleration structure references an application wrote into instance descriptions are its own GPU virtual addresses, not the device's. With a table set by vkd3d_set_indirect_va_table, a top level build with an array of instances first runs a compute pass that copies the descriptions into scratch memory with every reference looked up in the table (an address outside every range becomes zero, an inactive instance) and builds from the copy.
+---
+diff --git a/libs/vkd3d/command.c b/libs/vkd3d/command.c
+index dbce0af..0993dd0 100644
+--- a/libs/vkd3d/command.c
++++ b/libs/vkd3d/command.c
+@@ -20002,6 +20002,64 @@ static void d3d12_command_list_build_raytracing_opacity_micromap_array(struct d3
+     VKD3D_BREADCRUMB_COMMAND(BUILD_OMM);
+ }
+ 
++static bool d3d12_command_list_translate_rtas_instances(struct d3d12_command_list *list,
++        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS *inputs)
++{
++    const struct vkd3d_vk_device_procs *vk_procs = &list->device->vk_procs;
++    struct vkd3d_rtas_instance_translate_info pipeline_info;
++    struct vkd3d_rtas_instance_translate_args args;
++    struct vkd3d_scratch_allocation scratch;
++    VkMemoryBarrier2 vk_barrier;
++    VkDependencyInfo dep_info;
++
++    vkd3d_meta_get_rtas_instance_translate_pipeline(&list->device->meta_ops, &pipeline_info);
++
++    if (!d3d12_command_allocator_allocate_scratch_memory(list->allocator,
++            VKD3D_SCRATCH_POOL_KIND_DEVICE_STORAGE,
++            (VkDeviceSize)inputs->NumDescs * sizeof(D3D12_RAYTRACING_INSTANCE_DESC), 256, ~0u, &scratch))
++        return false;
++
++    d3d12_command_list_end_current_render_pass(list, false);
++    d3d12_command_list_end_transfer_batch(list);
++    d3d12_command_list_invalidate_current_pipeline(list, true);
++    d3d12_command_list_invalidate_root_parameters(list, &list->compute_bindings, true, &list->graphics_bindings);
++
++    args.source_va = inputs->InstanceDescs;
++    args.output_va = scratch.va;
++    args.translation_va = list->indirect_va_table;
++    args.instance_count = inputs->NumDescs;
++    args.pad = 0;
++
++    VK_CALL(vkCmdBindPipeline(list->cmd.vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
++            pipeline_info.vk_pipeline));
++    VK_CALL(vkCmdPushConstants(list->cmd.vk_command_buffer, pipeline_info.vk_pipeline_layout,
++            VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(args), &args));
++
++    {
++        uint32_t groups = vkd3d_compute_workgroup_count(inputs->NumDescs,
++                vkd3d_meta_get_rtas_instance_translate_workgroup_size());
++        uint32_t groups_x = groups < 65535u ? groups : 65535u;
++        uint32_t groups_y = (groups + 65534u) / 65535u;
++        VK_CALL(vkCmdDispatch(list->cmd.vk_command_buffer, groups_x, groups_y, 1));
++    }
++
++    memset(&vk_barrier, 0, sizeof(vk_barrier));
++    vk_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
++    vk_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
++    vk_barrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
++    vk_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
++    vk_barrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT;
++
++    memset(&dep_info, 0, sizeof(dep_info));
++    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
++    dep_info.memoryBarrierCount = 1;
++    dep_info.pMemoryBarriers = &vk_barrier;
++    VK_CALL(vkCmdPipelineBarrier2(list->cmd.vk_command_buffer, &dep_info));
++
++    inputs->InstanceDescs = scratch.va;
++    return true;
++}
++
+ static void STDMETHODCALLTYPE d3d12_command_list_BuildRaytracingAccelerationStructure(d3d12_command_list_iface *iface,
+         const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC *desc, UINT num_postbuild_info_descs,
+         const D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC *postbuild_info_descs)
+@@ -20012,6 +20070,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_BuildRaytracingAccelerationStru
+     struct d3d12_rtas_batch_state *rtas_batch = &list->rtas_batch;
+     VkAccelerationStructureBuildGeometryInfoKHR *build_info;
+     VkAccelerationStructureBuildRangeInfoKHR *range_infos;
++    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
+     VkAccelerationStructureGeometryKHR *geometry_infos;
+     uint32_t *primitive_counts = NULL;
+     VkMemoryBarrier2 vk_barrier;
+@@ -20070,6 +20129,16 @@ static void STDMETHODCALLTYPE d3d12_command_list_BuildRaytracingAccelerationStru
+         return;
+     }
+ 
++    inputs = desc->Inputs;
++
++    if (list->indirect_va_table && inputs.Type == D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL &&
++            inputs.NumDescs && inputs.DescsLayout == D3D12_ELEMENTS_LAYOUT_ARRAY &&
++            !d3d12_command_list_translate_rtas_instances(list, &inputs))
++    {
++        ERR("Failed to translate the instances. Dropping call.\n");
++        return;
++    }
++
+     geometry_count = vkd3d_acceleration_structure_get_geometry_count(&desc->Inputs);
+ 
+ #ifdef VKD3D_ENABLE_BREADCRUMBS
+@@ -20081,7 +20150,7 @@ static void STDMETHODCALLTYPE d3d12_command_list_BuildRaytracingAccelerationStru
+             &build_info, &geometry_infos, &omm_infos, &range_infos))
+         return;
+ 
+-    if (!vkd3d_acceleration_structure_convert_inputs(list->device, &desc->Inputs,
++    if (!vkd3d_acceleration_structure_convert_inputs(list->device, &inputs,
+             build_info, geometry_infos, omm_infos, range_infos, primitive_counts))
+     {
+         ERR("Failed to convert inputs.\n");
+diff --git a/libs/vkd3d/meson.build b/libs/vkd3d/meson.build
+index a86651a..bd0c7b2 100644
+--- a/libs/vkd3d/meson.build
++++ b/libs/vkd3d/meson.build
+@@ -36,6 +36,7 @@ vkd3d_shaders =[
+   'shaders/cs_execute_indirect_patch.comp',
+   'shaders/cs_execute_indirect_patch_debug_ring.comp',
+   'shaders/cs_execute_indirect_multi_dispatch.comp',
++  'shaders/cs_rtas_instance_translate.comp',
+ 
+   'shaders/cs_sampler_feedback_decode_buffer_min_mip.comp',
+   'shaders/fs_sampler_feedback_decode_image_min_mip.frag',
+diff --git a/libs/vkd3d/meta.c b/libs/vkd3d/meta.c
+index e641361..1c92610 100644
+--- a/libs/vkd3d/meta.c
++++ b/libs/vkd3d/meta.c
+@@ -1563,6 +1563,41 @@ fail:
+     return hresult_from_vk_result(vr);
+ }
+ 
++static void vkd3d_rtas_instance_translate_ops_cleanup(
++        struct vkd3d_rtas_instance_translate_ops *ops, struct d3d12_device *device)
++{
++    const struct vkd3d_vk_device_procs *vk_procs = &device->vk_procs;
++    VK_CALL(vkDestroyPipeline(device->vk_device, ops->vk_pipeline, NULL));
++    VK_CALL(vkDestroyPipelineLayout(device->vk_device, ops->vk_layout, NULL));
++}
++
++static HRESULT vkd3d_rtas_instance_translate_ops_init(
++        struct vkd3d_rtas_instance_translate_ops *ops, struct d3d12_device *device)
++{
++    VkPushConstantRange push_constant_range;
++    VkResult vr;
++
++    memset(ops, 0, sizeof(*ops));
++    push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
++    push_constant_range.offset = 0;
++    push_constant_range.size = sizeof(struct vkd3d_rtas_instance_translate_args);
++
++    if ((vr = vkd3d_meta_create_pipeline_layout(device, 0, NULL, 1,
++            &push_constant_range, &ops->vk_layout)) < 0)
++        goto fail;
++
++    if ((vr = vkd3d_meta_create_compute_pipeline(device,
++            sizeof(cs_rtas_instance_translate), cs_rtas_instance_translate,
++            ops->vk_layout, NULL, true, NULL, &ops->vk_pipeline)) < 0)
++        goto fail;
++
++    return S_OK;
++
++fail:
++    vkd3d_rtas_instance_translate_ops_cleanup(ops, device);
++    return hresult_from_vk_result(vr);
++}
++
+ static void vkd3d_predicate_ops_cleanup(struct vkd3d_predicate_ops *meta_predicate_ops,
+         struct d3d12_device *device)
+ {
+@@ -1670,6 +1705,13 @@ void vkd3d_meta_get_predicate_pipeline(struct vkd3d_meta_ops *meta_ops,
+     info->data_size = predicate_ops->data_sizes[command_type];
+ }
+ 
++void vkd3d_meta_get_rtas_instance_translate_pipeline(struct vkd3d_meta_ops *meta_ops,
++        struct vkd3d_rtas_instance_translate_info *info)
++{
++    info->vk_pipeline = meta_ops->rtas_instance_translate.vk_pipeline;
++    info->vk_pipeline_layout = meta_ops->rtas_instance_translate.vk_layout;
++}
++
+ void vkd3d_meta_get_multi_dispatch_indirect_pipeline(struct vkd3d_meta_ops *meta_ops,
+         struct vkd3d_multi_dispatch_indirect_info *info)
+ {
+@@ -2271,6 +2313,9 @@ HRESULT vkd3d_meta_ops_init(struct vkd3d_meta_ops *meta_ops, struct d3d12_device
+     if (FAILED(hr = vkd3d_multi_dispatch_indirect_ops_init(&meta_ops->multi_dispatch_indirect, device)))
+         goto fail_multi_dispatch_indirect_ops;
+ 
++    if (FAILED(hr = vkd3d_rtas_instance_translate_ops_init(&meta_ops->rtas_instance_translate, device)))
++        goto fail_rtas_instance_translate_ops;
++
+     if (FAILED(hr = vkd3d_dstorage_ops_init(&meta_ops->dstorage, device)))
+         goto fail_dstorage_ops;
+ 
+@@ -2287,6 +2332,8 @@ fail_workgraphs:
+ fail_sampler_feedback:
+     vkd3d_dstorage_ops_cleanup(&meta_ops->dstorage, device);
+ fail_dstorage_ops:
++    vkd3d_rtas_instance_translate_ops_cleanup(&meta_ops->rtas_instance_translate, device);
++fail_rtas_instance_translate_ops:
+     vkd3d_multi_dispatch_indirect_ops_cleanup(&meta_ops->multi_dispatch_indirect, device);
+ fail_multi_dispatch_indirect_ops:
+     vkd3d_execute_indirect_ops_cleanup(&meta_ops->execute_indirect, device);
+@@ -2313,6 +2360,7 @@ HRESULT vkd3d_meta_ops_cleanup(struct vkd3d_meta_ops *meta_ops, struct d3d12_dev
+     vkd3d_workgraph_ops_cleanup(&meta_ops->workgraph, device);
+     vkd3d_sampler_feedback_ops_cleanup(&meta_ops->sampler_feedback, device);
+     vkd3d_dstorage_ops_cleanup(&meta_ops->dstorage, device);
++    vkd3d_rtas_instance_translate_ops_cleanup(&meta_ops->rtas_instance_translate, device);
+     vkd3d_multi_dispatch_indirect_ops_cleanup(&meta_ops->multi_dispatch_indirect, device);
+     vkd3d_execute_indirect_ops_cleanup(&meta_ops->execute_indirect, device);
+     vkd3d_predicate_ops_cleanup(&meta_ops->predicate, device);
+diff --git a/libs/vkd3d/shaders/cs_rtas_instance_translate.comp b/libs/vkd3d/shaders/cs_rtas_instance_translate.comp
+new file mode 100644
+index 0000000..1a6c2aa
+--- /dev/null
++++ b/libs/vkd3d/shaders/cs_rtas_instance_translate.comp
+@@ -0,0 +1,73 @@
++#version 450
++#extension GL_EXT_buffer_reference : require
++#extension GL_EXT_buffer_reference_uvec2 : require
++#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
++
++layout(local_size_x = 64) in;
++
++struct TranslationRange
++{
++	uint64_t guest;
++	uint64_t bytes;
++	uint64_t host;
++};
++
++layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer Translation {
++	uint count;
++	uint pad;
++	uint64_t unmapped;
++	TranslationRange ranges[];
++};
++
++layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Instances {
++	uint words[];
++};
++
++layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer InstancesOut {
++	uint words[];
++};
++
++layout(push_constant) uniform Registers
++{
++	Instances source_va;
++	InstancesOut output_va;
++	Translation translation_va;
++	uint instance_count;
++	uint pad;
++};
++
++void main()
++{
++	uint index = gl_WorkGroupID.y * (65535u * 64u) + gl_WorkGroupID.x * 64u + gl_LocalInvocationID.x;
++	if (index >= instance_count)
++		return;
++
++	uint base = index * 16u;
++	for (uint i = 0u; i < 14u; i++)
++		output_va.words[base + i] = source_va.words[base + i];
++
++	uint64_t va = uint64_t(source_va.words[base + 14u]) | (uint64_t(source_va.words[base + 15u]) << 32);
++	uint64_t host = 0ul;
++	if (va != 0ul)
++	{
++		uint lo_index = 0u;
++		uint hi_index = translation_va.count;
++		while (lo_index < hi_index)
++		{
++			uint mid = (lo_index + hi_index) >> 1u;
++			if (translation_va.ranges[mid].guest <= va)
++				lo_index = mid + 1u;
++			else
++				hi_index = mid;
++		}
++		if (lo_index != 0u)
++		{
++			TranslationRange range = translation_va.ranges[lo_index - 1u];
++			uint64_t into = va - range.guest;
++			if (into < range.bytes)
++				host = range.host + into;
++		}
++	}
++	output_va.words[base + 14u] = uint(host & 0xfffffffful);
++	output_va.words[base + 15u] = uint(host >> 32);
++}
+diff --git a/libs/vkd3d/vkd3d_private.h b/libs/vkd3d/vkd3d_private.h
+index 3b7bcbb..adf6845 100644
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -4797,6 +4797,27 @@ struct vkd3d_multi_dispatch_indirect_ops
+     VkPipeline vk_multi_dispatch_indirect_pipeline;
+ };
+ 
++struct vkd3d_rtas_instance_translate_info
++{
++    VkPipelineLayout vk_pipeline_layout;
++    VkPipeline vk_pipeline;
++};
++
++struct vkd3d_rtas_instance_translate_args
++{
++    VkDeviceAddress source_va;
++    VkDeviceAddress output_va;
++    VkDeviceAddress translation_va;
++    uint32_t instance_count;
++    uint32_t pad;
++};
++
++struct vkd3d_rtas_instance_translate_ops
++{
++    VkPipelineLayout vk_layout;
++    VkPipeline vk_pipeline;
++};
++
+ struct vkd3d_execute_indirect_args
+ {
+     VkDeviceAddress template_va;
+@@ -4965,6 +4986,7 @@ struct vkd3d_meta_ops
+     struct vkd3d_predicate_ops predicate;
+     struct vkd3d_execute_indirect_ops execute_indirect;
+     struct vkd3d_multi_dispatch_indirect_ops multi_dispatch_indirect;
++    struct vkd3d_rtas_instance_translate_ops rtas_instance_translate;
+     struct vkd3d_dstorage_ops dstorage;
+     struct vkd3d_sampler_feedback_resolve_ops sampler_feedback;
+     struct vkd3d_workgraph_indirect_ops workgraph;
+@@ -5005,6 +5027,14 @@ void vkd3d_meta_get_predicate_pipeline(struct vkd3d_meta_ops *meta_ops,
+ void vkd3d_meta_get_multi_dispatch_indirect_pipeline(struct vkd3d_meta_ops *meta_ops,
+         struct vkd3d_multi_dispatch_indirect_info *info);
+ 
++void vkd3d_meta_get_rtas_instance_translate_pipeline(struct vkd3d_meta_ops *meta_ops,
++        struct vkd3d_rtas_instance_translate_info *info);
++
++static inline uint32_t vkd3d_meta_get_rtas_instance_translate_workgroup_size(void)
++{
++    return 64;
++}
++
+ static inline uint32_t vkd3d_meta_get_multi_dispatch_indirect_workgroup_size(void)
+ {
+     return 32;
+diff --git a/libs/vkd3d/vkd3d_shaders.h b/libs/vkd3d/vkd3d_shaders.h
+index f6b430c..4e812ce 100644
+--- a/libs/vkd3d/vkd3d_shaders.h
++++ b/libs/vkd3d/vkd3d_shaders.h
+@@ -51,6 +51,7 @@ enum vkd3d_meta_copy_mode
+ #include <cs_execute_indirect_patch.h>
+ #include <cs_execute_indirect_patch_debug_ring.h>
+ #include <cs_execute_indirect_multi_dispatch.h>
++#include <cs_rtas_instance_translate.h>
+ #include <vs_fullscreen_layer.h>
+ #include <vs_fullscreen.h>
+ #include <gs_fullscreen.h>

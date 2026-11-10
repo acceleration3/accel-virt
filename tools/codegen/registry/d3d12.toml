@@ -131,6 +131,28 @@ fields = ["TileCoordinate start", "TileSize size"]
 [structs.TileRange]
 fields = ["u32 flags", "u32 heap_offset", "u32 tiles"]
 
+[structs.StateSubobject]
+fields = ["u32 type", "u32 object", "u32 first", "u32 count", "u32 a", "u32 b", "u32 c", "u32 d"]
+
+[structs.StateExport]
+fields = ["u32 name", "u32 rename", "u32 flags", "u32 reserved"]
+
+[structs.StateAssociation]
+fields = ["u32 subobject", "u32 name"]
+
+[structs.RaytracingGeometry]
+fields = ["u32 type", "u32 flags", "u32 index_format", "u32 vertex_format", "u32 index_count", "u32 vertex_count",
+          "u64 transform", "u64 index_buffer", "u64 start", "u64 stride", "u64 count"]
+
+[structs.RaytracingPostbuild]
+fields = ["u64 destination", "u32 type", "u32 reserved"]
+
+[structs.RayTable]
+fields = ["u64 start", "u64 size", "u64 stride"]
+
+[structs.ShaderIdentifier]
+fields = ["u32 value[8]"]
+
 [structs.Caps12]
 fields = ["u32 layout", "u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
           "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
@@ -146,7 +168,7 @@ fields = ["u32 layout", "u32 feature_level", "u32 shader_model", "u32 resource_b
           "u32 vrs_tier", "u32 vrs_additional_rates", "u32 vrs_tile_size", "u32 vrs_per_primitive_viewport",
           "u32 vrs_sum_combiner", "u32 enhanced_barriers", "u32 relaxed_format_casting", "u32 write_immediate_queues",
           "u32 copy_queue_timestamps", "u32 atomic_int64_heap",
-          "u32 programmable_sample_positions_tier", "u32 render_pass_tier"]
+          "u32 programmable_sample_positions_tier", "u32 render_pass_tier", "u32 raytracing_tier"]
 
 [[command]]
 name = "OpenDevice12"
@@ -707,3 +729,78 @@ id = 0x152b
 doc = """Plays the closed bundle `bundle` inside the recording `list`; the list keeps alive what the bundle recorded.
 A bundle cannot play a bundle."""
 params = ["u32 list", "u32 bundle"]
+
+[[command]]
+name = "CreateStateObject12"
+id = 0x1600
+doc = """A raytracing state object. type is D3D12_STATE_OBJECT_TYPE; parent is the state object it grows from, 0 for
+none. Each subobject names what it holds: a root signature or collection by id, a library by its `a` byte offset and
+`b` byte size in `libraries` and its exports by the range `first` and `count` of `exports`, a hit group by the byte
+offsets in `names` of its export and its shaders (0xFFFFFFFF for none). names is UTF-16, each string ending in a zero
+unit; an association ties a subobject to the export it names. hresult is S_OK, or the host's own answer when it
+made no state object."""
+params = ["u32 object", "u32 parent", "u32 type", "u32 subobject_count", "StateSubobject subobjects[subobject_count] max 1024",
+          "u32 export_count", "StateExport exports[export_count] max 16384", "u32 association_count",
+          "StateAssociation associations[association_count] max 16384", "bytes names", "bytes libraries"]
+reply = ["u32 hresult"]
+
+[[command]]
+name = "StateObjectIdentifier12"
+id = 0x1601
+doc = "The 32 bytes the host's GetShaderIdentifier answers for the export `name` (UTF-16); found is 0 when there is none."
+params = ["u32 object", "bytes name"]
+reply = ["u32 found", "ShaderIdentifier identifier"]
+
+[[command]]
+name = "StateObjectStackSize12"
+id = 0x1602
+doc = "The host's GetShaderStackSize of the export `name` (UTF-16), or GetPipelineStackSize when name is empty; 0xFFFFFFFF when it has none."
+params = ["u32 object", "bytes name"]
+reply = ["u32 size"]
+
+[[command]]
+name = "SetPipelineStackSize12"
+id = 0x1603
+params = ["u32 object", "u32 bytes"]
+
+[[command]]
+name = "AccelerationStructurePrebuild12"
+id = 0x1604
+doc = """The host's sizes for an acceleration structure of this shape. Addresses are not read: only whether each is set
+matters."""
+params = ["u32 type", "u32 flags", "u32 num_descs", "u32 layout", "u32 geometry_count",
+          "RaytracingGeometry geometries[geometry_count] max 8192"]
+reply = ["u32 hresult", "u64 result_bytes", "u64 scratch_bytes", "u64 update_scratch_bytes"]
+
+[[command]]
+name = "BuildAccelerationStructure12"
+id = 0x1610
+doc = """Builds an acceleration structure of `destination` from geometries or from `instances`, with `scratch`. Every
+address is a guest address and must lie in one buffer; the host refuses an unmapped one and one whose room is
+smaller than the sizes its own prebuild info gives. postbuilds are written once the build is done."""
+params = ["u32 list", "u32 type", "u32 flags", "u32 num_descs", "u32 layout", "u64 destination", "u64 source",
+          "u64 scratch", "u64 instances", "u32 geometry_count", "RaytracingGeometry geometries[geometry_count] max 8192",
+          "u32 postbuild_count", "RaytracingPostbuild postbuilds[postbuild_count] max 8"]
+
+[[command]]
+name = "EmitAccelerationStructurePostbuild12"
+id = 0x1611
+doc = "Writes the postbuild information `type` of each of `sources` in turn at `destination`."
+params = ["u32 list", "u32 type", "u64 destination", "u32 source_count", "u64 sources[source_count] max 4096"]
+
+[[command]]
+name = "CopyAccelerationStructure12"
+id = 0x1612
+params = ["u32 list", "u64 destination", "u64 source", "u32 mode"]
+
+[[command]]
+name = "SetStateObject12"
+id = 0x1613
+params = ["u32 list", "u32 object"]
+
+[[command]]
+name = "DispatchRays12"
+id = 0x1614
+doc = "Traces width by height by depth rays with the state object set on `list`; the tables are guest addresses."
+params = ["u32 list", "RayTable raygen", "RayTable miss", "RayTable hit", "RayTable callable", "u32 width",
+          "u32 height", "u32 depth"]

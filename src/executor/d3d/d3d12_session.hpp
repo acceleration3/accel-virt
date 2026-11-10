@@ -5,6 +5,7 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/gpu_work_window.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
+#include "executor/d3d/d3d12_acceleration_sizes.hpp"
 #include "executor/d3d/d3d12_allocator_marks.hpp"
 #include "executor/d3d/d3d12_block_heaps.hpp"
 #include "executor/d3d/d3d12_descriptor_holds.hpp"
@@ -12,10 +13,12 @@
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_query_heaps.hpp"
+#include "executor/d3d/d3d12_raytracing_inputs.hpp"
 #include "executor/d3d/d3d12_refused_creates.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d12_indirect_table.hpp"
 #include "executor/d3d/d3d12_retain_memo.hpp"
+#include "executor/d3d/d3d12_state_object_builder.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -28,6 +31,7 @@
 
 struct ID3D12CommandQueue;
 struct ID3D12Fence;
+struct ID3D12Device5;
 struct ID3D12GraphicsCommandList;
 struct ID3D12PipelineState;
 struct IUnknown;
@@ -162,6 +166,16 @@ public:
     bool on_EndEvent12(uint32_t list) override;
     bool on_SetMarker12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) override;
     bool on_CopyTiles12(uint32_t list, uint32_t resource, const d3d12proto::TileCoordinate& start, const d3d12proto::TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) override;
+    bool on_CreateStateObject12(uint32_t object, uint32_t parent, uint32_t type, uint32_t subobject_count, const d3d12proto::StateSubobject* subobjects, uint32_t export_count, const d3d12proto::StateExport* exports, uint32_t association_count, const d3d12proto::StateAssociation* associations, const uint8_t* names, uint64_t names_size, const uint8_t* libraries, uint64_t libraries_size, uint32_t& hresult) override;
+    bool on_StateObjectIdentifier12(uint32_t object, const uint8_t* name, uint64_t name_size, uint32_t& found, d3d12proto::ShaderIdentifier& identifier) override;
+    bool on_StateObjectStackSize12(uint32_t object, const uint8_t* name, uint64_t name_size, uint32_t& size) override;
+    bool on_SetPipelineStackSize12(uint32_t object, uint32_t bytes) override;
+    bool on_AccelerationStructurePrebuild12(uint32_t type, uint32_t flags, uint32_t num_descs, uint32_t layout, uint32_t geometry_count, const d3d12proto::RaytracingGeometry* geometries, uint32_t& hresult, uint64_t& result_bytes, uint64_t& scratch_bytes, uint64_t& update_scratch_bytes) override;
+    bool on_BuildAccelerationStructure12(uint32_t list, uint32_t type, uint32_t flags, uint32_t num_descs, uint32_t layout, uint64_t destination, uint64_t source, uint64_t scratch, uint64_t instances, uint32_t geometry_count, const d3d12proto::RaytracingGeometry* geometries, uint32_t postbuild_count, const d3d12proto::RaytracingPostbuild* postbuilds) override;
+    bool on_EmitAccelerationStructurePostbuild12(uint32_t list, uint32_t type, uint64_t destination, uint32_t source_count, const uint64_t* sources) override;
+    bool on_CopyAccelerationStructure12(uint32_t list, uint64_t destination, uint64_t source, uint32_t mode) override;
+    bool on_SetStateObject12(uint32_t list, uint32_t object) override;
+    bool on_DispatchRays12(uint32_t list, const d3d12proto::RayTable& raygen, const d3d12proto::RayTable& miss, const d3d12proto::RayTable& hit, const d3d12proto::RayTable& callable, uint32_t width, uint32_t height, uint32_t depth) override;
     bool on_ExecuteIndirect12(uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) override;
 
     bool invariants_hold() const;
@@ -206,6 +220,14 @@ private:
                                                const d3d12proto::Box &region) const;
     bool                       tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,
                                           const d3d12proto::TileSize &size) const;
+    bool                       raytracing_ready(ID3D12Device5 *&device5) const;
+    bool                       guarded_postbuilds(uint32_t list, bool compacts, uint32_t count,
+                                                  const d3d12proto::RaytracingPostbuild *postbuilds,
+                                                  d3d12new::PostbuildDesc *made);
+    bool                       retain_geometry(uint32_t list, uint32_t count,
+                                               const d3d12proto::RaytracingGeometry *geometries);
+    bool                       ray_table(uint32_t list_id, const d3d12proto::RayTable &from, bool record,
+                                         d3d12new::GpuRangeAndStride &made);
     bool                       drain();
     bool                       wait_for(uint64_t mark);
     template <typename Values>
@@ -258,6 +280,9 @@ private:
     D3d12Presentation      presentation_;
     D3d12TileUpdate        tile_update_;
     D3d12RetainMemo        retained_;
+    D3d12StateObjectBuilder state_builder_;
+    D3d12RaytracingInputs  inputs_;
+    D3d12AccelerationSizes sizes_;
     uint32_t               removed_;
     DriverLog             &lines_;
     CommandRefusal         refusal_;

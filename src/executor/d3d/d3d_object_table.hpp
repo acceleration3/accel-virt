@@ -46,6 +46,7 @@ enum class D3dObjectKind : uint8_t {
     list12,
     query_heap12,
     command_signature12,
+    state_object12,
     surface9,
     texture9,
     cube_texture9,

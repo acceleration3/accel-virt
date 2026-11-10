@@ -74,6 +74,12 @@ void D3d12Capabilities::measure(ID3D12Device &device)
     measure_formats(device);
 }
 
+void D3d12Capabilities::withhold_raytracing()
+{
+    AV_SCOPE("D3d12Capabilities::withhold_raytracing");
+    caps_.raytracing_tier = 0u;
+}
+
 void D3d12Capabilities::measure_options(ID3D12Device &device)
 {
     AV_SCOPE("D3d12Capabilities::measure_options");
@@ -121,8 +127,10 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
         caps_.programmable_sample_positions_tier = static_cast<uint32_t>(options2.ProgrammableSamplePositionsTier);
     }
     D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
-    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
         caps_.render_pass_tier = static_cast<uint32_t>(options5.RenderPassesTier);
+        caps_.raytracing_tier = static_cast<uint32_t>(options5.RaytracingTier);
+    }
     d3d12new::Options6 options6 = {};
     if (SUCCEEDED(device.CheckFeatureSupport(static_cast<D3D12_FEATURE>(d3d12new::feature_options6), &options6, sizeof(options6)))) {
         caps_.vrs_tier = static_cast<uint32_t>(options6.variable_shading_rate_tier);

@@ -170,11 +170,11 @@ public:
     void STDMETHODCALLTYPE EndRenderPass() override { recorded++; }
     void STDMETHODCALLTYPE InitializeMetaCommand() override { recorded++; }
     void STDMETHODCALLTYPE ExecuteMetaCommand() override { recorded++; }
-    void STDMETHODCALLTYPE BuildRaytracingAccelerationStructure() override { recorded++; }
-    void STDMETHODCALLTYPE EmitRaytracingAccelerationStructurePostbuildInfo() override { recorded++; }
-    void STDMETHODCALLTYPE CopyRaytracingAccelerationStructure() override { recorded++; }
-    void STDMETHODCALLTYPE SetPipelineState1() override { recorded++; }
-    void STDMETHODCALLTYPE DispatchRays() override { recorded++; }
+    void STDMETHODCALLTYPE BuildRaytracingAccelerationStructure(const av::d3d12new::BuildDesc *, UINT, const av::d3d12new::PostbuildDesc *) override { recorded++; }
+    void STDMETHODCALLTYPE EmitRaytracingAccelerationStructurePostbuildInfo(const av::d3d12new::PostbuildDesc *, UINT, const UINT64 *) override { recorded++; }
+    void STDMETHODCALLTYPE CopyRaytracingAccelerationStructure(UINT64, UINT64, int) override { recorded++; }
+    void STDMETHODCALLTYPE SetPipelineState1(ID3D12StateObject *) override { recorded++; }
+    void STDMETHODCALLTYPE DispatchRays(const av::d3d12new::DispatchRaysDesc *) override { recorded++; }
     void STDMETHODCALLTYPE RSSetShadingRate(UINT, const UINT *) override { recorded++; }
     void STDMETHODCALLTYPE RSSetShadingRateImage(ID3D12Resource *) override { recorded++; }
     void STDMETHODCALLTYPE DispatchMesh(UINT, UINT, UINT) override { recorded++; }

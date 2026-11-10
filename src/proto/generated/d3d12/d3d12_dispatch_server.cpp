@@ -1797,6 +1797,271 @@ static bool decode_ExecuteBundle12(ServerDispatch& s, ::av::WireReader& r, ::av:
     return true;
 }
 
+static bool decode_CreateStateObject12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CreateStateObject12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    uint32_t parent{};
+    if (!r.read_pod(parent)) return false;
+    uint32_t type{};
+    if (!r.read_pod(type)) return false;
+    uint32_t subobject_count{};
+    if (!r.read_pod(subobject_count)) return false;
+    if (subobject_count > 1024u) return false;
+    StateSubobject* subobjects = nullptr;
+    if (subobject_count != 0u) {
+        subobjects = arena.allocate<StateSubobject>(subobject_count);
+        if (subobjects == nullptr) return false;
+        if (!r.read(subobjects, sizeof(StateSubobject) * subobject_count)) return false;
+    }
+    uint32_t export_count{};
+    if (!r.read_pod(export_count)) return false;
+    if (export_count > 16384u) return false;
+    StateExport* exports = nullptr;
+    if (export_count != 0u) {
+        exports = arena.allocate<StateExport>(export_count);
+        if (exports == nullptr) return false;
+        if (!r.read(exports, sizeof(StateExport) * export_count)) return false;
+    }
+    uint32_t association_count{};
+    if (!r.read_pod(association_count)) return false;
+    if (association_count > 16384u) return false;
+    StateAssociation* associations = nullptr;
+    if (association_count != 0u) {
+        associations = arena.allocate<StateAssociation>(association_count);
+        if (associations == nullptr) return false;
+        if (!r.read(associations, sizeof(StateAssociation) * association_count)) return false;
+    }
+    const uint8_t* names = nullptr;
+    uint64_t names_size = 0u;
+    if (!read_bytes(s, r, arena, names, names_size)) return false;
+    const uint8_t* libraries = nullptr;
+    uint64_t libraries_size = 0u;
+    if (!read_bytes(s, r, arena, libraries, libraries_size)) return false;
+    uint32_t hresult{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CreateStateObject12(object, parent, type, subobject_count, subobjects, export_count, exports, association_count, associations, names, names_size, libraries, libraries_size, hresult)) return false;
+    reply.write_pod(hresult);
+    return true;
+}
+
+static bool decode_StateObjectIdentifier12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:StateObjectIdentifier12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    const uint8_t* name = nullptr;
+    uint64_t name_size = 0u;
+    if (!read_bytes(s, r, arena, name, name_size)) return false;
+    uint32_t found{};
+    ShaderIdentifier identifier{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_StateObjectIdentifier12(object, name, name_size, found, identifier)) return false;
+    reply.write_pod(found);
+    reply.write_pod(identifier);
+    return true;
+}
+
+static bool decode_StateObjectStackSize12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:StateObjectStackSize12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    const uint8_t* name = nullptr;
+    uint64_t name_size = 0u;
+    if (!read_bytes(s, r, arena, name, name_size)) return false;
+    uint32_t size{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_StateObjectStackSize12(object, name, name_size, size)) return false;
+    reply.write_pod(size);
+    return true;
+}
+
+static bool decode_SetPipelineStackSize12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetPipelineStackSize12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    uint32_t bytes{};
+    if (!r.read_pod(bytes)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetPipelineStackSize12(object, bytes)) return false;
+    return true;
+}
+
+static bool decode_AccelerationStructurePrebuild12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:AccelerationStructurePrebuild12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t type{};
+    if (!r.read_pod(type)) return false;
+    uint32_t flags{};
+    if (!r.read_pod(flags)) return false;
+    uint32_t num_descs{};
+    if (!r.read_pod(num_descs)) return false;
+    uint32_t layout{};
+    if (!r.read_pod(layout)) return false;
+    uint32_t geometry_count{};
+    if (!r.read_pod(geometry_count)) return false;
+    if (geometry_count > 8192u) return false;
+    RaytracingGeometry* geometries = nullptr;
+    if (geometry_count != 0u) {
+        geometries = arena.allocate<RaytracingGeometry>(geometry_count);
+        if (geometries == nullptr) return false;
+        if (!r.read(geometries, sizeof(RaytracingGeometry) * geometry_count)) return false;
+    }
+    uint32_t hresult{};
+    uint64_t result_bytes{};
+    uint64_t scratch_bytes{};
+    uint64_t update_scratch_bytes{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_AccelerationStructurePrebuild12(type, flags, num_descs, layout, geometry_count, geometries, hresult, result_bytes, scratch_bytes, update_scratch_bytes)) return false;
+    reply.write_pod(hresult);
+    reply.write_pod(result_bytes);
+    reply.write_pod(scratch_bytes);
+    reply.write_pod(update_scratch_bytes);
+    return true;
+}
+
+static bool decode_BuildAccelerationStructure12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:BuildAccelerationStructure12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t type{};
+    if (!r.read_pod(type)) return false;
+    uint32_t flags{};
+    if (!r.read_pod(flags)) return false;
+    uint32_t num_descs{};
+    if (!r.read_pod(num_descs)) return false;
+    uint32_t layout{};
+    if (!r.read_pod(layout)) return false;
+    uint64_t destination{};
+    if (!r.read_pod(destination)) return false;
+    uint64_t source{};
+    if (!r.read_pod(source)) return false;
+    uint64_t scratch{};
+    if (!r.read_pod(scratch)) return false;
+    uint64_t instances{};
+    if (!r.read_pod(instances)) return false;
+    uint32_t geometry_count{};
+    if (!r.read_pod(geometry_count)) return false;
+    if (geometry_count > 8192u) return false;
+    RaytracingGeometry* geometries = nullptr;
+    if (geometry_count != 0u) {
+        geometries = arena.allocate<RaytracingGeometry>(geometry_count);
+        if (geometries == nullptr) return false;
+        if (!r.read(geometries, sizeof(RaytracingGeometry) * geometry_count)) return false;
+    }
+    uint32_t postbuild_count{};
+    if (!r.read_pod(postbuild_count)) return false;
+    if (postbuild_count > 8u) return false;
+    RaytracingPostbuild* postbuilds = nullptr;
+    if (postbuild_count != 0u) {
+        postbuilds = arena.allocate<RaytracingPostbuild>(postbuild_count);
+        if (postbuilds == nullptr) return false;
+        if (!r.read(postbuilds, sizeof(RaytracingPostbuild) * postbuild_count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_BuildAccelerationStructure12(list, type, flags, num_descs, layout, destination, source, scratch, instances, geometry_count, geometries, postbuild_count, postbuilds)) return false;
+    return true;
+}
+
+static bool decode_EmitAccelerationStructurePostbuild12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:EmitAccelerationStructurePostbuild12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t type{};
+    if (!r.read_pod(type)) return false;
+    uint64_t destination{};
+    if (!r.read_pod(destination)) return false;
+    uint32_t source_count{};
+    if (!r.read_pod(source_count)) return false;
+    if (source_count > 4096u) return false;
+    uint64_t* sources = nullptr;
+    if (source_count != 0u) {
+        sources = arena.allocate<uint64_t>(source_count);
+        if (sources == nullptr) return false;
+        if (!r.read(sources, sizeof(uint64_t) * source_count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_EmitAccelerationStructurePostbuild12(list, type, destination, source_count, sources)) return false;
+    return true;
+}
+
+static bool decode_CopyAccelerationStructure12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CopyAccelerationStructure12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint64_t destination{};
+    if (!r.read_pod(destination)) return false;
+    uint64_t source{};
+    if (!r.read_pod(source)) return false;
+    uint32_t mode{};
+    if (!r.read_pod(mode)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CopyAccelerationStructure12(list, destination, source, mode)) return false;
+    return true;
+}
+
+static bool decode_SetStateObject12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:SetStateObject12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t object{};
+    if (!r.read_pod(object)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SetStateObject12(list, object)) return false;
+    return true;
+}
+
+static bool decode_DispatchRays12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:DispatchRays12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    RayTable raygen{};
+    if (!r.read_pod(raygen)) return false;
+    RayTable miss{};
+    if (!r.read_pod(miss)) return false;
+    RayTable hit{};
+    if (!r.read_pod(hit)) return false;
+    RayTable callable{};
+    if (!r.read_pod(callable)) return false;
+    uint32_t width{};
+    if (!r.read_pod(width)) return false;
+    uint32_t height{};
+    if (!r.read_pod(height)) return false;
+    uint32_t depth{};
+    if (!r.read_pod(depth)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_DispatchRays12(list, raygen, miss, hit, callable, width, height, depth)) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1885,6 +2150,16 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_ClearUnorderedAccessViewUint12:
         case kCmd_ClearUnorderedAccessViewFloat12:
         case kCmd_ExecuteBundle12:
+        case kCmd_CreateStateObject12:
+        case kCmd_StateObjectIdentifier12:
+        case kCmd_StateObjectStackSize12:
+        case kCmd_SetPipelineStackSize12:
+        case kCmd_AccelerationStructurePrebuild12:
+        case kCmd_BuildAccelerationStructure12:
+        case kCmd_EmitAccelerationStructurePostbuild12:
+        case kCmd_CopyAccelerationStructure12:
+        case kCmd_SetStateObject12:
+        case kCmd_DispatchRays12:
             return true;
         default: return false;
     }
@@ -1979,6 +2254,16 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_ClearUnorderedAccessViewUint12: return decode_ClearUnorderedAccessViewUint12(s, r, reply, arena);
         case kCmd_ClearUnorderedAccessViewFloat12: return decode_ClearUnorderedAccessViewFloat12(s, r, reply, arena);
         case kCmd_ExecuteBundle12: return decode_ExecuteBundle12(s, r, reply, arena);
+        case kCmd_CreateStateObject12: return decode_CreateStateObject12(s, r, reply, arena);
+        case kCmd_StateObjectIdentifier12: return decode_StateObjectIdentifier12(s, r, reply, arena);
+        case kCmd_StateObjectStackSize12: return decode_StateObjectStackSize12(s, r, reply, arena);
+        case kCmd_SetPipelineStackSize12: return decode_SetPipelineStackSize12(s, r, reply, arena);
+        case kCmd_AccelerationStructurePrebuild12: return decode_AccelerationStructurePrebuild12(s, r, reply, arena);
+        case kCmd_BuildAccelerationStructure12: return decode_BuildAccelerationStructure12(s, r, reply, arena);
+        case kCmd_EmitAccelerationStructurePostbuild12: return decode_EmitAccelerationStructurePostbuild12(s, r, reply, arena);
+        case kCmd_CopyAccelerationStructure12: return decode_CopyAccelerationStructure12(s, r, reply, arena);
+        case kCmd_SetStateObject12: return decode_SetStateObject12(s, r, reply, arena);
+        case kCmd_DispatchRays12: return decode_DispatchRays12(s, r, reply, arena);
         default: return false;
     }
 }

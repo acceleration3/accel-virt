@@ -163,6 +163,29 @@ struct RecorderRecord {
     PoolRecord  *pool;
 };
 
+struct StateIdentifier {
+    uint64_t key;
+    uint32_t found;
+    uint32_t reserved;
+    uint32_t value[8];
+};
+
+struct StateIdentifierChunk {
+    static constexpr uint32_t entries = 31u;
+
+    StateIdentifierChunk *next;
+    uint32_t              used;
+    uint32_t              reserved;
+    StateIdentifier       identifiers[entries];
+};
+
+struct StateObjectRecord {
+    static constexpr uint32_t tag = 0x00585641u;
+
+    RecordHeader          header;
+    StateIdentifierChunk *chunks;
+};
+
 struct ListRecord {
     static constexpr uint32_t tag = 0x00495641u;
 

@@ -115,6 +115,16 @@ public:
     virtual bool on_ClearUnorderedAccessViewUint12(uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Uint4& values, uint32_t rect_count, const Rect* rects) = 0;
     virtual bool on_ClearUnorderedAccessViewFloat12(uint32_t list, const DescriptorRef& gpu_view, const DescriptorRef& cpu_view, uint32_t resource, const Float4& values, uint32_t rect_count, const Rect* rects) = 0;
     virtual bool on_ExecuteBundle12(uint32_t list, uint32_t bundle) = 0;
+    virtual bool on_CreateStateObject12(uint32_t object, uint32_t parent, uint32_t type, uint32_t subobject_count, const StateSubobject* subobjects, uint32_t export_count, const StateExport* exports, uint32_t association_count, const StateAssociation* associations, const uint8_t* names, uint64_t names_size, const uint8_t* libraries, uint64_t libraries_size, uint32_t& hresult) = 0;
+    virtual bool on_StateObjectIdentifier12(uint32_t object, const uint8_t* name, uint64_t name_size, uint32_t& found, ShaderIdentifier& identifier) = 0;
+    virtual bool on_StateObjectStackSize12(uint32_t object, const uint8_t* name, uint64_t name_size, uint32_t& size) = 0;
+    virtual bool on_SetPipelineStackSize12(uint32_t object, uint32_t bytes) = 0;
+    virtual bool on_AccelerationStructurePrebuild12(uint32_t type, uint32_t flags, uint32_t num_descs, uint32_t layout, uint32_t geometry_count, const RaytracingGeometry* geometries, uint32_t& hresult, uint64_t& result_bytes, uint64_t& scratch_bytes, uint64_t& update_scratch_bytes) = 0;
+    virtual bool on_BuildAccelerationStructure12(uint32_t list, uint32_t type, uint32_t flags, uint32_t num_descs, uint32_t layout, uint64_t destination, uint64_t source, uint64_t scratch, uint64_t instances, uint32_t geometry_count, const RaytracingGeometry* geometries, uint32_t postbuild_count, const RaytracingPostbuild* postbuilds) = 0;
+    virtual bool on_EmitAccelerationStructurePostbuild12(uint32_t list, uint32_t type, uint64_t destination, uint32_t source_count, const uint64_t* sources) = 0;
+    virtual bool on_CopyAccelerationStructure12(uint32_t list, uint64_t destination, uint64_t source, uint32_t mode) = 0;
+    virtual bool on_SetStateObject12(uint32_t list, uint32_t object) = 0;
+    virtual bool on_DispatchRays12(uint32_t list, const RayTable& raygen, const RayTable& miss, const RayTable& hit, const RayTable& callable, uint32_t width, uint32_t height, uint32_t depth) = 0;
 
 protected:
     // `guest` is the context's blob arena, which the implementation owns and

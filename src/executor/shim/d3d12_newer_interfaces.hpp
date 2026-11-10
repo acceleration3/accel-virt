@@ -1,6 +1,7 @@
 #ifndef AV_D3D12_NEWER_INTERFACES_HPP
 #define AV_D3D12_NEWER_INTERFACES_HPP
 
+#include "executor/shim/d3d12_raytracing_types.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
 #include <stdint.h>
@@ -30,6 +31,18 @@ constexpr int subobject_as = 24;
 constexpr int subobject_ms = 25;
 constexpr int subobject_depth_stencil2 = 26;
 constexpr int subobject_rasterizer2 = 28;
+
+constexpr int subobject_state_object_config = 0;
+constexpr int subobject_global_root_signature = 1;
+constexpr int subobject_local_root_signature = 2;
+constexpr int subobject_node_mask_rt = 3;
+constexpr int subobject_dxil_library = 5;
+constexpr int subobject_existing_collection = 6;
+constexpr int subobject_association = 7;
+constexpr int subobject_shader_config = 9;
+constexpr int subobject_pipeline_config = 10;
+constexpr int subobject_hit_group = 11;
+constexpr int subobject_pipeline_config1 = 12;
 
 constexpr int feature_options6 = 30;
 constexpr int feature_options7 = 32;
@@ -164,6 +177,70 @@ ID3D12Device2 : public ID3D12Device1 {
 };
 __CRT_UUID_DECL(ID3D12Device2, 0x30baa41e, 0xb15b, 0x475c, 0xa0, 0xbb, 0x1a, 0xf5, 0xc5, 0xb6, 0x43, 0x28);
 
+MIDL_INTERFACE("81dadc15-2bad-4392-93c5-101345c4aa98")
+ID3D12Device3 : public ID3D12Device2 {
+    virtual HRESULT STDMETHODCALLTYPE OpenExistingHeapFromAddress(const void *address, REFIID riid, void **heap) = 0;
+    virtual HRESULT STDMETHODCALLTYPE OpenExistingHeapFromFileMapping(HANDLE mapping, REFIID riid, void **heap) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnqueueMakeResident(UINT flags, UINT count, void *const *objects, void *fence,
+                                                          UINT64 value) = 0;
+};
+__CRT_UUID_DECL(ID3D12Device3, 0x81dadc15, 0x2bad, 0x4392, 0x93, 0xc5, 0x10, 0x13, 0x45, 0xc4, 0xaa, 0x98);
+
+MIDL_INTERFACE("e865df17-a9ee-46f9-a463-3098315aa2e5")
+ID3D12Device4 : public ID3D12Device3 {
+    virtual HRESULT STDMETHODCALLTYPE CreateCommandList1() = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateProtectedResourceSession() = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateCommittedResource1() = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateHeap1() = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateReservedResource1() = 0;
+    virtual void STDMETHODCALLTYPE GetResourceAllocationInfo1() = 0;
+};
+__CRT_UUID_DECL(ID3D12Device4, 0xe865df17, 0xa9ee, 0x46f9, 0xa4, 0x63, 0x30, 0x98, 0x31, 0x5a, 0xa2, 0xe5);
+
+MIDL_INTERFACE("47016943-fca8-4594-93ea-af258b55346d")
+ID3D12StateObject : public ID3D12Pageable {
+};
+__CRT_UUID_DECL(ID3D12StateObject, 0x47016943, 0xfca8, 0x4594, 0x93, 0xea, 0xaf, 0x25, 0x8b, 0x55, 0x34, 0x6d);
+
+MIDL_INTERFACE("de5fa827-9bf9-4f26-89ff-d7f56fde3860")
+ID3D12StateObjectProperties : public IUnknown {
+    virtual void *STDMETHODCALLTYPE GetShaderIdentifier(const char16_t *name) = 0;
+    virtual UINT64 STDMETHODCALLTYPE GetShaderStackSize(const char16_t *name) = 0;
+    virtual UINT64 STDMETHODCALLTYPE GetPipelineStackSize() = 0;
+    virtual void STDMETHODCALLTYPE SetPipelineStackSize(UINT64 bytes) = 0;
+};
+__CRT_UUID_DECL(ID3D12StateObjectProperties, 0xde5fa827, 0x9bf9, 0x4f26, 0x89, 0xff, 0xd7, 0xf5, 0x6f, 0xde, 0x38, 0x60);
+
+MIDL_INTERFACE("8b4f173b-2fea-4b80-8f58-4307191ab95d")
+ID3D12Device5 : public ID3D12Device4 {
+    virtual HRESULT STDMETHODCALLTYPE CreateLifetimeTracker() = 0;
+    virtual void STDMETHODCALLTYPE RemoveDevice() = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnumerateMetaCommands() = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnumerateMetaCommandParameters() = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateMetaCommand() = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateStateObject(const av::d3d12new::StateObjectDesc *desc, REFIID riid,
+                                                        void **state_object) = 0;
+    virtual void STDMETHODCALLTYPE GetRaytracingAccelerationStructurePrebuildInfo(
+        const av::d3d12new::BuildInputs *inputs, av::d3d12new::PrebuildInfo *info) = 0;
+    virtual int STDMETHODCALLTYPE CheckDriverMatchingIdentifier() = 0;
+};
+__CRT_UUID_DECL(ID3D12Device5, 0x8b4f173b, 0x2fea, 0x4b80, 0x8f, 0x58, 0x43, 0x07, 0x19, 0x1a, 0xb9, 0x5d);
+
+MIDL_INTERFACE("c70b221b-40e4-4a17-89af-025a0727a6dc")
+ID3D12Device6 : public ID3D12Device5 {
+    virtual HRESULT STDMETHODCALLTYPE SetBackgroundProcessingMode() = 0;
+};
+__CRT_UUID_DECL(ID3D12Device6, 0xc70b221b, 0x40e4, 0x4a17, 0x89, 0xaf, 0x02, 0x5a, 0x07, 0x27, 0xa6, 0xdc);
+
+MIDL_INTERFACE("5c014b53-68a1-4b9b-8bd1-dd6046b9358b")
+ID3D12Device7 : public ID3D12Device6 {
+    virtual HRESULT STDMETHODCALLTYPE AddToStateObject(const av::d3d12new::StateObjectDesc *addition,
+                                                       ID3D12StateObject *state_object, REFIID riid,
+                                                       void **grown) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateProtectedResourceSession1() = 0;
+};
+__CRT_UUID_DECL(ID3D12Device7, 0x5c014b53, 0x68a1, 0x4b9b, 0x8b, 0xd1, 0xdd, 0x60, 0x46, 0xb9, 0x35, 0x8b);
+
 MIDL_INTERFACE("6fda83a7-b84c-4e38-9ac8-c7bd22016b3d")
 ID3D12GraphicsCommandList3 : public ID3D12GraphicsCommandList2 {
     virtual void STDMETHODCALLTYPE SetProtectedResourceSession(void *session) = 0;
@@ -176,11 +253,14 @@ ID3D12GraphicsCommandList4 : public ID3D12GraphicsCommandList3 {
     virtual void STDMETHODCALLTYPE EndRenderPass() = 0;
     virtual void STDMETHODCALLTYPE InitializeMetaCommand() = 0;
     virtual void STDMETHODCALLTYPE ExecuteMetaCommand() = 0;
-    virtual void STDMETHODCALLTYPE BuildRaytracingAccelerationStructure() = 0;
-    virtual void STDMETHODCALLTYPE EmitRaytracingAccelerationStructurePostbuildInfo() = 0;
-    virtual void STDMETHODCALLTYPE CopyRaytracingAccelerationStructure() = 0;
-    virtual void STDMETHODCALLTYPE SetPipelineState1() = 0;
-    virtual void STDMETHODCALLTYPE DispatchRays() = 0;
+    virtual void STDMETHODCALLTYPE BuildRaytracingAccelerationStructure(
+        const av::d3d12new::BuildDesc *desc, UINT postbuild_count, const av::d3d12new::PostbuildDesc *postbuilds) = 0;
+    virtual void STDMETHODCALLTYPE EmitRaytracingAccelerationStructurePostbuildInfo(
+        const av::d3d12new::PostbuildDesc *desc, UINT source_count, const UINT64 *sources) = 0;
+    virtual void STDMETHODCALLTYPE CopyRaytracingAccelerationStructure(UINT64 destination, UINT64 source,
+                                                                       int mode) = 0;
+    virtual void STDMETHODCALLTYPE SetPipelineState1(ID3D12StateObject *state_object) = 0;
+    virtual void STDMETHODCALLTYPE DispatchRays(const av::d3d12new::DispatchRaysDesc *desc) = 0;
 };
 __CRT_UUID_DECL(ID3D12GraphicsCommandList4, 0x8754318e, 0xd3a9, 0x4541, 0x98, 0xcf, 0x64, 0x5b, 0x50, 0xdc, 0x48, 0x74);
 

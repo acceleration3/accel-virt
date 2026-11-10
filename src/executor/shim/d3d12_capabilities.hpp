@@ -17,6 +17,7 @@ public:
     D3d12Capabilities();
 
     void measure(ID3D12Device &device);
+    void withhold_raytracing();
 
     const d3d12proto::Caps12 &caps() const;
     const FormatCapsRows     &formats() const;

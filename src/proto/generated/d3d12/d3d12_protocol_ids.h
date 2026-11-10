@@ -95,5 +95,15 @@ inline constexpr uint32_t kCmd_SetShadingRate12 = 0x0004152d;
 inline constexpr uint32_t kCmd_SetShadingRateImage12 = 0x0004152e;
 inline constexpr uint32_t kCmd_Barrier12 = 0x0004152f;
 inline constexpr uint32_t kCmd_SetFrontAndBackStencilRef12 = 0x00041530;
+inline constexpr uint32_t kCmd_CreateStateObject12 = 0x00041600;
+inline constexpr uint32_t kCmd_StateObjectIdentifier12 = 0x00041601;
+inline constexpr uint32_t kCmd_StateObjectStackSize12 = 0x00041602;
+inline constexpr uint32_t kCmd_SetPipelineStackSize12 = 0x00041603;
+inline constexpr uint32_t kCmd_AccelerationStructurePrebuild12 = 0x00041604;
+inline constexpr uint32_t kCmd_BuildAccelerationStructure12 = 0x00041610;
+inline constexpr uint32_t kCmd_EmitAccelerationStructurePostbuild12 = 0x00041611;
+inline constexpr uint32_t kCmd_CopyAccelerationStructure12 = 0x00041612;
+inline constexpr uint32_t kCmd_SetStateObject12 = 0x00041613;
+inline constexpr uint32_t kCmd_DispatchRays12 = 0x00041614;
 
 }  // namespace av::d3d12proto

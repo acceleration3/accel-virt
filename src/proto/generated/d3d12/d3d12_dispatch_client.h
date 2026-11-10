@@ -196,5 +196,30 @@ namespace av::d3d12proto {
 // Plays the closed bundle `bundle` inside the recording `list`; the list keeps alive what the bundle recorded.
 // A bundle cannot play a bundle.
 [[nodiscard]] bool av_d3d12_ExecuteBundle12(::av::ClientTransport& t, uint32_t list, uint32_t bundle);
+// A raytracing state object. type is D3D12_STATE_OBJECT_TYPE; parent is the state object it grows from, 0 for
+// none. Each subobject names what it holds: a root signature or collection by id, a library by its `a` byte offset and
+// `b` byte size in `libraries` and its exports by the range `first` and `count` of `exports`, a hit group by the byte
+// offsets in `names` of its export and its shaders (0xFFFFFFFF for none). names is UTF-16, each string ending in a zero
+// unit; an association ties a subobject to the export it names. hresult is S_OK, or the host's own answer when it
+// made no state object.
+[[nodiscard]] bool av_d3d12_CreateStateObject12(::av::ClientTransport& t, uint32_t object, uint32_t parent, uint32_t type, uint32_t subobject_count, const StateSubobject* subobjects, uint32_t export_count, const StateExport* exports, uint32_t association_count, const StateAssociation* associations, const void* names, uint64_t names_size, const void* libraries, uint64_t libraries_size, uint32_t* hresult);
+// The 32 bytes the host's GetShaderIdentifier answers for the export `name` (UTF-16); found is 0 when there is none.
+[[nodiscard]] bool av_d3d12_StateObjectIdentifier12(::av::ClientTransport& t, uint32_t object, const void* name, uint64_t name_size, uint32_t* found, ShaderIdentifier* identifier);
+// The host's GetShaderStackSize of the export `name` (UTF-16), or GetPipelineStackSize when name is empty; 0xFFFFFFFF when it has none.
+[[nodiscard]] bool av_d3d12_StateObjectStackSize12(::av::ClientTransport& t, uint32_t object, const void* name, uint64_t name_size, uint32_t* size);
+[[nodiscard]] bool av_d3d12_SetPipelineStackSize12(::av::ClientTransport& t, uint32_t object, uint32_t bytes);
+// The host's sizes for an acceleration structure of this shape. Addresses are not read: only whether each is set
+// matters.
+[[nodiscard]] bool av_d3d12_AccelerationStructurePrebuild12(::av::ClientTransport& t, uint32_t type, uint32_t flags, uint32_t num_descs, uint32_t layout, uint32_t geometry_count, const RaytracingGeometry* geometries, uint32_t* hresult, uint64_t* result_bytes, uint64_t* scratch_bytes, uint64_t* update_scratch_bytes);
+// Builds an acceleration structure of `destination` from geometries or from `instances`, with `scratch`. Every
+// address is a guest address and must lie in one buffer; the host refuses an unmapped one and one whose room is
+// smaller than the sizes its own prebuild info gives. postbuilds are written once the build is done.
+[[nodiscard]] bool av_d3d12_BuildAccelerationStructure12(::av::ClientTransport& t, uint32_t list, uint32_t type, uint32_t flags, uint32_t num_descs, uint32_t layout, uint64_t destination, uint64_t source, uint64_t scratch, uint64_t instances, uint32_t geometry_count, const RaytracingGeometry* geometries, uint32_t postbuild_count, const RaytracingPostbuild* postbuilds);
+// Writes the postbuild information `type` of each of `sources` in turn at `destination`.
+[[nodiscard]] bool av_d3d12_EmitAccelerationStructurePostbuild12(::av::ClientTransport& t, uint32_t list, uint32_t type, uint64_t destination, uint32_t source_count, const uint64_t* sources);
+[[nodiscard]] bool av_d3d12_CopyAccelerationStructure12(::av::ClientTransport& t, uint32_t list, uint64_t destination, uint64_t source, uint32_t mode);
+[[nodiscard]] bool av_d3d12_SetStateObject12(::av::ClientTransport& t, uint32_t list, uint32_t object);
+// Traces width by height by depth rays with the state object set on `list`; the tables are guest addresses.
+[[nodiscard]] bool av_d3d12_DispatchRays12(::av::ClientTransport& t, uint32_t list, const RayTable& raygen, const RayTable& miss, const RayTable& hit, const RayTable& callable, uint32_t width, uint32_t height, uint32_t depth);
 
 }  // namespace av::d3d12proto

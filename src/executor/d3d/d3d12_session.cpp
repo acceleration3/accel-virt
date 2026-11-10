@@ -140,7 +140,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), source_(nullptr), placing_(false), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks), indirect_table_(addresses_),
       progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), allocators_(blocks), queries_(blocks), refused_creates_(), views_(objects_, addresses_),
-      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), retained_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), polled_at_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
+      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), retained_(), state_builder_(blocks, objects_), inputs_(blocks, addresses_), sizes_(blocks), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), polled_at_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -190,8 +190,9 @@ void D3d12Session::shut_down()
     presentation_.bind(nullptr, nullptr, nullptr);
     progress_.clear();
     addresses_.clear();
+    sizes_.clear();
     indirect_table_.forget();
-    objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
+    objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::state_object12);
     if (drained) block_heaps_.destroy_all();
     else block_heaps_.leak_all();
     views_.bind(nullptr);
@@ -557,7 +558,7 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     if (refused_creates_.forget(id)) return true;
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12 ||
-        kind > D3dObjectKind::command_signature12)
+        kind > D3dObjectKind::state_object12)
         return false;
     if (kind == D3dObjectKind::resource12) {
         addresses_.remove(id);
@@ -1197,7 +1198,7 @@ bool D3d12Session::invariants_hold() const
     return objects_.invariants_hold() && addresses_.invariants_hold() && compiles_.invariants_hold() &&
            holds_.invariants_hold() && descriptors_.invariants_hold() &&
            (device_ != nullptr ||
-            objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
+            objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::state_object12) == 0u);
 }
 
 }

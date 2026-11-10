@@ -6,6 +6,7 @@
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_ddi_tile_source.hpp"
 #include "um/d3d/d3d12_device.hpp"
+#include "um/d3d/d3d12_geometry_wire.hpp"
 #include "um/d3d/d3d12_records.hpp"
 
 namespace av::d3d12 {
@@ -35,6 +36,9 @@ constexpr uint32_t most_targets = 8u;
 constexpr uint32_t most_constants = 64u;
 constexpr uint32_t location_subresource = 0u;
 constexpr uint32_t location_footprint = 1u;
+constexpr uint32_t most_postbuilds = 8u;
+constexpr uint32_t most_postbuild_sources = 4096u;
+constexpr uint32_t structure_top = 0u;
 
 }
 
@@ -811,6 +815,79 @@ VOID D3d12Recorder::set_graphics_root_unordered_access_view(D3D12DDI_HCOMMANDLIS
 {
     AV_SCOPE("D3d12Recorder::set_graphics_root_unordered_access_view");
     set_root_view(handle, graphics, parameter, view_unordered, address);
+}
+
+VOID D3d12Recorder::build_raytracing_acceleration_structure(D3D12DDI_HCOMMANDLIST handle,
+                                                            const D3D12DDIARG_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_0054 *args)
+{
+    AV_SCOPE("D3d12Recorder::build_raytracing_acceleration_structure");
+    if (args == nullptr) return;
+    D3d12GeometryWire geometries(device_.memory());
+    RaytracingPostbuild postbuilds[most_postbuilds] = {};
+    if (args->NumPostbuildInfoDescs > most_postbuilds ||
+        (args->NumPostbuildInfoDescs != 0u && args->pPostbuildInfoDescs == nullptr) || !geometries.read(args->Inputs)) {
+        device_.lost("a raytracing acceleration structure build the driver cannot carry");
+        return;
+    }
+    for (UINT index = 0u; index < args->NumPostbuildInfoDescs; index++)
+        postbuilds[index] = RaytracingPostbuild{args->pPostbuildInfoDescs[index].DestBuffer,
+                                                static_cast<uint32_t>(args->pPostbuildInfoDescs[index].InfoType), 0u};
+    const bool top = static_cast<uint32_t>(args->Inputs.Type) == structure_top;
+    sent(av_d3d12_BuildAccelerationStructure12(
+             device_.wire(), list(handle), static_cast<uint32_t>(args->Inputs.Type),
+             static_cast<uint32_t>(args->Inputs.Flags), args->Inputs.NumDescs, geometries.layout(),
+             args->DestAccelerationStructureData, args->SourceAccelerationStructureData,
+             args->ScratchAccelerationStructureData, top ? args->Inputs.InstanceDescs : 0u, geometries.count(),
+             geometries.geometries(), args->NumPostbuildInfoDescs, postbuilds),
+         "BuildAccelerationStructure12");
+}
+
+VOID D3d12Recorder::emit_raytracing_acceleration_structure_postbuild_info(
+    D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_EMIT_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_0054 *args)
+{
+    AV_SCOPE("D3d12Recorder::emit_raytracing_acceleration_structure_postbuild_info");
+    if (args == nullptr) return;
+    if (args->NumSourceAccelerationStructures > most_postbuild_sources ||
+        (args->NumSourceAccelerationStructures != 0u && args->pSourceAccelerationStructureData == nullptr)) {
+        device_.lost("a postbuild information request the driver cannot carry");
+        return;
+    }
+    sent(av_d3d12_EmitAccelerationStructurePostbuild12(
+             device_.wire(), list(handle), static_cast<uint32_t>(args->Desc.InfoType), args->Desc.DestBuffer,
+             args->NumSourceAccelerationStructures, args->pSourceAccelerationStructureData),
+         "EmitAccelerationStructurePostbuild12");
+}
+
+VOID D3d12Recorder::copy_raytracing_acceleration_structure(
+    D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_COPY_RAYTRACING_ACCELERATION_STRUCTURE_0054 *args)
+{
+    AV_SCOPE("D3d12Recorder::copy_raytracing_acceleration_structure");
+    if (args == nullptr) return;
+    sent(av_d3d12_CopyAccelerationStructure12(device_.wire(), list(handle), args->DestAccelerationStructureData,
+                                              args->SourceAccelerationStructureData, static_cast<uint32_t>(args->Mode)),
+         "CopyAccelerationStructure12");
+}
+
+VOID D3d12Recorder::set_pipeline_state1(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HSTATEOBJECT_0054 state)
+{
+    AV_SCOPE("D3d12Recorder::set_pipeline_state1");
+    sent(av_d3d12_SetStateObject12(device_.wire(), list(handle), device_.id_of(state.pDrvPrivate)), "SetStateObject12");
+}
+
+VOID D3d12Recorder::dispatch_rays(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_DISPATCH_RAYS_0054 *args)
+{
+    AV_SCOPE("D3d12Recorder::dispatch_rays");
+    if (args == nullptr) return;
+    const RayTable raygen = {args->RayGenerationShaderRecord.StartAddress, args->RayGenerationShaderRecord.SizeInBytes, 0u};
+    const RayTable miss = {args->MissShaderTable.StartAddress, args->MissShaderTable.SizeInBytes,
+                           args->MissShaderTable.StrideInBytes};
+    const RayTable hit = {args->HitGroupTable.StartAddress, args->HitGroupTable.SizeInBytes,
+                          args->HitGroupTable.StrideInBytes};
+    const RayTable callable = {args->CallableShaderTable.StartAddress, args->CallableShaderTable.SizeInBytes,
+                               args->CallableShaderTable.StrideInBytes};
+    sent(av_d3d12_DispatchRays12(device_.wire(), list(handle), raygen, miss, hit, callable, args->Width, args->Height,
+                                 args->Depth),
+         "DispatchRays12");
 }
 
 }

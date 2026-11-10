@@ -64,6 +64,10 @@ IMPLEMENTED = {
         "pfnCalcPrivateCommandSignatureSize", "pfnCreateCommandSignature", "pfnDestroyCommandSignature",
         "pfnCalcPrivatePipelineLibrarySize", "pfnCreatePipelineLibrary", "pfnDestroyPipelineLibrary",
         "pfnAddPipelineStateToLibrary", "pfnCalcSerializedLibrarySize", "pfnSerializeLibrary",
+        "pfnCalcPrivateStateObjectSize", "pfnCreateStateObject", "pfnDestroyStateObject",
+        "pfnGetRaytracingAccelerationStructurePrebuildInfo", "pfnGetShaderIdentifier", "pfnGetShaderStackSize",
+        "pfnGetPipelineStackSize", "pfnSetPipelineStackSize", "pfnCalcPrivateAddToStateObjectSize",
+        "pfnAddToStateObject",
     },
     QUEUE_TABLE: {"pfnExecuteCommandLists", "pfnSignalFence", "pfnWaitForFence", "pfnUpdateTileMappings",
                   "pfnCopyTileMappings"},
@@ -89,8 +93,14 @@ IMPLEMENTED = {
         "pfnSOSetTargets", "pfnClearUnorderedAccessViewUint", "pfnClearUnorderedAccessViewFloat",
         "pfnExecuteBundle", "pfnAtomicCopyBufferRegion", "pfnDispatchMesh", "pfnRSSetShadingRate",
         "pfnRSSetShadingRateImage", "pfnBarrier", "pfnOmSetFrontAndBackStencilRef",
+        "pfnBuildRaytracingAccelerationStructure", "pfnEmitRaytracingAccelerationStructurePostbuildInfo",
+        "pfnCopyRaytracingAccelerationStructure", "pfnSetPipelineState1", "pfnDispatchRays",
     },
 }
+
+OBJECT_OWNED = {"pfnGetShaderIdentifier", "pfnGetShaderStackSize", "pfnGetPipelineStackSize",
+                "pfnSetPipelineStackSize"}
+OBJECT_OWNER = "D3d12RecordHandle({h}.pDrvPrivate).device()"
 
 TABLES = [
     (DEVICE_TABLE, "D3D12DDI_HDEVICE", "d3d12", "d3d::DeviceBlock<D3d12Device>({h}.pDrvPrivate).device()", "device"),
@@ -205,9 +215,17 @@ def thunks(tables):
             symbol = f"avumd_{prefix}_{name[3:]}"
             lines.append(f"extern \"C\" {ret_type(ret)} APIENTRY {symbol}({declared})")
             owned = parameters[0] == first
+            object_owned = table == DEVICE_TABLE and name in OBJECT_OWNED
             if name in IMPLEMENTED[table]:
-                if not owned:
+                if not owned and not object_owned:
                     raise SystemExit(f"{name}: implemented, but its first parameter is {parameters[0]}")
+                if object_owned:
+                    call = f"target.{snake(name)}({', '.join(names)})"
+                    head = f"{{ D3d12Device &target = {OBJECT_OWNER.format(h='handle')};"
+                    lines.append(f"{head} " + (f"{call}; }}" if ret == "void" else f"return {call}; }}"))
+                    lines.append("")
+                    fill.append(f"    table.{name} = &{symbol};")
+                    continue
                 call_arguments = ", ".join(names) if table == LIST_TABLE or table == QUEUE_TABLE else arguments
                 traced = "".join(f", {label}" for label in call_arguments.split(", ") if label)
                 tracer = "target" if owner == "device" else target.format(h='handle').replace(".recorder()", ".device()")
@@ -251,7 +269,7 @@ def methods(tables, owner):
         for name, ret, parameters in tables[table]:
             if ret is None or name not in IMPLEMENTED[table]:
                 continue
-            own = parameters if table in (LIST_TABLE, QUEUE_TABLE) else parameters[1:]
+            own = parameters if table in (LIST_TABLE, QUEUE_TABLE) or name in OBJECT_OWNED else parameters[1:]
             lines.append(f"{ret_type(ret)} {snake(name)}({', '.join(own)});")
         lines.append("")
     return "\n".join(lines)

@@ -408,6 +408,73 @@ struct TileRange {
 static_assert(sizeof(TileRange) == 12, "TileRange crosses as 12 bytes");
 static_assert(__is_trivially_copyable(TileRange), "TileRange is plain data");
 
+struct StateSubobject {
+    uint32_t type;
+    uint32_t object;
+    uint32_t first;
+    uint32_t count;
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+    uint32_t d;
+};
+static_assert(sizeof(StateSubobject) == 32, "StateSubobject crosses as 32 bytes");
+static_assert(__is_trivially_copyable(StateSubobject), "StateSubobject is plain data");
+
+struct StateExport {
+    uint32_t name;
+    uint32_t rename;
+    uint32_t flags;
+    uint32_t reserved;
+};
+static_assert(sizeof(StateExport) == 16, "StateExport crosses as 16 bytes");
+static_assert(__is_trivially_copyable(StateExport), "StateExport is plain data");
+
+struct StateAssociation {
+    uint32_t subobject;
+    uint32_t name;
+};
+static_assert(sizeof(StateAssociation) == 8, "StateAssociation crosses as 8 bytes");
+static_assert(__is_trivially_copyable(StateAssociation), "StateAssociation is plain data");
+
+struct RaytracingGeometry {
+    uint32_t type;
+    uint32_t flags;
+    uint32_t index_format;
+    uint32_t vertex_format;
+    uint32_t index_count;
+    uint32_t vertex_count;
+    uint64_t transform;
+    uint64_t index_buffer;
+    uint64_t start;
+    uint64_t stride;
+    uint64_t count;
+};
+static_assert(sizeof(RaytracingGeometry) == 64, "RaytracingGeometry crosses as 64 bytes");
+static_assert(__is_trivially_copyable(RaytracingGeometry), "RaytracingGeometry is plain data");
+
+struct RaytracingPostbuild {
+    uint64_t destination;
+    uint32_t type;
+    uint32_t reserved;
+};
+static_assert(sizeof(RaytracingPostbuild) == 16, "RaytracingPostbuild crosses as 16 bytes");
+static_assert(__is_trivially_copyable(RaytracingPostbuild), "RaytracingPostbuild is plain data");
+
+struct RayTable {
+    uint64_t start;
+    uint64_t size;
+    uint64_t stride;
+};
+static_assert(sizeof(RayTable) == 24, "RayTable crosses as 24 bytes");
+static_assert(__is_trivially_copyable(RayTable), "RayTable is plain data");
+
+struct ShaderIdentifier {
+    uint32_t value[8];
+};
+static_assert(sizeof(ShaderIdentifier) == 32, "ShaderIdentifier crosses as 32 bytes");
+static_assert(__is_trivially_copyable(ShaderIdentifier), "ShaderIdentifier is plain data");
+
 struct Caps12 {
     uint32_t layout;
     uint32_t feature_level;
@@ -454,8 +521,9 @@ struct Caps12 {
     uint32_t atomic_int64_heap;
     uint32_t programmable_sample_positions_tier;
     uint32_t render_pass_tier;
+    uint32_t raytracing_tier;
 };
-static_assert(sizeof(Caps12) == 192, "Caps12 crosses as 192 bytes");
+static_assert(sizeof(Caps12) == 196, "Caps12 crosses as 196 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto

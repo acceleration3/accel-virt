@@ -95,6 +95,16 @@ const char* command_name(uint32_t id) {
         case kCmd_SetShadingRateImage12: return "SetShadingRateImage12";
         case kCmd_Barrier12: return "Barrier12";
         case kCmd_SetFrontAndBackStencilRef12: return "SetFrontAndBackStencilRef12";
+        case kCmd_CreateStateObject12: return "CreateStateObject12";
+        case kCmd_StateObjectIdentifier12: return "StateObjectIdentifier12";
+        case kCmd_StateObjectStackSize12: return "StateObjectStackSize12";
+        case kCmd_SetPipelineStackSize12: return "SetPipelineStackSize12";
+        case kCmd_AccelerationStructurePrebuild12: return "AccelerationStructurePrebuild12";
+        case kCmd_BuildAccelerationStructure12: return "BuildAccelerationStructure12";
+        case kCmd_EmitAccelerationStructurePostbuild12: return "EmitAccelerationStructurePostbuild12";
+        case kCmd_CopyAccelerationStructure12: return "CopyAccelerationStructure12";
+        case kCmd_SetStateObject12: return "SetStateObject12";
+        case kCmd_DispatchRays12: return "DispatchRays12";
         default: return nullptr;
     }
 }

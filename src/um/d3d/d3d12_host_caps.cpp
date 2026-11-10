@@ -7,6 +7,7 @@
 #include "proto/d3d/caps12_layout.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "um/common/guest_setting.hpp"
 
 namespace av::d3d12 {
 
@@ -22,6 +23,8 @@ constexpr uint32_t most_tiled_tier = 2u;
 constexpr uint32_t most_view_instancing_tier = 3u;
 constexpr uint32_t most_vrs_tier = 2u;
 constexpr uint32_t mesh_tier_1 = 10u;
+constexpr uint32_t raytracing_tier_1_0 = 10u;
+constexpr uint32_t raytracing_tier_1_1 = 11u;
 constexpr uint32_t api_model_6_0 = 0x60u;
 constexpr uint32_t api_model_6_8 = 0x68u;
 constexpr uint32_t ddi_model_5_1 = 0x50015u;
@@ -52,6 +55,8 @@ bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter
         hresult != 0u)
         return false;
     if (caps_.layout != caps12_layout) return false;
+    const GuestSetting raytracing("AV_D3D12_RAYTRACING");
+    if (!raytracing.value().on()) caps_.raytracing_tier = 0u;
     formats_.learn(rows, static_cast<uint32_t>(answered / sizeof(rows[0])));
     icd::AdapterMemory memory(kmt, adapter);
     local_budget_ = memory.read() == Status::ok ? memory.budget(MemorySegmentGroup::local) : 0u;
@@ -142,6 +147,9 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     answer.EnhancedBarriersSupported = caps_.enhanced_barriers != 0u;
     answer.MeshShaderTier = caps_.mesh_shader_tier >= mesh_tier_1 ? D3D12DDI_MESH_SHADER_TIER_1
                                                                   : D3D12DDI_MESH_SHADER_TIER_NOT_SUPPORTED;
+    answer.RaytracingTier = caps_.raytracing_tier >= raytracing_tier_1_1   ? D3D12DDI_RAYTRACING_TIER_1_1
+                            : caps_.raytracing_tier >= raytracing_tier_1_0 ? D3D12DDI_RAYTRACING_TIER_1_0
+                                                                           : D3D12DDI_RAYTRACING_TIER_NOT_SUPPORTED;
     return fill(data, bytes, &answer, sizeof(answer));
 }
 

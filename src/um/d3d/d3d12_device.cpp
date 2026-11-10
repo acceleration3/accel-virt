@@ -35,7 +35,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(BlockSource &memory, d3d::D3dSession &session, KeyedLog &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table, d3d::D3dCallTrace &trace)
-    : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), lender_(session), clock_origin_(session, log), memories_(memory, session, log), follower_(), residency_(), channel_(), addresses_(), commitment_(),
+    : memory_(memory), session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), lender_(session), clock_origin_(session, log), memories_(memory, session, log), follower_(), residency_(), channel_(), addresses_(), commitment_(),
       recorder_(*this), null_resource_{}, loss_(lines_), library_blob_(), trace_(trace),
       context_number_(trace.number_context()), placed_heaps_(false)
 {
@@ -101,6 +101,12 @@ d3d::D3dDeviceChannel &D3d12Device::wire()
 {
     AV_SCOPE("D3d12Device::wire");
     return channel_.object();
+}
+
+BlockSource &D3d12Device::memory()
+{
+    AV_SCOPE("D3d12Device::memory");
+    return memory_;
 }
 
 uint32_t D3d12Device::id_of(const void *block) const

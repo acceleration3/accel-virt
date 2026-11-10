@@ -55,6 +55,7 @@ public:
 #include "um/d3d/generated/d3d12_device_ddi.inc"
 
     d3d::D3dDeviceChannel    &wire();
+    BlockSource              &memory();
     d3d12proto::DescriptorRef descriptor(D3D12DDI_CPU_DESCRIPTOR_HANDLE handle) const;
     d3d12proto::DescriptorRef descriptor(D3D12DDI_GPU_DESCRIPTOR_HANDLE handle) const;
     uint32_t                  id_of(const void *block) const;
@@ -111,10 +112,15 @@ private:
                             d3d12proto::SignatureEntry *out) const;
     void    graphics_state(const D3D12DDIARG_CREATE_PIPELINE_STATE_0099 &args, d3d12proto::GraphicsState &state) const;
 
+    HRESULT                  make_state_object(uint32_t type, UINT count, const D3D12DDI_STATE_SUBOBJECT_0054 *subobjects,
+                                               uint32_t parent, D3D12DDI_HSTATEOBJECT_0054 handle);
+    StateIdentifier         *state_identifier(StateObjectRecord &record, LPCWSTR name);
+
     const ResourceRecord &viewed(D3D12DDI_HRESOURCE handle) const;
     bool texture_view(uint32_t kind, const ResourceRecord &resource, D3D12DDI_RESOURCE_DIMENSION dimension,
                       const void *members, d3d12proto::ViewDesc &view) const;
 
+    BlockSource                          &memory_;
     d3d::D3dSession                      &session_;
     KeyedLog                        &lines_;
     icd::RefusedCalls                refused_;
