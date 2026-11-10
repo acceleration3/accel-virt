@@ -992,6 +992,30 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
         const VkMemoryType &kind = asked.memoryProperties.memoryTypes[allocate.memoryTypeIndex < VK_MAX_MEMORY_TYPES ? allocate.memoryTypeIndex : 0u];
         LogLine(lines_).text("on ").text(named.deviceName).text(", host type flags ").number(kind.propertyFlags).text(" heap ").number(kind.heapIndex).text(" of ").number(asked.memoryProperties.memoryTypeCount).text(" types, committed ").number(vram_.used(heap)).write();
         LogLine(lines_).text("host heap 0 budget ").number(budget.heapBudget[0]).text(" usage ").number(budget.heapUsage[0]).text(", heap 1 budget ").number(budget.heapBudget[1]).text(" usage ").number(budget.heapUsage[1]).write();
+        VkMemoryAllocateInfo clean = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, pAllocateInfo->allocationSize, allocate.memoryTypeIndex};
+        VkDeviceMemory       retried = VK_NULL_HANDLE;
+        const VkResult       again = RealVulkanDispatch::on_vkAllocateMemory(device, &clean, nullptr, &retried);
+        clean.allocationSize = (pAllocateInfo->allocationSize + 65535u) & ~VkDeviceSize{65535u};
+        VkDeviceMemory       rounded = VK_NULL_HANDLE;
+        const VkResult       larger = RealVulkanDispatch::on_vkAllocateMemory(device, &clean, nullptr, &rounded);
+        LogLine(lines_).text("retry without the chain ").number(static_cast<uint64_t>(static_cast<int64_t>(again))).text(", rounded to 64 KiB ").number(static_cast<uint64_t>(static_cast<int64_t>(larger))).write();
+        if (rounded != VK_NULL_HANDLE) RealVulkanDispatch::on_vkFreeMemory(device, rounded, nullptr);
+        LogLine every(lines_);
+        every.text("a clean 4096 byte allocation by type:");
+        for (uint32_t type = 0u; type < asked.memoryProperties.memoryTypeCount; type++) {
+            const VkMemoryAllocateInfo probe = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr, 4096u, type};
+            VkDeviceMemory             probed = VK_NULL_HANDLE;
+            const VkResult             verdict = RealVulkanDispatch::on_vkAllocateMemory(device, &probe, nullptr, &probed);
+            every.text(" ").number(type).text("=").number(static_cast<uint64_t>(static_cast<int64_t>(verdict)));
+            if (probed != VK_NULL_HANDLE) RealVulkanDispatch::on_vkFreeMemory(device, probed, nullptr);
+        }
+        every.write();
+        if (again == VK_SUCCESS) {
+            *pMemory = retried;
+            if (vram_.commit(heap, reinterpret_cast<uint64_t>(*pMemory), pAllocateInfo->allocationSize) == Status::ok) return VK_SUCCESS;
+            RealVulkanDispatch::on_vkFreeMemory(device, retried, nullptr);
+            *pMemory = VK_NULL_HANDLE;
+        }
         vram_.refund(heap, pAllocateInfo->allocationSize);
         return made;
     }
