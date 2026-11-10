@@ -754,3 +754,22 @@ TEST(guest_cl_context, the_invariant_catches_a_loss_the_state_does_not_say_and_a
   av::icd::LossLatchProbe::set_word(GuestClContextProbe::loss_of(context), 0x80000001u);
   CHECK(context.invariants_hold());
   GuestClContextProbe::say_it_was_made(context); }
+
+TEST(guest_cl_context, the_buffer_blocks_grow_by_a_region_of_their_own_and_give_it_back_when_idle)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint64_t offset = 0u;
+  const std::uint64_t whole = GuestClContext::blocks_reserve;
+  CHECK(context.blocks().take(whole, offset));
+  const std::uint64_t before = context.blocks().capacity();
+  rig.host().blob_import(0u, 0x78u);
+  CHECK(context.grow_blocks(whole));
+  CHECK(context.blocks().capacity() > before);
+  std::uint64_t more = 0u;
+  CHECK(context.blocks().take(whole, more));
+  context.blocks().give_back(more);
+  context.reclaim();
+  CHECK_EQ(context.blocks().capacity(), before);
+  CHECK(context.invariants_hold()); }

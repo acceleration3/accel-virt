@@ -255,3 +255,29 @@ TEST(cl_arena_blocks, a_retirement_that_cannot_be_remembered_frees_the_block_at_
   blocks.retire(offset);
   CHECK_EQ(blocks.live(), 0u);
   CHECK(blocks.invariants_hold()); }
+
+TEST(cl_arena_blocks, a_span_added_later_holds_blocks_and_goes_when_idle)
+{ ClArenaBlocks blocks(platform, lock);
+  CHECK(!blocks.add(1u << 20u, arena, sizeof arena));
+  blocks.lend(0u, arena, 4096u);
+  CHECK_EQ(blocks.capacity(), 4096u);
+  std::uint64_t first = 0u;
+  CHECK(blocks.take(4096u, first));
+  std::uint64_t second = 0u;
+  CHECK(!blocks.take(4096u, second));
+  const std::uint64_t base = 1u << 20u;
+  CHECK(blocks.add(base, arena + 4096u, 8192u));
+  CHECK_EQ(blocks.capacity(), 4096u + 8192u);
+  CHECK(blocks.take(8192u, second));
+  CHECK(second >= base && second < base + 8192u);
+  CHECK(blocks.at(second, 8192u) == arena + 4096u + (second - base));
+  CHECK_EQ(blocks.live(), 2u);
+  CHECK_EQ(blocks.take_idle_base(), 0u);
+  blocks.retire(second);
+  CHECK_EQ(blocks.take_idle_base(), 0u);
+  blocks.reclaim();
+  CHECK_EQ(blocks.take_idle_base(), base);
+  CHECK_EQ(blocks.capacity(), 4096u);
+  CHECK(blocks.at(second, 1u) == nullptr);
+  blocks.give_back(first);
+  CHECK(blocks.invariants_hold()); }

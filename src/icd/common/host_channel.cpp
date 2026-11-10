@@ -94,10 +94,12 @@ Status HostChannel::open_arena(GuestConnection &device)
     AV_SCOPE("HostChannel::open_arena");
     static_cast<void>(arena_.construct(device, transport_.object(), lines_));
     uint64_t bytes = arena_bytes_;
-    Status   opened = arena_.object().open(bytes);
-    while (opened != Status::ok && !transport_.object().faulted() && bytes / 2u >= KmtBlobArena::default_bytes) {
+    const bool     small = bytes < KmtBlobArena::default_bytes;
+    const uint64_t floor = small ? bytes : KmtBlobArena::default_bytes;
+    Status         opened = small ? arena_.object().open_small(bytes) : arena_.object().open(bytes);
+    while (opened != Status::ok && !transport_.object().faulted() && bytes / 2u >= floor) {
         bytes /= 2u;
-        opened = arena_.object().open(bytes);
+        opened = small ? arena_.object().open_small(bytes) : arena_.object().open(bytes);
     }
     if (opened != Status::ok) {
         arena_failed_step_ = arena_.object().failed_step();

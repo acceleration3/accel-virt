@@ -1017,3 +1017,17 @@ TEST(kmt_transport_grow, room_the_host_frees_while_the_driver_spins_for_it_is_fo
       rig.host_takes_the_releases(2u);
       CHECK_STATUS(rig.arena().close(), Status::ok);
   } }
+
+TEST(kmt_blob_arena, a_small_ring_is_whole_pages_from_the_minimum_up)
+{ struct Case { std::uint64_t asked; std::uint64_t ring; };
+  const Case cases[] = {{1u, mib}, {mib, mib}, {2u * mib, 2u * mib}, {2u * mib + 1u, 2u * mib + 4096u}};
+  for (const Case &one : cases) {
+      Rig rig;
+      rig.host_takes_the_imports();
+      CHECK_STATUS(rig.arena().open_small(one.asked), Status::ok);
+      CHECK_EQ(rig.transport().blobs().ring_bytes(), one.ring);
+      CHECK(rig.arena().invariants_hold());
+      rig.host_takes_the_releases(2u);
+      CHECK_STATUS(rig.arena().close(), Status::ok);
+      rig.check_nothing_is_held();
+  } }

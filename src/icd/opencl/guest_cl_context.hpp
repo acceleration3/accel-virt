@@ -48,9 +48,10 @@ public:
     static constexpr uint32_t reply_bytes = 1024u * 1024u;
     static constexpr size_t   staging_bytes = 256u * 1024u;
     static constexpr size_t   batch_bytes = 2u * staging_bytes;
-    static constexpr uint64_t arena_bytes = uint64_t{16} << 20u;
-    static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
-    static constexpr uint64_t blocks_reserve = uint64_t{8} << 20u;
+    static constexpr uint64_t arena_bytes = uint64_t{2} << 20u;
+    static constexpr uint64_t staging_reserve = uint64_t{2} << 20u;
+    static constexpr uint64_t blocks_reserve = uint64_t{2} << 20u;
+    static constexpr uint64_t blocks_ceiling = uint64_t{256} << 20u;
 
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
                    ThreadLock &blocks_lock, KeyedLog &lines, icd::SharedHandles &handles);
@@ -75,6 +76,7 @@ public:
     void                 retire(const uint64_t *block, HostAllocation *lent);
     void                 reclaim();
     void                 orphan_work();
+    [[nodiscard]] bool   grow_blocks(uint64_t need);
     ClArenaBlocks   &blocks();
     ClArenaBlocks   &staging();
     bool             lost() const;
@@ -118,6 +120,8 @@ private:
     bool                                 orphaned_work_;
     ClArenaBlocks                        staging_;
     icd::ArenaRegion                     region_;
+    icd::ArenaRegion                     grown_[ClArenaBlocks::most_extra];
+    bool                                 growing_;
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     ClD3d11Objects                       d3d11_;

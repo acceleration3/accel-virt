@@ -22,7 +22,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       channel_(memory, lines, icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
-      region_(),
+      region_(), grown_(), growing_(false),
       svm_(memory), external_(handles, memory, lines), d3d11_(memory), formats_(), mappings_(memory), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -116,6 +116,7 @@ void GuestClContext::teardown()
     if (state_ == State::made && channel_.opened()) external_.release_all(channel_.wire());
     blocks_.lend(0u, nullptr, 0u);
     staging_.lend(0u, nullptr, 0u);
+    for (icd::ArenaRegion &region : grown_) region.close();
     region_.close();
     channel_.close(state_ == State::lost);
     link_.release();
@@ -160,7 +161,32 @@ void GuestClContext::reclaim()
     AV_SCOPE("GuestClContext::reclaim");
     if (__atomic_load_n(&orphaned_work_, __ATOMIC_ACQUIRE)) return;
     blocks_.reclaim();
+    for (uint64_t base = blocks_.take_idle_base(); base != 0u; base = blocks_.take_idle_base())
+        for (icd::ArenaRegion &region : grown_)
+            if (region.held() && region.offset() == base) region.close();
     channel_.reclaim_retired();
+}
+
+bool GuestClContext::grow_blocks(uint64_t need)
+{
+    AV_SCOPE("GuestClContext::grow_blocks");
+    if (state_ != State::made || !channel_.has_arena() || !blocks_.ready()) return false;
+    if (__atomic_test_and_set(&growing_, __ATOMIC_ACQUIRE)) return true;
+    ScopeExit done([this] { __atomic_clear(&growing_, __ATOMIC_RELEASE); });
+    const uint64_t held = blocks_.capacity();
+    uint64_t       want = held < (uint64_t{64} << 20u) ? held : (uint64_t{64} << 20u);
+    if (want < need) want = need;
+    constexpr uint64_t unit = uint64_t{1} << 20u;
+    want = (want + unit - 1u) / unit * unit;
+    if (want > blocks_ceiling - (held < blocks_ceiling ? held : blocks_ceiling)) return false;
+    for (icd::ArenaRegion &region : grown_) {
+        if (region.held()) continue;
+        if (!region.open(channel_.wire(), want)) return false;
+        if (blocks_.add(region.offset(), region.view(), region.bytes())) return true;
+        region.close();
+        return false;
+    }
+    return false;
 }
 
 void GuestClContext::orphan_work()

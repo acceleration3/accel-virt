@@ -47,13 +47,25 @@ Status KmtBlobArena::open_control()
 Status KmtBlobArena::open(uint64_t bytes)
 {
     AV_SCOPE("KmtBlobArena::open");
+    return start(bytes < default_bytes ? default_bytes : bytes);
+}
+
+Status KmtBlobArena::open_small(uint64_t bytes)
+{
+    AV_SCOPE("KmtBlobArena::open_small");
+    return start(bytes < min_bytes ? min_bytes : bytes);
+}
+
+Status KmtBlobArena::start(uint64_t size)
+{
+    AV_SCOPE("KmtBlobArena::start");
+    const uint64_t bytes = size;
     if (lending()) return Status::invalid_state;
     if (bytes > max_bytes) return Status::invalid_parameter;
     failed_step_ = nullptr;
     failed_status_ = Status::ok;
     const Status controlled = open_control();
     if (controlled != Status::ok) return controlled;
-    uint64_t size = bytes < default_bytes ? default_bytes : bytes;
     if (size > GuestBytes::slot_bytes) size = GuestBytes::slot_bytes;
     static_cast<void>(rings_[0].construct(connection_, transport_, slots_));
     const Status opened = rings_[0].object().open(size);

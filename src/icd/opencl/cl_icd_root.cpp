@@ -892,7 +892,7 @@ cl_mem ClIcdRoot::create_buffer_for_host(cl_context context, cl_mem_flags flags,
     uint64_t block = 0u;
     bool     backed = false;
     if (wants_host_memory && on->blocks().ready())
-        backed = on->blocks().take(bytes, block);
+        backed = on->blocks().take(bytes, block) || (on->grow_blocks(bytes) && on->blocks().take(bytes, block));
 
     cl_int   host_error = CL_SUCCESS;
     uint64_t buffer = 0u;
