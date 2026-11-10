@@ -10,6 +10,7 @@
 #include "icd/opencl/d3d11_bridge.hpp"
 #include "icd/opencl/d3d11_object.hpp"
 #include "proto/d3d/dxgi_format.hpp"
+#include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
 
@@ -143,6 +144,15 @@ cl_mem ClIcdRoot::d3d11_twin(ClObject &held, GuestClContext &owner, void *resour
                                                                      opened, closed)
                                          : CL_OUT_OF_RESOURCES;
     if (!closed) d3d11_.close_handle(handle);
+    if (taken == CL_SUCCESS) {
+        cl_mem_object_type type = 0u;
+        const cl_int       asked = av::clproto::av_clGetMemObjectInfo(*wire, opened, CL_MEM_TYPE, sizeof type, &type, nullptr);
+        if (asked != CL_SUCCESS || type != CL_MEM_OBJECT_IMAGE2D) {
+            static_cast<void>(owner.external().give_back(*wire, opened));
+            d3d11_.let_go(made);
+            return nullptr;
+        }
+    }
     ClObject *object = nullptr;
     if (taken == CL_SUCCESS && objects_.make(ClObject::Kind::mem, opened, &owner, &held, object) != Status::ok) {
         static_cast<void>(owner.external().give_back(*wire, opened));
