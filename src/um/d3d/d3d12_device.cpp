@@ -67,7 +67,7 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     if (create.pKTCallbacks != nullptr) {
         static_cast<void>(follower_.construct(*create.pKTCallbacks, runtime_.handle, session_.transport()));
     }
-    if (core_ != nullptr) static_cast<void>(residency_.construct(*core_, runtime_));
+    if (core_ != nullptr) static_cast<void>(residency_.construct(*core_, runtime_, commitment_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
     commitment_.learn(caps_.local_budget());
     uint32_t hresult = 1u;

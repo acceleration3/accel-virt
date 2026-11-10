@@ -77,13 +77,6 @@ void MemorySegments::describe(DxgkQuerySegmentOut4Record &out) const
     out.PagingBufferPrivateDataSize = 0u;
 }
 
-uint32_t MemorySegments::host_heap_segment_id(bool cpu_visible) const
-{
-    AV_SCOPE("MemorySegments::host_heap_segment_id");
-    platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::host_heap_segment_id");
-    return !cpu_visible && local_.present() ? LocalMemorySegment::segment_id : system_memory_segment_id();
-}
-
 bool MemorySegments::invariants_hold() const
 {
     AV_SCOPE("MemorySegments::invariants_hold");

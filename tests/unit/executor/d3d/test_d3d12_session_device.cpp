@@ -1153,8 +1153,8 @@ TEST(d3d12_session_device, a_heap_and_a_committed_buffer_shared_in_one_session_o
     }
     constexpr std::uint64_t key_buffer = 0x5eed00000000b0f0ull;
     constexpr std::uint64_t key_heap = 0x5eed00000000b0f1ull;
-    constexpr std::uint32_t buffer = 40u;
-    constexpr std::uint32_t heap = 41u;
+    constexpr std::uint32_t shared_buffer = 40u;
+    constexpr std::uint32_t shared_heap = 41u;
     constexpr std::uint32_t opened_buffer = 50u;
     constexpr std::uint32_t opened_heap = 51u;
     constexpr std::uint64_t bytes = 65536u;
@@ -1172,27 +1172,27 @@ TEST(d3d12_session_device, a_heap_and_a_committed_buffer_shared_in_one_session_o
     desc.sample_count = 1u;
     desc.layout = 1u;
     hresult = 1u;
-    CHECK(av_d3d12_CreateCommittedResource12(wire, buffer, heap_of(heap_default), heap_flag_shared, desc,
+    CHECK(av_d3d12_CreateCommittedResource12(wire, shared_buffer, heap_of(heap_default), heap_flag_shared, desc,
                                               state_copy_dest, ClearValue{}, 0x700000000ull, &hresult));
     CHECK_EQ(hresult, 0u);
     hresult = 1u;
-    CHECK(av_d3d12_CreateHeap12(wire, heap, heap_of(heap_default), heap_flag_shared, bytes, 65536u, 0u, 0u, &hresult));
+    CHECK(av_d3d12_CreateHeap12(wire, shared_heap, heap_of(heap_default), heap_flag_shared, bytes, 65536u, 0u, 0u, &hresult));
     CHECK_EQ(hresult, 0u);
-    CHECK(av_d3d12_ShareObject12(wire, buffer, key_buffer));
-    CHECK(av_d3d12_ShareObject12(wire, heap, key_heap));
+    CHECK(av_d3d12_ShareObject12(wire, shared_buffer, key_buffer));
+    CHECK(av_d3d12_ShareObject12(wire, shared_heap, key_heap));
     std::uint32_t kind = 9u, dimension = 0u, height = 0u, depth = 0u, mips = 0u, format = 0u, samples = 0u, flags = 0u;
-    std::uint64_t width = 0u, size = 0u;
+    std::uint64_t opened_width = 0u, opened_size = 0u;
     CHECK(av_d3d12_OpenObject12(second, opened_buffer, key_buffer, 0x800000000ull, &kind, &dimension, &height, &depth,
-                                &mips, &format, &samples, &flags, &width, &size));
+                                &mips, &format, &samples, &flags, &opened_width, &opened_size));
     CHECK_EQ(kind, 1u);
     CHECK_EQ(dimension, dimension_buffer);
-    CHECK_EQ(width, bytes);
+    CHECK_EQ(opened_width, bytes);
     CHECK(av_d3d12_OpenObject12(second, opened_heap, key_heap, 0u, &kind, &dimension, &height, &depth, &mips, &format,
-                                &samples, &flags, &width, &size));
+                                &samples, &flags, &opened_width, &opened_size));
     CHECK_EQ(kind, 2u);
-    CHECK_EQ(size, bytes);
+    CHECK_EQ(opened_size, bytes);
     CHECK(av_d3d12_OpenObject12(second, 60u, key_heap + 7u, 0u, &kind, &dimension, &height, &depth, &mips, &format,
-                                &samples, &flags, &width, &size));
+                                &samples, &flags, &opened_width, &opened_size));
     CHECK_EQ(kind, 0u);
     std::uint32_t removed = 1u;
     CHECK(av_d3d12_Finish12(second, &removed));

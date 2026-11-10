@@ -25,7 +25,6 @@ public:
     void     forget_local();
     uint32_t count() const;
     uint32_t system_memory_segment_id() const;
-    uint32_t host_heap_segment_id(bool cpu_visible) const;
     [[nodiscard]] Status report(const AdapterInfoQuery &query) const;
 
     bool invariants_hold() const;
