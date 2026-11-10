@@ -210,9 +210,23 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
         return refuse_open(*args, 0u);
     const SurfaceLayout &layout = descriptor.layout();
     D3d9PresentFormat    presented(0u);
-    if ((descriptor.kind() != AllocationKind::gdi && descriptor.kind() != AllocationKind::surface) || layout.width() == 0u || layout.height() == 0u ||
+    if ((descriptor.kind() != AllocationKind::gdi && descriptor.kind() != AllocationKind::surface &&
+         descriptor.kind() != AllocationKind::cross_adapter) ||
+        layout.width() == 0u || layout.height() == 0u ||
         !presented.take_ddi(layout.format()))
+    {
+        LogLine(lines_)
+            .text("a Direct3D 9 opened allocation of kind ")
+            .number(static_cast<uint32_t>(descriptor.kind()))
+            .text(" is ")
+            .number(layout.width())
+            .text("x")
+            .number(layout.height())
+            .text(" format ")
+            .number(static_cast<uint32_t>(layout.format()))
+            .write();
         return refuse_open(*args, static_cast<uint32_t>(descriptor.kind()));
+    }
     D3d9Resource *made = nullptr;
     if (resources_.create(made) != Status::ok) return E_OUTOFMEMORY;
     *made = D3d9Resource{};
@@ -232,6 +246,7 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     made->allocation = info.hAllocation;
     made->allocation_pitch = layout.pitch();
     made->opened = true;
+    made->cross_adapter = descriptor.kind() == AllocationKind::cross_adapter;
     if (FAILED(allocations_.keep_resident(made->allocation))) {
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
@@ -780,6 +795,7 @@ HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
     if (source == nullptr || destination == nullptr || args->SrcSubResourceIndex >= source->count ||
         args->DstSubResourceIndex >= destination->count)
         return E_INVALIDARG;
+    if (destination->opened && destination->cross_adapter && !source->opened) return blt_to_cross_adapter(*source, *destination, *args);
     if (refuses_opened(*source, "a Direct3D 9 blt from an opened surface") ||
         refuses_opened(*destination, "a Direct3D 9 blt into an opened surface"))
         return E_NOTIMPL;
@@ -830,6 +846,41 @@ HRESULT D3d9Device::blt_to_system(const D3d9Resource &source, const D3d9Resource
         if (from + line > readback_bytes_ || line > to.system_pitch) break;
         memcpy(out + into, readback_ + from, line);
     }
+    return S_OK;
+}
+
+HRESULT D3d9Device::blt_to_cross_adapter(const D3d9Resource &source, const D3d9Resource &destination,
+                                         const D3DDDIARG_BLT &blt)
+{
+    AV_SCOPE("D3d9Device::blt_to_cross_adapter");
+    if (source.format != destination.format || source.kind == D3d9Resource::Kind::system) return E_NOTIMPL;
+    const LONG wide = blt.SrcRect.right - blt.SrcRect.left, high = blt.SrcRect.bottom - blt.SrcRect.top;
+    if (wide <= 0 || high <= 0 || wide != blt.DstRect.right - blt.DstRect.left ||
+        high != blt.DstRect.bottom - blt.DstRect.top)
+        return E_NOTIMPL;
+    if (!send_states()) return lost(__func__);
+    uint32_t pitch = 0u, rows = 0u;
+    const HRESULT read = read_surface(source, blt.SrcSubResourceIndex, pitch, rows);
+    if (FAILED(read)) return read;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
+    auto *const            pixels = static_cast<uint8_t *>(kernel_.lock_to_write(destination.allocation));
+    if (pixels == nullptr) return E_FAIL;
+    const uint32_t top = static_cast<uint32_t>(blt.SrcRect.top);
+    const size_t   line = layout.row_bytes(static_cast<uint32_t>(wide));
+    const size_t   first = static_cast<size_t>(layout.offset_of(static_cast<uint32_t>(blt.SrcRect.left), top, pitch));
+    const size_t   start = static_cast<size_t>(layout.offset_of(static_cast<uint32_t>(blt.DstRect.left),
+                                                                static_cast<uint32_t>(blt.DstRect.top),
+                                                                destination.allocation_pitch));
+    const uint32_t limit = destination.subresources[0].height;
+    for (uint32_t row = 0u; row < layout.rows(static_cast<uint32_t>(high)) && top / layout.element_height() + row < rows &&
+                            static_cast<uint32_t>(blt.DstRect.top) / layout.element_height() + row < limit;
+         row++) {
+        const size_t from = first + size_t{row} * pitch;
+        const size_t into = start + size_t{row} * destination.allocation_pitch;
+        if (from + line > readback_bytes_ || line > destination.allocation_pitch) break;
+        memcpy(pixels + into, readback_ + from, line);
+    }
+    kernel_.unlock(destination.allocation);
     return S_OK;
 }
 

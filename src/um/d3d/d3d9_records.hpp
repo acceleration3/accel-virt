@@ -46,6 +46,7 @@ struct D3d9Resource {
     HANDLE               allocation_resource;
     uint32_t             allocation_pitch;
     bool                 opened;
+    bool                 cross_adapter;
     uint64_t             shared_key;
     d3d::PresentCount    presents;
     uint32_t             named_point;

@@ -150,6 +150,7 @@ private:
     HRESULT blt_level(const D3d9Resource &source, uint32_t source_index, const D3d9Resource &destination,
                       uint32_t destination_index, const RECT &area, POINT at);
     HRESULT blt_to_system(const D3d9Resource &source, const D3d9Resource &destination, const D3DDDIARG_BLT &blt);
+    HRESULT blt_to_cross_adapter(const D3d9Resource &source, const D3d9Resource &destination, const D3DDDIARG_BLT &blt);
 
     HRESULT prepare_streams(uint32_t first_vertex, uint32_t vertex_count, uint32_t stream0_bytes, bool &rebased);
     HRESULT prepare_indices(const void *user, uint32_t index_bytes, uint32_t first_index, uint32_t count,
