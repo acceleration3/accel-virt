@@ -226,6 +226,42 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     backend.shut_down();
 }
 
+TEST(d3d_backend_device, a_pipeline_statistics_query_counts_the_vertices_and_primitives_of_the_draw_it_brackets)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend, rig.log);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device));
+    av::D3dLoopback wire(backend, rig.imports);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    bind_triangle(wire);
+    constexpr std::uint32_t query_pipeline_statistics = 4u;
+    CHECK(av_d3d_CreateQuery(wire, 50u, query_pipeline_statistics, 0u));
+    CHECK(av_d3d_BeginQuery(wire, 50u));
+    CHECK(av_d3d_Draw(wire, 3u, 0u));
+    CHECK(av_d3d_EndQuery(wire, 50u));
+    std::uint64_t counts[16] = {};
+    std::uint32_t ready = 0u;
+    std::uint64_t answered = 0u;
+    for (int attempt = 0; attempt < 200 && ready == 0u; attempt++)
+        CHECK(av_d3d_GetQueryData(wire, 50u, 0u, &ready, counts, sizeof(counts), &answered));
+    CHECK_EQ(ready, 1u);
+    CHECK_EQ(answered, 88u);
+    CHECK_EQ(counts[0], 3u);
+    CHECK_EQ(counts[1], 1u);
+    CHECK_EQ(counts[2], 3u);
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    backend.shut_down();
+}
+
 namespace {
 
 std::atomic<std::uint32_t> batch_wakes{0u};
