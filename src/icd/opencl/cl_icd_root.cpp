@@ -362,14 +362,15 @@ cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClDevice &device, cl_d
     const uint64_t      host = device.object()->wire();
     const uint64_t      key = reinterpret_cast<uintptr_t>(device.object());
     cl_int              kept = CL_SUCCESS;
-    if (device_answers_.answer(key, name, asked, kept)) return kept;
+    const bool          volatile_answer = name == free_memory_amd;
+    if (!volatile_answer && device_answers_.answer(key, name, asked, kept)) return kept;
     uint8_t      answer[host_extensions_bytes];
     size_t       answered = 0u;
     const cl_int fetched = av::clproto::av_clGetDeviceInfo(wire, host, name, sizeof answer, answer, &answered);
     if (fetched == CL_INVALID_VALUE)
         return av::clproto::av_clGetDeviceInfo(wire, host, name, value_bytes, value, size_ret);
     if (fetched != CL_SUCCESS) return fetched;
-    device_answers_.keep(key, name, answer, answered);
+    if (!volatile_answer) device_answers_.keep(key, name, answer, answered);
     return asked.give(answer, answered);
 }
 

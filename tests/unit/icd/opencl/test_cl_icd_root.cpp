@@ -1941,6 +1941,23 @@ TEST(cl_icd_root, a_queue_says_its_context_and_device_and_asks_the_host_the_rest
   CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_DEVICE, sizeof on, &on, nullptr), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
+TEST(cl_icd_root, a_host_answer_for_free_memory_is_asked_again_every_time)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  if (device == nullptr) return;
+  const std::size_t first[2] = {900u, 900u};
+  const std::size_t second[2] = {500u, 500u};
+  std::size_t       free_kib[2] = {};
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(first), sizeof first);
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(free_kib[0], 900u);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(second), sizeof second);
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(free_kib[0], 500u); }
+
 TEST(cl_icd_root, an_amd_adapter_answers_its_free_memory_from_windows)
 { ClIcdRig rig;
   rig.kmt().set_identity(0u, av::PciIdentity(0x1002u, 0x13C0u, av::PciIdentity::virtio_vendor,
