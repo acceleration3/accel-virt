@@ -1,0 +1,18 @@
+From: accel-virt
+Subject: [PATCH] a pixel shader that reads SV_SampleIndex runs per sample
+
+The shader metadata marked sample rate shading only for inputs interpolated at the sample, so a pipeline whose fragment shader reads the sample index was created without sample shading and a driver that does not infer it from the SampleId input ran the shader once per pixel with index zero.
+---
+diff -ruN
+--- a/src/dxvk/dxvk_shader_ir.cpp
++++ b/src/dxvk/dxvk_shader_ir.cpp
+@@ -620,6 +620,9 @@
+       if (builtIn == dxbc_spv::ir::BuiltIn::eIsFullyCovered)
+         m_metadata.flags.set(DxvkShaderFlag::UsesFragmentCoverage);
+ 
++      if (builtIn == dxbc_spv::ir::BuiltIn::eSampleId)
++        m_metadata.flags.set(DxvkShaderFlag::HasSampleRateShading);
++
+       return ++op;
+     }
+ 
