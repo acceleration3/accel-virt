@@ -157,6 +157,10 @@ public:
                       const d3dproto::Rect *rects) override;
     bool on_Discard(uint32_t object, uint32_t rect_count, const d3dproto::Rect *rects) override;
     bool on_CopyResource(uint32_t destination, uint32_t source) override;
+    bool on_BltResource(uint32_t destination, uint32_t destination_subresource, uint32_t destination_left,
+                        uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom,
+                        uint32_t source, uint32_t source_subresource, uint32_t source_left, uint32_t source_top,
+                        uint32_t source_right, uint32_t source_bottom) override;
     bool on_CopySubresourceRegion(uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y,
                                   uint32_t z, uint32_t source, uint32_t source_subresource, uint32_t has_box,
                                   const d3dproto::Box &box, uint32_t copy_flags) override;

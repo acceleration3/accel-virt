@@ -1,5 +1,5 @@
-#ifndef AV_UM_CROSS_ADAPTER_WAITS_HPP
-#define AV_UM_CROSS_ADAPTER_WAITS_HPP
+#ifndef AV_UM_PACKET_RELEASE_HPP
+#define AV_UM_PACKET_RELEASE_HPP
 
 #include "core/platform/thread_lock.hpp"
 #include "guest/transport/release_route.hpp"
@@ -16,16 +16,17 @@ class KmtTransport;
 
 namespace av::d3d {
 
-class CrossAdapterWaits final : public ReleaseRoute {
+class PacketRelease final : public ReleaseRoute {
 public:
-    CrossAdapterWaits(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, KmtTransport &transport,
+    PacketRelease(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, KmtTransport &transport,
                       ThreadLock &lock, KeyedLog &lines, HANDLE context);
-    ~CrossAdapterWaits();
-    CrossAdapterWaits(const CrossAdapterWaits &) = delete;
-    CrossAdapterWaits &operator=(const CrossAdapterWaits &) = delete;
+    ~PacketRelease();
+    PacketRelease(const PacketRelease &) = delete;
+    PacketRelease &operator=(const PacketRelease &) = delete;
 
-    void shares();
-    bool shared() const;
+    void engage();
+    void writing(D3DKMT_HANDLE allocation);
+    bool engaged() const;
     Status release(const uint8_t *record, uint32_t size) override;
     void   waited_long() override;
 
@@ -36,7 +37,8 @@ private:
     ThreadLock                   &lock_;
     KeyedLog                     &lines_;
     HANDLE                        context_;
-    bool                          shared_;
+    bool                          engaged_;
+    D3DKMT_HANDLE                 written_;
 };
 
 }

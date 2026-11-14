@@ -18,6 +18,7 @@ public:
     enum : uint32_t {
         gl_texture_2d = 0x0DE1u,
         gl_texture_tiling = 0x9580u, gl_linear_tiling = 0x9585u,
+        gl_draw_framebuffer = 0x8CA9u, gl_color_attachment0 = 0x8CE0u, gl_framebuffer_complete = 0x8CD5u,
     };
 
     ChainedFrames();
@@ -29,6 +30,10 @@ public:
     bool               opened() const;
     bool               fits(void *window, uint32_t width, uint32_t height) const;
     void               draw(ClientTransport &wire, uint32_t source, uint32_t slot);
+    void               finish(ClientTransport &wire);
+    void               attach(ClientTransport &wire, uint32_t framebuffer, uint32_t slot);
+    [[nodiscard]] bool renders_into(ClientTransport &wire, uint32_t framebuffer);
+    uint32_t           texture(uint32_t slot) const;
     void               close(ClientTransport *wire);
 
     bool invariants_hold() const;

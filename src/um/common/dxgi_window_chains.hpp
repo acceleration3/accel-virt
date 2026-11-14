@@ -33,7 +33,6 @@ class ThreadLock;
 class DxgiWindowChains final : public icd::WindowChains {
 public:
     static constexpr uint32_t max_devices = AvgpuAdapters::max_adapters;
-    static constexpr uint32_t copy_looks = 2000u;
 
     DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, KeyedLog &log);
     ~DxgiWindowChains();
@@ -43,6 +42,7 @@ public:
     bool open(void *window, uint64_t luid, uint32_t width, uint32_t height, icd::SlotLayout layout, uint32_t slots,
               uint64_t *ids, uint64_t *bytes) override;
     bool present(void *window, uint32_t slot) override;
+    bool settled(void *window, uint32_t slot) override;
     void close(void *window) override;
 
 private:
@@ -65,7 +65,7 @@ private:
         ComReference<ID3D11ShaderResourceView>  views[max_slots];
         uint64_t                                ids[max_slots];
         uint64_t                                bytes[max_slots];
-        ComReference<ID3D11Query>               copied;
+        ComReference<ID3D11Query>               copied[max_slots];
         uint32_t                                width;
         uint32_t                                height;
         uint32_t                                count;

@@ -1041,6 +1041,40 @@ static bool decode_CopySubresourceRegion(ServerDispatch& s, ::av::WireReader& r,
     return true;
 }
 
+static bool decode_BltResource(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:BltResource");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t destination{};
+    if (!r.read_pod(destination)) return false;
+    uint32_t destination_subresource{};
+    if (!r.read_pod(destination_subresource)) return false;
+    uint32_t destination_left{};
+    if (!r.read_pod(destination_left)) return false;
+    uint32_t destination_top{};
+    if (!r.read_pod(destination_top)) return false;
+    uint32_t destination_right{};
+    if (!r.read_pod(destination_right)) return false;
+    uint32_t destination_bottom{};
+    if (!r.read_pod(destination_bottom)) return false;
+    uint32_t source{};
+    if (!r.read_pod(source)) return false;
+    uint32_t source_subresource{};
+    if (!r.read_pod(source_subresource)) return false;
+    uint32_t source_left{};
+    if (!r.read_pod(source_left)) return false;
+    uint32_t source_top{};
+    if (!r.read_pod(source_top)) return false;
+    uint32_t source_right{};
+    if (!r.read_pod(source_right)) return false;
+    uint32_t source_bottom{};
+    if (!r.read_pod(source_bottom)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_BltResource(destination, destination_subresource, destination_left, destination_top, destination_right, destination_bottom, source, source_subresource, source_left, source_top, source_right, source_bottom)) return false;
+    return true;
+}
+
 static bool decode_ResolveSubresource(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d:ResolveSubresource");
     (void)s;
@@ -1316,6 +1350,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_Discard:
         case kCmd_CopyResource:
         case kCmd_CopySubresourceRegion:
+        case kCmd_BltResource:
         case kCmd_ResolveSubresource:
         case kCmd_GenerateMips:
         case kCmd_CopyStructureCount:
@@ -1393,6 +1428,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_Discard: return decode_Discard(s, r, reply, arena);
         case kCmd_CopyResource: return decode_CopyResource(s, r, reply, arena);
         case kCmd_CopySubresourceRegion: return decode_CopySubresourceRegion(s, r, reply, arena);
+        case kCmd_BltResource: return decode_BltResource(s, r, reply, arena);
         case kCmd_ResolveSubresource: return decode_ResolveSubresource(s, r, reply, arena);
         case kCmd_GenerateMips: return decode_GenerateMips(s, r, reply, arena);
         case kCmd_CopyStructureCount: return decode_CopyStructureCount(s, r, reply, arena);

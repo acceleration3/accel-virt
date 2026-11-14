@@ -2,7 +2,11 @@
 
 #include "harness/host/mock_host.hpp"
 #include "proto/pages/present_progress.hpp"
+#include "proto/dma/present_region.hpp"
+#include "proto/resources/surface_pair.hpp"
+#include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstring>
 
@@ -87,6 +91,35 @@ GpuRequestBuilder PresentScene::image(std::uint64_t ticket, std::uint64_t key) c
 {
     GpuRequestBuilder builder(QueuedPresentRequest::type);
     builder.u64(ticket).u32(1u).u32(1u).u64(key);
+    builder.u32(blt_operation).u32(0u).u32(0u).u32(1u).u32(0u).u32(1u).u32(0u).u32(pitch);
+    builder.u64(destination_run).u32(2u * page_bytes).u32(0u);
+    builder.u32(0u).u32(0u).u32(0u).u32(0u).u32(width).u32(1u);
+    return builder;
+}
+
+GpuRequestBuilder PresentScene::surfaces(std::uint64_t ticket, std::uint64_t source, std::uint64_t destination,
+                                         std::uint32_t regions) const
+{
+    const PresentCopyRequest copy(PresentOperation::blt, 0u, 0u, regions, 0u, 0u, 0u, 0u);
+    std::uint8_t             fixed[QueuedPresentRequest::encoded_size] = {};
+    WireWriter               fixed_writer(fixed, sizeof fixed);
+    QueuedPresentRequest(ticket, SurfacePair(source, destination), copy).write(fixed_writer);
+    GpuRequestBuilder builder(QueuedPresentRequest::type);
+    builder.truncate(0u);
+    builder.append(fixed, sizeof fixed);
+    for (std::uint32_t index = 0u; index < regions; index++) {
+        std::uint8_t bytes[PresentRegion::encoded_size] = {};
+        WireWriter   writer(bytes, sizeof bytes);
+        PresentRegion(index, 0u, index, 0u, 16u, 2u).write(writer);
+        builder.append(bytes, sizeof bytes);
+    }
+    return builder;
+}
+
+GpuRequestBuilder PresentScene::texture(std::uint64_t ticket, std::uint64_t key) const
+{
+    GpuRequestBuilder builder(QueuedPresentRequest::type);
+    builder.u64(ticket).u32(3u).u32(0u).u64(key);
     builder.u32(blt_operation).u32(0u).u32(0u).u32(1u).u32(0u).u32(1u).u32(0u).u32(pitch);
     builder.u64(destination_run).u32(2u * page_bytes).u32(0u);
     builder.u32(0u).u32(0u).u32(0u).u32(0u).u32(width).u32(1u);

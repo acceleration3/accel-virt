@@ -7,6 +7,7 @@
 #include "executor/renewable_device.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/shim/carried_share.hpp"
+#include "executor/shim/context_gate.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/d3d11_capabilities.hpp"
 #include "proto/context/device_uuid.hpp"
@@ -14,6 +15,8 @@
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/exportable_images.hpp"
 #include "executor/shim/host_image_export.hpp"
+#include "executor/shim/host_format_converter.hpp"
+#include "executor/shim/host_surface_copy.hpp"
 #include "executor/shim/plane_composer.hpp"
 #include "executor/shim/slice_importer.hpp"
 
@@ -46,7 +49,7 @@ class D3d12HostDevice;
 class Vkd3dImageExport;
 class WakeSignal;
 
-class D3d11HostDevice final : public RenewableDevice, public SliceImporter {
+class D3d11HostDevice final : public RenewableDevice, public SliceImporter, private ContextGate {
 public:
     explicit D3d11HostDevice(DriverLog &lines);
     ~D3d11HostDevice();
@@ -81,6 +84,10 @@ public:
     [[nodiscard]] bool compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
                                       uint32_t height, AvExportedImage &image);
     [[nodiscard]] bool export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image);
+    [[nodiscard]] bool map_surface(uint32_t domain, uint64_t surface, uint32_t wait_ms, AvFrameView &view);
+    void               unmap_surface(uint64_t surface);
+    [[nodiscard]] bool copy_surface(uint32_t domain, uint64_t source, uint64_t destination, const AvCopyRegion *regions,
+                                    uint32_t count, uint32_t wait_ms);
     [[nodiscard]] bool sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd);
     StagedFrame       *stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                                    uint32_t format);
@@ -100,6 +107,7 @@ public:
     [[nodiscard]] bool bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset,
                                     uint64_t bytes, void *host);
     DxvkVulkanDevice  &vulkan();
+    HostFormatConverter &converter();
 
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;
@@ -110,6 +118,10 @@ private:
     [[nodiscard]] bool make();
     void               unmake();
     bool               present() const override;
+    void               enter() override;
+    void               leave() override;
+    bool               inside() const override;
+    uint64_t           current_owner() const;
     bool               removed() override;
     [[nodiscard]] bool remake() override;
     void               carry_shares();
@@ -122,6 +134,8 @@ private:
     IUnknown          *viewed(uint32_t domain, uint64_t id, IUnknown *found);
     ID3D11Texture2D   *made_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented);
     void               retire_locked();
+    ID3D11Texture2D   *readable_like(ID3D11Texture2D *texture);
+    void               drop_read();
     [[nodiscard]] bool stage(uint32_t domain, uint64_t id, D3D11_TEXTURE2D_DESC &wanted);
     [[nodiscard]] bool drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels, uint32_t stride, uint32_t width,
                              uint32_t height);
@@ -143,9 +157,14 @@ private:
     HostImageExport         exports_;
     PlaneComposer           composer_;
     ExportableImages        images_;
+    HostSurfaceCopy         copies_;
+    HostFormatConverter     converter_;
     D3d11FramePool          frames_;
     ID3D11Texture2D        *staging_;
+    ID3D11Texture2D        *read_;
+    bool                    read_mapped_;
     PosixLock               lock_;
+    uint64_t                owner_;
     uint32_t                waiting_;
     uint64_t                taken_;
     DriverLog              &lines_;

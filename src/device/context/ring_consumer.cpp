@@ -145,6 +145,7 @@ Status RingConsumer::consume_next()
         return ran;
     }
     __atomic_store_n(&head_, head_ + batch.span(), __ATOMIC_RELEASE);
+    if (ordering_ != nullptr) ordering_->progressed();
     last_fence_ = batch.fence_id();
     batches_++;
     static_cast<void>(ring_.publish_head(head_));
@@ -258,6 +259,21 @@ uint64_t RingConsumer::earliest_pending() const
         return batch.published_at();
     }
     return UINT64_MAX;
+}
+
+uint64_t RingConsumer::published_end() const
+{
+    AV_SCOPE("RingConsumer::published_end");
+    if (!attached_ || faulted_ || !executor_.ready()) return 0u;
+    RingHeader header;
+    return ring_.snapshot(header) == Status::ok ? header.tail() : 0u;
+}
+
+bool RingConsumer::consumed_to(uint64_t end) const
+{
+    AV_SCOPE("RingConsumer::consumed_to");
+    if (!attached_ || faulted_ || !executor_.ready()) return true;
+    return __atomic_load_n(&head_, __ATOMIC_ACQUIRE) >= end;
 }
 
 void RingConsumer::note_clock(uint64_t published_at)

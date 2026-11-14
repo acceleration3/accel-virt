@@ -22,7 +22,7 @@
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/present_order.hpp"
 #include "um/d3d/allocation_lender.hpp"
-#include "um/d3d/cross_adapter_waits.hpp"
+#include "um/d3d/packet_release.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
@@ -68,6 +68,9 @@ public:
     HRESULT present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args);
     HRESULT blt(DXGI_DDI_ARG_BLT *args);
     HRESULT blt1(DXGI_DDI_ARG_BLT1 *args);
+    HRESULT blt_region(const ResourceRecord &to, uint32_t to_subresource, const d3dproto::Box &into,
+                       const ResourceRecord &from, uint32_t from_subresource, const d3dproto::Box &out_of,
+                       bool converts);
     HRESULT rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args);
     HRESULT resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args);
     HRESULT set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args);
@@ -211,7 +214,7 @@ private:
     ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;
     ObjectStorage<d3d::PresentOrder> present_order_;
-    ObjectStorage<d3d::CrossAdapterWaits> waits_;
+    ObjectStorage<d3d::PacketRelease> packets_;
     uint32_t  feature_level_;
     GrowableArray<ResourceRecord *> guest_surfaces_;
     icd::OnceLatch  guest_lock_refused_;

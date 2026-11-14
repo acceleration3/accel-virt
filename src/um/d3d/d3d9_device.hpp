@@ -16,6 +16,7 @@
 #include "proto/generated/d3d9/d3d9_wire_types.h"
 #include "um/common/performance_clock.hpp"
 #include "um/d3d/present_order.hpp"
+#include "um/d3d/packet_release.hpp"
 #include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/kernel_device.hpp"
@@ -160,6 +161,8 @@ private:
     uint32_t vertices_of(D3DPRIMITIVETYPE type, uint32_t primitives) const;
 
     HRESULT allocate(D3d9Resource &resource);
+    bool    shares_render_target(const D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create) const;
+    HRESULT allocate_shared(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     HRESULT allocate_primary(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     HRESULT show_primary(D3d9Resource &primary, uint32_t index);
     HRESULT publish_presented(D3d9Resource &resource, uint32_t index);
@@ -181,6 +184,7 @@ private:
     d3d::ReentrantCallLock                lock_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
     ObjectStorage<d3d::PresentOrder>     present_order_;
+    ObjectStorage<d3d::PacketRelease> packets_;
     ObjectPool<D3d9Resource>             resources_;
     ObjectPool<D3d9Query>                queries_;
     ObjectPool<d3d::D3d9StateBlock>      blocks_;

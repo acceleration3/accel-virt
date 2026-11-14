@@ -18,6 +18,7 @@
 #include "proto/pages/present_progress.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "miniport/present/present_ticket_record.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
@@ -306,6 +307,39 @@ TEST(present_queue, a_blt_from_a_snapshot_is_moved_out_of_it_by_the_device)
   CHECK_EQ(destination.at(4u, 0u), 0u);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
 
+TEST(present_queue, a_blt_between_two_host_surfaces_names_their_keys_and_carries_only_its_regions)
+{ Fixture      fixture;
+  EngineSide   device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  CHECK_STATUS(queue.start(), Status::ok);
+  device.copy_between_surfaces(false);
+  const PresentRegion regions[2] = {PresentRegion(0u, 0u, 0u, 0u, 4u, 2u), PresentRegion(4u, 4u, 8u, 8u, 2u, 2u)};
+  std::uint64_t       ticket = 0u;
+  const av::PresentCopyRequest copy(av::PresentOperation::blt, 0u, 0u, 2u, 7u, 64u, 9u, 128u);
+  CHECK_STATUS(queue.queue_surfaces(av::SurfacePair(0x71u, 0x72u), copy, regions, ticket), Status::ok);
+  CHECK_EQ(ticket, 1u);
+  device.serve();
+  CHECK(finishes(queue, 1u));
+  CHECK(device.copied() == av::SurfacePair(0x71u, 0x72u));
+  CHECK_EQ(device.copied_regions(), 2u);
+  CHECK(queue.invariants_hold()); }
+
+TEST(present_queue, a_blt_between_surfaces_the_device_cannot_copy_is_refused_there_and_still_completes)
+{ Fixture      fixture;
+  EngineSide   device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  CHECK_STATUS(queue.start(), Status::ok);
+  device.copy_between_surfaces(true);
+  const PresentRegion regions[1] = {PresentRegion(0u, 0u, 0u, 0u, 4u, 2u)};
+  const av::PresentCopyRequest copy(av::PresentOperation::blt, 0u, 0u, 1u, 0u, 0u, 0u, 0u);
+  std::uint64_t ticket = 0u;
+  CHECK_STATUS(queue.queue_surfaces(av::SurfacePair(0x71u, 0x72u), copy, regions, ticket), Status::ok);
+  device.serve();
+  CHECK(finishes(queue, 1u));
+  CHECK_STATUS(queue.queue_surfaces(av::SurfacePair(0u, 0x72u), copy, regions, ticket), Status::ok);
+  device.serve();
+  CHECK(finishes(queue, 2u)); }
+
 TEST(present_queue, a_start_that_failed_keeps_what_it_got_and_a_later_start_succeeds_on_it)
 { Fixture fixture;
   EngineSide device(fixture.mapped());
@@ -353,3 +387,27 @@ TEST(present_queue_invariants, a_started_queue_with_no_progress_page_or_a_missin
   CHECK(!queue.invariants_hold());
   PresentQueueProbe::put_payload(queue, 2u, payload);
   CHECK(queue.invariants_hold()); }
+
+TEST(present_queue, a_blt_from_a_host_texture_names_its_key_and_the_device_reads_the_texture_into_the_pages)
+{ Fixture      fixture;
+  EngineSide   device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  CHECK_STATUS(queue.start(), Status::ok);
+  static std::uint32_t pixels[side * side];
+  for (std::uint32_t at = 0u; at < side * side; at++) pixels[at] = 0x80000000u | at;
+  device.texture(0x4343u, AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), pitch, side, side, 0u});
+  Surface              source(fixture.platform());
+  Surface              destination(fixture.platform());
+  const PresentSurface from = source.present(red_first);
+  const PresentSurface into = destination.present(red_first);
+  const PresentRegion  region(2u, 3u, 0u, 0u, 4u, 1u);
+  std::uint64_t        ticket = 0u;
+  CHECK_STATUS(queue.queue_texture(0x4343u, from.blt_into(into, 1u), into, &region, ticket), Status::ok);
+  device.serve();
+  CHECK(finishes(queue, 1u));
+  CHECK_EQ(destination.at(0u, 0u), pixels[3u * side + 2u]);
+  CHECK_EQ(destination.at(3u, 0u), pixels[3u * side + 5u]);
+  CHECK_EQ(destination.at(4u, 0u), 0u);
+  CHECK_STATUS(queue.queue_texture(0x4444u, from.blt_into(into, 1u), into, &region, ticket), Status::ok);
+  device.serve();
+  CHECK(finishes(queue, 2u)); }

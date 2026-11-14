@@ -25,6 +25,7 @@
 #include "icd/vulkan/local_entries.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/vulkan/memory_allocate_chain.hpp"
+#include "icd/vulkan/semaphore_create_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
 #include "icd/common/host_completion_wait.hpp"
@@ -111,6 +112,7 @@ const Entry        local_rows[] = {
             Level::device},
     {"vkImportSemaphoreWin32HandleKHR",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkImportSemaphoreWin32HandleKHR), Level::device},
+    {"vkCreateSemaphore", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateSemaphore), Level::device},
     {"vkDestroySemaphore", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroySemaphore), Level::device},
     {"vkGetPhysicalDeviceExternalBufferProperties",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceExternalBufferProperties),
@@ -866,6 +868,20 @@ VkResult IcdRoot::opened_answer(Status opened, const char *api)
     return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
 
+VkResult IcdRoot::create_semaphore(VkDevice device, const VkSemaphoreCreateInfo *info,
+                                   const VkAllocationCallbacks *allocator, VkSemaphore *semaphore)
+{
+    AV_SCOPE("IcdRoot::create_semaphore");
+    if (info == nullptr || !shares_semaphore(info->pNext))
+        return vkicd::generated::Wrap_vkCreateSemaphore(device, info, allocator, semaphore);
+    SemaphoreCreateChain chain;
+    if (chain.take(*info, semaphore_handles_, semaphore_handles_.host_type()) != Status::ok) {
+        lines_.write("vkCreateSemaphore: the chain of a shared semaphore is not one this driver can send");
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    return vkicd::generated::Wrap_vkCreateSemaphore(device, chain.forwarded(), allocator, semaphore);
+}
+
 void IcdRoot::destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("IcdRoot::destroy_semaphore");
@@ -934,6 +950,21 @@ void IcdRoot::external_semaphore_properties(VkPhysicalDevice physical_device,
     properties->exportFromImportedHandleTypes =
         semaphore_handles_.reported(answered.exportFromImportedHandleTypes);
     properties->compatibleHandleTypes = semaphore_handles_.reported(answered.compatibleHandleTypes);
+}
+
+bool IcdRoot::shares_semaphore(const void *chain) const
+{
+    AV_SCOPE("IcdRoot::shares_semaphore");
+    uint32_t read = 0u;
+    for (const auto *node = static_cast<const VkBaseInStructure *>(chain); node != nullptr && read < max_chain;
+         node = node->pNext, read++) {
+        const VkStructureType type = static_cast<VkStructureType>(foreign_enum(node->sType));
+        if (type == export_semaphore_win32_handle_info) return true;
+        if (type != VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO) continue;
+        const auto *const asked = reinterpret_cast<const VkExportSemaphoreCreateInfo *>(node);
+        if (semaphore_handles_.answers(asked->handleTypes)) return true;
+    }
+    return false;
 }
 
 bool IcdRoot::shares_memory(const void *chain) const

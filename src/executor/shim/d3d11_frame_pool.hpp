@@ -46,6 +46,7 @@ private:
         ID3D11Texture2D *texture_;
         bool             staged_;
         uint32_t         format_;
+        uint32_t         held_format_;
         bool             mapped_;
     };
 

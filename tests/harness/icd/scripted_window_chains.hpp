@@ -15,10 +15,12 @@ public:
 
     void refuse_opens(bool refuse);
     void refuse_presents(bool refuse);
+    void hold_copies(bool hold);
 
     bool open(void *window, std::uint64_t luid, std::uint32_t width, std::uint32_t height, icd::SlotLayout layout,
               std::uint32_t slots, std::uint64_t *ids, std::uint64_t *bytes) override;
     bool present(void *window, std::uint32_t slot) override;
+    bool settled(void *window, std::uint32_t slot) override;
     void close(void *window) override;
 
     std::uint32_t opens() const;
@@ -36,6 +38,7 @@ public:
 private:
     bool          refuse_opens_;
     bool          refuse_presents_;
+    bool          holds_copies_;
     std::uint32_t opens_;
     std::uint32_t presents_;
     std::uint32_t closes_;

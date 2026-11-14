@@ -52,6 +52,7 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
         caps_.typed_uav_load_additional_formats = options.TypedUAVLoadAdditionalFormats ? 1u : 0u;
         caps_.rovs = options.ROVsSupported ? 1u : 0u;
         caps_.double_ops = options.DoublePrecisionFloatShaderOps ? 1u : 0u;
+        caps_.output_merger_logic_op = options.OutputMergerLogicOp ? 1u : 0u;
     }
     D3D12_FEATURE_DATA_D3D12_OPTIONS1 waves = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &waves, sizeof(waves)))) {

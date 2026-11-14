@@ -5,6 +5,7 @@
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
@@ -73,7 +74,7 @@ TEST(executor_library, the_vram_reserve_goes_to_the_executor_with_the_domain)
   library.close_domain(); }
 
 TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_refused)
-{ for (std::uint32_t broken = 0u; broken <= 27u; broken++) {
+{ for (std::uint32_t broken = 0u; broken <= 30u; broken++) {
       MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
       AvExecutorOps  &table = ops.editable();
       switch (broken) {
@@ -104,7 +105,10 @@ TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_re
       case 21u: table.map_frame = nullptr; break;
       case 22u: table.unmap_frame = nullptr; break;
       case 23u: table.export_surface = nullptr; break;
-      default: table.sync_surface = nullptr; break;
+      case 24u: table.copy_surface = nullptr; break;
+      case 28u: table.sync_surface = nullptr; break;
+      case 29u: table.map_surface = nullptr; break;
+      default: table.unmap_surface = nullptr; break;
       }
       ExecutorLibrary library;
       CHECK_STATUS(library.accept(&table), Status::invalid_parameter);
@@ -474,3 +478,43 @@ TEST(executor_library_composes, a_composition_the_library_does_not_execute_makes
   AvExportedImage image = {};
   CHECK(opened.library.composes());
   CHECK(!opened.library.compose_planes(&plane, 1u, 8u, 8u, image)); }
+
+TEST(executor_library_surfaces, are_copied_in_the_device_s_domain_only_with_regions_and_a_domain)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  ops.serve_copy(0x51u, 0x52u, true);
+  const AvCopyRegion regions[2] = {{0u, 0u, 0u, 0u, 4u, 4u}, {4u, 4u, 8u, 8u, 2u, 2u}};
+  CHECK(!library.copy_surface(av::SurfacePair(0x51u, 0x52u), regions, 2u, 100u));
+  CHECK_EQ(ops.copies_taken(), 0u);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u, 0u), Status::ok);
+  CHECK(!library.copy_surface(av::SurfacePair(0x51u, 0x52u), nullptr, 2u, 100u));
+  CHECK(!library.copy_surface(av::SurfacePair(0x51u, 0x52u), regions, 0u, 100u));
+  CHECK_EQ(ops.copies_taken(), 0u);
+  CHECK(library.copy_surface(av::SurfacePair(0x51u, 0x52u), regions, 2u, 100u));
+  CHECK_EQ(ops.copies_taken(), 1u);
+  CHECK_EQ(ops.copy_regions_taken(), 2u);
+  CHECK_EQ(ops.copy_wait(), 100u);
+  CHECK_EQ(ops.last_domain(), library.domain());
+  CHECK(!library.copy_surface(av::SurfacePair(0x53u, 0x52u), regions, 2u, 100u));
+  CHECK(!library.copy_surface(av::SurfacePair(0x51u, 0x53u), regions, 2u, 100u));
+  ops.serve_copy(0x51u, 0x52u, false);
+  CHECK(!library.copy_surface(av::SurfacePair(0x51u, 0x52u), regions, 2u, 100u)); }
+
+TEST(executor_library_surfaces, are_read_in_the_device_s_domain_and_let_go)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  static std::uint32_t pixels[4];
+  ops.serve_texture(0x51u, AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), 16u, 4u, 1u, 0u});
+  AvFrameView view = {};
+  CHECK(!library.map_surface(0x51u, 10u, view));
+  library.unmap_surface(0x51u);
+  CHECK_EQ(ops.texture_unmaps(), 0u);
+  CHECK_STATUS(library.open_domain(some_gpu, 0u, 0u, 0u), Status::ok);
+  CHECK(!library.map_surface(0u, 10u, view));
+  CHECK(library.map_surface(0x51u, 10u, view));
+  CHECK_EQ(view.width, 4u);
+  CHECK(!library.map_surface(0x52u, 10u, view));
+  library.unmap_surface(0x51u);
+  CHECK_EQ(ops.texture_unmaps(), 1u); }

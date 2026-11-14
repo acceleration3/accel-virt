@@ -215,12 +215,15 @@ TEST(display_sources_report, writes_each_source_s_format_mode_scanout_and_visibi
   CHECK_STATUS(sources.set_scanout(0u, 0x7000, &primary), Status::ok);
   CHECK_STATUS(sources.set_visible(1u, true), Status::ok);
   sources.set_vsync(true);
-  char bytes[512];
+  char bytes[1024];
   av::StateWriter writer(bytes, sizeof bytes);
   sources.report(writer);
-  char expected[512];
+  char expected[1024];
   std::snprintf(expected, sizeof expected,
                 "display_sources/0 count=2 vsync=true\n"
+                "display_sources/0/programmed/0 frequency=10000000 count=1\n"
+                "display_sources/0/programmed/0/at/0 counter=0 id=0 mark=1 extra=0\n"
+                "display_sources/0/reported/0 frequency=10000000 count=0\n"
                 "display_sources/0/source/0 format=21 width=1280 height=800 scanout=0x0000000000007000"
                 " primary=0x%016llX flip=0 visible=false\n"
                 "display_sources/0/source/1 format=0 width=0 height=0 scanout=0x0000000000000000"
@@ -297,6 +300,29 @@ TEST(display_sources_frames, a_multiplane_flip_is_remembered_with_its_own_attrib
   CHECK_EQ(layer.PlaneAttributes[0], 7u);
   CHECK(sources.shown(0u, 3u).kind() == DisplaySources::Flip::planes_disabled);
   CHECK(sources.shown(0u, 0u).kind() == DisplaySources::Flip::planes_disabled);
+  platform.set_irql(Irql::passive); }
+
+TEST(display_sources_immediate, only_the_newest_flip_counts_and_a_later_flip_clears_it)
+{ MockPlatform platform; DisplaySources sources(platform);
+  std::uint32_t allocation = 0u;
+  av::DxgkMultiplaneOverlayAttributes3Record attributes = {};
+  const av::OverlayPlane plane(0u, 9u, &allocation, 0x4000ll, attributes);
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.present_planes(0u, &plane, 1u), Status::ok);
+  sources.mark_immediate(0u);
+  platform.set_irql(Irql::dispatch);
+  CHECK(sources.immediate(0u));
+  CHECK(!sources.immediate(sources.count()));
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.present_planes(0u, &plane, 1u), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  CHECK(!sources.immediate(0u));
+  platform.set_irql(Irql::isr);
+  sources.mark_immediate(0u);
+  sources.mark_immediate(sources.count());
+  CHECK_STATUS(sources.set_scanout(0u, 0x5000, &allocation), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  CHECK(!sources.immediate(0u));
   platform.set_irql(Irql::passive); }
 
 TEST(display_sources_frames, the_count_wraps_past_zero_which_is_no_frame)

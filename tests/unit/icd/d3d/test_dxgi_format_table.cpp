@@ -327,13 +327,16 @@ TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_multisample_render_target, 0u); }
 
-TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
+TEST(dxgi_format_table, the_video_formats_are_neither_overlay_planes_nor_displayable)
 { Table table;
   constexpr std::uint32_t nv12 = 103u, yuy2 = 107u;
   table.record(nv12, api_sample, 0u);
+  table.record(yuy2, api_sample, 0u);
   table.settle();
-  CHECK((table.format_support(nv12) & ddi_multiplane_overlay) != 0u);
-  CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u); }
+  CHECK_EQ(table.format_support(nv12) & ddi_multiplane_overlay, 0u);
+  CHECK_EQ(table.format_support(nv12) & ddi_display, 0u);
+  CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u);
+  CHECK_EQ(table.format_support(yuy2) & ddi_display, 0u); }
 
 TEST(dxgi_format_table, formats_past_the_rows_the_host_sent_have_no_support)
 { av::d3dproto::FormatCaps rows[av::DxgiFormat::count] = {};

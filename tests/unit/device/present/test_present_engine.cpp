@@ -9,6 +9,8 @@
 #include "harness/host/mock_request.hpp"
 #include "harness/host/present_scene.hpp"
 #include "proto/pages/present_progress.hpp"
+#include "proto/dma/present_region.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
@@ -345,3 +347,79 @@ TEST(present_engine, the_invariant_catches_a_ring_of_slots_a_tally_or_a_thread_t
   CHECK(!rig.engine.invariants_hold());
   PresentEngineProbe::set_thread(rig.engine, nullptr);
   CHECK(rig.engine.invariants_hold()); }
+
+TEST(present_engine, a_surface_copy_completes_its_ticket_after_the_plane_copied_and_an_unknown_key_completes_it_refused)
+{ Rig rig;
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
+  CHECK_EQ(rig.send(rig.scene.surfaces(1u, 0x71u, 0x72u)), 0x1205u);
+  rig.plane.copy_through(false);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
+  CHECK_EQ(rig.send(rig.scene.surfaces(1u, 0x71u, 0x72u, 3u)), ok_nodata);
+  PresentProgress progress;
+  CHECK(rig.reaches(1u, progress));
+  CHECK_EQ(progress.refused(), 0u);
+  CHECK(rig.plane.copied() == av::SurfacePair(0x71u, 0x72u));
+  CHECK_EQ(rig.plane.copied_regions(), 3u);
+  CHECK_EQ(rig.host.live_guest_mappings(), 1u);
+  rig.plane.copy_through(true);
+  CHECK_EQ(rig.send(rig.scene.surfaces(2u, 0x73u, 0x72u)), ok_nodata);
+  CHECK(rig.reaches(2u, progress));
+  CHECK_EQ(progress.refused(), 1u);
+  CHECK_EQ(rig.send(rig.scene.blt(3u, 0u, 4u)), ok_nodata);
+  CHECK(rig.reaches(3u, progress));
+  CHECK_EQ(progress.refused(), 1u);
+  CHECK(rig.scene.copied(0u, 4u));
+  CHECK(rig.engine.invariants_hold()); }
+
+TEST(present_frames, copies_only_through_a_plane_that_copies_and_only_what_it_can_carry)
+{ av::PresentFrames none;
+  const av::PresentRegion region(0u, 0u, 0u, 0u, 4u, 4u);
+  CHECK(!none.copies());
+  CHECK(!none.copy(av::SurfacePair(1u, 2u), &region, 1u));
+  av::RecordingContextPlane plane;
+  const av::PresentFrames   blind(plane, gpu);
+  CHECK(!blind.copies());
+  CHECK(!blind.copy(av::SurfacePair(1u, 2u), &region, 1u));
+  plane.copy_through(false);
+  const av::PresentFrames sighted(plane, gpu);
+  CHECK(sighted.copies());
+  CHECK(!sighted.copy(av::SurfacePair(1u, 2u), nullptr, 1u));
+  CHECK(!sighted.copy(av::SurfacePair(1u, 2u), &region, 0u));
+  CHECK(!sighted.copy(av::SurfacePair(1u, 2u), &region, av::PresentFrames::copy_regions + 1u));
+  CHECK_EQ(plane.copies_asked(), 0u);
+  CHECK(sighted.copy(av::SurfacePair(1u, 2u), &region, 1u));
+  CHECK_EQ(plane.copy_first().width, 4u);
+  CHECK(!sighted.copy(av::SurfacePair(0u, 2u), &region, 1u)); }
+
+TEST(present_engine, a_texture_source_completes_after_the_host_texture_was_read_and_an_unknown_key_completes_refused)
+{ Rig rig;
+  static std::uint32_t pixels[PresentScene::width];
+  for (std::uint32_t x = 0u; x < PresentScene::width; x++) pixels[x] = 0x00FF0000u | x;
+  rig.plane.serve_texture(0x81u, AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
+                                             PresentScene::width, 1u, 0u});
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
+  CHECK_EQ(rig.send(rig.scene.texture(1u, 0x81u)), ok_nodata);
+  PresentProgress progress;
+  CHECK(rig.reaches(1u, progress));
+  CHECK_EQ(progress.refused(), 0u);
+  CHECK_EQ(rig.scene.destination_pixel(5u, 0u), 0x00FF0005u);
+  CHECK_EQ(rig.plane.texture_unmaps(), 1u);
+  CHECK_EQ(rig.send(rig.scene.texture(2u, 0x99u)), ok_nodata);
+  CHECK(rig.reaches(2u, progress));
+  CHECK_EQ(progress.refused(), 1u);
+  CHECK(rig.engine.invariants_hold()); }
+
+TEST(present_frames, reads_a_texture_only_through_a_plane_that_has_one)
+{ av::PresentFrames none;
+  AvFrameView       view = {};
+  CHECK(!none.map_surface(7u, view));
+  none.unmap_surface(7u);
+  av::RecordingContextPlane plane;
+  const av::PresentFrames   blind(plane, gpu);
+  CHECK(!blind.map_surface(7u, view));
+  plane.serve_texture(7u, AvFrameView{nullptr, 4u, 1u, 1u, 0u});
+  const av::PresentFrames sighted(plane, gpu);
+  CHECK(sighted.map_surface(7u, view));
+  CHECK(!sighted.map_surface(8u, view));
+  sighted.unmap_surface(7u);
+  CHECK_EQ(plane.texture_unmaps(), 1u); }

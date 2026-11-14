@@ -2,6 +2,7 @@
 
 #include "device/module/device_instance.hpp"
 #include "device/display/display_clock.hpp"
+#include "device/display/display_show.hpp"
 #include "device/fence/device_pulse.hpp"
 #include "device/export/export_connection.hpp"
 #include "device/present/present_engine.hpp"
@@ -99,6 +100,15 @@ void AvDisplayClockRun(void *clock)
 
 void AvDevicePulseRun(void *pulse)
 { static_cast<av::DevicePulse *>(pulse)->run(); }
+
+void AvDisplayShowRun(void *show)
+{ static_cast<av::DisplayShow *>(show)->run(); }
+
+void AvDisplayFramesExport(void *device)
+{ static_cast<av::VirtioGpuAv *>(device)->export_latched_frames(); }
+
+void AvDisplayImagesShow(void *device)
+{ static_cast<av::VirtioGpuAv *>(device)->show_exported_images(); }
 
 void AvDisplayFramesShow(void *device)
 { static_cast<av::VirtioGpuAv *>(device)->show_latched_frames(); }

@@ -116,16 +116,23 @@ bool DxgiWindowChains::present(void *window, uint32_t slot)
         presented = SUCCEEDED(shown);
         if (lines_.first(chain_presented_key, 0))
             lines_.note_hex("a window's chain presented its first frame, answering", static_cast<uint32_t>(shown), 16u);
-        context->End(chain->copied.get());
+        context->End(chain->copied[slot].get());
         context->Flush();
-        uint32_t looks = 0u;
-        while (context->GetData(chain->copied.get(), nullptr, 0u, 0u) == S_FALSE && looks < copy_looks) {
-            kmt_.sleep_briefly();
-            looks++;
-        }
     }
     lock_.release();
     return presented;
+}
+
+bool DxgiWindowChains::settled(void *window, uint32_t slot)
+{
+    AV_SCOPE("DxgiWindowChains::settled");
+    lock_.acquire();
+    Chain *const chain = chain_of(window);
+    const bool   open = chain != nullptr && chain->chain.get() != nullptr && slot < chain->count;
+    const bool   done = !open || devices_[chain->device].context->GetData(chain->copied[slot].get(), nullptr, 0u,
+                                                                            D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_FALSE;
+    lock_.release();
+    return done;
 }
 
 void DxgiWindowChains::close(void *window)
@@ -301,8 +308,13 @@ bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, 
     AV_SCOPE("DxgiWindowChains::make_chain");
     drop_slots(chain);
     if (chain.chain.get() != nullptr) {
-        if (FAILED(chain.chain->ResizeBuffers(0u, width, height, static_cast<DXGI_FORMAT>(chain.format), 0u))) {
-            refuse("the window's chain would not resize");
+        const HRESULT resized =
+            chain.chain->ResizeBuffers(0u, width, height, static_cast<DXGI_FORMAT>(chain.format), 0u);
+        if (FAILED(resized)) {
+            LogLine(lines_)
+                .text("no DXGI chain for a window: the window's chain would not resize, answering ")
+                .hex(static_cast<uint32_t>(resized), 8u)
+                .write();
             return false;
         }
     } else {
@@ -317,16 +329,17 @@ bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, 
         described.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         described.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
         HWND const window = static_cast<HWND>(chain.window);
-        if (FAILED(device.factory->CreateSwapChainForHwnd(device.device.get(), window, &described, nullptr, nullptr,
-                                                          chain.chain.receive()))) {
-            refuse("DXGI made no flip chain on the window");
+        const HRESULT created = device.factory->CreateSwapChainForHwnd(device.device.get(), window, &described, nullptr,
+                                                                       nullptr, chain.chain.receive());
+        if (FAILED(created)) {
+            LogLine(lines_)
+                .text("no DXGI chain for a window: DXGI made no flip chain, answering ")
+                .hex(static_cast<uint32_t>(created), 8u)
+                .write();
             return false;
         }
         static_cast<void>(device.factory->MakeWindowAssociation(window, DXGI_MWA_NO_WINDOW_CHANGES));
     }
-    const D3D11_QUERY_DESC query = {D3D11_QUERY_EVENT, 0u};
-    if (chain.copied.get() == nullptr && FAILED(device.device->CreateQuery(&query, chain.copied.receive())))
-        return false;
     chain.width = width;
     chain.height = height;
     return true;
@@ -358,6 +371,11 @@ bool DxgiWindowChains::make_slots(Chain &chain, Device &device, uint32_t count)
             refuse("a slot of the window's chain cannot be read");
             return false;
         }
+        const D3D11_QUERY_DESC query = {D3D11_QUERY_EVENT, 0u};
+        if (FAILED(device.device->CreateQuery(&query, chain.copied[slot].receive()))) {
+            refuse("a slot of the window's chain has no query for its copy");
+            return false;
+        }
         chain.count = slot + 1u;
     }
     return true;
@@ -367,6 +385,7 @@ void DxgiWindowChains::drop_slots(Chain &chain)
 {
     AV_SCOPE("DxgiWindowChains::drop_slots");
     for (uint32_t slot = 0u; slot < max_slots; slot++) {
+        chain.copied[slot].reset();
         chain.views[slot].reset();
         chain.slots[slot].reset();
         chain.ids[slot] = 0u;
@@ -380,7 +399,6 @@ void DxgiWindowChains::drop_chain(Chain &chain)
     AV_SCOPE("DxgiWindowChains::drop_chain");
     const bool held = chain.chain.get() != nullptr;
     drop_slots(chain);
-    chain.copied.reset();
     chain.chain.reset();
     ID3D11DeviceContext *const context = devices_[chain.device].context.get();
     if (held && context != nullptr) {

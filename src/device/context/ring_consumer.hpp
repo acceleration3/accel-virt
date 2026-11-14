@@ -36,6 +36,8 @@ public:
     bool     faulted() const;
     uint64_t head() const;
     uint64_t earliest_pending() const;
+    uint64_t published_end() const;
+    bool     consumed_to(uint64_t end) const;
     bool     has_work() const;
     uint64_t watchdog_deadline() const;
     void     announce_awake(bool awake);

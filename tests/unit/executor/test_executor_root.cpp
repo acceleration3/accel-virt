@@ -3,6 +3,7 @@
 #include "executor/context_session.hpp"
 #include "executor/executor_log.hpp"
 #include "executor/executor_root.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
@@ -373,6 +374,8 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   int             fd = 5;
   CHECK(!root.export_surface(1u, 7u, 0u, image));
   CHECK(!root.sync_surface(1u, 7u, 0u, writes, fd));
+  const AvCopyRegion copied[1] = {{0u, 0u, 0u, 0u, 2u, 2u}};
+  CHECK(!root.copy_surface(1u, av::SurfacePair(7u, 8u), copied, 1u, 10u));
   CHECK_STATUS(root.initialize(apis), Status::ok);
   const std::uint32_t on_intel = held.domain_of(intel);
   const std::uint32_t on_nvidia = held.domain_of(nvidia);
@@ -393,6 +396,9 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   CHECK(!root.sync_surface(on_intel + 100u, 7u, 0u, writes, fd));
   CHECK(!root.sync_surface(on_nvidia, 7u, 0u, writes, fd));
   CHECK(!root.sync_surface(on_intel, 7u, 0u, writes, fd));
+  CHECK(!root.copy_surface(on_intel + 100u, av::SurfacePair(7u, 8u), copied, 1u, 10u));
+  CHECK(!root.copy_surface(on_nvidia, av::SurfacePair(7u, 8u), copied, 1u, 10u));
+  CHECK(!root.copy_surface(on_intel, av::SurfacePair(7u, 8u), copied, 1u, 10u));
   CHECK_EQ(fd, -1);
   CHECK_EQ(writes, 0u);
   apis.shares(0u)->clear();
@@ -511,6 +517,23 @@ TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, absent) == nullptr);
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, nullptr) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
+
+TEST(executor_root_open, a_refused_context_says_which_check_refused_it)
+{ Opened opened;
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the opencl context is refused: the GPU does not run this API"), 1u);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, absent) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the vulkan context is refused: the domain names no GPU"), 1u);
+  const AvContextOptions asked = {4u, 6u, 0u, 0u, 0u};
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel, &asked) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("context options were asked of an API that takes none"), 1u);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, intel) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the backend would not start"), 1u); }
+
+TEST(executor_root_open, a_refusal_repeated_many_times_is_spoken_a_few_times)
+{ Opened opened;
+  for (std::uint32_t i = 0u; i < 300u; i++) CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
+  CHECK_EQ(opened.held().lines().holding("the GPU does not run this API"), 6u); }
 
 TEST(executor_root_open, every_slot_taken_refuses_the_next)
 { Opened opened;

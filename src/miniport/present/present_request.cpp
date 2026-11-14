@@ -19,7 +19,7 @@ PresentRequest::PresentRequest(Platform &platform, DxgkargPresentRecord &request
 Status PresentRequest::operation(PresentOperation &operation) const
 {
     AV_SCOPE("PresentRequest::operation");
-    switch (request_.Flags) {
+    switch (request_.Flags & ~flag_linear_to_srgb) {
     case flag_blt:
         operation = PresentOperation::blt;
         return Status::ok;

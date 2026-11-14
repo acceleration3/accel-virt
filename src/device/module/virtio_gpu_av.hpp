@@ -6,6 +6,7 @@
 #include "device/context/local_context_plane.hpp"
 #include "device/isolation/renderer_context_plane.hpp"
 #include "device/display/display_clock.hpp"
+#include "device/display/display_show.hpp"
 #include "device/display/head_planes.hpp"
 #include "device/display/display_heads.hpp"
 #include "device/display/display_modes.hpp"
@@ -56,6 +57,8 @@ public:
     bool                 read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     bool                 post_frame(uint32_t head, uint32_t frame, uint64_t key);
     void                 show_latched_frames();
+    void                 export_latched_frames();
+    void                 show_exported_images();
     bool                 pci_identity(AvPciIdentity &identity) const;
     uint32_t             blobs() const;
     uint32_t             scanouts() const;
@@ -94,6 +97,7 @@ private:
     RendererContextPlane remote_;
     ContextPlane        *contexts_;
     ExportService        exports_;
+    DisplayShow          shower_;
 
     friend struct VirtioGpuAvProbe;
 };

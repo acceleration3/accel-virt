@@ -263,6 +263,7 @@ TEST(d3d_backend, nothing_is_bound_drawn_cleared_or_copied_with_no_device_select
   CHECK(!backend.on_Discard(nobody, 0u, nullptr));
   CHECK(!backend.on_CopyResource(1u, 2u));
   CHECK(!backend.on_CopySubresourceRegion(1u, 0u, 0u, 0u, 0u, 2u, 0u, 0u, box, 0u));
+  CHECK(!backend.on_BltResource(1u, 0u, 0u, 0u, 4u, 4u, 2u, 0u, 0u, 0u, 4u, 4u));
   CHECK(!backend.on_ResolveSubresource(1u, 0u, 2u, 0u, 28u));
   CHECK(!backend.on_GenerateMips(nobody));
   CHECK(!backend.on_CopyStructureCount(1u, 0u, 2u));

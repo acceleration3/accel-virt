@@ -316,17 +316,6 @@ TEST(guest_gl_context, it_remembers_the_dc_it_was_made_current_on)
   CHECK(context->current_dc() == nullptr);
   CHECK(context->invariants_hold()); }
 
-TEST(guest_gl_context, it_remembers_the_swap_the_pacing_refused_until_it_is_shown)
-{ GlContextRig rig;
-  Context context(rig);
-  int dc = 0;
-  CHECK(context->held_swap() == nullptr);
-  context->hold_swap(&dc);
-  CHECK(context->held_swap() == &dc);
-  context->hold_swap(nullptr);
-  CHECK(context->held_swap() == nullptr);
-  CHECK(context->invariants_hold()); }
-
 TEST(guest_gl_context, an_unmade_context_paces_nothing)
 { GlContextRig rig;
   Context context(rig);

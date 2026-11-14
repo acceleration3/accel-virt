@@ -342,6 +342,14 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkImportSemaphoreWin32HandleKHR(
     return icd_binding.root().import_semaphore_handle(device, pImportSemaphoreWin32HandleInfo);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pCreateInfo,
+                                                       const VkAllocationCallbacks *pAllocator,
+                                                       VkSemaphore *pSemaphore)
+{
+    AV_SCOPE("local_vkCreateSemaphore");
+    return icd_binding.root().create_semaphore(device, pCreateInfo, pAllocator, pSemaphore);
+}
+
 VKAPI_ATTR void VKAPI_CALL local_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
                                                     const VkAllocationCallbacks *pAllocator)
 {

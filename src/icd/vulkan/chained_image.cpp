@@ -19,7 +19,7 @@ using BindImage = VkResult(VKAPI_PTR *)(VkDevice, VkImage, VkDeviceMemory, VkDev
 
 ChainedImage::ChainedImage(EntryLookup &entries, VkDevice device, uint64_t host_device, WindowChains &chains,
                            ClientTransport &wire)
-    : entries_(entries), device_(device), host_device_(host_device), chains_(chains), slots_(), wire_(wire), image_(VK_NULL_HANDLE)
+    : entries_(entries), device_(device), host_device_(host_device), chains_(chains), slots_(), wire_(wire), images_{}
 {
     AV_SCOPE("ChainedImage::ChainedImage");
 }
@@ -30,51 +30,61 @@ ChainedImage::~ChainedImage()
     release();
 }
 
-bool ChainedImage::open(void *window, uint64_t luid, VkFormat format, VkExtent2D extent)
+bool ChainedImage::open(void *window, uint64_t luid, VkFormat format, VkExtent2D extent, uint32_t count)
 {
     AV_SCOPE("ChainedImage::open");
     if (slots_.opened() || window == nullptr) return false;
     SlotFormat slot(SlotLayout::bgra_top_down);
     if (!slot.take_vk(static_cast<uint32_t>(format))) return false;
-    if (!slots_.open(wire_, chains_, window, luid, extent.width, extent.height, slot.layout(), 1u, host_device_)) return false;
-    if (make_image(slot, extent)) return true;
+    if (!slots_.open(wire_, chains_, window, luid, extent.width, extent.height, slot.layout(), count, host_device_)) return false;
+    bool made = true;
+    for (uint32_t index = 0u; made && index < count; index++) made = make_image(slot, extent, index);
+    if (made) return true;
     close();
     return false;
 }
 
-bool ChainedImage::make_image(const SlotFormat &slot, VkExtent2D extent)
+bool ChainedImage::make_image(const SlotFormat &slot, VkExtent2D extent, uint32_t index)
 {
     AV_SCOPE("ChainedImage::make_image");
-    const VkDeviceMemory memory = HandleBits(slots_.memory(0u)).as<VkDeviceMemory>();
+    const VkDeviceMemory memory = HandleBits(slots_.memory(index)).as<VkDeviceMemory>();
     const ExportableImageInfo described(extent.width, extent.height, 1u, 1u, 1u, slot.dxgi(), slot.bind_flags());
     const auto create = reinterpret_cast<CreateImage>(entries_.entry("vkCreateImage"));
-    if (create(device_, &described.info(), nullptr, &image_) != VK_SUCCESS) {
-        image_ = VK_NULL_HANDLE;
+    if (create(device_, &described.info(), nullptr, &images_[index]) != VK_SUCCESS) {
+        images_[index] = VK_NULL_HANDLE;
         return false;
     }
     const auto bind = reinterpret_cast<BindImage>(entries_.entry("vkBindImageMemory"));
-    return bind(device_, image_, memory, 0u) == VK_SUCCESS;
+    return bind(device_, images_[index], memory, 0u) == VK_SUCCESS;
 }
 
 bool ChainedImage::opened() const
 {
     AV_SCOPE("ChainedImage::opened");
-    return image_ != VK_NULL_HANDLE;
+    return slots_.opened() && images_[0] != VK_NULL_HANDLE;
 }
 
-VkImage ChainedImage::slot() const
+VkImage ChainedImage::slot(uint32_t index) const
 {
     AV_SCOPE("ChainedImage::slot");
-    return image_;
+    return index < ChainSlots::max_slots ? images_[index] : VK_NULL_HANDLE;
 }
 
 void ChainedImage::release()
 {
     AV_SCOPE("ChainedImage::release");
-    if (image_ != VK_NULL_HANDLE)
-        reinterpret_cast<DestroyImage>(entries_.entry("vkDestroyImage"))(device_, image_, nullptr);
-    image_ = VK_NULL_HANDLE;
+    destroy_images();
     slots_.release(wire_);
+}
+
+void ChainedImage::destroy_images()
+{
+    AV_SCOPE("ChainedImage::destroy_images");
+    for (VkImage &image : images_) {
+        if (image != VK_NULL_HANDLE)
+            reinterpret_cast<DestroyImage>(entries_.entry("vkDestroyImage"))(device_, image, nullptr);
+        image = VK_NULL_HANDLE;
+    }
 }
 
 void ChainedImage::close()
@@ -87,7 +97,8 @@ void ChainedImage::close()
 bool ChainedImage::invariants_hold() const
 {
     AV_SCOPE("ChainedImage::invariants_hold");
-    if (image_ != VK_NULL_HANDLE && slots_.memory(0u) == 0u) return false;
+    for (uint32_t index = 0u; index < ChainSlots::max_slots; index++)
+        if (images_[index] != VK_NULL_HANDLE && slots_.memory(index) == 0u) return false;
     return slots_.invariants_hold();
 }
 

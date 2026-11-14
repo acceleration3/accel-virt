@@ -87,6 +87,8 @@ public:
                                                          VkPhysicalDeviceMemoryProperties *properties);
     void               physical_device_memory_properties2(VkPhysicalDevice physical_device,
                                                           VkPhysicalDeviceMemoryProperties2 *properties);
+    VkResult           create_semaphore(VkDevice device, const VkSemaphoreCreateInfo *info,
+                                        const VkAllocationCallbacks *allocator, VkSemaphore *semaphore);
     VkResult           allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
                                        const VkAllocationCallbacks *allocator, VkDeviceMemory *memory);
     void               free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator);
@@ -207,6 +209,7 @@ private:
     Win32HandleKind         semaphore_handles_;
     const ImportMemoryWin32HandleRecord *imported_memory_record(const void *chain) const;
     bool                    shares_memory(const void *chain) const;
+    bool                    shares_semaphore(const void *chain) const;
     VkResult                shared_allocation(LoaderHandle &made, VkDevice device, const VkMemoryAllocateInfo &info,
                                               const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
     VkResult                publish(LoaderHandle &made, VkDevice device, uint32_t kind, uint64_t size,

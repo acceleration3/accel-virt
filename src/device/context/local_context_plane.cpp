@@ -3,6 +3,7 @@
 #include "proto/context/capset_info.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
@@ -156,6 +157,12 @@ bool LocalContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedIm
     return library_.export_image(key, image);
 }
 
+bool LocalContextPlane::exports_off_main_loop() const
+{
+    AV_SCOPE("LocalContextPlane::exports_off_main_loop");
+    return true;
+}
+
 bool LocalContextPlane::composes() const
 {
     AV_SCOPE("LocalContextPlane::composes");
@@ -193,6 +200,33 @@ void LocalContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &frame)
 {
     AV_SCOPE("LocalContextPlane::unmap_frame");
     library_.unmap_frame(frame);
+}
+
+bool LocalContextPlane::copies_surfaces() const
+{
+    AV_SCOPE("LocalContextPlane::copies_surfaces");
+    return library_.available();
+}
+
+bool LocalContextPlane::copy_surface(const uint8_t *, const SurfacePair &surfaces, const AvCopyRegion *regions,
+                                     uint32_t count, uint32_t wait_ms)
+{
+    AV_SCOPE("LocalContextPlane::copy_surface");
+    contexts_.settle_d3d();
+    return library_.copy_surface(surfaces, regions, count, wait_ms);
+}
+
+bool LocalContextPlane::map_surface(const uint8_t *, uint64_t surface, uint32_t wait_ms, AvFrameView &view)
+{
+    AV_SCOPE("LocalContextPlane::map_surface");
+    contexts_.settle_d3d();
+    return library_.map_surface(surface, wait_ms, view);
+}
+
+void LocalContextPlane::unmap_surface(const uint8_t *, uint64_t surface)
+{
+    AV_SCOPE("LocalContextPlane::unmap_surface");
+    library_.unmap_surface(surface);
 }
 
 bool LocalContextPlane::exports_surfaces() const

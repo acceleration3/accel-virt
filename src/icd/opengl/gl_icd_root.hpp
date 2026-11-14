@@ -80,6 +80,8 @@ public:
     bool        pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
                                      int32_t *ints, float *floats);
     void        flush_current();
+    void        finish_current();
+    void        viewport(int32_t x, int32_t y, int32_t width, int32_t height);
     bool        set_swap_interval(int32_t interval);
     int32_t     swap_interval();
     bool        choose_pixel_format(void *dc, const int32_t *ints, const float *floats, uint32_t max,
@@ -105,8 +107,8 @@ private:
     enum class Shown { refused, nothing, handed };
 
     Shown show_frame(void *dc);
-    Shown present_frame(void *dc);
-    void  present_held(GuestGlContext &context);
+    Shown present_frame(void *dc, bool paced);
+    bool  admits(GuestGlContext &context);
     uint64_t take_pending(uint32_t thread);
     [[nodiscard]] Status put_pending(uint32_t thread, uint64_t handle);
     void     fail(uint32_t error);

@@ -79,7 +79,7 @@ Status StandardAllocation::describe_cross_adapter(AllocationDescriptor &descript
     const uint32_t format = static_cast<uint32_t>(surface.Format);
     const CrossAdapterLayout layout(surface.Width, surface.Height, format, CrossAdapterFormat(format).bytes_per_pixel());
     if (!layout.valid()) return Status::invalid_parameter;
-    surface.Pitch = layout.pitch();
+    surface.Pitch = layout.reported_pitch();
     descriptor = AllocationDescriptor(AllocationKind::cross_adapter, true, layout.surface(), layout.bytes(),
                                       ScanoutTarget());
     return Status::ok;

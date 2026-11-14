@@ -22,6 +22,7 @@ namespace av::icd {
 }
 
 namespace av::icd {
+class PresentPacing;
 class WindowSurface;
 }
 
@@ -59,6 +60,9 @@ public:
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
                      icd::WindowSurface &surface, GlPresentQueue *loop, uint64_t luid);
     void     hand_over(const BatchMark &mark);
+    void     hold_over(const BatchMark &mark, icd::PresentPacing &pacing);
+    void     show_held_now();
+    bool     viewport_resizes(uint32_t width, uint32_t height);
     void     follow(ClientTransport &wire, void *window, const PixelFormat &format, icd::WindowSurface &surface);
     void     drop_gone(ClientTransport &wire, icd::WindowSurface &surface);
     void     release(ClientTransport *wire);
@@ -83,6 +87,8 @@ private:
     bool                                draws_window_;
     bool                                reads_window_;
     uint32_t                            read_buffer_;
+    uint32_t                            viewport_width_;
+    uint32_t                            viewport_height_;
 
     bool                                ever_current_;
 

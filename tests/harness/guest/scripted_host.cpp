@@ -231,6 +231,13 @@ void ScriptedHost::gl_integer(std::int32_t value)
     gl_bytes(bytes, sizeof bytes);
 }
 
+void ScriptedHost::gl_status(std::uint32_t value)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(value);
+    queue(writer);
+}
+
 void ScriptedHost::gl_resource_property(std::int32_t value)
 {
     const std::int32_t written = 1;

@@ -68,6 +68,38 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
     return resource.shared_key != 0u ? show_primary(resource, 0u) : S_OK;
 }
 
+bool D3d9Device::shares_render_target(const D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create) const
+{
+    AV_SCOPE("D3d9Device::shares_render_target");
+    const bool single = (resource.kind == D3d9Resource::Kind::surface && resource.count == 1u) ||
+                        (resource.kind == D3d9Resource::Kind::texture && resource.levels == 1u);
+    return create.Flags.SharedResource && create.Flags.RenderTarget && single && create.Pool != D3DDDIPOOL_SYSTEMMEM;
+}
+
+HRESULT D3d9Device::allocate_shared(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
+{
+    AV_SCOPE("D3d9Device::allocate_shared");
+    const D3d9Subresource &top = resource.subresources[0];
+    D3d9PresentFormat presented(0u);
+    if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
+    d3d::KernelSurface surface(top.width, top.height, presented.dxgi());
+    if (surface.make() != Status::ok) return E_INVALIDARG;
+    D3DKMT_HANDLE allocation = 0u;
+    const HRESULT made = allocations_.make(surface, create.hResource, allocation);
+    if (FAILED(made)) return made;
+    resource.allocation = allocation;
+    resource.allocation_resource = create.hResource;
+    resource.allocation_pitch = surface.pitch();
+    resource.shared_key = surface.key();
+    if (resource.shared_key == 0u) return S_OK;
+    uint32_t id = 0u, subresource = 0u;
+    if (!surface_of(resource, 0u, id, subresource)) return E_INVALIDARG;
+    if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, resource.shared_key, 0u) ||
+        wire().flush() != Status::ok)
+        return lost(__func__);
+    return S_OK;
+}
+
 HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
 {
     AV_SCOPE("D3d9Device::show_primary");
@@ -82,7 +114,14 @@ HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
 HRESULT D3d9Device::publish_presented(D3d9Resource &resource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::publish_presented");
-    if (resource.allocation_resource != nullptr && resource.shared_key != 0u) return show_primary(resource, index);
+    if (resource.allocation_resource != nullptr && resource.shared_key != 0u) {
+        if (!packets_.constructed()) return show_primary(resource, index);
+        packets_.object().engage();
+        packets_.object().writing(resource.allocation);
+        const HRESULT shown = show_primary(resource, index);
+        packets_.object().writing(0u);
+        return shown;
+    }
     return publish_point(resource, index);
 }
 

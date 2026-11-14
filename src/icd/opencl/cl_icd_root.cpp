@@ -758,9 +758,13 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
                                 void *host_pointer, const uint64_t *properties, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_buffer");
+    static constexpr uint64_t allowed[] = {
+        ClExternalMemory::handle_properties[0], ClExternalMemory::handle_properties[1],
+        ClExternalMemory::handle_properties[2], ClExternalMemory::handle_properties[3],
+        ClExternalMemory::handle_properties[4], ClPropertyList::device_handle_list};
+    static_assert(sizeof allowed / sizeof allowed[0] == ClExternalMemory::handle_property_count + 1u);
     ClPropertyList list;
-    const cl_int   judged_list = judge(properties, ClExternalMemory::handle_properties,
-                                       ClExternalMemory::handle_property_count, list);
+    const cl_int   judged_list = judge(properties, allowed, ClExternalMemory::handle_property_count + 1u, list);
     if (judged_list != CL_SUCCESS) {
         report_error(error, judged_list);
         return nullptr;

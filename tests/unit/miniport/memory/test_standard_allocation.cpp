@@ -150,6 +150,9 @@ TEST(standard_allocation_describe, a_cross_adapter_texture_has_dxgkrnls_pitch_an
   D3dkmdtGdiSurfaceDataRecord narrow = {1056u, 16u, a8r8g8b8, 7, 0u, 0xEEu};
   CHECK_STATUS(Request(gdi, &narrow).describe(platform), Status::ok);
   CHECK_EQ(narrow.Pitch, 4224u);
+  D3dkmdtGdiSurfaceDataRecord unaligned = {160u, 120u, a8r8g8b8, 7, 0u, 0xEEu};
+  CHECK_STATUS(Request(gdi, &unaligned).describe(platform), Status::ok);
+  CHECK_EQ(unaligned.Pitch, 640u);
   D3dkmdtGdiSurfaceDataRecord wide = {100u, 100u, 113, 7, 0u, 0xEEu};
   CHECK_STATUS(Request(gdi, &wide).describe(platform), Status::ok);
   CHECK_EQ(wide.Pitch, 896u);

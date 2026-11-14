@@ -14,7 +14,7 @@ WindowFramebuffers::WindowFramebuffers(BlockSource &memory, DriverLog &log)
     : memory_(memory), log_(log), pool_(memory), presenters_(memory, Pool::paged), current_(nullptr),
       presented_(nullptr), draws_window_(false),
       reads_window_(false),
-      read_buffer_(gl_back), ever_current_(false)
+      read_buffer_(gl_back), viewport_width_(0u), viewport_height_(0u), ever_current_(false)
 {
     AV_SCOPE("WindowFramebuffers::WindowFramebuffers");
 }
@@ -49,6 +49,10 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
                                    presenter.height() != old_height);
     const bool moved = found != current_;
     current_ = found;
+    if (moved || remade) {
+        viewport_width_ = 0u;
+        viewport_height_ = 0u;
+    }
     if (!ever_current_) {
         ever_current_ = true;
         draws_window_ = true;
@@ -143,6 +147,22 @@ void WindowFramebuffers::hand_over(const BatchMark &mark)
     presented_ = nullptr;
 }
 
+void WindowFramebuffers::hold_over(const BatchMark &mark, icd::PresentPacing &pacing)
+{
+    AV_SCOPE("WindowFramebuffers::hold_over");
+    if (presented_ != nullptr) presented_->hold_over(mark, pacing);
+    presented_ = nullptr;
+}
+
+bool WindowFramebuffers::viewport_resizes(uint32_t width, uint32_t height)
+{
+    AV_SCOPE("WindowFramebuffers::viewport_resizes");
+    if (current_ == nullptr || (width == viewport_width_ && height == viewport_height_)) return false;
+    viewport_width_ = width;
+    viewport_height_ = height;
+    return true;
+}
+
 void WindowFramebuffers::follow(ClientTransport &wire, void *window, const PixelFormat &format,
                                 icd::WindowSurface &surface)
 {
@@ -178,6 +198,13 @@ void WindowFramebuffers::release(ClientTransport *wire)
         forget(presenter);
         return true;
     });
+}
+
+void WindowFramebuffers::show_held_now()
+{
+    AV_SCOPE("WindowFramebuffers::show_held_now");
+    for (uint32_t slot = presenters_.next_live(0u); slot != presenters_.no_slot; slot = presenters_.next_live(slot + 1u))
+        (*presenters_.at(slot))->show_held_now();
 }
 
 uint32_t WindowFramebuffers::held() const

@@ -83,6 +83,7 @@ bool TextureUpload::send(UploadSink &sink, const uint8_t *data) const
     if (!readable()) return false;
     const uint64_t most = piece_most();
     if (bytes() <= most) return sink.piece(box_, data, bytes(), row_pitch_, slice_pitch_, true);
+    if (layout_.planar()) return false;
     icd::SplitReport split(wire_);
     for (uint32_t slice = 0u; slice < slices(); slice++)
         if (!send_slice(sink, data, slice, most, split)) return false;

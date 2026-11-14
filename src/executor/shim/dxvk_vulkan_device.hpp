@@ -3,6 +3,7 @@
 
 #include "executor/d3d/idle_queue.hpp"
 #include "executor/shim/dxvk_queues.hpp"
+#include "executor/shim/gated_queue.hpp"
 #include "executor/shim/queue_work.hpp"
 #include "executor/shim/vulkan_device_table.hpp"
 #include "executor/shim/vulkan_timeline.hpp"
@@ -16,10 +17,11 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
+class ContextGate;
 class OwnedFd;
 class DxvkVulkanDevice final : public IdleQueue {
 public:
-    DxvkVulkanDevice();
+    explicit DxvkVulkanDevice(ContextGate &gate);
     ~DxvkVulkanDevice();
     DxvkVulkanDevice(const DxvkVulkanDevice &) = delete;
     DxvkVulkanDevice &operator=(const DxvkVulkanDevice &) = delete;
@@ -41,6 +43,7 @@ private:
     IDXGIVkInteropDevice1 *interop_;
     VulkanDeviceTable      table_;
     DxvkD3d11Queue         queue_;
+    GatedQueue             gated_;
     QueueWork              work_;
     VkSemaphore            sync_;
     bool                   sync_spent_;

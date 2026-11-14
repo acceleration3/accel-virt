@@ -130,6 +130,12 @@ TEST(present_request_present, a_blt_writes_one_command_with_both_patches)
   CHECK_EQ(present.patch(1u).PatchOffset, PresentCommand::destination_address_offset);
   CHECK(present.patches_untouched_from(2u)); }
 
+TEST(present_request_present, a_linear_to_srgb_blt_is_a_blt)
+{ Present present(blt | 0x40u);
+  CHECK_EQ(present.run(), 0u);
+  CHECK_EQ(u32(present.dma(), 4u), 1u);
+  CHECK_EQ(present.patched(), 2u); }
+
 TEST(present_request_present, a_colour_fill_patches_only_the_destination)
 { Present present(color_fill);
   present.request().SubRectCnt = 0u;

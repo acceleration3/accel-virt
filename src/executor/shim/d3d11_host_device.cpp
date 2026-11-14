@@ -5,10 +5,10 @@
 
 
 
+#include <pthread.h>
 #include <stdio.h>
 
 #include "core/log/log_line.hpp"
-#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/bgra_rows.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
@@ -25,7 +25,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice(DriverLog &lines)
-    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_, lines), frames_(*this), staging_(nullptr), lock_(), waiting_(0u), taken_(0u), lines_(lines), clock_(), carry_heap_(), carried_(carry_heap_)
+    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(*this), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_, lines), copies_(), converter_(), frames_(*this), staging_(nullptr), read_(nullptr), read_mapped_(false), lock_(), owner_(0u), waiting_(0u), taken_(0u), lines_(lines), clock_(), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
 }
@@ -92,14 +92,19 @@ void D3d11HostDevice::unmake()
 {
     AV_SCOPE("D3d11HostDevice::unmake");
     composer_.release();
+    converter_.release();
     exports_.release();
     if (context_ != nullptr) frames_.clear();
     images_.release();
+    copies_.release();
     if (slices_ != nullptr) slices_->Release();
     slices_ = nullptr;
     vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
     staging_ = nullptr;
+    if (read_ != nullptr) read_->Release();
+    read_ = nullptr;
+    read_mapped_ = false;
     if (context_ != nullptr) context_->Release();
     if (device_ != nullptr) device_->Release();
     context_ = nullptr;
@@ -187,6 +192,97 @@ bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, uint32_t
     return exported;
 }
 
+ID3D11Texture2D *D3d11HostDevice::readable_like(ID3D11Texture2D *texture)
+{
+    AV_SCOPE("D3d11HostDevice::readable_like");
+    D3D11_TEXTURE2D_DESC wanted = {};
+    texture->GetDesc(&wanted);
+    D3D11_TEXTURE2D_DESC have = {};
+    if (read_ != nullptr) read_->GetDesc(&have);
+    if (read_ != nullptr && have.Width == wanted.Width && have.Height == wanted.Height &&
+        have.Format == wanted.Format)
+        return read_;
+    drop_read();
+    wanted.MipLevels = 1u;
+    wanted.ArraySize = 1u;
+    wanted.SampleDesc = {1u, 0u};
+    wanted.Usage = D3D11_USAGE_STAGING;
+    wanted.BindFlags = 0u;
+    wanted.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    wanted.MiscFlags = 0u;
+    if (FAILED(device_->CreateTexture2D(&wanted, nullptr, &read_))) read_ = nullptr;
+    return read_;
+}
+
+void D3d11HostDevice::drop_read()
+{
+    AV_SCOPE("D3d11HostDevice::drop_read");
+    if (read_ != nullptr && read_mapped_ && context_ != nullptr) context_->Unmap(read_, 0u);
+    read_mapped_ = false;
+    if (read_ != nullptr) read_->Release();
+    read_ = nullptr;
+}
+
+bool D3d11HostDevice::map_surface(uint32_t domain, uint64_t surface, uint32_t wait_ms, AvFrameView &view)
+{
+    AV_SCOPE("D3d11HostDevice::map_surface");
+    view = AvFrameView{};
+    ID3D11Fence *fence = nullptr;
+    uint64_t     value = 0u;
+    uint32_t     width = 0u;
+    uint32_t     height = 0u;
+    lock(nullptr);
+    bool busy = read_mapped_;
+    ID3D11Texture2D *const from = !busy && usable() ? presented_texture(domain, surface) : nullptr;
+    ID3D11Texture2D *const into = from != nullptr ? readable_like(from) : nullptr;
+    if (into != nullptr) {
+        D3D11_TEXTURE2D_DESC desc = {};
+        from->GetDesc(&desc);
+        width = desc.Width;
+        height = desc.Height;
+    }
+    const AvCopyRegion whole = {0u, 0u, 0u, 0u, width, height};
+    const bool submitted = into != nullptr && copies_.submit(device_, context_, from, into, &whole, 1u, fence, value);
+    if (from != nullptr) from->Release();
+    unlock();
+    if (!submitted || !copies_.wait(fence, value, wait_ms)) return false;
+    lock(nullptr);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    const bool ok = usable() && read_ != nullptr && !read_mapped_ &&
+                    SUCCEEDED(context_->Map(read_, 0u, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped));
+    if (ok) {
+        read_mapped_ = true;
+        view = AvFrameView{static_cast<const uint8_t *>(mapped.pData), mapped.RowPitch, width, height, 0u};
+    }
+    unlock();
+    return ok;
+}
+
+void D3d11HostDevice::unmap_surface(uint64_t)
+{
+    AV_SCOPE("D3d11HostDevice::unmap_surface");
+    lock(nullptr);
+    if (read_ != nullptr && read_mapped_ && context_ != nullptr) context_->Unmap(read_, 0u);
+    read_mapped_ = false;
+    unlock();
+}
+
+bool D3d11HostDevice::copy_surface(uint32_t domain, uint64_t source, uint64_t destination,
+                                   const AvCopyRegion *regions, uint32_t count, uint32_t wait_ms)
+{
+    AV_SCOPE("D3d11HostDevice::copy_surface");
+    ID3D11Fence *fence = nullptr;
+    uint64_t     value = 0u;
+    lock(nullptr);
+    ID3D11Texture2D *const from = usable() ? presented_texture(domain, source) : nullptr;
+    ID3D11Texture2D *const into = from != nullptr ? shared_texture(domain, destination) : nullptr;
+    const bool submitted = into != nullptr && copies_.submit(device_, context_, from, into, regions, count, fence, value);
+    if (from != nullptr) from->Release();
+    if (into != nullptr) into->Release();
+    unlock();
+    return submitted && copies_.wait(fence, value, wait_ms);
+}
+
 bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd)
 {
     AV_SCOPE("D3d11HostDevice::sync_surface");
@@ -202,6 +298,12 @@ bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint32_t f
     synced = synced && vulkan_.sync_file(fd);
     unlock();
     return synced;
+}
+
+HostFormatConverter &D3d11HostDevice::converter()
+{
+    AV_SCOPE("D3d11HostDevice::converter");
+    return converter_;
 }
 
 StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
@@ -411,6 +513,7 @@ void D3d11HostDevice::lock(ID3DDeviceContextState *state)
     lock_.acquire();
     __atomic_fetch_sub(&waiting_, 1u, __ATOMIC_ACQ_REL);
     __atomic_fetch_add(&taken_, uint64_t{1}, __ATOMIC_RELEASE);
+    __atomic_store_n(&owner_, current_owner(), __ATOMIC_RELAXED);
     select(state);
 }
 
@@ -426,11 +529,36 @@ void D3d11HostDevice::unlock()
 {
     AV_SCOPE("D3d11HostDevice::unlock");
     const uint64_t mine = __atomic_load_n(&taken_, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&owner_, uint64_t{0}, __ATOMIC_RELAXED);
     lock_.release();
     if (__atomic_load_n(&waiting_, __ATOMIC_ACQUIRE) == 0u) return;
     constexpr uint32_t patience = 100000u;
     for (uint32_t spin = 0u; spin < patience && __atomic_load_n(&taken_, __ATOMIC_ACQUIRE) == mine; spin++)
         __builtin_ia32_pause();
+}
+
+void D3d11HostDevice::enter()
+{
+    AV_SCOPE("D3d11HostDevice::enter");
+    lock(nullptr);
+}
+
+void D3d11HostDevice::leave()
+{
+    AV_SCOPE("D3d11HostDevice::leave");
+    unlock();
+}
+
+bool D3d11HostDevice::inside() const
+{
+    AV_SCOPE("D3d11HostDevice::inside");
+    return __atomic_load_n(&owner_, __ATOMIC_RELAXED) == current_owner();
+}
+
+uint64_t D3d11HostDevice::current_owner() const
+{
+    AV_SCOPE("D3d11HostDevice::current_owner");
+    return static_cast<uint64_t>(pthread_self());
 }
 
 ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
@@ -443,9 +571,10 @@ ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
     ID3DDeviceContextState *state = nullptr;
     HRESULT                 made = E_FAIL;
     {
-        const ThreadLockHold locked(lock_);
+        lock(nullptr);
         made = device_->CreateDeviceContextState(0u, &level, 1u, D3D11_SDK_VERSION, __uuidof(ID3D11Device1), &chosen,
                                                  &state);
+        unlock();
     }
     if (FAILED(made)) return nullptr;
     feature_level = chosen;
@@ -455,7 +584,7 @@ ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
 void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
 {
     AV_SCOPE("D3d11HostDevice::forget_state");
-    const ThreadLockHold locked(lock_);
+    lock(nullptr);
     if (state != nullptr && state == active_) {
         const D3D_FEATURE_LEVEL wanted = static_cast<D3D_FEATURE_LEVEL>(feature_level_);
         D3D_FEATURE_LEVEL chosen = wanted;
@@ -467,6 +596,7 @@ void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
         }
         active_ = nullptr;
     }
+    unlock();
 }
 
 ID3D11Device5 *D3d11HostDevice::device() const

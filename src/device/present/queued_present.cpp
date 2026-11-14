@@ -25,9 +25,13 @@ Status QueuedPresent::accept(ControlRequest &request, const QueuedPresentRequest
                              const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::accept");
-    if (present.source() == QueuedPresentRequest::Source::image && !snapshots.readable()) return Status::not_supported;
+    const QueuedPresentRequest::Source from = present.source();
+    if (from == QueuedPresentRequest::Source::image && !snapshots.readable()) return Status::not_supported;
+    if ((from == QueuedPresentRequest::Source::surfaces || from == QueuedPresentRequest::Source::texture) &&
+        !snapshots.copies())
+        return Status::not_supported;
     present_ = present;
-    Status status = map(request);
+    Status status = from == QueuedPresentRequest::Source::surfaces ? Status::ok : map(request);
     if (status == Status::ok) status = read_regions(request);
     if (status != Status::ok) release();
     return status;
@@ -60,6 +64,8 @@ Status QueuedPresent::move(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move");
     if (present_.source() == QueuedPresentRequest::Source::image) return move_snapshot(snapshots);
+    if (present_.source() == QueuedPresentRequest::Source::surfaces) return move_surfaces(snapshots);
+    if (present_.source() == QueuedPresentRequest::Source::texture) return move_texture(snapshots);
     RegionMover mover(source_.window(), destination_.window(), present_.copy());
     return move_regions(mover);
 }
@@ -77,9 +83,24 @@ Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
     AV_SCOPE("QueuedPresent::move_snapshot");
     AvFrameView view = {};
     if (!snapshots.map(present_.image(), view)) return Status::not_found;
-    ScopeExit       unmap([this, &snapshots] { snapshots.unmap(present_.image()); });
-    void *const     pixels = const_cast<uint8_t *>(view.pixels);
-    const uint64_t  length = uint64_t{view.row_pitch} * view.height;
+    ScopeExit unmap([this, &snapshots] { snapshots.unmap(present_.image()); });
+    return move_view(view);
+}
+
+Status QueuedPresent::move_texture(const PresentFrames &snapshots)
+{
+    AV_SCOPE("QueuedPresent::move_texture");
+    AvFrameView view = {};
+    if (!snapshots.map_surface(present_.image().surface(), view)) return Status::not_found;
+    ScopeExit unmap([this, &snapshots] { snapshots.unmap_surface(present_.image().surface()); });
+    return move_view(view);
+}
+
+Status QueuedPresent::move_view(const AvFrameView &view)
+{
+    AV_SCOPE("QueuedPresent::move_view");
+    void *const      pixels = const_cast<uint8_t *>(view.pixels);
+    const uint64_t   length = uint64_t{view.row_pitch} * view.height;
     const BlobWindow source(&pixels, &length, 1u, length);
     const PresentCopyRequest &copy = present_.copy();
     const PresentCopyRequest  shape(PresentOperation::blt,
@@ -88,6 +109,12 @@ Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
                                     copy.destination_pitch());
     RegionMover mover(source, destination_.window(), shape);
     return move_regions(mover);
+}
+
+Status QueuedPresent::move_surfaces(const PresentFrames &snapshots)
+{
+    AV_SCOPE("QueuedPresent::move_surfaces");
+    return snapshots.copy(present_.surfaces(), regions_, present_.copy().regions()) ? Status::ok : Status::not_found;
 }
 
 void QueuedPresent::release()
@@ -121,7 +148,7 @@ bool QueuedPresent::invariants_hold() const
 {
     AV_SCOPE("QueuedPresent::invariants_hold");
     if (!source_.invariants_hold() || !destination_.invariants_hold()) return false;
-    const bool mapped = destination_.extents() != 0u;
+    const bool mapped = destination_.extents() != 0u || present_.source() == QueuedPresentRequest::Source::surfaces;
     return mapped == (present_.ticket() != 0u) && (mapped || refusals_after_ == 0u);
 }
 

@@ -54,6 +54,7 @@ private:
     Surface *row(uint64_t surface);
     Slot    *slot(const SurfacePoint &frame);
     Slot    *room(StagedFrame *&evicted);
+    bool     evict_oldest(uint64_t surface);
     Look     look(const SurfacePoint &frame, AvFrameView &view);
     StagedFrame *claim(const SurfacePoint &frame, Look &found);
     bool     passed(const Surface &surface, uint32_t point) const;

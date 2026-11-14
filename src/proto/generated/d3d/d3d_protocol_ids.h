@@ -73,6 +73,7 @@ inline constexpr uint32_t kCmd_ReadSubresource = 0x0004040c;
 inline constexpr uint32_t kCmd_PresentPoint = 0x0004040d;
 inline constexpr uint32_t kCmd_QueryBufferSlices11 = 0x0004040e;
 inline constexpr uint32_t kCmd_BindBufferSlice = 0x0004040f;
+inline constexpr uint32_t kCmd_BltResource = 0x00040410;
 inline constexpr uint32_t kCmd_BeginQuery = 0x00040500;
 inline constexpr uint32_t kCmd_EndQuery = 0x00040501;
 inline constexpr uint32_t kCmd_GetQueryData = 0x00040502;

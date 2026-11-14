@@ -64,7 +64,7 @@ GLenum APIENTRY Wrap_glClientWaitSync(GLsync sync, GLbitfield flags, GLuint64 ti
 void APIENTRY Wrap_glFinish(void)
 {
     AV_SCOPE("Wrap_glFinish");
-    ::av::glicd::gl_icd_binding.root().manual().finish();
+    ::av::glicd::gl_icd_binding.root().finish_current();
 }
 
 void APIENTRY Wrap_glColorPointer(GLint, GLenum, GLsizei, const void*)
@@ -174,6 +174,12 @@ void APIENTRY Wrap_glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height,
 {
     AV_SCOPE("Wrap_glReadPixels");
     ::av::glicd::gl_icd_binding.root().manual().read_pixels(x, y, width, height, format, type, pixels);
+}
+
+void APIENTRY Wrap_glViewport(GLint x, GLint y, GLsizei width, GLsizei height)
+{
+    AV_SCOPE("Wrap_glViewport");
+    ::av::glicd::gl_icd_binding.root().viewport(x, y, width, height);
 }
 
 void APIENTRY Wrap_glFlush(void)

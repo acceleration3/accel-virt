@@ -362,6 +362,20 @@ public:
                               av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
                                   av::CapsetInfo::feature_present_from_image);
     }
+    void                   offer_present_between_surfaces()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
+                                  av::CapsetInfo::feature_present_from_image |
+                                  av::CapsetInfo::feature_present_between_surfaces);
+    }
+    void                   offer_present_from_surface()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
+                                  av::CapsetInfo::feature_present_from_image |
+                                  av::CapsetInfo::feature_present_from_surface);
+    }
     void                   serve() { answer_display_info(this); }
     const std::uint8_t    *last_queued() const { return queued_; }
     std::uint32_t          queued_presents() const { return queued_count_; }
@@ -3211,6 +3225,125 @@ TEST(adapter_present, a_blt_naming_a_point_on_a_host_surface_is_queued_from_its_
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
+TEST(adapter_present, a_blt_from_one_host_surface_to_another_with_no_point_is_queued_between_their_keys)
+{ Fixture fixture;
+  fixture.offer_present_between_surfaces();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)),
+           success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface unshared(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  std::uint32_t kind = 0u, source_entries = 1u, destination_entries = 1u;
+  std::uint64_t from = 0u, into = 0u;
+  std::memcpy(&into, fixture.last_queued() + 4u, sizeof into);
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&from, fixture.last_queued() + 40u, sizeof from);
+  std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
+  std::memcpy(&destination_entries, fixture.last_queued() + 68u, sizeof destination_entries);
+  CHECK_EQ(kind, 2u);
+  CHECK(from != 0u);
+  CHECK(into != 0u);
+  CHECK(from != into);
+  CHECK_EQ(source_entries, 0u);
+  CHECK_EQ(destination_entries, 0u);
+  info[2].hDeviceSpecificAllocation = unshared.open_handle();
+  av::DxgkargPresentRecord pages = present;
+  pages.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &pages)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK_EQ(kind, 0u);
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t point[av::PresentPointRecord::encoded_size] = {};
+  CHECK_STATUS(av::PresentPointRecord(0xABCDu).encode(point, sizeof point), av::Status::ok);
+  av::DxgkargPresentRecord pointed = present;
+  pointed.pDmaBuffer = dma;
+  pointed.pPrivateDriverData = point;
+  pointed.PrivateDriverDataSize = sizeof point;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &pointed)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK(kind != 2u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_present, a_blt_from_a_host_surface_to_a_page_destination_with_no_point_reads_the_host_texture)
+{ Fixture fixture;
+  fixture.offer_present_from_surface();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface pages(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  MappedSurface unshared(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = pages.open_handle();
+  std::uint8_t dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  std::uint32_t kind = 0u, point = 1u, source_entries = 1u, destination_entries = 0u;
+  std::uint64_t key = 0u, into = 1u;
+  std::memcpy(&into, fixture.last_queued() + 4u, sizeof into);
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&point, fixture.last_queued() + 36u, sizeof point);
+  std::memcpy(&key, fixture.last_queued() + 40u, sizeof key);
+  std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
+  std::memcpy(&destination_entries, fixture.last_queued() + 68u, sizeof destination_entries);
+  CHECK_EQ(kind, 3u);
+  CHECK_EQ(point, 0u);
+  CHECK(key != 0u);
+  CHECK_EQ(into, 0u);
+  CHECK_EQ(source_entries, 0u);
+  CHECK(destination_entries != 0u);
+  info[1].hDeviceSpecificAllocation = unshared.open_handle();
+  av::DxgkargPresentRecord shadow = present;
+  shadow.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &shadow)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK_EQ(kind, 0u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
 TEST(adapter_present, a_point_named_by_escape_is_the_next_blt_s_frame)
 { Fixture fixture;
   fixture.offer_present_snapshots();
@@ -3391,6 +3524,8 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
       "adapter/0/present_waiters/0 busy=false waiting=0 waits=0 timeouts=0\n"
       "adapter/0/av_context_table/0 busy=false bound=0\n"
       "adapter/0/display_sources/0 count=1 vsync=false\n"
+      "adapter/0/display_sources/0/programmed/0 frequency=10000000 count=0\n"
+      "adapter/0/display_sources/0/reported/0 frequency=10000000 count=0\n"
       "adapter/0/display_sources/0/source/0 format=0 width=0 height=0 scanout=0x0000000000000000"
       " primary=0x0000000000000000 flip=0 visible=false";
   CHECK(std::strcmp(dump, expected) == 0);
@@ -5846,6 +5981,40 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, a_base_plane_wit
   fixture.platform().set_irql(Irql::passive);
   CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary);
   CHECK_EQ(AdapterProbe(fixture.adapter()).scanout(0u), 0x6000000000ull); }
+
+TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, an_immediate_flip_is_reported_from_the_dpc_and_a_synchronised_one_at_the_vsync)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  int primary = 0;
+  av::DxgkPrimaryContextDataRecord view = {};
+  view.hAllocation = &primary;
+  view.SegmentId = 1u;
+  view.SegmentAddress = 0x6000000000ll;
+  av::DxgkPrimaryContextDataRecord *views[] = {&view};
+  av::DxgkMultiplaneOverlayPlane3Record plane = {};
+  plane.LayerIndex = 0u;
+  plane.PresentId = 41u;
+  plane.InputFlags = av::plane_input_enabled;
+  plane.ContextCount = 1u;
+  plane.ppContextData = views;
+  av::DxgkMultiplaneOverlayPlane3Record *list[] = {&plane};
+  av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record request = {};
+  request.PlaneCount = 1u;
+  request.ppPlanes = list;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.adapter().dpc_routine();
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  plane.PresentId = 42u;
+  plane.InputFlags = av::plane_input_enabled | av::plane_input_flip_immediate;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.adapter().dpc_routine();
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, 10); }
 
 TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, skips_what_it_cannot_show_and_takes_no_more_than_the_planes_there_are)
 { Fixture fixture;

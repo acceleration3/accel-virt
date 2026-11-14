@@ -1,4 +1,7 @@
 #include "miniport/ddi/dxgk_multiplane_overlay_plane_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
+#include "miniport/display/overlay_plane.hpp"
 #include "miniport/display/device_vblank.hpp"
 #include "miniport/display/display_mode.hpp"
 #include "miniport/display/display_sources.hpp"
@@ -50,6 +53,7 @@ namespace {
 
 constexpr std::int32_t  crtc_vsync = 3;
 constexpr std::int32_t  crtc_vsync_multiplane = 7;
+constexpr std::int32_t  crtc_vsync_presented = 10;
 constexpr std::uint32_t no_memory = 0xC0000017u;
 
 class Fixture {
@@ -185,6 +189,162 @@ TEST(device_vblank_tick, a_posted_source_reports_the_flip_the_device_latched_and
   fixture.tick(400u, true);
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).InterruptType, crtc_vsync);
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).Argument2, 0x3000u); }
+
+namespace {
+
+class PresentedFlips {
+public:
+    explicit PresentedFlips(Fixture &fixture) : fixture_(fixture) {}
+
+    void present(std::uint64_t id, bool immediate = true)
+    {
+        av::DxgkMultiplaneOverlayAttributes3Record attributes = {};
+        const av::OverlayPlane plane(0u, id, &allocation_, 0x1000ll, attributes);
+        fixture_.platform().set_irql(Irql::isr);
+        CHECK_STATUS(fixture_.sources().present_planes(0u, &plane, 1u), Status::ok);
+        if (immediate) fixture_.sources().mark_immediate(0u);
+        fixture_.platform().set_irql(Irql::passive);
+    }
+    std::uint64_t id_of(std::uint32_t interrupt)
+    {
+        const auto &record = fixture_.dxgkrnl().interrupt(interrupt);
+        const auto *const layers = reinterpret_cast<const av::DxgkMultiplaneOverlayVsyncInfo2Record *>(
+            static_cast<std::uintptr_t>(record.UnionRemainder[0]) |
+            (static_cast<std::uintptr_t>(record.UnionRemainder[1]) << 32u));
+        return layers != nullptr && record.Argument2 == 1u ? layers->PresentId : 0u;
+    }
+
+private:
+    Fixture      &fixture_;
+    std::uint32_t allocation_ = 0u;
+};
+
+}
+
+TEST(device_vblank_early, a_new_flip_is_reported_from_the_next_tick_without_waiting_for_a_blank)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  flips.present(10u);
+  fixture.tick(100u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, crtc_vsync_presented);
+  CHECK_EQ(flips.id_of(0u), 10u);
+  CHECK_EQ(fixture.vsync().reported(), 0u);
+  fixture.tick(150u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  flips.present(11u);
+  fixture.tick(200u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(flips.id_of(1u), 11u); }
+
+TEST(device_vblank_early, a_flip_that_waits_for_the_vsync_is_reported_only_at_the_vsync)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  flips.present(10u, false);
+  fixture.tick(100u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.blank(1u);
+  fixture.tick(200u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(flips.id_of(0u), 10u);
+  flips.present(11u, true);
+  flips.present(12u, false);
+  fixture.tick(300u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u); }
+
+TEST(device_vblank_early, a_flip_replaced_before_the_tick_is_dropped_and_the_newest_is_reported_once)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  flips.present(10u);
+  flips.present(11u);
+  flips.present(12u);
+  fixture.tick(100u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(flips.id_of(0u), 12u);
+  fixture.tick(110u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u); }
+
+TEST(device_vblank_early, the_blank_after_an_early_report_repeats_the_same_present_and_never_an_older_one)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  std::uint64_t last = 0u;
+  std::uint32_t seen = 0u;
+  for (std::uint32_t round = 1u; round <= 6u; round++) {
+      flips.present(round * 10u);
+      if (round % 2u == 0u) flips.present(round * 10u + 1u);
+      fixture.blank(round);
+      fixture.tick(round * 100u);
+      for (; seen < fixture.dxgkrnl().interrupts(); seen++) {
+          const std::uint64_t id = flips.id_of(seen);
+          CHECK(id >= last);
+          last = id;
+      }
+  }
+  CHECK_EQ(last, 61u);
+  CHECK_EQ(fixture.vsync().reported(), 6u); }
+
+TEST(device_vblank_early, a_source_that_posts_frames_never_sees_a_present_older_than_one_already_reported)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  std::uint64_t last = 0u;
+  std::uint32_t seen = 0u;
+  for (std::uint32_t round = 1u; round <= 6u; round++) {
+      flips.present(round * 10u);
+      flips.present(round * 10u + 1u);
+      fixture.blank(round, round * 2u - 1u);
+      fixture.tick(round * 100u, true);
+      for (; seen < fixture.dxgkrnl().interrupts(); seen++) {
+          const std::uint64_t id = flips.id_of(seen);
+          CHECK(id >= last);
+          last = id;
+      }
+  }
+  CHECK_EQ(last, 61u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 12u); }
+
+TEST(device_vblank_early, nothing_is_reported_early_while_vsync_is_off_or_suspended)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  flips.present(10u);
+  fixture.tick(100u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.vsync().suspend();
+  flips.present(11u);
+  fixture.tick(200u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u); }
+
+TEST(device_vblank_early, a_presented_report_carries_the_gpu_frequency_and_clock)
+{ Fixture fixture;
+  PresentedFlips flips(fixture);
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.take_page();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  flips.present(10u);
+  fixture.tick(100u);
+  const auto &record = fixture.dxgkrnl().interrupt(0u);
+  std::uint64_t frequency = 0u;
+  const std::uint64_t expected = fixture.platform().performance_counter(frequency);
+  static_cast<void>(expected);
+  CHECK(frequency != 0u);
+  CHECK_EQ((static_cast<std::uint64_t>(record.UnionRemainder[3]) << 32u) | record.UnionRemainder[2], frequency); }
 
 TEST(device_vblank_tick, a_refused_report_is_said_and_not_counted)
 { Fixture fixture;

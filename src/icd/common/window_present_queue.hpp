@@ -47,6 +47,7 @@ public:
     void     refuse();
     uint32_t free_slot(const Source &owner, uint32_t slots, uint32_t reserved);
     uint32_t try_slot(const Source &owner, uint32_t slots, uint32_t reserved);
+    uint32_t reclaim_slot(const Source &owner, uint32_t slots, uint32_t reserved);
     void     keep(HeldFlusher &owner);
     void     forget(HeldFlusher &owner);
     bool     hand(const Frame &frame);
@@ -69,7 +70,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    enum class Stage : uint8_t { free, queued, showing };
+    enum class Stage : uint8_t { free, queued, showing, copying };
 
     struct Row {
         Frame    frame_;
@@ -84,7 +85,10 @@ private:
     uint32_t free_row() const;
     uint32_t held_by(const Source &owner) const;
     void     drop_queued(const Source &owner);
+    void     reap_copied();
+    void     forget_copied(const Source &owner);
     bool     holds(const Source &owner, uint32_t slot) const;
+    uint32_t first_free(const Source &owner, uint32_t slots, uint32_t reserved) const;
     bool     wait_for(const Mark &mark);
     void     show(uint32_t row, const Frame &frame);
     bool     put_on_window(const Frame &frame);
@@ -177,8 +181,32 @@ template <typename Source, typename Readiness>
 uint32_t WindowPresentQueue<Source, Readiness>::try_slot(const Source &owner, uint32_t slots, uint32_t reserved)
 {
     AV_SCOPE("WindowPresentQueue::try_slot");
-    uint32_t slot = 0u;
     const ThreadLockHold held(lock_);
+    reap_copied();
+    return first_free(owner, slots, reserved);
+}
+
+template <typename Source, typename Readiness>
+uint32_t WindowPresentQueue<Source, Readiness>::reclaim_slot(const Source &owner, uint32_t slots, uint32_t reserved)
+{
+    AV_SCOPE("WindowPresentQueue::reclaim_slot");
+    const ThreadLockHold held(lock_);
+    reap_copied();
+    uint32_t slot = first_free(owner, slots, reserved);
+    if (slot == slots) {
+        drop_queued(owner);
+        slot = first_free(owner, slots, reserved);
+    }
+    if (slot == slots) dropped_frames_++;
+    return slot;
+}
+
+template <typename Source, typename Readiness>
+uint32_t WindowPresentQueue<Source, Readiness>::first_free(const Source &owner, uint32_t slots,
+                                                           uint32_t reserved) const
+{
+    AV_SCOPE("WindowPresentQueue::first_free");
+    uint32_t slot = 0u;
     while (slot < slots && (slot == reserved || holds(owner, slot))) slot++;
     return slot;
 }
@@ -241,6 +269,7 @@ void WindowPresentQueue<Source, Readiness>::settle(const Source &owner)
         {
             const ThreadLockHold held(lock_);
             if (look >= slot_looks || !thread_.running()) drop_queued(owner);
+            forget_copied(owner);
             held_frames = held_by(owner);
         }
         if (held_frames == 0u) return;
@@ -431,8 +460,31 @@ uint32_t WindowPresentQueue<Source, Readiness>::held_by(const Source &owner) con
 {
     AV_SCOPE("WindowPresentQueue::held_by");
     uint32_t count = 0u;
-    for (const Row &row : rows_) count += row.stage_ != Stage::free && row.frame_.owner() == &owner ? 1u : 0u;
+    for (const Row &row : rows_)
+        count += (row.stage_ == Stage::queued || row.stage_ == Stage::showing) && row.frame_.owner() == &owner ? 1u : 0u;
     return count;
+}
+
+template <typename Source, typename Readiness>
+void WindowPresentQueue<Source, Readiness>::reap_copied()
+{
+    AV_SCOPE("WindowPresentQueue::reap_copied");
+    for (Row &row : rows_) {
+        if (row.stage_ != Stage::copying || !chains_.settled(row.frame_.window(), row.frame_.slot())) continue;
+        row.frame_ = Frame();
+        row.stage_ = Stage::free;
+    }
+}
+
+template <typename Source, typename Readiness>
+void WindowPresentQueue<Source, Readiness>::forget_copied(const Source &owner)
+{
+    AV_SCOPE("WindowPresentQueue::forget_copied");
+    for (Row &row : rows_) {
+        if (row.stage_ != Stage::copying || row.frame_.owner() != &owner) continue;
+        row.frame_ = Frame();
+        row.stage_ = Stage::free;
+    }
 }
 
 template <typename Source, typename Readiness>
@@ -477,8 +529,12 @@ void WindowPresentQueue<Source, Readiness>::show(uint32_t row, const Frame &fram
     {
         const ThreadLockHold held(lock_);
         frame.owner()->done(frame, drawn);
-        rows_.at(row).frame_ = Frame();
-        rows_.at(row).stage_ = Stage::free;
+        if (shown && frame.chained()) {
+            rows_.at(row).stage_ = Stage::copying;
+        } else {
+            rows_.at(row).frame_ = Frame();
+            rows_.at(row).stage_ = Stage::free;
+        }
         if (shown)
             shown_frames_++;
         else

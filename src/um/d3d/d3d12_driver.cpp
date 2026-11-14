@@ -38,6 +38,7 @@ d3d::Hresult D3d12Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t km
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
     if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::SessionRefusal(adapters_.exhausted()).for_d3d();
     const HRESULT answered = adapters_.caps(slot).answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args));
+    trace_.call(0u, "caps", args.Type, args.DataSize, answered);
     if (FAILED(answered)) lines_.note("Direct3D 12 caps refused, type", args.Type);
     return static_cast<d3d::Hresult>(answered);
 }

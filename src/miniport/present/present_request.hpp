@@ -27,6 +27,7 @@ private:
         flag_color_fill = 0x2u,
         flag_flip = 0x4u,
         flag_flip_with_no_wait = 0x8u,
+        flag_linear_to_srgb = 0x40u,
         flag_flip_with_multiplane_overlay = 0x1000u,
     };
     enum : uint32_t { source_index = 1u, destination_index = 2u };

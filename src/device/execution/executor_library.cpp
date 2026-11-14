@@ -1,6 +1,7 @@
 #include "device/execution/executor_library.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/submission/blob_role.hpp"
 
@@ -31,7 +32,7 @@ bool ExecutorLibrary::complete(const AvExecutorOps &ops) const
            ops.imported_handle != nullptr && ops.share_object != nullptr && ops.open_object != nullptr &&
            ops.close_object != nullptr && ops.release_shared != nullptr && ops.read_image != nullptr &&
            ops.export_image != nullptr && ops.map_frame != nullptr && ops.unmap_frame != nullptr &&
-           ops.export_surface != nullptr && ops.sync_surface != nullptr && ops.answer_part != nullptr;
+           ops.export_surface != nullptr && ops.sync_surface != nullptr && ops.copy_surface != nullptr && ops.map_surface != nullptr && ops.unmap_surface != nullptr && ops.answer_part != nullptr;
 }
 
 bool ExecutorLibrary::available() const
@@ -285,6 +286,27 @@ bool ExecutorLibrary::sync_surface(uint64_t surface, uint32_t flags, uint64_t &w
     writes = counted;
     fd = answered;
     return true;
+}
+
+bool ExecutorLibrary::map_surface(uint64_t surface, uint32_t wait_ms, AvFrameView &view) const
+{
+    AV_SCOPE("ExecutorLibrary::map_surface");
+    return domain_ != 0u && surface != 0u && ops_->map_surface(ops_->opaque, domain_, surface, wait_ms, &view) == AV_EXECUTED;
+}
+
+void ExecutorLibrary::unmap_surface(uint64_t surface) const
+{
+    AV_SCOPE("ExecutorLibrary::unmap_surface");
+    if (domain_ != 0u) ops_->unmap_surface(ops_->opaque, domain_, surface);
+}
+
+bool ExecutorLibrary::copy_surface(const SurfacePair &surfaces, const AvCopyRegion *regions, uint32_t count,
+                                   uint32_t wait_ms) const
+{
+    AV_SCOPE("ExecutorLibrary::copy_surface");
+    if (domain_ == 0u || regions == nullptr || count == 0u) return false;
+    return ops_->copy_surface(ops_->opaque, domain_, surfaces.source(), surfaces.destination(), regions, count,
+                              wait_ms) == AV_EXECUTED;
 }
 
 }

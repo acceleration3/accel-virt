@@ -1,4 +1,4 @@
-#include "um/d3d/cross_adapter_waits.hpp"
+#include "um/d3d/packet_release.hpp"
 
 #include "core/log/keyed_log.hpp"
 #include "core/platform/thread_lock_hold.hpp"
@@ -7,54 +7,64 @@
 
 namespace av::d3d {
 
-CrossAdapterWaits::CrossAdapterWaits(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, KmtTransport &transport,
+PacketRelease::PacketRelease(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, KmtTransport &transport,
                                      ThreadLock &lock, KeyedLog &lines, HANDLE context)
     : kernel_(kernel), device_(device), transport_(transport), lock_(lock), lines_(lines), context_(context),
-      shared_(false)
+      engaged_(false), written_(0u)
 {
-    AV_SCOPE("CrossAdapterWaits::CrossAdapterWaits");
+    AV_SCOPE("PacketRelease::PacketRelease");
 }
 
-CrossAdapterWaits::~CrossAdapterWaits()
+PacketRelease::~PacketRelease()
 {
-    AV_SCOPE("CrossAdapterWaits::~CrossAdapterWaits");
+    AV_SCOPE("PacketRelease::~PacketRelease");
     const ThreadLockHold held(lock_);
     transport_.release_directly(*this);
 }
 
-void CrossAdapterWaits::shares()
+void PacketRelease::engage()
 {
-    AV_SCOPE("CrossAdapterWaits::shares");
+    AV_SCOPE("PacketRelease::engage");
     const ThreadLockHold held(lock_);
-    shared_ = true;
+    engaged_ = true;
     if (transport_.routed_by(*this)) return;
     if (transport_.release_by(*this) != Status::ok)
-        lines_.once("a cross-adapter resource's work is not ordered behind the context's waits: the transport "
+        lines_.once("a resource's work is not ordered behind the context's waits: the transport "
                     "cannot release its batches by packet");
 }
 
-bool CrossAdapterWaits::shared() const
+void PacketRelease::writing(D3DKMT_HANDLE allocation)
 {
-    AV_SCOPE("CrossAdapterWaits::shared");
-    return shared_;
+    AV_SCOPE("PacketRelease::writing");
+    written_ = allocation;
 }
 
-void CrossAdapterWaits::waited_long()
+bool PacketRelease::engaged() const
 {
-    AV_SCOPE("CrossAdapterWaits::waited_long");
+    AV_SCOPE("PacketRelease::engaged");
+    return engaged_;
+}
+
+void PacketRelease::waited_long()
+{
+    AV_SCOPE("PacketRelease::waited_long");
     lines_.once("a call waited several seconds for a batch released by packet: it may be held behind a wait on the "
                 "device's context that only the application's own thread satisfies later");
 }
 
-Status CrossAdapterWaits::release(const uint8_t *record, uint32_t size)
+Status PacketRelease::release(const uint8_t *record, uint32_t size)
 {
-    AV_SCOPE("CrossAdapterWaits::release");
+    AV_SCOPE("PacketRelease::release");
     if (context_ == nullptr) return Status::not_supported;
     D3DDDICB_SUBMITCOMMAND submit = {};
     submit.Commands = transport_.marker_address();
     submit.CommandLength = sizeof(uint64_t);
     submit.BroadcastContextCount = 1u;
     submit.BroadcastContext[0] = context_;
+    if (written_ != 0u) {
+        submit.NumPrimaries = 1u;
+        submit.WrittenPrimaries[0] = written_;
+    }
     submit.pPrivateDriverData = const_cast<uint8_t *>(record);
     submit.PrivateDriverDataSize = size;
     const HRESULT submitted = kernel_.pfnSubmitCommandCb(device_, &submit);

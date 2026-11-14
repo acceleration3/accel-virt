@@ -1,6 +1,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "proto/dma/present_operation.hpp"
 #include "proto/dma/present_region.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
@@ -15,6 +16,7 @@ using av::PresentOperation;
 using av::PresentRegion;
 using av::QueuedPresentRequest;
 using av::Status;
+using av::SurfacePair;
 using av::SurfacePoint;
 using av::WireReader;
 using av::WireWriter;
@@ -186,3 +188,76 @@ TEST(queued_present_request, every_rule_broken_is_malformed_and_changes_nothing)
   CHECK_EQ(read.ticket(), 7u);
   CHECK_STATUS(decode_bytes(good, read), Status::ok);
   CHECK_EQ(read.ticket(), 8u); }
+
+TEST(queued_present_request, a_surface_copy_names_its_destination_in_the_header_and_its_source_without_a_point)
+{ const Encoded encoded = encode(QueuedPresentRequest(6u, SurfacePair(surface, 0xAABBCCDDEEFF0011u), blt(0u, 0u, 2u, 0u, 0u, 0u, 0u)));
+  CHECK_EQ(field_at<std::uint32_t>(encoded.bytes, 0u), 0x02F7u);
+  CHECK_EQ(field_at<std::uint64_t>(encoded.bytes, 4u), 0xAABBCCDDEEFF0011u);
+  for (std::uint32_t at = 12u; at < 24u; at++) CHECK_EQ(encoded.bytes[at], 0u);
+  CHECK_EQ(field_at<std::uint64_t>(encoded.bytes, 24u), 6u);
+  CHECK_EQ(field_at<std::uint32_t>(encoded.bytes, 32u), 2u);
+  CHECK_EQ(field_at<std::uint32_t>(encoded.bytes, 36u), 0u);
+  CHECK_EQ(field_at<std::uint64_t>(encoded.bytes, 40u), surface); }
+
+TEST(queued_present_request, a_surface_copy_reads_back_with_no_pages_and_its_regions_right_after_the_fixed_part)
+{ QueuedPresentRequest read;
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 0u, 3u, 0u, 0u, 0u, 0u)), read), Status::ok);
+  CHECK(read.source() == Source::surfaces);
+  CHECK(read.surfaces() == SurfacePair(surface, 77u));
+  CHECK_EQ(read.copy().regions(), 3u);
+  CHECK_EQ(read.regions_offset(), 80u);
+  CHECK_EQ(read.size(), 80u + 3u * PresentRegion::encoded_size);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 0u, max_regions, 0u, 0u, 0u, 0u)), read), Status::ok); }
+
+TEST(queued_present_request, a_surface_copy_with_a_missing_key_pages_a_swap_a_fill_or_too_many_regions_is_malformed)
+{ QueuedPresentRequest read;
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(0u, 77u), blt(0u, 0u, 1u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 0u), blt(0u, 0u, 1u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(0u, SurfacePair(surface, 77u), blt(0u, 0u, 1u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(swap, 0u, 1u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 0u, 0u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 0u, max_regions + 1u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 0u, 1u, 1u, 4u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 0u, 1u, 0u, 0u, 1u, 4u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), blt(0u, 5u, 1u, 0u, 0u, 0u, 0u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(6u, SurfacePair(surface, 77u), PresentCopyRequest(PresentOperation::color_fill, 0u, 1u, 1u, 0u, 0u, 0u, 0u)), read), Status::malformed); }
+
+TEST(queued_present_request, a_destination_in_the_header_of_a_page_or_image_request_is_malformed)
+{ Encoded encoded = encode(QueuedPresentRequest(9u, blt(0u, 0u, 1u, 1u, 64u, 1u, 64u)));
+  const std::uint64_t destination = 5u;
+  std::memcpy(encoded.bytes + 4u, &destination, sizeof destination);
+  QueuedPresentRequest read;
+  CHECK_STATUS(decode_bytes(encoded, read), Status::malformed);
+  Encoded image = encode(QueuedPresentRequest(4u, SurfacePoint(surface, point), blt(0u, 0u, 2u, 0u, 0u, 3u, 256u)));
+  std::memcpy(image.bytes + 4u, &destination, sizeof destination);
+  CHECK_STATUS(decode_bytes(image, read), Status::malformed); }
+
+TEST(queued_present_request, a_texture_blt_names_its_source_key_with_no_point_and_the_destination_pages)
+{ const Encoded encoded = encode(QueuedPresentRequest(8u, surface, blt(0u, 0u, 2u, 0u, 0u, 3u, 256u)));
+  CHECK_EQ(field_at<std::uint32_t>(encoded.bytes, 32u), 3u);
+  CHECK_EQ(field_at<std::uint32_t>(encoded.bytes, 36u), 0u);
+  CHECK_EQ(field_at<std::uint64_t>(encoded.bytes, 40u), surface);
+  CHECK_EQ(field_at<std::uint64_t>(encoded.bytes, 4u), 0u);
+  QueuedPresentRequest read;
+  CHECK_STATUS(decode_bytes(encoded, read), Status::ok);
+  CHECK(read.source() == Source::texture);
+  CHECK_EQ(read.image().surface(), surface);
+  CHECK_EQ(read.image().point(), 0u);
+  CHECK_EQ(read.copy().destination_entries(), 3u);
+  CHECK_EQ(read.destination_entries_offset(), 80u); }
+
+TEST(queued_present_request, a_texture_blt_with_a_point_pages_for_a_source_no_destination_or_a_fill_is_malformed)
+{ QueuedPresentRequest read;
+  Encoded pointed = encode(QueuedPresentRequest(8u, surface, blt(0u, 0u, 2u, 0u, 0u, 3u, 256u)));
+  const std::uint32_t one = 1u;
+  std::memcpy(pointed.bytes + 36u, &one, sizeof one);
+  CHECK_STATUS(decode_bytes(pointed, read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(8u, 0u, blt(0u, 0u, 2u, 0u, 0u, 3u, 256u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(8u, surface, blt(0u, 0u, 2u, 1u, 64u, 3u, 256u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(8u, surface, blt(0u, 0u, 2u, 0u, 0u, 0u, 256u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(0u, surface, blt(0u, 0u, 2u, 0u, 0u, 3u, 256u)), read), Status::malformed);
+  CHECK_STATUS(decode(QueuedPresentRequest(8u, surface, PresentCopyRequest(PresentOperation::color_fill, 0u, 1u, 1u, 0u, 0u, 2u, 64u)), read), Status::malformed);
+  Encoded unknown = encode(QueuedPresentRequest(8u, surface, blt(0u, 0u, 2u, 0u, 0u, 3u, 256u)));
+  const std::uint32_t four = 4u;
+  std::memcpy(unknown.bytes + 32u, &four, sizeof four);
+  CHECK_STATUS(decode_bytes(unknown, read), Status::malformed); }

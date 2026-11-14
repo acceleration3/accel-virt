@@ -9,6 +9,7 @@
 #include "harness/platform/mock_platform.hpp"
 #include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/virtio/mapped_virtio_function.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
@@ -29,6 +30,10 @@ public:
     void          serve();
     std::uint32_t presents() const;
     void          frame(const SurfacePoint &frame, const AvFrameView &view);
+    void          copy_between_surfaces(bool refuse);
+    void          texture(std::uint64_t surface, const AvFrameView &view);
+    SurfacePair   copied() const;
+    std::uint32_t copied_regions() const;
 
 private:
     static void          stall(void *context);

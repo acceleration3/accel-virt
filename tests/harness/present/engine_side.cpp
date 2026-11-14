@@ -48,6 +48,10 @@ void EngineSide::serve()
 }
 std::uint32_t EngineSide::presents() const { return presents_; }
 void          EngineSide::frame(const SurfacePoint &frame, const AvFrameView &view) { plane_.serve_frame(frame, view); }
+void          EngineSide::texture(std::uint64_t surface, const AvFrameView &view) { plane_.serve_texture(surface, view); }
+void          EngineSide::copy_between_surfaces(bool refuse) { plane_.copy_through(refuse); }
+SurfacePair   EngineSide::copied() const { return plane_.copied(); }
+std::uint32_t EngineSide::copied_regions() const { return plane_.copied_regions(); }
 
 void EngineSide::stall(void *context)
 {

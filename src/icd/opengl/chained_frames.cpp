@@ -61,8 +61,33 @@ void ChainedFrames::draw(ClientTransport &wire, uint32_t source, uint32_t slot)
     if (!opened_ || slot >= slot_count) return;
     glproto::av_glCopyImageSubData(wire, source, gl_texture_2d, 0, 0, 0, 0, textures_[slot], gl_texture_2d, 0, 0, 0, 0,
                                     static_cast<GLsizei>(slots_.width()), static_cast<GLsizei>(slots_.height()), 1);
-    WireWriter finish = wire.request_writer();
-    static_cast<void>(wire.send_async(glproto::kCmd_glFinish, finish));
+    finish(wire);
+}
+
+void ChainedFrames::finish(ClientTransport &wire)
+{
+    AV_SCOPE("ChainedFrames::finish");
+    WireWriter finished = wire.request_writer();
+    static_cast<void>(wire.send_async(glproto::kCmd_glFinish, finished));
+}
+
+void ChainedFrames::attach(ClientTransport &wire, uint32_t framebuffer, uint32_t slot)
+{
+    AV_SCOPE("ChainedFrames::attach");
+    if (!opened_ || slot >= slot_count) return;
+    glproto::av_glNamedFramebufferTexture(wire, framebuffer, gl_color_attachment0, textures_[slot], 0);
+}
+
+bool ChainedFrames::renders_into(ClientTransport &wire, uint32_t framebuffer)
+{
+    AV_SCOPE("ChainedFrames::renders_into");
+    return glproto::av_glCheckNamedFramebufferStatus(wire, framebuffer, gl_draw_framebuffer) == gl_framebuffer_complete;
+}
+
+uint32_t ChainedFrames::texture(uint32_t slot) const
+{
+    AV_SCOPE("ChainedFrames::texture");
+    return slot < slot_count ? textures_[slot] : 0u;
 }
 
 void ChainedFrames::close(ClientTransport *wire)

@@ -1,4 +1,6 @@
 #include "icd/opengl/gl_icd_root.hpp"
+#include "icd/common/window_present_queue.hpp"
+#include "icd/opengl/batch_ready.hpp"
 
 #include "core/log/log_line.hpp"
 #include "core/platform/thread_lock_hold.hpp"
@@ -223,7 +225,6 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
     }
     GuestGlContext *const previous = currents_.current();
     if (previous != nullptr && previous != context) {
-        present_held(*previous);
         previous->flush();
     }
     if (context->state() == GuestGlContext::State::created) {
@@ -255,7 +256,6 @@ bool GlIcdRoot::release_context(uint64_t handle)
     const ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr || currents_.current() != context) return false;
-    present_held(*context);
     context->flush();
     context->set_current_dc(nullptr);
     currents_.release();
@@ -350,21 +350,26 @@ GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
         windows_.drop_gone(surface_);
     }
     GuestGlContext *const context = currents_.current();
-    if (context != nullptr && context->wire() != nullptr && !context->pacing().admits() &&
-        windows_.format_of(surface_.window_of(dc)) == context->pixel_format()) {
-        context->hold_swap(dc);
-        return Shown::nothing;
-    }
-    return present_frame(dc);
+    const bool            paced = context != nullptr && context->wire() != nullptr &&
+                       windows_.format_of(surface_.window_of(dc)) == context->pixel_format() && !admits(*context);
+    return present_frame(dc, paced);
 }
 
-GlIcdRoot::Shown GlIcdRoot::present_frame(void *dc)
+bool GlIcdRoot::admits(GuestGlContext &context)
+{
+    AV_SCOPE("GlIcdRoot::admits");
+    presents_.acquire();
+    const bool admitted = context.pacing().admits();
+    presents_.release();
+    return admitted;
+}
+
+GlIcdRoot::Shown GlIcdRoot::present_frame(void *dc, bool paced)
 {
     AV_SCOPE("GlIcdRoot::present_frame");
     GuestGlContext *const context = currents_.current();
     void *const           window = surface_.window_of(dc);
     if (context == nullptr || windows_.format_of(window) != context->pixel_format()) return Shown::refused;
-    context->hold_swap(nullptr);
     ClientTransport *const transport = context->wire();
     if (transport == nullptr) return Shown::nothing;
     const icd::WindowExtent::Look seen = icd::WindowExtent(surface_, window).look();
@@ -375,9 +380,22 @@ GlIcdRoot::Shown GlIcdRoot::present_frame(void *dc)
                               context->adapter_luid()))
         return Shown::refused;
     context->flush();
-    framebuffers.hand_over(context->mark());
+    if (paced) framebuffers.hold_over(context->mark(), context->pacing());
+    else framebuffers.hand_over(context->mark());
     framebuffers.follow(*transport, window, formats_.format(context->pixel_format()), surface_);
     return Shown::handed;
+}
+
+void GlIcdRoot::viewport(int32_t x, int32_t y, int32_t width, int32_t height)
+{
+    AV_SCOPE("GlIcdRoot::viewport");
+    GuestGlContext *const context = currents_.current();
+    ClientTransport *const transport = wire();
+    if (context == nullptr || transport == nullptr) return;
+    WindowFramebuffers &framebuffers = context->framebuffers();
+    if (framebuffers.viewport_resizes(static_cast<uint32_t>(width), static_cast<uint32_t>(height)))
+        framebuffers.follow(*transport, framebuffers.window(), formats_.format(context->pixel_format()), surface_);
+    glproto::av_glViewport(*transport, x, y, width, height);
 }
 
 void GlIcdRoot::flush_current()
@@ -386,17 +404,16 @@ void GlIcdRoot::flush_current()
     GuestGlContext *const context = currents_.current();
     if (context != nullptr && !formats_.format(context->pixel_format()).double_buffer())
         static_cast<void>(show_frame(context->current_dc()));
-    else if (context != nullptr && context->held_swap() != nullptr && context->pacing().admits())
-        static_cast<void>(present_frame(context->held_swap()));
+    if (context != nullptr) context->framebuffers().show_held_now();
     manual_.flush();
 }
 
-void GlIcdRoot::present_held(GuestGlContext &context)
+void GlIcdRoot::finish_current()
 {
-    AV_SCOPE("GlIcdRoot::present_held");
-    if (context.held_swap() == nullptr) return;
-    windows_.drop_gone(surface_);
-    static_cast<void>(present_frame(context.held_swap()));
+    AV_SCOPE("GlIcdRoot::finish_current");
+    GuestGlContext *const context = currents_.current();
+    if (context != nullptr) context->framebuffers().show_held_now();
+    manual_.finish();
 }
 
 bool GlIcdRoot::set_swap_interval(int32_t interval)

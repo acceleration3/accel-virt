@@ -3,6 +3,7 @@
 
 #include "miniport/present/pixel_mover.hpp"
 #include "core/support/status.hpp"
+#include "proto/resources/surface_pair.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <stdint.h>
@@ -19,7 +20,7 @@ class PresentSurface;
 class PresentTicket final : public PixelMover {
 public:
     PresentTicket(Platform &platform, LogBudget &budget, PresentQueue *queue, PixelMover &fallback,
-                  const SurfacePoint &image);
+                  const SurfacePoint &image, const SurfacePair &surfaces);
     PresentTicket(const PresentTicket &) = delete;
     PresentTicket &operator=(const PresentTicket &) = delete;
 
@@ -39,6 +40,7 @@ private:
     PresentQueue *queue_;
     PixelMover   &fallback_;
     SurfacePoint  image_;
+    SurfacePair   surfaces_;
     uint64_t      ticket_;
 };
 

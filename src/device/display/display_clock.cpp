@@ -169,7 +169,6 @@ void DisplayClock::showing()
 bool DisplayClock::take_unshown(uint32_t head, uint64_t &key)
 {
     AV_SCOPE("DisplayClock::take_unshown");
-    host_.require_main_loop("DisplayClock::take_unshown");
     if (lock_ == nullptr || head >= heads) return false;
     host_.lock_mutex(lock_);
     const bool unshown = latches_[head].take_unshown(key);

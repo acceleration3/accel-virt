@@ -30,6 +30,9 @@ public:
     GpuRequestBuilder blt(std::uint64_t ticket, std::uint32_t first, std::uint32_t rows) const;
     GpuRequestBuilder fill(std::uint64_t ticket, std::uint32_t colour, std::uint32_t first, std::uint32_t rows) const;
     GpuRequestBuilder image(std::uint64_t ticket, std::uint64_t key) const;
+    GpuRequestBuilder surfaces(std::uint64_t ticket, std::uint64_t source, std::uint64_t destination,
+                               std::uint32_t regions = 1u) const;
+    GpuRequestBuilder texture(std::uint64_t ticket, std::uint64_t key) const;
     bool              progress(PresentProgress &progress) const;
 
 private:

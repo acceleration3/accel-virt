@@ -9,6 +9,8 @@
 namespace av {
 
 
+class PresentRegion;
+class SurfacePair;
 class SurfacePoint;
 
 class ContextPlane;
@@ -16,6 +18,9 @@ class ContextPlane;
 class PresentFrames {
 public:
     static constexpr uint32_t wait_ms = 500u;
+    static constexpr uint32_t copy_wait_ms = 2000u;
+    static constexpr uint32_t surface_wait_ms = 2000u;
+    static constexpr uint32_t copy_regions = 256u;
     static constexpr uint32_t uuid_bytes = DeviceUuid::bytes;
 
     PresentFrames();
@@ -24,6 +29,10 @@ public:
     bool readable() const;
     [[nodiscard]] bool map(const SurfacePoint &frame, AvFrameView &view) const;
     void               unmap(const SurfacePoint &frame) const;
+    bool               copies() const;
+    [[nodiscard]] bool map_surface(uint64_t surface, AvFrameView &view) const;
+    void               unmap_surface(uint64_t surface) const;
+    [[nodiscard]] bool copy(const SurfacePair &surfaces, const PresentRegion *regions, uint32_t count) const;
 
 private:
     ContextPlane *plane_;

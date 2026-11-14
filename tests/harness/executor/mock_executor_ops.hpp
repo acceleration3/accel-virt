@@ -102,6 +102,12 @@ public:
     bool          opened_as(AvExecutor *executor, std::uint64_t object_id, std::uint64_t &wire_handle);
     void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
+    void                 serve_copy(std::uint64_t source, std::uint64_t destination, bool succeeds);
+    std::uint32_t        copies_taken() const;
+    std::uint32_t        copy_regions_taken() const;
+    std::uint32_t        copy_wait() const;
+    void                 serve_texture(std::uint64_t surface, const AvFrameView &view);
+    std::uint32_t        texture_unmaps() const;
     void                 serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
                                        int fence);
     std::uint32_t        last_domain() const;
@@ -218,6 +224,15 @@ private:
     std::uint32_t              frame_point_ = 0u;
     AvFrameView               frame_ = {};
     std::uint32_t              frame_unmaps_ = 0u;
+    std::uint64_t              copy_source_ = 0u;
+    std::uint64_t              copy_destination_ = 0u;
+    bool                       copy_succeeds_ = true;
+    std::uint32_t              copies_taken_ = 0u;
+    std::uint32_t              copy_regions_taken_ = 0u;
+    std::uint32_t              copy_wait_ = 0u;
+    std::uint64_t              texture_surface_ = 0u;
+    AvFrameView                texture_ = {};
+    std::uint32_t              texture_unmaps_ = 0u;
     std::uint64_t              surface_ = 0u;
     AvExportedImage            surface_image_ = {};
     std::uint64_t              surface_writes_ = 0u;

@@ -49,6 +49,7 @@ private:
     static constexpr size_t   response_bytes = 24u;
 
     void                 ask();
+    void                 report_now();
     [[nodiscard]] Status report(const FlipView &shown);
 
     Platform             &platform_;
@@ -64,6 +65,7 @@ private:
     uint64_t              sequence_;
     uint32_t              reported_;
     uint32_t              enables_;
+    uint32_t              reported_frame_ = 0u;
 
     friend struct DeviceVblankProbe;
 };

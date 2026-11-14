@@ -2,6 +2,7 @@
 #define AV_QUEUED_PRESENT_HPP
 
 #include "core/support/status.hpp"
+#include "device/abi/av_executor.h"
 #include "device/memory/guest_page_mapping.hpp"
 #include "proto/dma/present_region.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
@@ -36,6 +37,9 @@ private:
     [[nodiscard]] Status read_regions(ControlRequest &request);
     [[nodiscard]] Status move_regions(RegionMover &mover);
     [[nodiscard]] Status move_snapshot(const PresentFrames &snapshots);
+    [[nodiscard]] Status move_texture(const PresentFrames &snapshots);
+    [[nodiscard]] Status move_view(const AvFrameView &view);
+    [[nodiscard]] Status move_surfaces(const PresentFrames &snapshots);
 
     GuestPageMapping     source_;
     GuestPageMapping     destination_;

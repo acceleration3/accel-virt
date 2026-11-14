@@ -4757,13 +4757,6 @@ void APIENTRY Wrap_glVertexP4uiv(GLenum type, const GLuint* value) {
     ::av::glproto::av_glVertexP4uiv(*av_t, type, value);
 }
 
-void APIENTRY Wrap_glViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
-    AV_SCOPE("glViewport");
-    auto* av_t = ::av::glicd::wire();
-    if (av_t == nullptr) return;
-    ::av::glproto::av_glViewport(*av_t, x, y, width, height);
-}
-
 void APIENTRY Wrap_glViewportArrayv(GLuint first, GLsizei count, const GLfloat* v) {
     AV_SCOPE("glViewportArrayv");
     auto* av_t = ::av::glicd::wire();

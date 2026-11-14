@@ -13,6 +13,7 @@ namespace av {
 
 
 class BlobRole;
+class SurfacePair;
 class SurfacePoint;
 
 class ExecutorLibrary {
@@ -64,6 +65,9 @@ public:
     void unmap_frame(const SurfacePoint &frame) const;
     bool export_surface(uint64_t surface, uint32_t flags, AvExportedImage &image) const;
     bool sync_surface(uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) const;
+    bool map_surface(uint64_t surface, uint32_t wait_ms, AvFrameView &view) const;
+    void unmap_surface(uint64_t surface) const;
+    bool copy_surface(const SurfacePair &surfaces, const AvCopyRegion *regions, uint32_t count, uint32_t wait_ms) const;
 
     static constexpr uint32_t known_sub_apis = 15u;
 

@@ -101,6 +101,12 @@ namespace av::d3dproto {
 [[nodiscard]] bool av_d3d_Discard(::av::ClientTransport& t, uint32_t object, uint32_t rect_count, const Rect* rects);
 [[nodiscard]] bool av_d3d_CopyResource(::av::ClientTransport& t, uint32_t destination, uint32_t source);
 [[nodiscard]] bool av_d3d_CopySubresourceRegion(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t z, uint32_t source, uint32_t source_subresource, uint32_t has_box, const Box& box, uint32_t copy_flags);
+// A DXGI blt between two 2D textures that a copy cannot be: the source rectangle (left, top, right, bottom)
+// drawn over the destination rectangle on the host GPU in one pass, stretched when the sizes differ and converted
+// when the formats do. A destination of another family than the source takes a 10:10:10:2 or half-float source
+// decoded, an sRGB-typed or floating source encoded as sRGB, so a value already encoded is not encoded twice.
+// Nothing is answered; textures the host cannot draw between are left as they were.
+[[nodiscard]] bool av_d3d_BltResource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t destination_left, uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom, uint32_t source, uint32_t source_subresource, uint32_t source_left, uint32_t source_top, uint32_t source_right, uint32_t source_bottom);
 [[nodiscard]] bool av_d3d_ResolveSubresource(::av::ClientTransport& t, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format);
 [[nodiscard]] bool av_d3d_GenerateMips(::av::ClientTransport& t, uint32_t view);
 [[nodiscard]] bool av_d3d_CopyStructureCount(::av::ClientTransport& t, uint32_t destination, uint32_t offset, uint32_t source_view);

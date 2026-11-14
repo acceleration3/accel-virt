@@ -85,6 +85,7 @@ public:
     virtual bool on_Discard(uint32_t object, uint32_t rect_count, const Rect* rects) = 0;
     virtual bool on_CopyResource(uint32_t destination, uint32_t source) = 0;
     virtual bool on_CopySubresourceRegion(uint32_t destination, uint32_t destination_subresource, uint32_t x, uint32_t y, uint32_t z, uint32_t source, uint32_t source_subresource, uint32_t has_box, const Box& box, uint32_t copy_flags) = 0;
+    virtual bool on_BltResource(uint32_t destination, uint32_t destination_subresource, uint32_t destination_left, uint32_t destination_top, uint32_t destination_right, uint32_t destination_bottom, uint32_t source, uint32_t source_subresource, uint32_t source_left, uint32_t source_top, uint32_t source_right, uint32_t source_bottom) = 0;
     virtual bool on_ResolveSubresource(uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) = 0;
     virtual bool on_GenerateMips(uint32_t view) = 0;
     virtual bool on_CopyStructureCount(uint32_t destination, uint32_t offset, uint32_t source_view) = 0;

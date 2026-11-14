@@ -12,6 +12,7 @@
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -93,6 +94,7 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
               made->subresources[0].height);
     HRESULT host = args->Pool == D3DDDIPOOL_SYSTEMMEM ? S_OK : create_host_object(*made, *args);
     if (SUCCEEDED(host) && args->Flags.Primary) host = allocate_primary(*made, *args);
+    else if (SUCCEEDED(host) && shares_render_target(*made, *args)) host = allocate_shared(*made, *args);
     if (FAILED(host)) {
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
@@ -196,13 +198,15 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     if (args->NumAllocations != 1u || args->pOpenAllocationInfo == nullptr) return refuse_open(*args, 0u);
     const D3DDDI_OPENALLOCATIONINFO &info = args->pOpenAllocationInfo[0];
     AllocationDescriptor             descriptor;
+    const size_t described = info.PrivateDriverDataSize == SharedAllocationData::encoded_size
+                                 ? AllocationDescriptor::encoded_size
+                                 : info.PrivateDriverDataSize;
     if (info.pPrivateDriverData == nullptr ||
-        descriptor.decode(static_cast<const uint8_t *>(info.pPrivateDriverData), info.PrivateDriverDataSize) !=
-            Status::ok)
+        descriptor.decode(static_cast<const uint8_t *>(info.pPrivateDriverData), described) != Status::ok)
         return refuse_open(*args, 0u);
     const SurfaceLayout &layout = descriptor.layout();
     D3d9PresentFormat    presented(0u);
-    if (descriptor.kind() != AllocationKind::gdi || layout.width() == 0u || layout.height() == 0u ||
+    if ((descriptor.kind() != AllocationKind::gdi && descriptor.kind() != AllocationKind::surface) || layout.width() == 0u || layout.height() == 0u ||
         !presented.take_ddi(layout.format()))
         return refuse_open(*args, static_cast<uint32_t>(descriptor.kind()));
     D3d9Resource *made = nullptr;

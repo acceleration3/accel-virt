@@ -113,6 +113,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSemaphoreWin32HandleKHR(
     VkDevice device, const SemaphoreGetWin32HandleRecord *pGetWin32HandleInfo, void **pHandle);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkImportSemaphoreWin32HandleKHR(
     VkDevice device, const ImportSemaphoreWin32HandleRecord *pImportSemaphoreWin32HandleInfo);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pCreateInfo,
+                                                       const VkAllocationCallbacks *pAllocator,
+                                                       VkSemaphore *pSemaphore);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
                                                     const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalBufferProperties(

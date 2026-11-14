@@ -225,6 +225,26 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         *fd = mock.surface_fence_;
         return AV_EXECUTED;
     };
+    table_.copy_surface = [](void *opaque, std::uint32_t domain, std::uint64_t source, std::uint64_t destination,
+                             const AvCopyRegion *regions, std::uint32_t count, std::uint32_t wait_ms) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        mock.last_domain_ = domain;
+        mock.copies_taken_++;
+        mock.copy_regions_taken_ += count;
+        mock.copy_wait_ = wait_ms;
+        if (regions == nullptr || source == 0u || source != mock.copy_source_ || destination != mock.copy_destination_)
+            return AV_UNKNOWN;
+        return mock.copy_succeeds_ ? AV_EXECUTED : AV_UNKNOWN;
+    };
+    table_.map_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t,
+                            AvFrameView *view) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        mock.last_domain_ = domain;
+        if (view == nullptr || surface == 0u || surface != mock.texture_surface_) return AV_UNKNOWN;
+        *view = mock.texture_;
+        return AV_EXECUTED;
+    };
+    table_.unmap_surface = [](void *opaque, std::uint32_t, std::uint64_t) { mock_of(opaque).texture_unmaps_++; };
     table_.end_batch = [](void *, AvExecutor *) {};
     table_.poll = [](void *opaque, AvExecutor *) -> std::uint32_t {
         return mock_of(opaque).host_lost_.load() ? AV_POLL_LOST : AV_POLL_IDLE;
@@ -638,6 +658,25 @@ void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, co
 }
 
 std::uint32_t MockExecutorOps::frame_unmaps() const { return frame_unmaps_; }
+
+void MockExecutorOps::serve_copy(std::uint64_t source, std::uint64_t destination, bool succeeds)
+{
+    copy_source_ = source;
+    copy_destination_ = destination;
+    copy_succeeds_ = succeeds;
+}
+
+void MockExecutorOps::serve_texture(std::uint64_t surface, const AvFrameView &view)
+{
+    texture_surface_ = surface;
+    texture_ = view;
+}
+
+std::uint32_t MockExecutorOps::texture_unmaps() const { return texture_unmaps_; }
+
+std::uint32_t MockExecutorOps::copies_taken() const { return copies_taken_; }
+std::uint32_t MockExecutorOps::copy_regions_taken() const { return copy_regions_taken_; }
+std::uint32_t MockExecutorOps::copy_wait() const { return copy_wait_; }
 
 void MockExecutorOps::serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
                                     int fence)
