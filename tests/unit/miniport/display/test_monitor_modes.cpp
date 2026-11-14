@@ -7,8 +7,10 @@
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 
 using av::D3dkmdtMonitorSourceModeRecord;
 using av::DisplayModeList;
@@ -97,3 +99,44 @@ TEST(monitor_modes, is_passive_only)
   static_cast<void>(recommend(platform, vidpn, 1u));
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
+
+TEST(monitor_modes_recommend, a_mode_wider_than_an_edid_timing_is_added_by_the_driver_and_preferred_when_the_host_prefers_it)
+{ for (const std::uint32_t chosen : {0u, 1u}) {
+      MockPlatform platform;
+      FakeVidPn vidpn;
+      av::DisplayModeSet host;
+      CHECK_STATUS(host.add(5120u, 1440u), av::Status::ok);
+      CHECK_STATUS(host.add(7680u, 2160u), av::Status::ok);
+      CHECK_STATUS(host.add(3840u, 2160u), av::Status::ok);
+      CHECK_STATUS(host.prefer(chosen), av::Status::ok);
+      DisplayModeList modes;
+      CHECK_STATUS(modes.adopt(host), av::Status::ok);
+      const av::DisplaySources sources(platform);
+      const DxgkargRecommendMonitorModesRecord request = {0u, 0u, vidpn.monitor_mode_set(), &vidpn.monitor_interface()};
+      CHECK_EQ(MonitorModes(platform, modes, sources, request).recommend().value(), 0);
+      CHECK_EQ(vidpn.monitor_modes().modes(), modes.count());
+      const std::uint32_t wanted_width = chosen == 0u ? 5120u : 7680u;
+      const std::uint32_t wanted_height = chosen == 0u ? 1440u : 2160u;
+      std::uint32_t preferred_modes = 0u;
+      std::uint32_t ultrawide = 0u;
+      std::uint32_t double_4k = 0u;
+      for (std::uint32_t index = 0u; index < vidpn.monitor_modes().modes(); index++) {
+          const D3dkmdtMonitorSourceModeRecord &mode = vidpn.monitor_modes().mode(index);
+          const av::D3dkmdtVideoSignalInfoRecord &signal = mode.VideoSignalInfo;
+          CHECK_EQ(mode.Origin, origin_driver);
+          CHECK_EQ(signal.TotalSizeCx, signal.ActiveSizeCx + 160u);
+          CHECK_EQ(signal.TotalSizeCy, signal.ActiveSizeCy + signal.ActiveSizeCy / 24u);
+          if (signal.ActiveSizeCx == 5120u && signal.ActiveSizeCy == 1440u) ultrawide++;
+          if (signal.ActiveSizeCx == 7680u && signal.ActiveSizeCy == 2160u) double_4k++;
+          if (mode.Preference != preferred) continue;
+          preferred_modes++;
+          CHECK_EQ(signal.ActiveSizeCx, wanted_width);
+          CHECK_EQ(signal.ActiveSizeCy, wanted_height);
+          CHECK_EQ(signal.VSyncFreqNumerator, 60u);
+          CHECK_EQ(signal.PixelRate, std::uint64_t{wanted_width + 160u} * (wanted_height + wanted_height / 24u) * 60u);
+      }
+      CHECK_EQ(preferred_modes, 1u);
+      CHECK(ultrawide >= 1u);
+      CHECK(double_4k >= 1u);
+      CHECK_EQ(vidpn.monitor_modes().outstanding(), 0u);
+  } }

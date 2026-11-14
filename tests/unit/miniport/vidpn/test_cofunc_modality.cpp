@@ -7,9 +7,11 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/vidpn_fixture.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 using av::CofuncModality;
 using av::D3dkmdtVidPnSourceModeRecord;
@@ -57,6 +59,7 @@ public:
     av::LogBudget                         &budget() { return budget_; }
     av::D3dkmdtVidPnPresentPathRecord     &path() { return path_; }
     av::FakeVidPn                         &vidpn() { return fixture_.vidpn(); }
+    DisplayModeList                       &modes() { return modes_; }
     DxgkargEnumVidPnCofuncModalityRecord &request() { return request_; }
     std::uint32_t run()
     {
@@ -239,3 +242,77 @@ TEST(cofunc_modality, is_passive_only)
   enumeration.fixture().platform().set_irql(Irql::passive);
   CHECK(enumeration.fixture().platform().claim(Violation::irql_ceiling));
   while (enumeration.fixture().platform().claim(Violation::irql_ceiling)) {} }
+
+namespace {
+
+av::DisplayModeSet wide_host_modes()
+{
+    av::DisplayModeSet host;
+    CHECK_STATUS(host.add(5120u, 1440u), av::Status::ok);
+    CHECK_STATUS(host.add(7680u, 2160u), av::Status::ok);
+    return host;
+}
+
+template <typename Modes, typename Width, typename Height>
+std::uint32_t sized(const Modes &modes, Width width, Height height, std::uint32_t wanted_width, std::uint32_t wanted_height)
+{
+    std::uint32_t found = 0u;
+    for (std::uint32_t index = 0u; index < modes.modes(); index++)
+        found += width(modes.mode(index)) == wanted_width && height(modes.mode(index)) == wanted_height ? 1u : 0u;
+    return found;
+}
+
+std::uint32_t source_modes_of(av::FakeVidPn &vidpn, std::uint32_t width, std::uint32_t height)
+{
+    return sized(vidpn.source_modes(0u), [](const D3dkmdtVidPnSourceModeRecord &mode) { return mode.PrimSurfSizeCx; },
+                 [](const D3dkmdtVidPnSourceModeRecord &mode) { return mode.PrimSurfSizeCy; }, width, height);
+}
+
+std::uint32_t target_modes_of(av::FakeVidPn &vidpn, std::uint32_t width, std::uint32_t height)
+{
+    return sized(vidpn.target_modes(0u),
+                 [](const D3dkmdtVidPnTargetModeRecord &mode) { return mode.VideoSignalInfo.ActiveSizeCx; },
+                 [](const D3dkmdtVidPnTargetModeRecord &mode) { return mode.VideoSignalInfo.ActiveSizeCy; }, width, height);
+}
+
+}
+
+TEST(cofunc_modality_enumerate, modes_wider_than_an_edid_timing_are_offered_on_both_ends)
+{ Enumeration enumeration;
+  CHECK_STATUS(enumeration.modes().adopt(wide_host_modes()), av::Status::ok);
+  CHECK_EQ(enumeration.run(), 0u);
+  CHECK_EQ(source_modes_of(enumeration.vidpn(), 5120u, 1440u), 2u);
+  CHECK_EQ(source_modes_of(enumeration.vidpn(), 7680u, 2160u), 2u);
+  CHECK(target_modes_of(enumeration.vidpn(), 5120u, 1440u) >= 1u);
+  CHECK(target_modes_of(enumeration.vidpn(), 7680u, 2160u) >= 1u);
+  const auto &sources = enumeration.vidpn().source_modes(0u);
+  for (std::uint32_t index = 0u; index < sources.modes(); index++) {
+      const D3dkmdtVidPnSourceModeRecord &mode = sources.mode(index);
+      CHECK_EQ(mode.VisibleRegionSizeCx, mode.PrimSurfSizeCx);
+      CHECK_EQ(mode.Stride, mode.PrimSurfSizeCx * 4u);
+  }
+  const auto &targets = enumeration.vidpn().target_modes(0u);
+  std::uint32_t preferred_modes = 0u;
+  for (std::uint32_t index = 0u; index < targets.modes(); index++) {
+      const D3dkmdtVidPnTargetModeRecord &mode = targets.mode(index);
+      if (mode.WireFormatAndPreference != (preferred | rgb_8_bits)) continue;
+      preferred_modes++;
+      CHECK_EQ(mode.VideoSignalInfo.ActiveSizeCx, 5120u);
+      CHECK_EQ(mode.VideoSignalInfo.ActiveSizeCy, 1440u);
+      CHECK_EQ(mode.VideoSignalInfo.VSyncFreqNumerator, 60u);
+  }
+  CHECK_EQ(preferred_modes, 1u); }
+
+TEST(cofunc_modality_visit, a_pinned_source_mode_wider_than_an_edid_timing_constrains_the_target_to_its_size)
+{ struct Case { std::uint32_t width, height; };
+  for (const Case &pinned : {Case{5120u, 1440u}, Case{7680u, 2160u}}) {
+      Enumeration enumeration;
+      CHECK_STATUS(enumeration.modes().adopt(wide_host_modes()), av::Status::ok);
+      enumeration.vidpn().source_modes(0u).seed(source_mode(pinned.width, pinned.height), true);
+      CHECK_EQ(enumeration.run(), 0u);
+      CHECK_EQ(enumeration.vidpn().source_modes(0u).modes(), 1u);
+      const auto &targets = enumeration.vidpn().target_modes(0u);
+      CHECK_EQ(targets.modes(), target_modes_of(enumeration.vidpn(), pinned.width, pinned.height));
+      CHECK(target_modes_of(enumeration.vidpn(), pinned.width, pinned.height) >= 1u);
+      CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
+  } }

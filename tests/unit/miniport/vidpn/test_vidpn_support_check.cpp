@@ -9,9 +9,11 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/vidpn_fixture.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 using av::D3dkmdtVidPnSourceModeRecord;
 using av::D3dkmdtVidPnTargetModeRecord;
@@ -239,3 +241,29 @@ TEST(vidpn_support_check, a_refusal_names_its_reason_and_the_source_mode_it_turn
   CHECK(std::strcmp(refusal_of(odd, refused), "source mode") == 0);
   CHECK_EQ(refused.PrimSurfSizeCx, 1000u);
   CHECK_EQ(refused.PixelFormat, DisplayMode::source_formats[0]); }
+
+TEST(vidpn_support_check_visit, a_pinned_mode_wider_than_an_edid_timing_is_supported_once_the_host_offers_it)
+{ struct Case { std::uint32_t width, height; };
+  for (const Case &pinned : {Case{5120u, 1440u}, Case{7680u, 2160u}}) {
+      VidPnFixture fixture;
+      fixture.vidpn().add_path(0u, 0u);
+      D3dkmdtVidPnSourceModeRecord source = {};
+      DisplayMode(pinned.width, pinned.height).describe(source, DisplayMode::source_formats[0]);
+      D3dkmdtVidPnTargetModeRecord target = {};
+      DisplayMode(pinned.width, pinned.height).describe(target.VideoSignalInfo);
+      fixture.vidpn().source_modes(0u).seed(source, true);
+      fixture.vidpn().target_modes(0u).seed(target, true);
+      std::uint8_t supported = 1u;
+      CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
+      CHECK_EQ(supported, 0u);
+      av::DisplayModeSet host;
+      CHECK_STATUS(host.add(5120u, 1440u), av::Status::ok);
+      CHECK_STATUS(host.add(7680u, 2160u), av::Status::ok);
+      DisplayModeList modes;
+      CHECK_STATUS(modes.adopt(host), av::Status::ok);
+      DxgkargIsSupportedVidPnRecord request = {};
+      request.hDesiredVidPn = fixture.handle();
+      const av::DisplaySources sources(fixture.platform());
+      CHECK_EQ(VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), modes, sources, request).decide().value(), 0);
+      CHECK_EQ(request.IsVidPnSupported, 1u);
+  } }

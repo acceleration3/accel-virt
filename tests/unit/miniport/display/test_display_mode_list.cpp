@@ -247,13 +247,30 @@ TEST(display_mode_list_adopt, a_mode_windows_refuses_as_too_small_is_left_out)
   CHECK_EQ(modes.count(), 2u);
   CHECK(modes.invariants_hold()); }
 
-TEST(display_mode_list_adopt, a_mode_the_edid_cannot_describe_is_left_out)
+TEST(display_mode_list_adopt, a_mode_wider_than_an_edid_timing_is_offered_and_one_past_the_largest_edge_is_left_out)
 { DisplayModeList modes;
-  CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}, {4096u, 2160u}, {3840u, 2160u}, {5120u, 2880u}}, 3u)),
+  CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}, {4096u, 2160u}, {3840u, 2160u}, {5120u, 1440u}, {7680u, 2160u},
+                                    {8193u, 2160u}, {16384u, 16384u}}, 3u)),
                av::Status::ok);
+  CHECK_EQ(modes.count(), 5u);
+  CHECK_EQ(modes.preferred().width(), 5120u);
+  CHECK_EQ(modes.preferred().height(), 1440u);
+  CHECK(modes.is_preferred(modes.preferred()));
+  bool widest = false;
+  for (std::uint32_t i = 0u; i < modes.count(); ++i) {
+      CHECK(modes.mode(i).width() <= 7680u);
+      widest = widest || (modes.mode(i).width() == 7680u && modes.mode(i).height() == 2160u);
+  }
+  CHECK(widest);
+  D3dkmdtVidPnSourceModeRecord source = {};
+  av::DisplayMode(7680u, 2160u).describe(source, av::DisplayMode::source_formats[0]);
+  CHECK_EQ(source.Stride, 7680u * 4u);
+  CHECK(modes.find(source) != nullptr);
+  CHECK_EQ(modes.find(source)->width(), 7680u);
+  CHECK_STATUS(modes.adopt(offered({{7680u, 4320u}, {8192u, 4320u}}, 1u)), av::Status::ok);
   CHECK_EQ(modes.count(), 2u);
-  CHECK_EQ(modes.preferred().width(), 3840u);
-  CHECK_STATUS(modes.adopt(offered({{4096u, 4096u}, {8000u, 100u}}, 0u)), av::Status::not_found);
+  CHECK_EQ(modes.preferred().width(), 8192u);
+  CHECK_STATUS(modes.adopt(offered({{8193u, 4096u}, {9000u, 100u}}, 0u)), av::Status::not_found);
   CHECK_EQ(modes.count(), 2u);
-  CHECK_EQ(modes.preferred().width(), 3840u);
+  CHECK_EQ(modes.preferred().width(), 8192u);
   CHECK(modes.invariants_hold()); }

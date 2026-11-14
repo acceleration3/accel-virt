@@ -266,3 +266,21 @@ TEST(present_request, is_passive_only)
   static_cast<void>(present.present());
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
+
+TEST(present_request_present, rectangles_past_3840_and_4096_columns_are_written_as_given)
+{ Present present(blt);
+  present.request().SrcRect = {0, 0, 3840, 1440};
+  present.request().DstRect = {3841, 0, 7681, 1440};
+  present.rect(0u) = {3841, 10, 4000, 20};
+  present.rect(1u) = {4097, 30, 5120, 1440};
+  present.rect(2u) = {7000, 0, 7680, 2160};
+  CHECK_EQ(present.run(), 0u);
+  CHECK_EQ(u32(present.dma(), 12u), 3u);
+  CHECK_EQ(u32(present.dma(), 24u), 3840u);
+  CHECK_EQ(u32(present.dma(), 32u), 3841u);
+  CHECK_EQ(u32(present.dma(), 40u), 7681u);
+  const std::uint32_t expected[3][4] = {{3841u, 10u, 4000u, 20u}, {4097u, 30u, 5120u, 1440u}, {7000u, 0u, 7680u, 2160u}};
+  for (std::size_t index = 0u; index < 3u; index++)
+      for (std::size_t edge = 0u; edge < 4u; edge++)
+          CHECK_EQ(u32(present.dma(), PresentCommand::header_size + index * PresentCommand::sub_rectangle_size + edge * 4u),
+                   expected[index][edge]); }

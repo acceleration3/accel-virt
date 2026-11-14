@@ -13,6 +13,7 @@ public:
     static constexpr uint32_t default_refresh_millihz = 60000u;
     static constexpr uint32_t source_format_count = 2u;
     static constexpr int32_t  source_formats[source_format_count] = {21, 32};
+    static constexpr uint32_t max_source_edge = 8192u;
 
     DisplayMode(uint32_t width, uint32_t height, uint32_t refresh_millihz = default_refresh_millihz);
     DisplayMode();

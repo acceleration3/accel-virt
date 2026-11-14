@@ -58,17 +58,19 @@ bool DisplayMode::offerable() const
 {
     AV_SCOPE("DisplayMode::offerable");
     if (width_ < min_source_edge || height_ < min_source_edge) return false;
-    if (width_ > max_edid_edge || height_ > max_edid_edge) return false;
-    return total_height() - height_ <= max_edid_edge;
+    return width_ <= max_source_edge && height_ <= max_source_edge;
 }
 
 DisplayMode DisplayMode::edid_timing() const
 {
     AV_SCOPE("DisplayMode::edid_timing");
-    const uint64_t frame = uint64_t{total_width()} * total_height();
-    const uint64_t fastest = max_edid_pixel_clock_units * edid_pixel_clock_unit_hz * millihertz_per_hertz / frame;
-    if (refresh_millihz_ <= fastest) return *this;
-    return DisplayMode(width_, height_, static_cast<uint32_t>(fastest));
+    const uint32_t    longest = width_ > height_ ? width_ : height_;
+    const uint32_t    divisor = longest / (max_edid_edge + 1u) + 1u;
+    const DisplayMode stated(width_ / divisor, height_ / divisor, refresh_millihz_);
+    const uint64_t    frame = uint64_t{stated.total_width()} * stated.total_height();
+    const uint64_t    fastest = max_edid_pixel_clock_units * edid_pixel_clock_unit_hz * millihertz_per_hertz / frame;
+    if (refresh_millihz_ <= fastest) return stated;
+    return DisplayMode(stated.width(), stated.height(), static_cast<uint32_t>(fastest));
 }
 
 uint32_t DisplayMode::width() const

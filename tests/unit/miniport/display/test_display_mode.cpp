@@ -113,9 +113,18 @@ TEST(display_mode, what_windows_can_be_offered)
   CHECK(!av::DisplayMode(80u, 80u).offerable());
   CHECK(av::DisplayMode(3840u, 2160u).offerable());
   CHECK(av::DisplayMode(4095u, 2160u).offerable());
-  CHECK(!av::DisplayMode(4096u, 2160u).offerable());
-  CHECK(!av::DisplayMode(1000u, 4096u).offerable());
+  CHECK(av::DisplayMode(4096u, 2160u).offerable());
+  CHECK(av::DisplayMode(1000u, 4096u).offerable());
   CHECK(av::DisplayMode(4095u, 4095u).offerable());
+  CHECK(av::DisplayMode(5120u, 1440u).offerable());
+  CHECK(av::DisplayMode(5120u, 2160u).offerable());
+  CHECK(av::DisplayMode(7680u, 2160u, 144000u).offerable());
+  CHECK(av::DisplayMode(7680u, 4320u).offerable());
+  CHECK(av::DisplayMode(8192u, 4320u).offerable());
+  CHECK(av::DisplayMode(8192u, 8192u).offerable());
+  CHECK(!av::DisplayMode(8193u, 2160u).offerable());
+  CHECK(!av::DisplayMode(1000u, 8193u).offerable());
+  CHECK(!av::DisplayMode(16384u, 16384u).offerable());
   CHECK(av::DisplayMode(2560u, 1440u, 360000u).offerable());
   CHECK_EQ(av::DisplayMode().width(), 640u);
   CHECK_EQ(av::DisplayMode().height(), 480u); }
@@ -193,6 +202,27 @@ TEST(display_mode, the_edid_states_the_fastest_rate_its_clock_holds)
   CHECK(fast.pixel_rate() <= 655'350'000ull && 655'350'000ull - fast.pixel_rate() < 2ull * 2720ull * 1500ull / 1000ull);
   const DisplayMode huge = DisplayMode(7680u, 4320u, 1000000u).edid_timing();
   CHECK(huge.refresh_millihz() >= 1000u); }
+
+TEST(display_mode, the_edid_states_a_mode_wider_than_its_fields_as_the_largest_whole_fraction_that_fits)
+{ struct Case { std::uint32_t width, height, stated_width, stated_height; };
+  const Case cases[] = {{4095u, 2160u, 4095u, 2160u}, {4096u, 2160u, 2048u, 1080u}, {5120u, 1440u, 2560u, 720u},
+                        {5120u, 2160u, 2560u, 1080u}, {7680u, 2160u, 3840u, 1080u}, {7680u, 4320u, 3840u, 2160u},
+                        {8191u, 4320u, 4095u, 2160u}, {8192u, 4320u, 2730u, 1440u}, {1440u, 5120u, 720u, 2560u},
+                        {3840u, 2160u, 3840u, 2160u}, {4095u, 100u, 4095u, 100u}};
+  for (const Case &mode : cases) {
+      const DisplayMode stated = DisplayMode(mode.width, mode.height).edid_timing();
+      CHECK_EQ(stated.width(), mode.stated_width);
+      CHECK_EQ(stated.height(), mode.stated_height);
+      CHECK_EQ(stated.refresh_millihz(), 60000u);
+      CHECK(stated.width() <= 4095u && stated.height() <= 4095u);
+      CHECK(stated.total_width() - stated.width() <= 4095u && stated.total_height() - stated.height() <= 4095u);
+      CHECK(stated.pixel_rate() / 10000u <= 65535u);
+  }
+  const DisplayMode fast = DisplayMode(7680u, 4320u, 144000u).edid_timing();
+  CHECK_EQ(fast.width(), 3840u);
+  CHECK_EQ(fast.height(), 2160u);
+  CHECK(fast.refresh_millihz() < 144000u && fast.refresh_millihz() > 60000u);
+  CHECK(fast.pixel_rate() / 10000u <= 65535u); }
 
 TEST(display_mode, a_period_is_in_the_100_ns_interrupt_time_units)
 { CHECK_EQ(DisplayMode(1920u, 1080u).period(), second / 60u);

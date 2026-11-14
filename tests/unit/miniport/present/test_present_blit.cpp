@@ -612,3 +612,35 @@ TEST(present_blit_invariants, a_held_region_past_the_destination_is_detected)
   CHECK(!blit.invariants_hold());
   av::PresentBlitProbe::hold(blit, PresentRegion(0u, 0u, 0u, 0u, 1u, 1u));
   CHECK(blit.invariants_hold()); }
+
+TEST(present_blit, rectangles_lying_past_3840_and_4096_columns_reach_the_mover_whole)
+{ constexpr std::uint32_t wide = 7680u;
+  constexpr std::uint32_t rows = 4u;
+  constexpr std::uint32_t wide_pages = wide * rows * PresentSurface::pixel_bytes / GuestPageList::page_bytes;
+  MockPlatform   platform;
+  RecordingMover mover;
+  std::uint64_t  source_frames[wide_pages];
+  std::uint64_t  destination_frames[wide_pages];
+  for (std::uint32_t index = 0u; index < wide_pages; index++) {
+      source_frames[index] = 0x10000000u + index * GuestPageList::page_bytes;
+      destination_frames[index] = 0x20000000u + index * GuestPageList::page_bytes;
+  }
+  const SurfaceLayout  layout(wide, rows, format, wide * PresentSurface::pixel_bytes);
+  const PresentSurface from(layout, GuestPageList(source_frames, wide_pages));
+  const PresentSurface into(layout, GuestPageList(destination_frames, wide_pages));
+  const RectRecord dirty[] = {rect(3841, 0, 4000, 2), rect(4097, 1, 5120, 4), rect(7000, 0, 7680, 4),
+                              rect(3000, 2, 4500, 3)};
+  { PresentBlit blit(platform, mover, &from, into);
+    CHECK_STATUS(blit.blit(Rectangle(0, 0, wide, rows), Rectangle(0, 0, wide, rows), dirty, 4u), Status::ok);
+    CHECK_STATUS(blit.blit(Rectangle(100, 0, 1124, rows), Rectangle(4200, 0, 5224, rows), nullptr, 0u), Status::ok);
+    CHECK_STATUS(blit.fill(0xFF102030u, Rectangle(5120, 0, wide, rows), nullptr, 0u), Status::ok);
+    CHECK(blit.invariants_hold());
+    CHECK_EQ(blit.rows(), 2u + 3u + 4u + 1u + 4u + 4u); }
+  CHECK_EQ(mover.taken(), 6u);
+  check_region(mover.region(0u), 3841u, 0u, 3841u, 0u, 159u, 2u);
+  check_region(mover.region(1u), 4097u, 1u, 4097u, 1u, 1023u, 3u);
+  check_region(mover.region(2u), 7000u, 0u, 7000u, 0u, 680u, 4u);
+  check_region(mover.region(3u), 3000u, 2u, 3000u, 2u, 1500u, 1u);
+  check_region(mover.region(4u), 100u, 0u, 4200u, 0u, 1024u, 4u);
+  check_region(mover.region(5u), 5120u, 0u, 5120u, 0u, 2560u, 4u);
+  CHECK_EQ(mover.fills(), 1u); }

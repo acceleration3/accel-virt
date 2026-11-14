@@ -153,7 +153,7 @@ public:
     }
 
 private:
-    static constexpr std::uint32_t max_pages = 1024u;
+    static constexpr std::uint32_t max_pages = 16384u;
 
     av::MappedVirtioFunction       mapped_;
     ObjectStorage<VirtioGpuDevice> storage_;
@@ -560,3 +560,38 @@ TEST(display_scanout_refresh, a_plane_the_host_queue_has_no_room_for_is_answered
   }
   CHECK(refused != Status::ok);
   CHECK(fixture.scanout().invariants_hold()); }
+
+TEST(display_scanout_refresh, a_mode_wider_than_an_edid_timing_is_carried_whole_with_every_page_of_its_primary)
+{ for (const DisplayMode &wide : {DisplayMode(5120u, 1440u), DisplayMode(7680u, 2160u)}) {
+      Fixture fixture;
+      FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+      fixture.live(0u, wide);
+      CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true, true), Status::ok);
+      CHECK_EQ(control.respond_all(ok_nodata), 5u);
+      CHECK_EQ(control.request_type(0u), create_2d);
+      CHECK_EQ(u32(control.request(0u), 32u), wide.width());
+      CHECK_EQ(u32(control.request(0u), 36u), wide.height());
+      CHECK_EQ(u32(control.request(1u), 28u), 1u);
+      CHECK_EQ(u32(control.request(1u), 32u), static_cast<std::uint32_t>(first_frame));
+      CHECK_EQ(u32(control.request(1u), 40u), wide.frame_pages() * static_cast<std::uint32_t>(page));
+      CHECK_EQ(std::uint64_t{wide.frame_pages()} * page, std::uint64_t{wide.width()} * wide.height() * 4u);
+      CHECK_EQ(control.request_type(2u), set_scanout);
+      CHECK_EQ(u32(control.request(2u), 24u), 0u);
+      CHECK_EQ(u32(control.request(2u), 32u), wide.width());
+      CHECK_EQ(u32(control.request(2u), 36u), wide.height());
+      CHECK_EQ(control.request_type(3u), transfer);
+      CHECK_EQ(u32(control.request(3u), 32u), wide.width());
+      CHECK_EQ(u32(control.request(3u), 36u), wide.height());
+      CHECK_EQ(control.request_type(4u), flush);
+      CHECK_EQ(u32(control.request(4u), 24u), 0u);
+      CHECK_EQ(u32(control.request(4u), 32u), wide.width());
+      CHECK_EQ(u32(control.request(4u), 36u), wide.height());
+      CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true, true), Status::ok);
+      CHECK_EQ(control.respond_all(ok_nodata), 2u);
+      CHECK_EQ(control.request_type(5u), transfer);
+      CHECK_EQ(u32(control.request(5u), 32u), wide.width());
+      CHECK_EQ(control.request_type(6u), flush);
+      CHECK_EQ(u32(control.request(6u), 32u), wide.width());
+      CHECK_EQ(u32(control.request(6u), 36u), wide.height());
+      CHECK(fixture.scanout().invariants_hold());
+  } }

@@ -129,3 +129,24 @@ TEST(region_mover, a_region_leaving_either_surface_is_refused_at_its_first_row_o
   const PresentCopyRequest flat(PresentOperation::blt, 0u, 0u, 1u, 1u, 0u, 1u, 32u);
   RegionMover              mover(source.window(), destination.window(), flat);
   CHECK_STATUS(mover.move(PresentRegion(0u, 0u, 0u, 0u, 1u, 1u)), Status::invalid_parameter); }
+
+TEST(region_mover, a_region_lying_past_3840_and_4096_columns_lands_at_its_own_columns)
+{ constexpr std::uint32_t wide = 5120u;
+  HostSurface source(wide, 1u, wide * 4u, 16000u);
+  HostSurface destination(wide, 1u, wide * 4u, 16500u);
+  source.number();
+  const PresentCopyRequest request = blt(source, destination, 0u);
+  RegionMover              mover(source.window(), destination.window(), request);
+  CHECK_STATUS(mover.move(PresentRegion(3841u, 0u, 3841u, 0u, 159u, 1u)), Status::ok);
+  CHECK_STATUS(mover.move(PresentRegion(4097u, 0u, 4097u, 0u, 1023u, 1u)), Status::ok);
+  for (std::uint32_t x = 0u; x < wide; x++) {
+      const bool moved = (x >= 3841u && x < 4000u) || x >= 4097u;
+      CHECK_EQ(destination.at(x, 0u), moved ? source.at(x, 0u) : 0u);
+  }
+  const PresentCopyRequest fill(PresentOperation::color_fill, 0u, 0xFF123456u, 1u, 0u, 0u, 1u, destination.pitch());
+  RegionMover              filler(BlobWindow(), destination.window(), fill);
+  CHECK_STATUS(filler.move(PresentRegion(0u, 0u, 4000u, 0u, 97u, 1u)), Status::ok);
+  CHECK_EQ(destination.at(3999u, 0u), source.at(3999u, 0u));
+  CHECK_EQ(destination.at(4000u, 0u), 0xFF123456u);
+  CHECK_EQ(destination.at(4096u, 0u), 0xFF123456u);
+  CHECK_EQ(destination.at(4097u, 0u), source.at(4097u, 0u)); }
