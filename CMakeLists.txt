@@ -113,7 +113,9 @@ endif()
 if(AV_SPIRV_TOOLS_LIBRARY)
   target_link_libraries(av_core PUBLIC ${AV_SPIRV_TOOLS_LIBRARY})
 endif()
-find_library(AV_OPENCL_LIBRARY NAMES OpenCL)
+# libOpenCL.so.1 too: without the loader's dev package there is no libOpenCL.so,
+# and the executor would load with clGetProgramInfo and the rest undefined.
+find_library(AV_OPENCL_LIBRARY NAMES OpenCL libOpenCL.so.1)
 if(AV_OPENCL_LIBRARY)
   target_link_libraries(av_core PUBLIC ${AV_OPENCL_LIBRARY})
 endif()
