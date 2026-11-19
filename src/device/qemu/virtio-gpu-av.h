@@ -62,7 +62,7 @@ struct VirtIOGPUAv {
     VirtQueue *fence_queues[AV_DEVICE_INTERRUPT_LINES];
     bool scanouts[VIRTIO_GPU_MAX_SCANOUTS];
     QemuDmaBuf *exported[VIRTIO_GPU_MAX_SCANOUTS][2];
-    int32_t exported_fd[VIRTIO_GPU_MAX_SCANOUTS][2];
+    ino_t exported_ino[VIRTIO_GPU_MAX_SCANOUTS][2];
     int32_t showing[VIRTIO_GPU_MAX_SCANOUTS];
 };
 
