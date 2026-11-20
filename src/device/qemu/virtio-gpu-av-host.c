@@ -548,14 +548,16 @@ bool virtio_gpu_av_show_image(VirtIOGPUAv *r, uint32_t head, const AvExportedIma
 {
     QemuConsole *con = av_head_console(r, head);
     QemuDmaBuf *buffer;
+    struct stat identity;
     int32_t duplicate;
     uint32_t stride, offset;
 
-    if (!con || !qemu_console_has_gl(con) || image->slot >= 2 || image->fd < 0) {
+    if (!con || !qemu_console_has_gl(con) || image->slot >= 2 || image->fd < 0 || fstat(image->fd, &identity) < 0) {
         return false;
     }
     buffer = r->exported[head][image->slot];
-    if (buffer && (r->exported_fd[head][image->slot] != image->fd ||
+    /* Known by the dma-buf's inode: a restarted renderer's image can arrive at its predecessor's descriptor number */
+    if (buffer && (r->exported_ino[head][image->slot] != identity.st_ino ||
                    qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height ||
                    qemu_dmabuf_get_fourcc(buffer) != image->fourcc ||
                    qemu_dmabuf_get_modifier(buffer) != image->modifier ||
@@ -568,7 +570,7 @@ bool virtio_gpu_av_show_image(VirtIOGPUAv *r, uint32_t head, const AvExportedIma
         buffer = NULL;
     }
     if (!buffer) {
-        duplicate = dup(image->fd);
+        duplicate = fcntl(image->fd, F_DUPFD_CLOEXEC, 0);
         if (duplicate < 0) {
             return false;
         }
@@ -577,7 +579,7 @@ bool virtio_gpu_av_show_image(VirtIOGPUAv *r, uint32_t head, const AvExportedIma
         buffer = qemu_dmabuf_new(image->width, image->height, &offset, &stride, 0, 0, image->width, image->height,
                                  image->fourcc, image->modifier, &duplicate, 1, false, false);
         r->exported[head][image->slot] = buffer;
-        r->exported_fd[head][image->slot] = image->fd;
+        r->exported_ino[head][image->slot] = identity.st_ino;
     }
     if (r->showing[head] != (int32_t)image->slot) {
         VIRTIO_GPU_BASE(r)->enable = 1;
