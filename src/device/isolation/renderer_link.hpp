@@ -15,6 +15,7 @@ class ReadyMessage;
 class RendererLink {
 public:
     static constexpr uint32_t request_timeout_ms = 2000u;
+    static constexpr uint32_t slow_timeout_ms = 10000u;
     static constexpr uint32_t hello_timeout_ms = 10000u;
     static constexpr uint32_t max_descriptors = 16u;
 
@@ -32,7 +33,10 @@ public:
                                   int *descriptors, uint32_t capacity, uint32_t &count);
 
 private:
-    [[nodiscard]] Status await(RendererMessageHeader::Kind expected, uint64_t sequence, uint32_t timeout_ms,
+    void   extend(bool &extended, uint64_t &deadline, uint64_t started, RendererMessageHeader::Kind asked,
+                  uint32_t timeout_ms);
+    [[nodiscard]] Status await(RendererMessageHeader::Kind asked, RendererMessageHeader::Kind expected, uint64_t sequence,
+                               uint32_t timeout_ms,
                                const uint8_t *&body, uint32_t &length, int *kept, uint32_t capacity, uint32_t &count);
     [[nodiscard]] Status frame(RendererMessageHeader::Kind kind, const uint8_t *body, uint32_t length,
                                uint64_t &sequence);

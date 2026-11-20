@@ -182,8 +182,31 @@ TEST(renderer_link_request, the_wait_ends_at_its_deadline_however_much_the_rende
   fixture.host().advance_clock_per_read(1000u * millisecond);
   Status outcome = Status::ok;
   CHECK_STATUS(fixture.create(outcome), Status::invalid_state);
-  CHECK_EQ(fixture.peer().queued(), 2u);
-  CHECK_EQ(fixture.host().last_receive_timeout(), 1000u); }
+  CHECK_EQ(fixture.peer().queued(), 0u);
+  CHECK_EQ(fixture.host().logged(), 1u);
+  CHECK_EQ(fixture.host().last_receive_timeout(), RendererLink::slow_timeout_ms - 5000u); }
+
+TEST(renderer_link_request, a_late_answer_within_the_slow_bound_is_taken_with_a_log_line)
+{ Fixture fixture;
+  fixture.peer().fall_silent();
+  for (std::uint64_t stale = 10u; stale < 13u; stale++) fixture.peer().queue_reply(stale, Status::ok, 0u);
+  fixture.peer().queue_reply(1u, Status::ok, 0u);
+  fixture.host().advance_clock_per_read(1000u * millisecond);
+  Status outcome = Status::invalid_state;
+  CHECK_STATUS(fixture.create(outcome), Status::ok);
+  CHECK_STATUS(outcome, Status::ok);
+  CHECK_EQ(fixture.host().logged(), 1u);
+  CHECK(std::strstr(fixture.host().last_log(), "has not answered create_context in 2000 ms") != nullptr); }
+
+TEST(renderer_link_request, a_renderer_late_past_the_slow_bound_is_invalid_state)
+{ Fixture fixture;
+  fixture.peer().fall_silent();
+  for (std::uint64_t stale = 10u; stale < 22u; stale++) fixture.peer().queue_reply(stale, Status::ok, 0u);
+  fixture.host().advance_clock_per_read(1000u * millisecond);
+  Status outcome = Status::ok;
+  CHECK_STATUS(fixture.create(outcome), Status::invalid_state);
+  CHECK(fixture.peer().queued() > 0u);
+  CHECK_EQ(fixture.host().logged(), 1u); }
 
 TEST(renderer_link_request, a_wait_is_given_what_is_left_rounded_up_to_the_millisecond)
 { Fixture fixture;
