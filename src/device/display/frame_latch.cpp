@@ -4,7 +4,8 @@
 
 namespace av {
 
-FrameLatch::FrameLatch() : pending_frame_(0u), pending_key_(0u), latched_frame_(0u), latched_key_(0u), unshown_(false)
+FrameLatch::FrameLatch()
+    : pending_frame_(0u), pending_key_(0u), latched_frame_(0u), latched_key_(0u), unshown_(false), held_(false)
 {
     AV_SCOPE("FrameLatch::FrameLatch");
 }
@@ -20,17 +21,35 @@ void FrameLatch::post(uint32_t frame, uint64_t key)
 bool FrameLatch::latch()
 {
     AV_SCOPE("FrameLatch::latch");
-    if (pending_frame_ == 0u || pending_frame_ == latched_frame_) return false;
+    if (held_ || pending_frame_ == 0u || pending_frame_ == latched_frame_) return false;
     latched_frame_ = pending_frame_;
     latched_key_ = pending_key_;
     unshown_ = true;
     return true;
 }
 
+void FrameLatch::hold(bool held)
+{
+    AV_SCOPE("FrameLatch::hold");
+    held_ = held;
+}
+
 uint32_t FrameLatch::latched() const
 {
     AV_SCOPE("FrameLatch::latched");
     return latched_frame_;
+}
+
+bool FrameLatch::awaits(uint64_t key) const
+{
+    AV_SCOPE("FrameLatch::awaits");
+    return pending_frame_ != 0u && pending_frame_ != latched_frame_ && pending_key_ == key;
+}
+
+bool FrameLatch::shows(uint64_t key) const
+{
+    AV_SCOPE("FrameLatch::shows");
+    return latched_frame_ != 0u && latched_key_ == key;
 }
 
 bool FrameLatch::take_unshown(uint64_t &key)
@@ -50,6 +69,7 @@ void FrameLatch::clear()
     latched_frame_ = 0u;
     latched_key_ = 0u;
     unshown_ = false;
+    held_ = false;
 }
 
 bool FrameLatch::invariants_hold() const

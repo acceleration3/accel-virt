@@ -386,6 +386,7 @@ TEST(local_context_plane, exports_images_from_any_thread)
 TEST(local_context_plane, posts_no_export_and_has_no_answers_to_take)
 { Fixture fixture;
   CHECK(!fixture.plane().post_export(uuid, 0u, 0x51u));
+  CHECK(!fixture.plane().exporting(0u));
   fixture.plane().take_answers();
   CHECK(fixture.plane().invariants_hold()); }
 

@@ -182,6 +182,7 @@ void VirtioGpuAv::renderer_lost()
     AV_SCOPE("VirtioGpuAv::renderer_lost");
     host_.require_main_loop("VirtioGpuAv::renderer_lost");
     contexts_->renderer_lost();
+    hold_exporting_heads();
 }
 
 void VirtioGpuAv::renderer_due()
@@ -189,6 +190,7 @@ void VirtioGpuAv::renderer_due()
     AV_SCOPE("VirtioGpuAv::renderer_due");
     host_.require_main_loop("VirtioGpuAv::renderer_due");
     contexts_->take_answers();
+    hold_exporting_heads();
 }
 
 bool VirtioGpuAv::control(void *request, uint32_t type)
@@ -366,6 +368,13 @@ void VirtioGpuAv::show_latched_frames()
         uint64_t key = 0u;
         if (clock_.take_unshown(head, key)) static_cast<void>(post_head(head, key));
     }
+    hold_exporting_heads();
+}
+
+void VirtioGpuAv::hold_exporting_heads()
+{
+    AV_SCOPE("VirtioGpuAv::hold_exporting_heads");
+    for (uint32_t head = 0u; head < DisplayClock::heads; head++) clock_.hold(head, contexts_->exporting(head));
 }
 
 bool VirtioGpuAv::show_frame(uint32_t head, uint64_t key)
@@ -373,7 +382,13 @@ bool VirtioGpuAv::show_frame(uint32_t head, uint64_t key)
     AV_SCOPE("VirtioGpuAv::show_frame");
     host_.require_main_loop("VirtioGpuAv::show_frame");
     if (!realized() || head >= DisplayClock::heads || !host_.display_takes_dmabuf(head)) return false;
-    if (!contexts_->exports_off_main_loop()) return post_head(head, key);
+    if (clock_.latches(head) && (clock_.awaits(head, key) || (contexts_->exporting(head) && clock_.shows(head, key))))
+        return true;
+    if (!contexts_->exports_off_main_loop()) {
+        const bool posted = post_head(head, key);
+        hold_exporting_heads();
+        return posted;
+    }
     if (shower_.start() != Status::ok) return false;
     shower_.ask(head, key);
     shower_.wake();

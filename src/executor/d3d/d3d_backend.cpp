@@ -726,6 +726,12 @@ bool D3dBackend::on_RotateResources11(uint32_t count, const uint32_t *resources)
         for (uint32_t other = 0u; other < index; other++)
             if (textures[other] == textures[index]) return false;
     }
+    uint64_t surfaces[max_rotation] = {};
+    for (uint32_t index = 0u; index < count; index++) {
+        ID3D11Resource *const rotated = objects_.find_as<ID3D11Resource>(resources[index], D3dObjectKind::resource);
+        surfaces[index] = rotated != nullptr ? SurfaceIdentity(rotated).surface() : 0u;
+    }
+    flip_chains_.rotated(surfaces, count);
     for (uint32_t index = 0u; index < count; index++)
         static_cast<void>(objects_.exchange(resources[index], D3dObjectKind::resource, textures[(index + 1u) % count]));
     return remake_views(textures, count) == Status::ok;
@@ -1984,6 +1990,17 @@ void D3dBackend::pace(uint64_t bytes)
     static_cast<void>(work_window_.settle(device11_->vulkan()));
 }
 
+void D3dBackend::show_chain(uint64_t surface, ID3D11Texture2D *presented)
+{
+    AV_SCOPE("D3dBackend::show_chain");
+    uint64_t       siblings[FlipChains::member_capacity] = {};
+    const uint32_t count = flip_chains_.siblings(surface, siblings, FlipChains::member_capacity);
+    for (uint32_t index = 0u; index < count; index++) {
+        if (!shares_->opened(siblings[index])) continue;
+        static_cast<void>(device11_->show(shares_->domain(), siblings[index], presented));
+    }
+}
+
 void D3dBackend::counted(ID3D11Resource *destination)
 {
     AV_SCOPE("D3dBackend::counted");
@@ -2243,6 +2260,8 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
             LogLine(lines_).text("a flip of surface ").hex(frame.surface(), 16u).text(" has no copy to show: DWM reads the buffer itself").write();
             show_refused_ = true;
         }
+        if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D && frame.surface() != 0u)
+            show_chain(frame.surface(), static_cast<ID3D11Texture2D *>(found));
         return true;
     }
     if (surfaces_ == nullptr) return true;

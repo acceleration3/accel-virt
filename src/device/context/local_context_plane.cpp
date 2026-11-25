@@ -206,6 +206,12 @@ bool LocalContextPlane::post_export(const uint8_t *, uint32_t, uint64_t)
     return false;
 }
 
+bool LocalContextPlane::exporting(uint32_t) const
+{
+    AV_SCOPE("LocalContextPlane::exporting");
+    return false;
+}
+
 void LocalContextPlane::take_answers()
 {
     AV_SCOPE("LocalContextPlane::take_answers");

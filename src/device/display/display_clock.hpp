@@ -34,6 +34,9 @@ public:
     void                 post(uint32_t head, uint32_t frame, uint64_t key);
     void                 showing();
     bool                 take_unshown(uint32_t head, uint64_t &key);
+    void                 hold(uint32_t head, bool held);
+    bool                 awaits(uint32_t head, uint64_t key);
+    bool                 shows(uint32_t head, uint64_t key);
     void                 run();
     bool                 tick(uint64_t now, uint64_t &next);
 

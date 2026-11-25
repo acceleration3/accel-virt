@@ -176,6 +176,35 @@ bool DisplayClock::take_unshown(uint32_t head, uint64_t &key)
     return unshown;
 }
 
+void DisplayClock::hold(uint32_t head, bool held)
+{
+    AV_SCOPE("DisplayClock::hold");
+    if (lock_ == nullptr || head >= heads) return;
+    host_.lock_mutex(lock_);
+    latches_[head].hold(held);
+    host_.unlock_mutex(lock_);
+}
+
+bool DisplayClock::awaits(uint32_t head, uint64_t key)
+{
+    AV_SCOPE("DisplayClock::awaits");
+    if (lock_ == nullptr || head >= heads) return false;
+    host_.lock_mutex(lock_);
+    const bool awaited = latches_[head].awaits(key);
+    host_.unlock_mutex(lock_);
+    return awaited;
+}
+
+bool DisplayClock::shows(uint32_t head, uint64_t key)
+{
+    AV_SCOPE("DisplayClock::shows");
+    if (lock_ == nullptr || head >= heads) return false;
+    host_.lock_mutex(lock_);
+    const bool shown = latches_[head].shows(key);
+    host_.unlock_mutex(lock_);
+    return shown;
+}
+
 void DisplayClock::run()
 {
     AV_SCOPE("DisplayClock::run");

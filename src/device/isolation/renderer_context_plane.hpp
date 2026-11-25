@@ -79,6 +79,7 @@ public:
     bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) override;
     bool exports_off_main_loop() const override;
     bool post_export(const uint8_t *gpu_uuid, uint32_t head, uint64_t key) override;
+    bool exporting(uint32_t head) const override;
     void take_answers() override;
     bool composes() const override;
     bool compose_planes(const uint8_t *gpu_uuid, const AvScanoutPlane *planes, uint32_t count, uint32_t width,

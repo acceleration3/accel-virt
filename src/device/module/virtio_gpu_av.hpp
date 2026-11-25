@@ -84,6 +84,7 @@ private:
     [[nodiscard]] Status start_recording(const AvRecordingOptions *recording, TextBuffer &message);
     void                 attach_exports();
     bool                 post_head(uint32_t head, uint64_t key);
+    void                 hold_exporting_heads();
 
     Host              &host_;
     GpuBinding         binding_;

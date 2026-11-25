@@ -100,3 +100,51 @@ TEST(frame_latch, an_unshown_frame_nothing_was_latched_for_or_a_key_with_no_fram
   CHECK(!keyed.invariants_hold());
   keyed.post(1u, 0x77u);
   CHECK(keyed.invariants_hold()); }
+
+TEST(frame_latch, a_held_latch_keeps_its_frame_until_let_go_then_takes_the_newest)
+{ FrameLatch latch;
+  latch.post(1u, 0x11u);
+  CHECK(latch.latch());
+  std::uint64_t key = 0u;
+  CHECK(latch.take_unshown(key));
+  latch.hold(true);
+  latch.post(2u, 0x22u);
+  latch.post(3u, 0x33u);
+  CHECK(!latch.latch());
+  CHECK_EQ(latch.latched(), 1u);
+  CHECK(!latch.take_unshown(key));
+  CHECK(latch.invariants_hold());
+  latch.hold(false);
+  CHECK(latch.latch());
+  CHECK_EQ(latch.latched(), 3u);
+  CHECK(latch.take_unshown(key));
+  CHECK_EQ(key, 0x33u);
+  latch.hold(true);
+  latch.clear();
+  latch.post(4u, 0x44u);
+  CHECK(latch.latch()); }
+
+TEST(frame_latch, a_posted_key_is_awaited_until_it_latches_and_then_shown)
+{ FrameLatch latch;
+  CHECK(!latch.awaits(0u));
+  CHECK(!latch.shows(0u));
+  latch.post(1u, 0x11u);
+  CHECK(latch.awaits(0x11u));
+  CHECK(!latch.awaits(0x22u));
+  CHECK(!latch.shows(0x11u));
+  CHECK(latch.latch());
+  CHECK(!latch.awaits(0x11u));
+  CHECK(latch.shows(0x11u));
+  latch.post(2u, 0x22u);
+  CHECK(latch.awaits(0x22u));
+  CHECK(!latch.awaits(0x11u));
+  CHECK(latch.shows(0x11u));
+  CHECK(!latch.shows(0x22u));
+  latch.post(0u, 0x33u);
+  CHECK(!latch.awaits(0x33u));
+  CHECK(latch.latch());
+  CHECK(latch.shows(0x22u));
+  CHECK(!latch.shows(0x11u));
+  latch.clear();
+  CHECK(!latch.shows(0x22u));
+  CHECK(!latch.awaits(0x22u)); }

@@ -1710,3 +1710,26 @@ TEST(renderer_context_plane_invariants, memory_asked_with_no_renderer_is_seen)
   av::HostBlobErrand errand(memory.table(), rig.plane(), av::HostBlobErrand::Kind::lend, blob_id, 1u);
   RendererContextPlaneProbe::ask_while_lost(rig.plane(), errand);
   CHECK(!rig.plane().invariants_hold()); }
+
+TEST(renderer_context_plane_exporting, a_head_is_exporting_while_an_export_is_out_or_asked_for_and_until_the_last_is_answered)
+{ PostingPlane rig;
+  CHECK(!rig.plane().exporting(0u));
+  CHECK_STATUS(rig.start(), Status::ok);
+  CHECK(!rig.plane().exporting(0u));
+  const std::uint32_t sent = rig.peer().delivered();
+  CHECK(rig.plane().post_export(uuid, 0u, 0x10u));
+  CHECK(rig.plane().exporting(0u));
+  CHECK(!rig.plane().exporting(1u));
+  CHECK(!rig.plane().exporting(RendererContextPlane::max_heads));
+  CHECK(rig.plane().post_export(uuid, 0u, 0x11u));
+  rig.answer_export(rig.peer().sequence_at(sent), true, 0u, 64u, 1u);
+  rig.plane().take_answers();
+  CHECK(rig.plane().exporting(0u));
+  rig.answer_export(rig.peer().sequence_at(sent + 1u), true, 0u, 64u, 1u);
+  rig.plane().take_answers();
+  CHECK(!rig.plane().exporting(0u));
+  CHECK(rig.plane().post_export(uuid, 1u, 0x20u));
+  CHECK(rig.plane().exporting(1u));
+  rig.plane().renderer_lost();
+  CHECK(!rig.plane().exporting(1u));
+  CHECK(rig.plane().invariants_hold()); }

@@ -86,6 +86,15 @@ bool D3dShares::writes(uint32_t domain, uint64_t id, uint64_t &count)
         domain, id, [&count](Share &share, D3dRetired &) { count = share.direct3d().writes(); });
 }
 
+bool D3dShares::opened(uint32_t domain, uint64_t id)
+{
+    AV_SCOPE("D3dShares::opened");
+    bool opened = false;
+    static_cast<void>(shares_.with_direct3d(
+        domain, id, [&opened](Share &share, D3dRetired &) { opened = share.direct3d().opens() != 0u; }));
+    return opened;
+}
+
 void D3dShares::lose_direct3d11()
 {
     AV_SCOPE("D3dShares::lose_direct3d11");

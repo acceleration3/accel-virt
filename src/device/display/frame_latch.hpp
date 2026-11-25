@@ -11,7 +11,10 @@ public:
 
     void     post(uint32_t frame, uint64_t key);
     bool     latch();
+    void     hold(bool held);
     uint32_t latched() const;
+    bool     awaits(uint64_t key) const;
+    bool     shows(uint64_t key) const;
     bool     take_unshown(uint64_t &key);
     void     clear();
 
@@ -23,6 +26,7 @@ private:
     uint32_t latched_frame_;
     uint64_t latched_key_;
     bool     unshown_;
+    bool     held_;
 
     friend struct FrameLatchProbe;
 };

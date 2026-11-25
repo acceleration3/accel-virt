@@ -56,6 +56,7 @@ public:
     virtual bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) = 0;
     virtual bool exports_off_main_loop() const = 0;
     virtual bool post_export(const uint8_t *gpu_uuid, uint32_t head, uint64_t key) = 0;
+    virtual bool exporting(uint32_t head) const = 0;
     virtual void take_answers() = 0;
     virtual bool composes() const = 0;
     virtual bool compose_planes(const uint8_t *gpu_uuid, const AvScanoutPlane *planes, uint32_t count, uint32_t width,

@@ -315,6 +315,22 @@ TEST(d3d_shares, take_retired_hands_over_no_more_than_asked)
   objects[0]->Release();
   CHECK_EQ(f.d3d.take_retired(objects, 2u), 0u); }
 
+TEST(d3d_shares, a_share_is_opened_once_a_consumer_has_opened_it)
+{ CountedObject resource;
+  Fixture f;
+  CHECK(!f.d3d.opened(domain, 0x2Au));
+  CHECK_STATUS(f.d3d.publish_resource(domain, 0x2Au, &resource, ShareOrigin::d3d11, f.publisher), Status::ok);
+  CHECK(!f.d3d.opened(domain, 0x2Au));
+  IUnknown *const opened = f.opened_resource(0x2Au);
+  CHECK(opened != nullptr);
+  CHECK(f.d3d.opened(domain, 0x2Au));
+  CHECK(!f.d3d.opened(domain + 1u, 0x2Au));
+  CHECK(!f.d3d.opened(domain, 0x2Bu));
+  opened->Release();
+  f.shares.clear();
+  CHECK(!f.d3d.opened(domain, 0x2Au));
+  f.drained(); }
+
 TEST(d3d_shares, counts_the_copies_written_into_a_share)
 { CountedObject resource;
   Fixture f;

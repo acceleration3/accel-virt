@@ -449,3 +449,54 @@ TEST(display_clock, the_invariant_catches_a_broken_page_schedule_latch_or_a_thre
   DisplayClockProbe::set_wake(rig.clock, wake);
   DisplayClockProbe::set_thread(rig.clock, nullptr);
   CHECK(rig.clock.invariants_hold()); }
+
+TEST(display_clock, a_held_head_keeps_its_frame_on_the_page_and_latches_the_newest_once_let_go)
+{ Rig rig;
+  CHECK(!rig.clock.awaits(0u, 0x10u));
+  CHECK(!rig.clock.shows(0u, 0x10u));
+  rig.clock.hold(0u, true);
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  CHECK_STATUS(rig.clock.attach(page), Status::ok);
+  VblankRecord record;
+  rig.clock.post(0u, 1u, 0x10u);
+  CHECK(rig.clock.awaits(0u, 0x10u));
+  CHECK(!rig.clock.shows(0u, 0x10u));
+  rig.host.set_clock(start_at + period_60);
+  CHECK(rig.reaches(page, 0u, 1u, record));
+  CHECK_EQ(record.latched(), 1u);
+  CHECK(rig.clock.shows(0u, 0x10u));
+  CHECK(!rig.clock.awaits(0u, 0x10u));
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
+  rig.clock.hold(2u, true);
+  rig.clock.hold(0u, true);
+  rig.clock.hold(DisplayClock::heads, true);
+  rig.clock.post(0u, 2u, 0x20u);
+  rig.clock.post(0u, 3u, 0x30u);
+  rig.clock.post(2u, 5u, 0x50u);
+  rig.clock.post(1u, 4u, 0x40u);
+  rig.host.set_clock(start_at + 2u * period_60);
+  CHECK(rig.reaches(page, 0u, 2u, record));
+  CHECK_EQ(record.latched(), 1u);
+  CHECK(rig.reaches(page, 1u, 2u, record));
+  CHECK_EQ(record.latched(), 4u);
+  CHECK(rig.reaches(page, 2u, 2u, record));
+  CHECK_EQ(record.latched(), 0u);
+  CHECK(rig.clock.awaits(0u, 0x30u));
+  CHECK(!rig.clock.awaits(0u, 0x20u));
+  CHECK(rig.clock.shows(0u, 0x10u));
+  CHECK(!rig.clock.shows(DisplayClock::heads, 0x10u));
+  CHECK(!rig.clock.awaits(DisplayClock::heads, 0x30u));
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
+  CHECK_EQ(rig.shows.keys[1], 0x40u);
+  CHECK_EQ(rig.shows.keys[0], 0x10u);
+  rig.clock.hold(0u, false);
+  rig.host.set_clock(start_at + 3u * period_60);
+  CHECK(rig.reaches(page, 0u, 3u, record));
+  CHECK_EQ(record.latched(), 3u);
+  CHECK(rig.clock.shows(0u, 0x30u));
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
+  CHECK_EQ(rig.shows.keys[0], 0x30u);
+  CHECK(rig.clock.invariants_hold()); }

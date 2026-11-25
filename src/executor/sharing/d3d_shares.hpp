@@ -30,6 +30,7 @@ public:
     bool      keep_shown(uint32_t domain, uint64_t id, IUnknown *copy);
     void      written(uint32_t domain, uint64_t id);
     bool      writes(uint32_t domain, uint64_t id, uint64_t &count);
+    bool      opened(uint32_t domain, uint64_t id);
 
     void      lose_direct3d11();
     void      lose_direct3d12();

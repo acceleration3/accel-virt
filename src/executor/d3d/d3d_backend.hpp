@@ -9,6 +9,7 @@
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/d3d_refused_creates.hpp"
+#include "executor/d3d/flip_chains.hpp"
 #include "executor/d3d/guest_devices.hpp"
 #include "executor/d3d/leased_objects.hpp"
 #include "executor/d3d/queue_drain.hpp"
@@ -236,6 +237,7 @@ private:
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
     ID3D11Texture2D         *lent_texture(const D3D11_TEXTURE2D_DESC &texture, uint64_t memory, uint32_t row_pitch);
     void                     counted(ID3D11Resource *destination);
+    void                     show_chain(uint64_t surface, ID3D11Texture2D *presented);
     void                     pace(uint64_t bytes);
     static uint64_t          copy_bytes(ID3D11Resource *resource, const D3D11_BOX *box);
     bool                     update_in_pieces(ID3D11Resource *resource, uint32_t subresource, const D3D11_BOX &whole,
@@ -285,6 +287,7 @@ private:
     CommandRefusal          refusal_;
     WireArena              *arena_;
     D3dObjectTable          objects_;
+    FlipChains              flip_chains_;
     D3dRefusedCreates       refused_creates_;
     LeasedObjects           leased_;
     GuestBytes              guest_;

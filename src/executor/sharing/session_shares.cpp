@@ -67,6 +67,12 @@ Status SessionShares::publish_resource(uint64_t id, IUnknown *resource, ShareOri
     return D3dShares(*shares_).publish_resource(domain_, id, resource, origin, *session_);
 }
 
+bool SessionShares::opened(uint64_t id) const
+{
+    AV_SCOPE("SessionShares::opened");
+    return shares_ != nullptr && D3dShares(*shares_).opened(domain_, id);
+}
+
 void SessionShares::written(uint64_t id)
 {
     AV_SCOPE("SessionShares::written");

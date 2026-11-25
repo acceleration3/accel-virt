@@ -44,6 +44,7 @@ TEST(session_shares, unbound_shares_and_opens_nothing)
   CHECK_STATUS(unbound.publish_resource(0x2Au, &resource, ShareOrigin::d3d11), Status::invalid_state);
   unbound.close(0x2Au, 0x9001u);
   unbound.written(0x2Au);
+  CHECK(!unbound.opened(0x2Au));
   CHECK(!unbound.describe_image(0x2Au, SharedImageShape(4u, 4u, 87u, 16u)));
   unbound.end();
   CHECK_EQ(resource.references(), 1u); }
@@ -73,6 +74,13 @@ TEST(session_shares, bound_it_shares_and_opens_as_its_session_in_its_domain)
   CHECK_EQ(reader_backend.released_objects(), 1u);
 
   CHECK_STATUS(maker.publish_resource(0x2Bu, &resource, ShareOrigin::d3d11), Status::ok);
+  CHECK(!maker.opened(0x2Bu));
+  bool live = false;
+  IUnknown *const consumed = d3d.open_resource(domain, 0x2Bu, live);
+  CHECK(consumed != nullptr);
+  CHECK(maker.opened(0x2Bu));
+  CHECK(!elsewhere.opened(0x2Bu));
+  if (consumed != nullptr) consumed->Release();
   maker.written(0x2Bu);
   uint64_t count = 0u;
   CHECK(d3d.writes(domain, 0x2Bu, count));

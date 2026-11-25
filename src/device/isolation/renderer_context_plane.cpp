@@ -490,6 +490,12 @@ bool RendererContextPlane::post_export(const uint8_t *, uint32_t head, uint64_t 
     return false;
 }
 
+bool RendererContextPlane::exporting(uint32_t head) const
+{
+    AV_SCOPE("RendererContextPlane::exporting");
+    return alive_ && head < max_heads && !posted_[head].idle();
+}
+
 Status RendererContextPlane::send_export(uint32_t head, uint64_t key)
 {
     AV_SCOPE("RendererContextPlane::send_export");

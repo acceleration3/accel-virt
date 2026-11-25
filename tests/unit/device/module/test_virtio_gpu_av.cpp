@@ -36,9 +36,11 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/export/export_answer.hpp"
 #include "proto/export/export_request.hpp"
+#include "proto/pages/vblank_record.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -1457,6 +1459,80 @@ TEST(virtio_gpu_av_show_frame, with_a_renderer_a_frame_is_asked_without_waiting_
   rig.host().fail_renderer_send_at(1u);
   CHECK(!rig.device().show_frame(1u, 0x61u));
   CHECK_EQ(rig.host().renderer_kills(), kills + 1u);
+  rig.device().reset();
+  ::close(ends[0]);
+  renderer_image = -1;
+  CHECK(rig.device().invariants_hold()); }
+
+namespace {
+
+bool latched_on_page(av::MockHost &host, std::uint32_t head, std::uint64_t sequence, std::uint32_t &latched)
+{
+    constexpr std::uint64_t page = 0x101000u;
+    const timespec pause = {0, 100000};
+    for (std::uint32_t waited = 0u; waited < 20000u; waited++) {
+        const std::uint8_t *const base = host.guest_ram(page + 32u + 64u * head);
+        std::uint32_t before = 0u;
+        std::uint32_t after = 0u;
+        std::uint8_t  fields[av::VblankRecord::encoded_size] = {};
+        std::memcpy(&before, base, sizeof before);
+        std::memcpy(fields, base + av::VblankRecord::fields_at, sizeof fields);
+        std::memcpy(&after, base, sizeof after);
+        av::VblankRecord record;
+        if (before == after && before % 2u == 0u && record.decode(fields, sizeof fields) == Status::ok &&
+            record.sequence() >= sequence) {
+            latched = record.latched();
+            return true;
+        }
+        nanosleep(&pause, nullptr);
+    }
+    return false;
+}
+
+}
+
+TEST(virtio_gpu_av_show_frame, with_a_renderer_a_head_latches_nothing_new_while_its_export_is_out_and_shows_no_frame_early)
+{ RendererDevice rig;
+  int ends[2] = {-1, -1};
+  CHECK_EQ(::pipe2(ends, O_CLOEXEC), 0);
+  ::close(ends[1]);
+  renderer_image = ends[0];
+  rig.executor().editable().export_image = export_renderer_image;
+  rig.host().add_display_heads(1u);
+  rig.host().set_clock(1000u);
+  CHECK_STATUS(rig.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so"), Status::ok);
+  rig.device().status(DriverStatus::driver_ok);
+  GpuRequestBuilder page(0x02F4u);
+  page.u64(0x101000u);
+  MockRequest page_request(page.bytes(), page.size());
+  CHECK(rig.device().control(&page_request, 0x02F4u));
+  CHECK_EQ(page_request.response_type(), 0x1100u);
+  CHECK(rig.device().post_frame(0u, 5u, 0x61u));
+  CHECK(rig.device().show_frame(0u, 0x61u));
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 0u);
+  rig.host().set_clock(1000u + 16666667u);
+  CHECK(rig.host().wait_for_main_loop_work(1u, 2000u));
+  CHECK(rig.host().run_main_loop() >= 1u);
+  std::uint32_t latched = 0u;
+  CHECK(latched_on_page(rig.host(), 0u, 1u, latched));
+  CHECK_EQ(latched, 5u);
+  CHECK(rig.device().post_frame(0u, 6u, 0x61u));
+  CHECK(rig.device().show_frame(0u, 0x61u));
+  rig.host().set_clock(1000u + 2u * 16666667u);
+  CHECK(latched_on_page(rig.host(), 0u, 2u, latched));
+  CHECK_EQ(latched, 5u);
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 1u);
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 1u);
+  rig.host().set_clock(1000u + 3u * 16666667u);
+  CHECK(latched_on_page(rig.host(), 0u, 3u, latched));
+  CHECK_EQ(latched, 6u);
+  CHECK(rig.host().wait_for_main_loop_work(1u, 2000u));
+  CHECK(rig.host().run_main_loop() >= 1u);
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 2u);
   rig.device().reset();
   ::close(ends[0]);
   renderer_image = -1;

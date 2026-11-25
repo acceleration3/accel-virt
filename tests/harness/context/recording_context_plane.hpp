@@ -68,6 +68,7 @@ public:
     bool export_image(const std::uint8_t *, std::uint64_t, AvExportedImage &) override { return false; }
     bool exports_off_main_loop() const override { return false; }
     bool post_export(const std::uint8_t *, std::uint32_t, std::uint64_t) override { return false; }
+    bool exporting(std::uint32_t) const override { return false; }
     void take_answers() override {}
     RecordingContextPlane() = default;
     RecordingContextPlane(const RecordingContextPlane &) = delete;

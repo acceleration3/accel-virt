@@ -31,6 +31,7 @@ public:
     void                 close(uint64_t id, uint64_t handle);
     [[nodiscard]] Status publish_resource(uint64_t id, IUnknown *resource, ShareOrigin origin);
     void                 written(uint64_t id);
+    bool                 opened(uint64_t id) const;
     bool                 describe_image(uint64_t id, const SharedImageShape &shape);
     void                 end();
     void                 leak();
