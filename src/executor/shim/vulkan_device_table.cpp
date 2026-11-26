@@ -98,6 +98,17 @@ bool VulkanDeviceTable::integrated() const
     return loaded() && integrated_;
 }
 
+bool VulkanDeviceTable::snoops_host_memory() const
+{
+    AV_SCOPE("VulkanDeviceTable::snoops_host_memory");
+    constexpr VkMemoryPropertyFlags snooped =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    if (!loaded()) return false;
+    for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++)
+        if ((memory_.memoryTypes[type].propertyFlags & snooped) == snooped) return true;
+    return false;
+}
+
 bool VulkanDeviceTable::imports_dma_bufs() const
 {
     AV_SCOPE("VulkanDeviceTable::imports_dma_bufs");

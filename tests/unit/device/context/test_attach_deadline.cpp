@@ -83,8 +83,8 @@ public:
         static_cast<void>(blobs_.initialize());
         static_cast<void>(shares_.initialize());
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(first_gpu, 0u, 0u, 0u));
-        static_cast<void>(library_.open_domain(second_gpu, 0u, 0u, 0u));
+        static_cast<void>(library_.open_domain(first_gpu, 0u, 0u, 0u, 0u));
+        static_cast<void>(library_.open_domain(second_gpu, 0u, 0u, 0u, 0u));
         for (std::uint32_t index = 0u; index < 3u; index++) {
             Lane &lane = lanes_[index];
             lane = Lane{10u * index + 1u, 10u * index + 2u, 3u + index, nullptr};

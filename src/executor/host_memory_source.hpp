@@ -55,6 +55,7 @@ public:
     [[nodiscard]] bool   vulkan_types(GuestMemoryTypes &answer);
     uint32_t             live() const;
     void                 reserve_vram(uint32_t mib);
+    void                 honour_guest_pat();
     void                 use_host_ram(ByteLedger *ledger);
     void                 use_vram_ledger(ByteLedger *ledger);
     uint64_t             host_ram_held() const;
@@ -114,6 +115,7 @@ private:
     uint32_t                     mappable_;
     uint32_t                     visible_;
     uint32_t                     alike_;
+    bool                         guest_pat_honoured_;
     GuestMemoryTypes             vulkan_;
     VramPolicy                   vram_;
     VramAccount                  host_ram_;

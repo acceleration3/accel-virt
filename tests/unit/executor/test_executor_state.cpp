@@ -71,7 +71,7 @@ TEST(executor_root_report, says_the_vms_host_ram_budget_what_is_in_use_and_how_o
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 1000u, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 1000u, 0u, 0u);
   CHECK(apis.host_ram().take(600u));
   CHECK(!apis.host_ram().take(600u));
   char bytes[1024];

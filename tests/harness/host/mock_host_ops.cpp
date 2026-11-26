@@ -95,6 +95,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     };
     table_.hostmem_size = [](void *opaque) { return host_of(opaque).hostmem_size(); };
     table_.guest_memory_bytes = [](void *opaque) { return host_of(opaque).guest_memory_bytes(); };
+    table_.honours_guest_pat = [](void *opaque) { return host_of(opaque).honours_guest_pat() ? 1 : 0; };
     table_.place_in_hostmem = [](void *opaque, int fd, std::uint64_t size, std::uint64_t offset) {
         return host_of(opaque).place_in_hostmem(fd, size, offset) == Status::ok ? 0 : 1;
     };

@@ -14,7 +14,7 @@ static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
     : exporter_(exporter), memories_(blocks), aliases_(blocks), placed_(blocks), placed_sequence_(0u), lock_(), host_(), asked_(0u), mappable_(0u),
-      visible_(0u), alike_(0u), vulkan_(), vram_(), host_ram_(), device_ram_(), reuse_()
+      visible_(0u), alike_(0u), guest_pat_honoured_(false), vulkan_(), vram_(), host_ram_(), device_ram_(), reuse_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -40,7 +40,10 @@ void HostMemorySource::learn()
         asked_ |= bit;
         const VkMemoryPropertyFlags flags = host_.memoryTypes[type].propertyFlags;
         constexpr VkMemoryPropertyFlags shared = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        if ((flags & shared) != shared || !exporter_.maps_coherently(type) || !exporter_.exportable(type)) continue;
+        if ((flags & shared) != shared) continue;
+        if (!exporter_.maps_coherently(type) && !(guest_pat_honoured_ && exporter_.maps_coherently_write_combined(type)))
+            continue;
+        if (!exporter_.exportable(type)) continue;
         mappable_ |= bit;
         if (exporter_.imports_host_visible(type)) visible_ |= bit;
         if (exporter_.imports_alike(type)) alike_ |= bit;
@@ -414,6 +417,13 @@ void HostMemorySource::reserve_vram(uint32_t mib)
     AV_SCOPE("HostMemorySource::reserve_vram");
     const ThreadLockHold held(lock_);
     vram_ = VramPolicy(mib);
+}
+
+void HostMemorySource::honour_guest_pat()
+{
+    AV_SCOPE("HostMemorySource::honour_guest_pat");
+    const ThreadLockHold held(lock_);
+    guest_pat_honoured_ = true;
 }
 
 void HostMemorySource::use_vram_ledger(ByteLedger *ledger)

@@ -134,6 +134,7 @@ typedef struct AvHostOps {
     int (*duplicate_export)(void *opaque, int descriptor);
 
     uint64_t (*guest_memory_bytes)(void *opaque);
+    int (*honours_guest_pat)(void *opaque);
 
     void (*renderer_deadline)(void *opaque, uint64_t deadline);
 } AvHostOps;

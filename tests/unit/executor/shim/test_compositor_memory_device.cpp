@@ -49,7 +49,8 @@ av::LoaderHostApis &opened_host()
   host.open();
   return host; }
 
-std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::uint32_t type)
+bool driver_gpu(av::LoaderHostApis &host, std::uint32_t index, VkPhysicalDeviceProperties &described,
+                VkPhysicalDeviceMemoryProperties &memory)
 { std::uint8_t uuid[16] = {};
   host.gpu_uuid(index, uuid);
   VkApplicationInfo application = {};
@@ -59,10 +60,10 @@ std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::u
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   create.pApplicationInfo = &application;
   VkInstance instance = VK_NULL_HANDLE;
-  if (::vkCreateInstance(&create, nullptr, &instance) != VK_SUCCESS) return 0u;
+  if (::vkCreateInstance(&create, nullptr, &instance) != VK_SUCCESS) return false;
   std::uint32_t    count = 8u;
   VkPhysicalDevice devices[8] = {};
-  std::uint32_t    flags = 0u;
+  bool             found = false;
   if (::vkEnumeratePhysicalDevices(instance, &count, devices) >= VK_SUCCESS) {
       for (std::uint32_t device = 0u; device < count; device++) {
           VkPhysicalDeviceIDProperties id = {};
@@ -74,13 +75,19 @@ std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::u
           bool same = true;
           for (std::uint32_t byte = 0u; byte < 16u; byte++) same = same && id.deviceUUID[byte] == uuid[byte];
           if (!same) continue;
-          VkPhysicalDeviceMemoryProperties memory = {};
+          described = properties.properties;
           ::vkGetPhysicalDeviceMemoryProperties(devices[device], &memory);
-          flags = type < memory.memoryTypeCount ? memory.memoryTypes[type].propertyFlags : 0u;
+          found = true;
       }
   }
   ::vkDestroyInstance(instance, nullptr);
-  return flags; }
+  return found; }
+
+std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::uint32_t type)
+{ VkPhysicalDeviceProperties       described = {};
+  VkPhysicalDeviceMemoryProperties memory = {};
+  if (!driver_gpu(host, index, described, memory)) return 0u;
+  return type < memory.memoryTypeCount ? memory.memoryTypes[type].propertyFlags : 0u; }
 
 bool imports_host_visible(av::LoaderHostApis &host, std::uint32_t index, int fd)
 { std::uint8_t uuid[16] = {};
@@ -244,6 +251,21 @@ TEST(compositor_memory_device, every_guest_type_the_guest_maps_is_shared_memory_
           ::close(answered.fd);
       }
       CHECK_EQ(source->live(), 0u);
+      CHECK(source->invariants_hold());
+  } }
+
+TEST(compositor_memory_device, an_uncached_type_of_an_integrated_gpu_is_never_mapped_while_the_guest_pat_is_not_honoured)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t index = 0u; index < host.gpu_count(); index++) {
+      HostMemorySource *const          source = host.memory_source(index);
+      VkPhysicalDeviceProperties       described = {};
+      VkPhysicalDeviceMemoryProperties memory = {};
+      if (source == nullptr || !driver_gpu(host, index, described, memory)) continue;
+      if (described.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) continue;
+      const std::uint32_t mappable = source->mappable_types();
+      for (std::uint32_t type = 0u; type < memory.memoryTypeCount && type < HostMemoryRequest::memory_types; type++)
+          if ((mappable >> type & 1u) != 0u)
+              CHECK((memory.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u);
       CHECK(source->invariants_hold());
   } }
 

@@ -207,10 +207,30 @@ TEST(executor_root, the_vram_reserve_a_domain_opens_with_reaches_that_gpu_s_memo
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(apis.source().vram_policy().reserve_mib(), 0u);
-  const std::uint32_t domain = root.open_domain(intel, 3072u, 0u, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 3072u, 0u, 0u, 0u);
   CHECK(domain != 0u);
   CHECK_EQ(apis.source().vram_policy().reserve_mib(), 3072u);
   root.close_domain(domain); }
+
+TEST(executor_root, write_combined_memory_is_mapped_only_in_a_domain_opened_with_the_guest_pat_honoured)
+{ const std::uint32_t asked[] = {0u, AV_DOMAIN_GUEST_PAT_HONOURED};
+  for (const std::uint32_t flags : asked) {
+      MockHostApis apis;
+      apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+      const std::uint32_t type = apis.exporter().add_type(
+          av::MockMemoryExporter::device_local | av::MockMemoryExporter::host_visible |
+              av::MockMemoryExporter::host_coherent,
+          true);
+      apis.exporter().map_incoherently(type);
+      apis.exporter().map_write_combined(type);
+      RootUnderTest held;
+      ExecutorRoot &root = *held;
+      CHECK_STATUS(root.initialize(apis), Status::ok);
+      const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u, flags);
+      CHECK(domain != 0u);
+      CHECK_EQ(apis.source().mappable_types(), flags != 0u ? 1u : 0u);
+      root.close_domain(domain);
+  } }
 
 TEST(executor_root, the_host_ram_a_domain_opens_with_is_the_vms_budget_and_caps_the_memory_the_source_gives_out)
 { MockHostApis apis;
@@ -223,7 +243,7 @@ TEST(executor_root, the_host_ram_a_domain_opens_with_is_the_vms_budget_and_caps_
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(apis.host_ram().cap(), UINT64_MAX);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 8192u, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 8192u, 0u, 0u);
   CHECK(domain != 0u);
   CHECK_EQ(apis.host_ram().cap(), 8192u);
   AvHostMemory memory = {-1, 0u, 0u};
@@ -242,7 +262,7 @@ TEST(executor_root, the_floor_a_domain_opens_with_is_what_the_vms_host_ram_ledge
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(apis.host_ram().floor(), 0u);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 8192u, 7777u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 8192u, 7777u, 0u);
   CHECK(domain != 0u);
   CHECK_EQ(apis.host_ram().floor(), 7777u);
   root.close_domain(domain); }
@@ -256,7 +276,7 @@ TEST(executor_root, a_session_opens_on_a_host_below_its_floor)
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 8ull << 30, 7ull << 30);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 8ull << 30, 7ull << 30, 0u);
   CHECK(domain != 0u);
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
@@ -271,7 +291,7 @@ TEST(executor_root, a_domain_opened_with_no_host_ram_means_no_budget)
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u, 0u);
   CHECK(domain != 0u);
   CHECK_EQ(apis.host_ram().cap(), UINT64_MAX);
   root.close_domain(domain); }
@@ -282,7 +302,7 @@ TEST(executor_root, a_session_s_own_host_memory_is_limited_when_it_opens)
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u, 0u);
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
   CHECK(session != nullptr);
@@ -296,7 +316,7 @@ TEST(executor_root, a_vulkan_session_is_bound_to_its_gpu_s_ledger)
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u, 0u);
   const std::uint32_t before = apis.ledger_questions();
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
@@ -310,13 +330,13 @@ TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
-  CHECK_EQ(root.open_domain(intel, 0u, 0u, 0u), 0u);
+  CHECK_EQ(root.open_domain(intel, 0u, 0u, 0u, 0u), 0u);
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  CHECK_EQ(root.open_domain(absent, 0u, 0u, 0u), 0u);
-  CHECK_EQ(root.open_domain(nullptr, 0u, 0u, 0u), 0u);
-  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u);
+  CHECK_EQ(root.open_domain(absent, 0u, 0u, 0u, 0u), 0u);
+  CHECK_EQ(root.open_domain(nullptr, 0u, 0u, 0u, 0u), 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u, 0u, 0u, 0u);
   CHECK(domain != 0u);
-  CHECK(root.open_domain(intel, 0u, 0u, 0u) != domain);
+  CHECK(root.open_domain(intel, 0u, 0u, 0u, 0u) != domain);
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
   CHECK(session != nullptr);

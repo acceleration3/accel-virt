@@ -23,6 +23,7 @@ public:
     bool               interoperates() const;
     bool               imports_dma_bufs() const;
     bool               integrated() const;
+    bool               snoops_host_memory() const;
     VkDevice           device() const;
     [[nodiscard]] bool lose() const;
 

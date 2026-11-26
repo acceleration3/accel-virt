@@ -118,7 +118,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.signal_context_ = context;
     };
     table_.open_domain = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint32_t reserve,
-                              std::uint64_t host_ram, std::uint64_t floor) -> std::uint32_t {
+                              std::uint64_t host_ram, std::uint64_t floor, std::uint32_t flags) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
         Lock             lock(mock.lock_);
         if (mock.refuse_domain_ != 0u && --mock.refuse_domain_ == 0u) return 0u;
@@ -126,6 +126,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.last_vram_reserve_mib_ = reserve;
         mock.last_host_ram_bytes_ = host_ram;
         mock.last_host_ram_floor_bytes_ = floor;
+        mock.last_domain_flags_ = flags;
         return domain_bit | ++mock.domains_opened_;
     };
     table_.close_domain = [](void *opaque, std::uint32_t domain) {
@@ -475,6 +476,7 @@ std::uint32_t MockExecutorOps::last_closed_domain() { Lock lock(lock_); return l
 std::uint8_t  MockExecutorOps::last_domain_gpu() { Lock lock(lock_); return last_domain_gpu_; }
 std::uint32_t MockExecutorOps::last_vram_reserve_mib() { Lock lock(lock_); return last_vram_reserve_mib_; }
 std::uint64_t MockExecutorOps::last_host_ram_bytes() { Lock lock(lock_); return last_host_ram_bytes_; }
+std::uint32_t MockExecutorOps::last_domain_flags() { Lock lock(lock_); return last_domain_flags_; }
 std::uint64_t MockExecutorOps::last_host_ram_floor_bytes() { Lock lock(lock_); return last_host_ram_floor_bytes_; }
 std::uint32_t MockExecutorOps::misuses() { return misuses_.load(); }
 

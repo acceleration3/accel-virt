@@ -79,6 +79,7 @@ public:
     [[nodiscard]] Status restore_guest_run(void *run, uint64_t bytes) override;
 
     uint64_t             guest_memory_bytes() override;
+    bool                 honours_guest_pat() override;
     uint64_t             hostmem_size() override;
     [[nodiscard]] Status place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;
     void                 remove_from_hostmem(uint64_t offset, uint64_t size) override;

@@ -29,7 +29,7 @@ MockMemoryExporter::~MockMemoryExporter()
 std::uint32_t MockMemoryExporter::add_type(std::uint32_t flags, bool exportable, std::uint32_t heap)
 {
     if (type_count_ >= max_types) return max_types;
-    types_[type_count_] = Type{flags, exportable, false, 0u, 0u, heap, false, false};
+    types_[type_count_] = Type{flags, exportable, false, 0u, 0u, heap, false, false, false};
     return type_count_++;
 }
 
@@ -59,6 +59,11 @@ void MockMemoryExporter::refuse_alike(std::uint32_t type)
 void MockMemoryExporter::map_incoherently(std::uint32_t type)
 {
     if (type < type_count_) types_[type].incoherent = true;
+}
+
+void MockMemoryExporter::map_write_combined(std::uint32_t type)
+{
+    if (type < type_count_) types_[type].write_combined = true;
 }
 
 bool MockMemoryExporter::fires(std::uint32_t &countdown)
@@ -113,6 +118,15 @@ bool MockMemoryExporter::maps_coherently(std::uint32_t type)
         return false;
     }
     return !types_[type].incoherent;
+}
+
+bool MockMemoryExporter::maps_coherently_write_combined(std::uint32_t type)
+{
+    if (type >= type_count_) {
+        misuses_++;
+        return false;
+    }
+    return types_[type].write_combined;
 }
 
 Status MockMemoryExporter::allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory)

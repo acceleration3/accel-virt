@@ -1,5 +1,6 @@
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
+#include "device/abi/av_executor.h"
 #include "device/context/local_context_plane.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/memory/blob_table.hpp"
@@ -132,6 +133,22 @@ TEST(local_context_plane, starting_hands_the_executor_the_host_ram_floor_the_cap
   capset.floor_host_ram(7ull << 30);
   CHECK_STATUS(fixture.plane().start(other_gpu, capset), Status::ok);
   CHECK_EQ(fixture.ops().last_host_ram_floor_bytes(), 7ull << 30); }
+
+TEST(local_context_plane, starting_tells_the_executor_the_guest_pat_is_honoured_only_when_the_capset_says_so)
+{ const std::uint8_t other_gpu[16] = {1u};
+  av::CapsetInfo capset(av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor),
+                        1u, 64u, 12u, 24u, 0u,
+                        av::GpuIdentity(0x8086u, 0x3185u, av::GpuIdentity::integrated_gpu, other_gpu, 1u << 30,
+                                        4ull << 30, "gpu"));
+  Fixture plain;
+  CHECK_STATUS(plain.plane().accept(&plain.ops().table()), Status::ok);
+  CHECK_STATUS(plain.plane().start(other_gpu, capset), Status::ok);
+  CHECK_EQ(plain.ops().last_domain_flags(), 0u);
+  capset.announce(av::CapsetInfo::feature_guest_pat_honoured);
+  Fixture honoured;
+  CHECK_STATUS(honoured.plane().accept(&honoured.ops().table()), Status::ok);
+  CHECK_STATUS(honoured.plane().start(other_gpu, capset), Status::ok);
+  CHECK_EQ(honoured.ops().last_domain_flags(), std::uint32_t{AV_DOMAIN_GUEST_PAT_HONOURED}); }
 
 TEST(local_context_plane, a_placed_request_is_made_on_the_worker_of_the_context_that_asked_and_by_no_other)
 { Fixture fixture;

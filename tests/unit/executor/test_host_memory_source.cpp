@@ -87,6 +87,15 @@ public:
         exporter.add_type(visible, true);
         exporter.add_type(visible | coherent, false);
     }
+    void without_snooped_memory()
+    {
+        for (std::uint32_t pair = 0u; pair < 2u; pair++) {
+            const std::uint32_t write_combined = exporter.add_type(local | visible | coherent, true);
+            exporter.map_incoherently(write_combined);
+            exporter.map_write_combined(write_combined);
+            exporter.add_type(local | visible | cached, true);
+        }
+    }
 
     Status allocate(std::uint64_t key, HostMemoryRequest request, AvHostMemory &memory, std::uint64_t size = page,
                     std::uint32_t in = domain)
@@ -200,6 +209,63 @@ TEST(host_memory_source_types, memory_a_cached_mapping_would_not_see_coherently_
   CHECK_EQ(rig.exporter.misuses(), 0u);
   CHECK(rig.source.invariants_hold());
   rig.source.free(domain, 1u); }
+
+TEST(host_memory_source_types, write_combined_memory_stays_unmapped_while_the_guest_pat_is_not_honoured)
+{ Rig rig;
+  rig.without_snooped_memory();
+  CHECK_EQ(rig.source.mappable_types(), 0u);
+  for (std::uint32_t type = 0u; type < 4u; type++) CHECK_EQ(rig.exporter.export_questions(type), 0u);
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, upload, memory), Status::invalid_parameter);
+  CHECK_STATUS(rig.allocate(2u, readback, memory), Status::invalid_parameter);
+  CHECK_EQ(rig.exporter.attempts(), 0u);
+  CHECK_EQ(memory.fd, -1);
+  CHECK_EQ(rig.exporter.misuses(), 0u); }
+
+TEST(host_memory_source_types, honouring_the_guest_pat_maps_no_type_the_gpu_cannot_map_write_combined)
+{ Rig rig;
+  rig.discrete();
+  rig.exporter.map_incoherently(1u);
+  rig.exporter.map_incoherently(3u);
+  rig.source.honour_guest_pat();
+  CHECK_EQ(rig.source.mappable_types(), 0x4u);
+  CHECK_EQ(rig.exporter.export_questions(1u), 0u);
+  CHECK_EQ(rig.exporter.export_questions(3u), 0u);
+  CHECK_EQ(rig.exporter.misuses(), 0u); }
+
+TEST(host_memory_source_types, a_gpu_whose_only_coherent_memory_is_write_combined_answers_uploads_and_readbacks_write_combined)
+{ Rig rig;
+  rig.without_snooped_memory();
+  CHECK(rig.exporter.maps_coherently_write_combined(0u));
+  CHECK(!rig.exporter.maps_coherently_write_combined(1u));
+  rig.source.honour_guest_pat();
+  CHECK_EQ(rig.source.mappable_types(), 0x5u);
+  CHECK_EQ(rig.exporter.export_questions(1u), 0u);
+  CHECK_EQ(rig.exporter.export_questions(3u), 0u);
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, upload, memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 0u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  CHECK_STATUS(rig.allocate(2u, readback, memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 0u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  av::GuestMemoryTypes types;
+  CHECK(rig.source.vulkan_types(types));
+  VkPhysicalDeviceMemoryProperties shown = {};
+  types.properties(shown);
+  std::uint32_t mapped = 0u;
+  for (std::uint32_t guest = 0u; guest < shown.memoryTypeCount; guest++) {
+      if ((shown.memoryTypes[guest].propertyFlags & visible) == 0u) continue;
+      CHECK_EQ(shown.memoryTypes[guest].propertyFlags & cached, 0u);
+      CHECK_STATUS(rig.allocate(10u + guest, vulkan(guest), memory), Status::ok);
+      CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+      mapped++;
+  }
+  CHECK(mapped != 0u);
+  CHECK_EQ(rig.exporter.misuses(), 0u);
+  CHECK(rig.source.invariants_hold());
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.exporter.live(), 0u); }
 
 TEST(host_memory_source_choice, upload_prefers_the_bar_written_combined)
 { Rig rig;

@@ -227,6 +227,19 @@ TEST(device_capset_host_ram, a_guest_as_large_as_the_host_still_leaves_the_least
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK_EQ(capset.info().gpu().shared_memory(), 1ull << 30); }
 
+TEST(device_capset, the_guest_pat_is_announced_only_where_the_host_honours_it)
+{ MockHost host;
+  host.add_gpu(first);
+  DeviceCapset capset(host);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK(!capset.info().has_feature(CapsetInfo::feature_guest_pat_honoured));
+  MockHost honouring;
+  honouring.add_gpu(first);
+  honouring.honour_guest_pat();
+  DeviceCapset announced(honouring);
+  announced.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(honouring));
+  CHECK(announced.info().has_feature(CapsetInfo::feature_guest_pat_honoured)); }
+
 TEST(device_capset_host_ram, the_executor_is_told_the_floor_host_memory_may_not_fall_below)
 { MockHost host;
   host.add_gpu(first);

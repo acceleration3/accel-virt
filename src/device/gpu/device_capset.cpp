@@ -36,6 +36,7 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
                        GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), local, host_ram, AdapterName(gpu.name()).text()));
     info_.reserve_vram(vram_reserve_mib_);
     info_.floor_host_ram(HostRamPolicy(host_ram_reserve_mib_).floor_for(total));
+    if (host_.honours_guest_pat()) info_.announce(CapsetInfo::feature_guest_pat_honoured);
     described_ = true;
 }
 

@@ -27,6 +27,7 @@ public:
     static constexpr uint64_t feature_present_from_surface = 512u;
     static constexpr uint64_t feature_hybrid_integrated = 1024u;
     static constexpr uint64_t feature_hybrid_discrete = 2048u;
+    static constexpr uint64_t feature_guest_pat_honoured = 4096u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,

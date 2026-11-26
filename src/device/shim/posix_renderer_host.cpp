@@ -465,6 +465,12 @@ uint64_t PosixRendererHost::guest_memory_bytes()
     return 0u;
 }
 
+bool PosixRendererHost::honours_guest_pat()
+{
+    AV_SCOPE("PosixRendererHost::honours_guest_pat");
+    return false;
+}
+
 uint64_t PosixRendererHost::hostmem_size()
 {
     AV_SCOPE("PosixRendererHost::hostmem_size");

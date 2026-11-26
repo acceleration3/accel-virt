@@ -19,6 +19,7 @@ public:
     bool     imports_host_visible(uint32_t type) override;
     bool     imports_alike(uint32_t type) override;
     bool     maps_coherently(uint32_t type) override;
+    bool     maps_coherently_write_combined(uint32_t type) override;
     [[nodiscard]] Status allocate(uint32_t type, uint64_t size, ExportedMemory &memory) override;
     void     free(const ExportedMemory &memory) override;
 

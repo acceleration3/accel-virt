@@ -1,4 +1,5 @@
 #include "device/context/local_context_plane.hpp"
+#include "device/abi/av_executor.h"
 
 #include "device/memory/host_blob_errand.hpp"
 #include "device/threading/service_thread.hpp"
@@ -40,8 +41,11 @@ Status LocalContextPlane::initialize()
 Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &capset)
 {
     AV_SCOPE("LocalContextPlane::start");
+    const uint32_t flags =
+        capset.has_feature(CapsetInfo::feature_guest_pat_honoured) ? AV_DOMAIN_GUEST_PAT_HONOURED : 0u;
     if (library_.domain() == 0u) static_cast<void>(library_.open_domain(gpu_uuid, capset.vram_reserve_mib(),
-                                                                      capset.gpu().shared_memory(), capset.host_ram_floor()));
+                                                                      capset.gpu().shared_memory(), capset.host_ram_floor(),
+                                                                      flags));
     return Status::ok;
 }
 

@@ -132,7 +132,7 @@ uint32_t ExecutorRoot::sub_apis() const
 }
 
 uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib, uint64_t host_ram_bytes,
-                                   uint64_t host_ram_floor_bytes)
+                                   uint64_t host_ram_floor_bytes, uint32_t flags)
 {
     AV_SCOPE("ExecutorRoot::open_domain");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
@@ -146,6 +146,7 @@ uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserv
     if (source != nullptr) {
         source->reserve_vram(vram_reserve_mib);
         source->use_host_ram(host_ram);
+        if ((flags & AV_DOMAIN_GUEST_PAT_HONOURED) != 0u) source->honour_guest_pat();
     }
     VramLedger *const ledger = apis_->vram_ledger(gpu->index());
     if (ledger != nullptr) ledger->reserve_vram(vram_reserve_mib);

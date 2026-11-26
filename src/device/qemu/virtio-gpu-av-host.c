@@ -19,6 +19,11 @@
 #include "system/address-spaces.h"
 #include "system/ramblock.h"
 #include "hw/core/boards.h"
+#include "qemu/accel.h"
+#include "qom/object.h"
+#include "qapi/qapi-types-common.h"
+#include "system/kvm.h"
+#include <linux/kvm.h>
 #include "ui/console.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-bus.h"
@@ -306,6 +311,24 @@ static void av_release_range(void *opaque, void *base, uint64_t size)
 static uint64_t av_guest_memory_bytes(void *opaque)
 {
     return current_machine ? current_machine->ram_size : 0;
+}
+
+static int av_honours_guest_pat(void *opaque)
+{
+#ifdef KVM_X86_QUIRK_IGNORE_GUEST_PAT
+    int honour;
+
+    if (!kvm_enabled()) {
+        return 0;
+    }
+    honour = object_property_get_enum(OBJECT(current_accel()), "honor-guest-pat", "OnOffAuto", NULL);
+    if (honour < 0 || honour == ON_OFF_AUTO_OFF) {
+        return 0;
+    }
+    return (kvm_check_extension(kvm_state, KVM_CAP_DISABLE_QUIRKS2) & KVM_X86_QUIRK_IGNORE_GUEST_PAT) != 0;
+#else
+    return 0;
+#endif
 }
 
 static uint64_t av_hostmem_size(void *opaque)
@@ -1083,6 +1106,7 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .restore_guest_run = av_restore_guest_run,
         .hostmem_size = av_hostmem_size,
         .guest_memory_bytes = av_guest_memory_bytes,
+        .honours_guest_pat = av_honours_guest_pat,
         .place_in_hostmem = av_place_in_hostmem,
         .remove_from_hostmem = av_remove_from_hostmem,
         .monotonic_nanoseconds = av_monotonic_nanoseconds,

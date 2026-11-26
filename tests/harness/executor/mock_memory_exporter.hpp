@@ -31,12 +31,14 @@ public:
     void          hide_on_import(std::uint32_t type);
     void          refuse_alike(std::uint32_t type);
     void          map_incoherently(std::uint32_t type);
+    void          map_write_combined(std::uint32_t type);
 
     void          memory_properties(VkPhysicalDeviceMemoryProperties &answer) override;
     bool          exportable(std::uint32_t type) override;
     bool          imports_host_visible(std::uint32_t type) override;
     bool          imports_alike(std::uint32_t type) override;
     bool          maps_coherently(std::uint32_t type) override;
+    bool          maps_coherently_write_combined(std::uint32_t type) override;
     Status        allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory) override;
     void          free(const ExportedMemory &memory) override;
 
@@ -63,6 +65,7 @@ private:
         std::uint32_t heap;
         bool          unalike;
         bool          incoherent;
+        bool          write_combined;
     };
     struct Allocation {
         std::uint64_t handle;

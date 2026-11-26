@@ -122,6 +122,17 @@ TEST(table_host, a_missing_or_overlong_file_reader_reads_nothing)
   CHECK_STATUS(overlong.read_file("/sys/x", bytes, sizeof bytes, length), Status::not_found);
   CHECK_EQ(length, 0u); }
 
+TEST(table_host, the_guest_pat_is_honoured_only_where_the_glue_says_so)
+{ MockHost mock; MockHostOps ops(mock);
+  AvHostOps table = ops.table();
+  TableHost host(table);
+  CHECK(!host.honours_guest_pat());
+  mock.honour_guest_pat();
+  CHECK(host.honours_guest_pat());
+  table.honours_guest_pat = nullptr;
+  TableHost without(table);
+  CHECK(!without.honours_guest_pat()); }
+
 TEST(table_host, a_null_answer_from_the_table_is_no_memory)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *handle = &mock;

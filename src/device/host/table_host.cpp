@@ -253,6 +253,12 @@ uint64_t TableHost::guest_memory_bytes()
     return ops_.guest_memory_bytes != nullptr ? ops_.guest_memory_bytes(ops_.opaque) : 0u;
 }
 
+bool TableHost::honours_guest_pat()
+{
+    AV_SCOPE("TableHost::honours_guest_pat");
+    return ops_.honours_guest_pat != nullptr && ops_.honours_guest_pat(ops_.opaque) != 0;
+}
+
 uint64_t TableHost::hostmem_size()
 {
     AV_SCOPE("TableHost::hostmem_size");
