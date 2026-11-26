@@ -1,6 +1,7 @@
 #include "device/display/display_clock.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "proto/pages/vblank_record.hpp"
@@ -246,6 +247,27 @@ bool DisplayClock::tick(uint64_t now, uint64_t &next)
     host_.unlock_mutex(lock_);
     if (raise) interrupts_.raise(FenceInterrupts::display_line);
     return true;
+}
+
+void DisplayClock::report(StateWriter &writer) const
+{
+    AV_SCOPE("DisplayClock::report");
+    if (lock_ == nullptr) return;
+    uint64_t posts = 0u;
+    uint64_t dropped = 0u;
+    uint64_t held = 0u;
+    host_.lock_mutex(lock_);
+    for (const FrameLatch &latch : latches_) {
+        posts += latch.posts();
+        dropped += latch.posts_dropped();
+        held += latch.blanks_held();
+    }
+    host_.unlock_mutex(lock_);
+    writer.open("display_clock", 0u);
+    writer.number("posts", posts);
+    writer.number("posts_dropped", dropped);
+    writer.number("blanks_held", held);
+    writer.close();
 }
 
 bool DisplayClock::invariants_hold() const

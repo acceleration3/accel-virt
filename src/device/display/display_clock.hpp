@@ -12,6 +12,7 @@
 namespace av {
 
 class FenceInterrupts;
+class StateWriter;
 struct DisplayClockProbe;
 
 class DisplayClock {
@@ -39,6 +40,7 @@ public:
     bool                 shows(uint32_t head, uint64_t key);
     void                 run();
     bool                 tick(uint64_t now, uint64_t &next);
+    void                 report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 

@@ -1,3 +1,4 @@
+#include "core/trace/state_writer.hpp"
 #include "device/display/display_clock.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -499,4 +500,36 @@ TEST(display_clock, a_held_head_keeps_its_frame_on_the_page_and_latches_the_newe
   CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
   CHECK_EQ(rig.host.run_main_loop(), 1u);
   CHECK_EQ(rig.shows.keys[0], 0x30u);
+  CHECK(rig.clock.invariants_hold()); }
+
+TEST(display_clock, the_report_sums_every_head_s_posts_drops_and_held_blanks_and_a_clock_never_started_writes_none)
+{ Rig rig;
+  char dump[256];
+  av::StateWriter unstarted(dump, sizeof dump);
+  rig.clock.report(unstarted);
+  CHECK_EQ(unstarted.length(), 0u);
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  CHECK_STATUS(rig.clock.attach(page), Status::ok);
+  av::StateWriter empty(dump, sizeof dump);
+  rig.clock.report(empty);
+  CHECK(std::strcmp(empty.dump(), "display_clock/0 posts=0 posts_dropped=0 blanks_held=0") == 0);
+  VblankRecord record;
+  rig.clock.post(0u, 1u, 0x10u);
+  rig.clock.post(3u, 1u, 0x30u);
+  rig.host.set_clock(start_at + period_60);
+  CHECK(rig.reaches(page, 3u, 1u, record));
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
+  rig.clock.hold(0u, true);
+  rig.clock.hold(3u, true);
+  rig.clock.post(0u, 2u, 0x11u);
+  rig.clock.post(3u, 2u, 0x31u);
+  rig.host.set_clock(start_at + 2u * period_60);
+  CHECK(rig.reaches(page, 3u, 2u, record));
+  CHECK_EQ(record.latched(), 1u);
+  rig.clock.post(0u, 3u, 0x12u);
+  rig.clock.post(3u, 2u, 0x31u);
+  av::StateWriter counted(dump, sizeof dump);
+  rig.clock.report(counted);
+  CHECK(std::strcmp(counted.dump(), "display_clock/0 posts=6 posts_dropped=1 blanks_held=2") == 0);
   CHECK(rig.clock.invariants_hold()); }

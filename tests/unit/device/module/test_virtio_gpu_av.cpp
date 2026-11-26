@@ -448,12 +448,14 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   writer.open("device", 3u);
   device.report(writer);
   CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 host_window_bytes=65536 contexts=1 driver_ok=true\n"
+                                    "device/3/display_clock/0 posts=0 posts_dropped=0 blanks_held=0\n"
                                     "device/3/host_blobs/0 live=0\n"
                                     "device/3/window_stats/0 attached=false stable=false\n"
                                     "device/3/contexts/0 live=1 reaping=0 refused_attaches=0\n"
                                     "device/3/contexts/0/context/7 name= bound=true sub_api=1 version=2.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 lane_of=0 attached=",
                      std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 host_window_bytes=65536 contexts=1 driver_ok=true\n"
+                                 "device/3/display_clock/0 posts=0 posts_dropped=0 blanks_held=0\n"
                                  "device/3/host_blobs/0 live=0\n"
                                  "device/3/window_stats/0 attached=false stable=false\n"
                                  "device/3/contexts/0 live=1 reaping=0 refused_attaches=0\n"
@@ -1529,6 +1531,99 @@ TEST(virtio_gpu_av_show_frame, with_a_renderer_a_head_latches_nothing_new_while_
   rig.host().set_clock(1000u + 3u * 16666667u);
   CHECK(latched_on_page(rig.host(), 0u, 3u, latched));
   CHECK_EQ(latched, 6u);
+  CHECK(rig.host().wait_for_main_loop_work(1u, 2000u));
+  CHECK(rig.host().run_main_loop() >= 1u);
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 2u);
+  rig.device().reset();
+  ::close(ends[0]);
+  renderer_image = -1;
+  CHECK(rig.device().invariants_hold()); }
+
+namespace {
+
+bool export_out_for_frame_five(RendererDevice &rig)
+{
+    rig.executor().editable().export_image = export_renderer_image;
+    rig.host().add_display_heads(1u);
+    rig.host().set_clock(1000u);
+    if (rig.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so") != Status::ok) return false;
+    rig.device().status(DriverStatus::driver_ok);
+    GpuRequestBuilder page(0x02F4u);
+    page.u64(0x101000u);
+    MockRequest page_request(page.bytes(), page.size());
+    if (!rig.device().control(&page_request, 0x02F4u) || page_request.response_type() != 0x1100u) return false;
+    if (!rig.device().post_frame(0u, 5u, 0x61u) || !rig.device().show_frame(0u, 0x61u)) return false;
+    rig.host().set_clock(1000u + 16666667u);
+    if (!rig.host().wait_for_main_loop_work(1u, 2000u) || rig.host().run_main_loop() < 1u) return false;
+    std::uint32_t latched = 0u;
+    return latched_on_page(rig.host(), 0u, 1u, latched) && latched == 5u && rig.host().images_shown(0u) == 0u;
+}
+
+bool reports(VirtioGpuAv &device, const char *expected)
+{
+    char dump[4096];
+    av::StateWriter writer(dump, sizeof dump);
+    writer.open("device", 0u);
+    device.report(writer);
+    return std::strstr(writer.dump(), expected) != nullptr;
+}
+
+}
+
+TEST(virtio_gpu_av_report, a_frame_held_at_a_blank_behind_an_export_and_replaced_before_the_next_is_dropped)
+{ RendererDevice rig;
+  int ends[2] = {-1, -1};
+  CHECK_EQ(::pipe2(ends, O_CLOEXEC), 0);
+  ::close(ends[1]);
+  renderer_image = ends[0];
+  CHECK(export_out_for_frame_five(rig));
+  CHECK(reports(rig.device(), "\ndevice/0/display_clock/0 posts=1 posts_dropped=0 blanks_held=0\n"));
+  CHECK(rig.device().post_frame(0u, 6u, 0x61u));
+  CHECK(rig.device().show_frame(0u, 0x61u));
+  rig.host().set_clock(1000u + 2u * 16666667u);
+  std::uint32_t latched = 0u;
+  CHECK(latched_on_page(rig.host(), 0u, 2u, latched));
+  CHECK_EQ(latched, 5u);
+  CHECK(rig.device().post_frame(0u, 7u, 0x61u));
+  CHECK(rig.device().show_frame(0u, 0x61u));
+  CHECK(reports(rig.device(), "\ndevice/0/display_clock/0 posts=3 posts_dropped=1 blanks_held=1\n"));
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 1u);
+  rig.host().set_clock(1000u + 3u * 16666667u);
+  CHECK(latched_on_page(rig.host(), 0u, 3u, latched));
+  CHECK_EQ(latched, 7u);
+  CHECK(reports(rig.device(), "\ndevice/0/display_clock/0 posts=3 posts_dropped=1 blanks_held=1\n"));
+  CHECK(rig.host().wait_for_main_loop_work(1u, 2000u));
+  CHECK(rig.host().run_main_loop() >= 1u);
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 2u);
+  rig.device().reset();
+  ::close(ends[0]);
+  renderer_image = -1;
+  CHECK(rig.device().invariants_hold()); }
+
+TEST(virtio_gpu_av_report, a_frame_held_at_a_blank_and_latched_once_the_export_is_answered_is_not_dropped)
+{ RendererDevice rig;
+  int ends[2] = {-1, -1};
+  CHECK_EQ(::pipe2(ends, O_CLOEXEC), 0);
+  ::close(ends[1]);
+  renderer_image = ends[0];
+  CHECK(export_out_for_frame_five(rig));
+  CHECK(rig.device().post_frame(0u, 6u, 0x61u));
+  CHECK(rig.device().show_frame(0u, 0x61u));
+  rig.host().set_clock(1000u + 2u * 16666667u);
+  std::uint32_t latched = 0u;
+  CHECK(latched_on_page(rig.host(), 0u, 2u, latched));
+  CHECK_EQ(latched, 5u);
+  rig.device().renderer_due();
+  CHECK_EQ(rig.host().images_shown(0u), 1u);
+  rig.host().set_clock(1000u + 3u * 16666667u);
+  CHECK(latched_on_page(rig.host(), 0u, 3u, latched));
+  CHECK_EQ(latched, 6u);
+  CHECK(rig.device().post_frame(0u, 7u, 0x61u));
+  CHECK(rig.device().post_frame(0u, 8u, 0x61u));
+  CHECK(reports(rig.device(), "\ndevice/0/display_clock/0 posts=4 posts_dropped=0 blanks_held=1\n"));
   CHECK(rig.host().wait_for_main_loop_work(1u, 2000u));
   CHECK(rig.host().run_main_loop() >= 1u);
   rig.device().renderer_due();

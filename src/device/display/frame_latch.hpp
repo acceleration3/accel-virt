@@ -17,6 +17,9 @@ public:
     bool     shows(uint64_t key) const;
     bool     take_unshown(uint64_t &key);
     void     clear();
+    uint64_t posts() const;
+    uint64_t posts_dropped() const;
+    uint64_t blanks_held() const;
 
     bool invariants_hold() const;
 
@@ -27,6 +30,10 @@ private:
     uint64_t latched_key_;
     bool     unshown_;
     bool     held_;
+    bool     pending_held_;
+    uint64_t posts_;
+    uint64_t posts_dropped_;
+    uint64_t blanks_held_;
 
     friend struct FrameLatchProbe;
 };

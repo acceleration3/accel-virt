@@ -454,6 +454,7 @@ void VirtioGpuAv::report(StateWriter &writer)
         writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
     }
     heads_.report(writer);
+    clock_.report(writer);
     host_blobs_.report(writer);
     window_stats_.report(writer);
     contexts_->report(writer);
