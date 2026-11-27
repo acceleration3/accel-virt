@@ -561,6 +561,7 @@ static int av_show_scanout(void *opaque, uint32_t head, const void *blob, const 
     surface = qemu_create_displaysurface_from(frame->width, frame->height, format, frame->stride, pixels);
     VIRTIO_GPU_BASE(r)->enable = 1;
     qemu_console_set_surface(con, surface);
+    VIRTIO_GPU_BASE(r)->scanout[head].ds = NULL;
     r->scanouts[head] = true;
     return 0;
 }
@@ -619,6 +620,7 @@ bool virtio_gpu_av_show_image(VirtIOGPUAv *r, uint32_t head, const AvExportedIma
             fprintf(stderr, "virtio-gpu-av: head %u shows exported images\n", head);
         }
         qemu_console_resize(con, image->width, image->height);
+        VIRTIO_GPU_BASE(r)->scanout[head].ds = NULL;
         qemu_console_gl_scanout_dmabuf(con, buffer);
         r->showing[head] = (int32_t)image->slot;
     }
@@ -656,6 +658,7 @@ static void av_hide_scanout(void *opaque, uint32_t head)
 
     if (con && r->scanouts[head]) {
         qemu_console_set_surface(con, NULL);
+        VIRTIO_GPU_BASE(r)->scanout[head].ds = NULL;
         r->scanouts[head] = false;
     }
 }

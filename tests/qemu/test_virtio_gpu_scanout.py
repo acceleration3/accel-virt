@@ -69,8 +69,8 @@ def named(command, resource):
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuScanout(unittest.TestCase):
-    def open(self):
-        qtest = virtio_qtest.Qtest(BUILD, av_context.av_device(f",hostmem={HOSTMEM}"))
+    def open(self, shared_ram=False):
+        qtest = virtio_qtest.Qtest(BUILD, av_context.av_device(f",hostmem={HOSTMEM}"), shared_ram)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID |
                                       FEATURE_CONTEXT_INIT)
@@ -103,6 +103,24 @@ class VirtioGpuScanout(unittest.TestCase):
         for frame in (0, 1, 2, 0xFFFFFFFF):
             self.expect(gpu, header(CMD_SCANOUT_IMAGE)
                         + struct.pack("<IIQ", 1, frame, 0xDEADBEEF), RESP_OK_NODATA)
+        self.expect(gpu, flush(1), RESP_OK_NODATA)
+
+    def test_a_2d_scanout_after_the_head_showed_or_hid_a_blob(self):
+        gpu = self.open(shared_ram=True)
+        self.expect(gpu, header(CMD_RESOURCE_CREATE_2D)
+                    + struct.pack("<4I", 1, FORMAT_B8G8R8A8, WIDTH, HEIGHT), RESP_OK_NODATA)
+        address = gpu.device.memory.allocate(FRAME)
+        self.expect(gpu, header(CMD_RESOURCE_ATTACH_BACKING)
+                    + struct.pack("<IIQI4x", 1, 1, address, FRAME), RESP_OK_NODATA)
+        set_scanout = header(CMD_SET_SCANOUT) + struct.pack("<6I", 0, 0, WIDTH, HEIGHT, 0, 1)
+        disable = scanout_blob(0, 0, rect_width=0, rect_height=0, width=0, height=0, fmt=0,
+                               strides=(0, 0, 0, 0))
+        self.blob(gpu, 2)
+        self.expect(gpu, set_scanout, RESP_OK_NODATA)
+        self.expect(gpu, scanout_blob(0, 2), RESP_OK_NODATA)
+        self.expect(gpu, set_scanout, RESP_OK_NODATA)
+        self.expect(gpu, disable, RESP_OK_NODATA)
+        self.expect(gpu, set_scanout, RESP_OK_NODATA)
         self.expect(gpu, flush(1), RESP_OK_NODATA)
 
     def test_accelerated_desktop_still_rejects_truncation_and_unknown_resources(self):
