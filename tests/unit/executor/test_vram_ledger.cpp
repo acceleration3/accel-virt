@@ -119,6 +119,17 @@ TEST(vram_ledger, the_advertised_cap_stays_the_policys_while_the_followed_cap_fa
   ledger.reserve_vram(4096u);
   CHECK_EQ(ledger.advertised(), 12 * gib); }
 
+TEST(vram_ledger, the_followed_cap_keeps_the_ledgers_own_memory_when_the_hosts_usage_does_not_count_it)
+{ VramLedger  ledger;
+  FixedSource source(gib, 0u);
+  ledger.learn(16 * gib);
+  ledger.follow(&source);
+  CHECK(ledger.take(768ull << 20));
+  ledger.reserve_vram(0u);
+  CHECK(ledger.take(512ull << 20));
+  CHECK_EQ(ledger.cap(), gib + (768ull << 20));
+  CHECK(!ledger.take(gib + (1ull << 20))); }
+
 TEST(vram_ledger_uma, a_uma_gpus_take_is_refused_by_the_host_ram_floor)
 { av::HostRamLedger   host;
   av::FakeMemoryGauge gauge;

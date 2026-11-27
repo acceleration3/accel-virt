@@ -127,8 +127,7 @@ void VramLedger::refresh()
         return;
     }
     const uint64_t mine = used();
-    const uint64_t elsewhere = usage > mine ? usage - mine : 0u;
-    const uint64_t room = budget > elsewhere ? budget - elsewhere : 0u;
+    const uint64_t room = budget > usage ? budget - usage + mine : mine;
     const uint64_t followed = room < policy ? room : policy;
     set_cap(followed < mine ? mine : followed);
 }
